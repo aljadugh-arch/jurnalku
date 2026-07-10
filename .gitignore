@@ -1,0 +1,23 @@
+# Deps
+node_modules/
+dist/
+dist.old/
+
+# Env & secrets
+server/.env
+*.env
+
+# SQLite runtime
+server/*.db
+server/*.db-wal
+server/*.db-shm
+server/*.db.bak*
+
+# Logs & tmp
+*.log
+/tmp/
+.DS_Store
+
+# Uploads (runtime user data)
+server/uploads/
+public/uploads/
