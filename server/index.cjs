@@ -774,7 +774,54 @@ app.delete('/api/users/:id', ADMIN, (req, res) => {
   res.json({ success: true })
 })
 
+// ---- Akun pengguna dari data guru (GTK) ----
+// Daftar guru yang BELUM punya akun user (match by nip, atau nama jika nip kosong)
+app.get('/api/gtk/tanpa-akun', ADMIN, (req, res) => {
+  const rows = db.prepare(`
+    SELECT g.id, g.nip, g.nama, g.email, g.no_hp, g.jabatan
+    FROM gtk g
+    WHERE g.tenant_id = ?
+      AND g.status = 'aktif'
+      AND NOT EXISTS (
+        SELECT 1 FROM users u
+        WHERE u.tenant_id = g.tenant_id
+          AND ( (g.nip IS NOT NULL AND g.nip <> '' AND u.nip = g.nip)
+                OR (g.email IS NOT NULL AND g.email <> '' AND u.email = g.email) )
+      )
+    ORDER BY g.nama
+  `).all(req.tenantId)
+  res.json(rows)
+})
+
+// Buat akun user dari satu/lebih guru. Body: { items: [{ gtk_id, password?, role? }] }
+// Password default = NIP guru (jika kosong, pakai no_hp; jika kosong juga, wajib isi manual).
+// Email login: gtk.email jika ada, else <nip|id>@<tenant>.local
+app.post('/api/users/from-gtk', ADMIN, (req, res) => {
+  const items = Array.isArray(req.body.items) ? req.body.items : []
+  if (!items.length) return res.status(400).json({ error: 'Tidak ada guru dipilih' })
+  const slug = (db.prepare('SELECT slug FROM tenants WHERE id = ?').get(req.tenantId) || {}).slug || 'app'
+  const created = [], skipped = []
+  const insert = db.prepare('INSERT INTO users (id, nama, email, password, role, nip, tenant_id) VALUES (?,?,?,?,?,?,?)')
+  const tx = db.transaction(() => {
+    for (const it of items) {
+      const g = db.prepare('SELECT * FROM gtk WHERE id = ? AND tenant_id = ?').get(it.gtk_id, req.tenantId)
+      if (!g) { skipped.push({ gtk_id: it.gtk_id, alasan: 'guru tidak ditemukan' }); continue }
+      const role = ['guru', 'kepala'].includes(it.role) ? it.role : 'guru'
+      const pwd = (it.password && String(it.password).length >= 6) ? String(it.password) : (g.nip || g.no_hp || '')
+      if (!pwd || pwd.length < 6) { skipped.push({ nama: g.nama, alasan: 'password default (NIP/HP) < 6 karakter, isi manual' }); continue }
+      const email = (g.email && g.email.trim()) ? g.email.trim() : `${(g.nip || g.id).toString().replace(/\s/g,'')}@${slug}.local`
+      if (db.prepare('SELECT id FROM users WHERE email = ?').get(email)) { skipped.push({ nama: g.nama, alasan: 'email sudah dipakai: ' + email }); continue }
+      const id = uuidv4()
+      insert.run(id, g.nama, email, bcrypt.hashSync(pwd, 10), role, g.nip || null, req.tenantId)
+      created.push({ id, nama: g.nama, email, password_default: (it.password ? undefined : pwd), role })
+    }
+  })
+  tx()
+  res.json({ dibuat: created.length, dilewati: skipped.length, created, skipped })
+})
+
 // ==================== SETTINGS ====================
+
 app.get('/api/settings', (req, res) => {
   let tenantId = req.tenantId
   const token = req.headers.authorization?.split(' ')[1]

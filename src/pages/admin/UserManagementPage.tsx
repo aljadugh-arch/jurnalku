@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import toast from 'react-hot-toast'
-import { UserPlus, Trash2, Shield } from 'lucide-react'
+import { UserPlus, Trash2, Shield, GraduationCap, KeyRound } from 'lucide-react'
 import api from '../../services/api'
 import { roleLabel } from '../../lib/roles'
 import type { User } from '../../types'
@@ -12,16 +12,27 @@ const CREATABLE = [
   { value: 'wali_kelas', label: 'Wali Kelas' },
 ]
 
+type GtkTanpaAkun = { id: string; nip: string | null; nama: string; email: string | null; no_hp: string | null; jabatan: string | null }
+
 export default function UserManagementPage() {
   const [users, setUsers] = useState<User[]>([])
   const [form, setForm] = useState({ nama: '', email: '', password: '', role: 'kepala' })
   const [saving, setSaving] = useState(false)
+  const [gtkList, setGtkList] = useState<GtkTanpaAkun[]>([])
+  const [sel, setSel] = useState<Record<string, boolean>>({})
+  const [pwd, setPwd] = useState<Record<string, string>>({})
+  const [genRole, setGenRole] = useState('guru')
+  const [genning, setGenning] = useState(false)
 
   const load = async () => {
     try { setUsers((await api.get('/users')).data) }
     catch { toast.error('Gagal memuat daftar pengguna') }
   }
-  useEffect(() => { load() }, [])
+  const loadGtk = async () => {
+    try { setGtkList((await api.get('/gtk/tanpa-akun')).data) }
+    catch { /* endpoint optional */ }
+  }
+  useEffect(() => { load(); loadGtk() }, [])
 
   const create = async () => {
     if (!form.nama.trim() || !form.email.trim() || form.password.length < 6) {
@@ -35,6 +46,31 @@ export default function UserManagementPage() {
       load()
     } catch (e: any) { toast.error(e.response?.data?.error || 'Gagal membuat pengguna') }
     finally { setSaving(false) }
+  }
+
+  const toggleAll = (on: boolean) => {
+    const next: Record<string, boolean> = {}
+    if (on) gtkList.forEach(g => { next[g.id] = true })
+    setSel(next)
+  }
+
+  const buatAkun = async () => {
+    const items = gtkList.filter(g => sel[g.id]).map(g => ({
+      gtk_id: g.id, role: genRole, password: pwd[g.id]?.trim() || undefined,
+    }))
+    if (!items.length) { toast.error('Pilih minimal satu guru'); return }
+    setGenning(true)
+    try {
+      const res = (await api.post('/users/from-gtk', { items })).data
+      const defaults = (res.created || []).filter((c: any) => c.password_default)
+      toast.success(`${res.dibuat} akun dibuat${res.dilewati ? `, ${res.dilewati} dilewati` : ''}`)
+      if (defaults.length) {
+        toast(`Password default (= NIP/HP): ${defaults.map((c: any) => `${c.nama}=${c.password_default}`).join(', ')}`, { duration: 10000, icon: '🔑' })
+      }
+      if (res.skipped?.length) res.skipped.forEach((s: any) => toast.error(`${s.nama || s.gtk_id}: ${s.alasan}`, { duration: 6000 }))
+      setSel({}); setPwd({}); load(); loadGtk()
+    } catch (e: any) { toast.error(e.response?.data?.error || 'Gagal membuat akun') }
+    finally { setGenning(false) }
   }
 
   const remove = async (u: User) => {
@@ -64,6 +100,57 @@ export default function UserManagementPage() {
           {saving ? 'Menyimpan...' : 'Tambah'}
         </button>
       </div>
+
+      {/* Buat akun dari data guru */}
+      {gtkList.length > 0 && (
+        <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
+          <h2 className="font-semibold text-gray-700 mb-1 flex items-center gap-2"><GraduationCap size={18} /> Buat Akun dari Data Guru</h2>
+          <p className="text-gray-500 text-xs mb-4">{gtkList.length} guru belum punya akun. Kosongkan password untuk pakai default (= NIP, atau No. HP jika NIP kosong). Guru wajib ganti password sendiri setelah login.</p>
+
+          <div className="flex flex-wrap items-center gap-3 mb-3">
+            <button onClick={() => toggleAll(true)} className="text-xs px-3 py-1.5 border rounded-lg hover:bg-gray-50">Pilih Semua</button>
+            <button onClick={() => toggleAll(false)} className="text-xs px-3 py-1.5 border rounded-lg hover:bg-gray-50">Kosongkan</button>
+            <div className="flex items-center gap-2 text-xs">
+              <span className="text-gray-500">Role:</span>
+              <select value={genRole} onChange={e => setGenRole(e.target.value)} className="px-2 py-1.5 border rounded-lg">
+                <option value="guru">Guru</option>
+                <option value="kepala">Kepala (read-only)</option>
+              </select>
+            </div>
+            <button onClick={buatAkun} disabled={genning} className="ml-auto px-4 py-2 bg-green-600 text-white rounded-lg text-sm hover:bg-green-700 disabled:opacity-50 flex items-center gap-2">
+              <KeyRound size={15} /> {genning ? 'Membuat...' : 'Buat Akun Terpilih'}
+            </button>
+          </div>
+
+          <div className="overflow-x-auto border rounded-lg">
+            <table className="w-full text-sm">
+              <thead className="bg-gray-50 text-gray-500 text-left">
+                <tr>
+                  <th className="px-3 py-2 w-10"></th>
+                  <th className="px-3 py-2">Nama</th>
+                  <th className="px-3 py-2">NIP</th>
+                  <th className="px-3 py-2">Password (opsional)</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y">
+                {gtkList.map(g => (
+                  <tr key={g.id} className={sel[g.id] ? 'bg-green-50/50' : ''}>
+                    <td className="px-3 py-2">
+                      <input type="checkbox" checked={!!sel[g.id]} onChange={e => setSel({ ...sel, [g.id]: e.target.checked })} />
+                    </td>
+                    <td className="px-3 py-2 font-medium text-gray-800">{g.nama}</td>
+                    <td className="px-3 py-2 text-gray-500">{g.nip || <span className="text-amber-600 text-xs">tanpa NIP</span>}</td>
+                    <td className="px-3 py-2">
+                      <input placeholder={g.nip || g.no_hp || 'wajib isi (min 6)'} value={pwd[g.id] || ''} onChange={e => setPwd({ ...pwd, [g.id]: e.target.value })}
+                        className="w-40 px-2 py-1 border rounded text-xs" />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
 
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
         {/* Desktop table */}
