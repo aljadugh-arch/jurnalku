@@ -22,32 +22,45 @@ export default function ImportExcel({ title, templateUrl, templateName, headerRo
   const handleFile = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
+    setPreview([]); setHeaders([])
     const reader = new FileReader()
+    reader.onerror = () => toast.error('Gagal membaca file. Coba file lain.')
     reader.onload = (evt) => {
-      const data = new Uint8Array(evt.target?.result as ArrayBuffer)
-      const wb = XLSX.read(data, { type: 'array' })
-      const sh = wb.Sheets[wb.SheetNames[0]]
-      const rows: any[][] = XLSX.utils.sheet_to_json(sh, { header: 1 })
-      
-      if (rows.length <= headerRow) { toast.error('File kosong atau format tidak sesuai'); return }
-      
-      const hdrs = (rows[headerRow] as string[]).map(h => (h || '').toString().trim())
-      setHeaders(hdrs)
-      
-      const mapped: Record<string, any>[] = []
-      for (let i = headerRow + 1; i < rows.length; i++) {
-        const row = rows[i]
-        if (!row || row.every(c => !c)) continue // skip empty rows
-        const obj: Record<string, any> = {}
-        hdrs.forEach((h, idx) => {
-          const field = columnMap[h]
-          if (field && row[idx] !== undefined && row[idx] !== null) {
-            obj[field] = row[idx].toString().trim()
-          }
-        })
-        if (Object.keys(obj).length > 0) mapped.push(obj)
+      try {
+        const data = new Uint8Array(evt.target?.result as ArrayBuffer)
+        const wb = XLSX.read(data, { type: 'array' })
+        const sh = wb.Sheets[wb.SheetNames[0]]
+        const rows: any[][] = XLSX.utils.sheet_to_json(sh, { header: 1 })
+
+        if (rows.length <= headerRow) { toast.error('File kosong atau baris header tidak ditemukan'); return }
+
+        const hdrs = (rows[headerRow] as string[]).map(h => (h || '').toString().trim())
+        setHeaders(hdrs)
+
+        const mapped: Record<string, any>[] = []
+        for (let i = headerRow + 1; i < rows.length; i++) {
+          const row = rows[i]
+          if (!row || row.every(c => !c)) continue // skip empty rows
+          const obj: Record<string, any> = {}
+          hdrs.forEach((h, idx) => {
+            const field = columnMap[h]
+            if (field && row[idx] !== undefined && row[idx] !== null) {
+              obj[field] = row[idx].toString().trim()
+            }
+          })
+          if (Object.keys(obj).length > 0) mapped.push(obj)
+        }
+
+        if (mapped.length === 0) {
+          toast.error('Tidak ada baris cocok. Pastikan kolom header sama persis dengan template.')
+          return
+        }
+        setPreview(mapped)
+      } catch (err: any) {
+        toast.error('File tidak bisa dibaca: ' + (err?.message || 'format tidak dikenali'))
+      } finally {
+        if (fileRef.current) fileRef.current.value = ''
       }
-      setPreview(mapped)
     }
     reader.readAsArrayBuffer(file)
   }

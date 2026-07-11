@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Plus, Trash2, X, Upload, Download } from 'lucide-react'
+import { Plus, Trash2, X, Upload } from 'lucide-react'
 import toast from 'react-hot-toast'
 import api from '../../services/api'
 import ImportExcel from '../../components/ImportExcel'
@@ -45,9 +45,6 @@ export default function MapelPage() {
           <p className="text-gray-500 text-sm mt-1">Kelola data mata pelajaran ({data.length} mapel)</p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <a href="/templates/template-mapel.xls" download className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg text-sm hover:bg-gray-50">
-            <Download size={16} /> Unduh Template
-          </a>
           <button onClick={() => setShowImport(true)} className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg text-sm hover:bg-green-700">
             <Upload size={16} /> Import
           </button>

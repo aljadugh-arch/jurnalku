@@ -111,9 +111,6 @@ export default function DataGTKPage() {
           <p className="text-gray-500 text-sm mt-1">Guru dan Tenaga Kependidikan ({data.length} orang)</p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <a href="/templates/template-gtk.xls" download className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg text-sm hover:bg-gray-50">
-            <Download size={16} /> Unduh Template
-          </a>
           <button onClick={() => setShowImport(true)} className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg text-sm hover:bg-green-700">
             <Upload size={16} /> Import
           </button>
