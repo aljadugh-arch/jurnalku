@@ -108,46 +108,89 @@ export default function JadwalPage() {
       })
       const guruList = gtks.filter(g => kodeMap.has(g.id))
 
-      const cap = (h: string) => h.charAt(0).toUpperCase() + h.slice(1)
+      const cap = (h: string) => h.toUpperCase()
       const findSlot = (rombelId: string, h: string, jam: typeof jamPelajaran[0]) =>
         allRows.find(r => r.rombel_id === rombelId && r.hari === h && r.jam_mulai <= jam.mulai && r.jam_selesai >= jam.selesai)
 
-      const header1 = ['HARI', 'JAM', 'WAKTU', ...rombels.flatMap(r => [r.nama, '']), 'NO', 'KG', 'NAMA GURU', ...hari.map(cap), 'TOTAL']
-      const header2 = ['', '', '', ...rombels.flatMap(() => ['KG', 'MAPEL']), '', '', '', ...hari.map(() => ''), '']
+      const nRombel = rombels.length
+      const nHari = hari.length
+      const COL_WAKTU = 3 // A,B,C = HARI,JAM,WAKTU
+      const COL_REKAP_START = COL_WAKTU + nRombel * 2 + 1 // +1 kolom pemisah kosong
+      const COL_REKAP = { no: COL_REKAP_START, kg: COL_REKAP_START + 1, nama: COL_REKAP_START + 2, hariStart: COL_REKAP_START + 3 }
+      const COL_TOTAL = COL_REKAP.hariStart + nHari
+      const lastCol = COL_TOTAL
 
-      const dataRows: any[][] = []
+      const merges: any[] = []
+      const wsData: any[][] = []
+
+      // Baris 1-4: judul (merge full width)
+      wsData.push(['JADWAL PELAJARAN']); merges.push({ s: { r: 0, c: 0 }, e: { r: 0, c: lastCol } })
+      wsData.push([])
+      wsData.push([namaLembaga]); merges.push({ s: { r: 2, c: 0 }, e: { r: 2, c: lastCol } })
+      wsData.push([`TAHUN PELAJARAN ${taAktif ? taAktif.nama + ' ' + taAktif.semester : ''}`]); merges.push({ s: { r: 3, c: 0 }, e: { r: 3, c: lastCol } })
+
+      // Baris 5-6: header 2-baris
+      const rowHeaderIdx = wsData.length // 4 (0-indexed)
+      const h1: any[] = ['HARI', 'JAM', 'WAKTU']
+      rombels.forEach(r => { h1.push(r.nama, '') })
+      h1.push('') // kolom pemisah
+      h1.push('NO', 'KG', 'NAMA GURU', 'JUMLAH JAM', ...hari.map(() => ''), 'TOTAL')
+      const h2: any[] = ['', '', '']
+      rombels.forEach(() => h2.push('KG', 'MAPEL'))
+      h2.push('')
+      h2.push('', '', '', ...hari.map(cap), '')
+      wsData.push(h1, h2)
+      // merge vertikal HARI/JAM/WAKTU
+      ;[0, 1, 2].forEach(c => merges.push({ s: { r: rowHeaderIdx, c }, e: { r: rowHeaderIdx + 1, c } }))
+      // merge nama rombel horizontal (2 kolom: KG+MAPEL)
+      rombels.forEach((_, i) => {
+        const c = COL_WAKTU + i * 2
+        merges.push({ s: { r: rowHeaderIdx, c }, e: { r: rowHeaderIdx, c: c + 1 } })
+      })
+      // merge NO/KG/NAMA GURU vertikal, JUMLAH JAM horizontal, TOTAL vertikal
+      merges.push({ s: { r: rowHeaderIdx, c: COL_REKAP.no }, e: { r: rowHeaderIdx + 1, c: COL_REKAP.no } })
+      merges.push({ s: { r: rowHeaderIdx, c: COL_REKAP.kg }, e: { r: rowHeaderIdx + 1, c: COL_REKAP.kg } })
+      merges.push({ s: { r: rowHeaderIdx, c: COL_REKAP.nama }, e: { r: rowHeaderIdx + 1, c: COL_REKAP.nama } })
+      merges.push({ s: { r: rowHeaderIdx, c: COL_REKAP.hariStart }, e: { r: rowHeaderIdx, c: COL_REKAP.hariStart + nHari - 1 } })
+      merges.push({ s: { r: rowHeaderIdx, c: COL_TOTAL }, e: { r: rowHeaderIdx + 1, c: COL_TOTAL } })
+
+      // Baris data: per hari, per jam — sisipkan baris "Istirahat" di antara slot jam
+      const istirahatSetelah = [4, 6]
+      const guruRekapRows: number[] = [] // baris (0-indexed) tempat rekap guru mulai ditulis
       hari.forEach(h => {
         jamPelajaran.forEach((jam, ji) => {
+          const rIdx = wsData.length
+          if (guruRekapRows.length < guruList.length) guruRekapRows.push(rIdx)
           const row: any[] = [ji === 0 ? cap(h) : '', jam.ke, `${jam.mulai}-${jam.selesai}`]
           rombels.forEach(r => {
             const slot = findSlot(r.id, h, jam)
             row.push(slot?.gtk_id ? kodeMap.get(slot.gtk_id) : '', slot ? (slot.mapel_nama || '') : '')
           })
-          dataRows.push(row)
+          wsData.push(row)
+          if (istirahatSetelah.includes(jam.ke) && ji < jamPelajaran.length - 1) {
+            const next = jamPelajaran[ji + 1]
+            const istRow: any[] = ['', '', `${jam.selesai}-${next.mulai}`, 'Istirahat']
+            wsData.push(istRow)
+            merges.push({ s: { r: wsData.length - 1, c: COL_WAKTU }, e: { r: wsData.length - 1, c: COL_WAKTU + nRombel * 2 - 1 } })
+          }
         })
       })
-      // Rekap jam mengajar guru ditempel di kolom kanan, baris sejajar (isi kosong bila guru habis)
+
+      // Rekap jam mengajar guru ditempel di kolom kanan mulai baris data pertama
       guruList.forEach((g, gi) => {
         const perHari = hari.map(h => allRows.filter(r => r.gtk_id === g.id && r.hari === h).length)
         const total = perHari.reduce((a, b) => a + b, 0)
-        const row = dataRows[gi] || (dataRows[gi] = [])
+        const rIdx = guruRekapRows[gi]
+        if (rIdx == null) return
+        const row = wsData[rIdx]
         const rekap = [gi + 1, kodeMap.get(g.id), g.nama, ...perHari, total]
-        const offset = 3 + rombels.length * 2
-        rekap.forEach((v, i) => { row[offset + i] = v })
+        rekap.forEach((v, i) => { row[COL_REKAP.no + i] = v })
       })
 
-      const wsData = [
-        ['JADWAL PELAJARAN'],
-        [],
-        [namaLembaga],
-        [`TAHUN PELAJARAN ${taAktif ? taAktif.nama + ' ' + taAktif.semester : ''}`],
-        header1,
-        header2,
-        ...dataRows
-      ]
       const wb = XLSX.utils.book_new()
       const ws = XLSX.utils.aoa_to_sheet(wsData)
-      ws['!cols'] = [{ wch: 10 }, { wch: 6 }, { wch: 14 }, ...rombels.flatMap(() => [{ wch: 5 }, { wch: 16 }]), { wch: 5 }, { wch: 5 }, { wch: 22 }, ...hari.map(() => ({ wch: 6 })), { wch: 7 }]
+      ws['!merges'] = merges
+      ws['!cols'] = [{ wch: 10 }, { wch: 6 }, { wch: 14 }, ...rombels.flatMap(() => [{ wch: 5 }, { wch: 16 }]), { wch: 2 }, { wch: 5 }, { wch: 5 }, { wch: 22 }, ...hari.map(() => ({ wch: 6 })), { wch: 7 }]
       XLSX.utils.book_append_sheet(wb, ws, 'Master Jadwal')
       XLSX.writeFile(wb, `Master_Jadwal_${namaLembaga || 'Lembaga'}.xlsx`)
       toast.success('Master jadwal diunduh')
