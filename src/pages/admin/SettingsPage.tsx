@@ -7,11 +7,16 @@ import { useSettingsStore } from '../../stores/settingsStore'
 import { JENJANG_OPTIONS } from '../../lib/jenjang'
 import MapPicker from '../../components/MapPicker'
 
+const HARI_OPTIONS = [
+  { value: 'senin', label: 'Senin' }, { value: 'selasa', label: 'Selasa' }, { value: 'rabu', label: 'Rabu' },
+  { value: 'kamis', label: 'Kamis' }, { value: 'jumat', label: 'Jumat' }, { value: 'sabtu', label: 'Sabtu' }, { value: 'minggu', label: 'Minggu' }
+]
+
 export default function SettingsPage() {
   const [form, setForm] = useState({
     nama_lembaga: '', alamat: '', telepon: '', email: '',
     theme: 'light', primary_color: '#1e40af', accent_color: '#059669', sidebar_color: '#1e293b',
-    geo_latitude: '', geo_longitude: '', geo_radius: '200', jenjang: ''
+    geo_latitude: '', geo_longitude: '', geo_radius: '200', jenjang: '', hari_libur: ['jumat', 'minggu'] as string[]
   })
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -27,7 +32,8 @@ export default function SettingsPage() {
       setForm({
         nama_lembaga: s.nama_lembaga || '', alamat: s.alamat || '', telepon: s.telepon || '', email: s.email || '',
         theme: s.theme || 'light', primary_color: s.primary_color || '#1e40af', accent_color: s.accent_color || '#059669', sidebar_color: s.sidebar_color || '#1e293b',
-        geo_latitude: s.geo_latitude || '', geo_longitude: s.geo_longitude || '', geo_radius: s.geo_radius || '200', jenjang: s.jenjang || ''
+        geo_latitude: s.geo_latitude || '', geo_longitude: s.geo_longitude || '', geo_radius: s.geo_radius || '200', jenjang: s.jenjang || '',
+        hari_libur: (() => { try { return JSON.parse(s.hari_libur || '["jumat","minggu"]') } catch { return ['jumat', 'minggu'] } })()
       })
     }).catch(() => toast.error('Gagal memuat pengaturan'))
     .finally(() => setLoading(false))
@@ -118,6 +124,25 @@ export default function SettingsPage() {
               {JENJANG_OPTIONS.map(j => <option key={j.value} value={j.value}>{j.label}</option>)}
             </select>
             <p className="text-xs text-gray-400 mt-1">Menentukan penamaan tingkat/kelas di Rombel (RA=A,B • MI=1-6 • MTs=7-9 • MA=10-12)</p>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-600 mb-2">Hari Libur</label>
+            <p className="text-xs text-gray-400 mb-2">Hari yang dicentang tidak dihitung sebagai hari efektif belajar / jadwal.</p>
+            <div className="flex flex-wrap gap-2">
+              {HARI_OPTIONS.map(h => (
+                <label key={h.value} className={'flex items-center gap-2 px-3 py-2 border rounded-lg text-sm cursor-pointer ' + (form.hari_libur.includes(h.value) ? 'bg-red-50 border-red-300 text-red-700' : 'bg-white border-gray-300 text-gray-600')}>
+                  <input
+                    type="checkbox"
+                    checked={form.hari_libur.includes(h.value)}
+                    onChange={e => setForm({
+                      ...form,
+                      hari_libur: e.target.checked ? [...form.hari_libur, h.value] : form.hari_libur.filter(x => x !== h.value)
+                    })}
+                  />
+                  {h.label}
+                </label>
+              ))}
+            </div>
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-600 mb-1">Alamat</label>

@@ -11,7 +11,7 @@ interface Jadwal {
   mapel_nama?: string; gtk_nama?: string; rombel_nama?: string
 }
 
-const hari = ['senin', 'selasa', 'rabu', 'kamis', 'jumat', 'sabtu'] as const
+const SEMUA_HARI = ['senin', 'selasa', 'rabu', 'kamis', 'jumat', 'sabtu', 'minggu'] as const
 
 export default function JadwalPage() {
   const [jadwal, setJadwal] = useState<Jadwal[]>([])
@@ -23,6 +23,10 @@ export default function JadwalPage() {
   const [showForm, setShowForm] = useState(false)
   const settings = useSettingsStore(s => s.settings)
   const jenjang = (settings.jenjang as string) || ''
+  const hariLibur: string[] = useMemo(() => {
+    try { return JSON.parse((settings as any).hari_libur || '["jumat","minggu"]') } catch { return ['jumat', 'minggu'] }
+  }, [settings])
+  const hari = useMemo(() => SEMUA_HARI.filter(h => !hariLibur.includes(h)), [hariLibur])
   const jamPelajaran = useMemo(() => generateJamPelajaran(jenjang, 10), [jenjang])
   const [form, setForm] = useState({ mapel_id: '', rombel_id: '', gtk_id: '', hari: 'senin', jam_mulai: '07:00', jam_selesai: '07:45', ruangan: '' })
 
@@ -30,6 +34,11 @@ export default function JadwalPage() {
   useEffect(() => {
     if (jamPelajaran[0]) setForm(f => ({ ...f, jam_mulai: jamPelajaran[0].mulai, jam_selesai: jamPelajaran[0].selesai }))
   }, [jamPelajaran])
+
+  // pastikan hari terpilih bukan hari libur
+  useEffect(() => {
+    if (hari.length > 0 && !hari.includes(form.hari as any)) setForm(f => ({ ...f, hari: hari[0] }))
+  }, [hari])
 
   useEffect(() => {
     Promise.all([api.get('/rombel'), api.get('/mapel'), api.get('/gtk')]).then(([r, m, g]) => {
@@ -253,7 +262,7 @@ export default function JadwalPage() {
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-1">Hari</label>
                   <select value={form.hari} onChange={e => setForm({...form, hari: e.target.value})} className="w-full px-3 py-2 border rounded-lg text-sm">
-                    {hari.map(h => <option key={h} value={h} className="capitalize">{h}</option>)}
+                    {hari.map(h => <option key={h} value={h} className="capitalize">{h.charAt(0).toUpperCase()+h.slice(1)}</option>)}
                   </select>
                 </div>
                 <div>
@@ -263,23 +272,16 @@ export default function JadwalPage() {
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">Jam Ke / Mulai</label>
-                  <select value={form.jam_mulai} onChange={e => {
-                    const slot = jamPelajaran.find(j => j.mulai === e.target.value)
-                    setForm({...form, jam_mulai: e.target.value, jam_selesai: slot ? slot.selesai : form.jam_selesai})
-                  }} className="w-full px-3 py-2 border rounded-lg text-sm">
-                    {jamPelajaran.map(j => <option key={j.mulai} value={j.mulai}>Jam ke-{j.ke} ({j.mulai})</option>)}
-                  </select>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">Jam Mulai</label>
+                  <input type="time" value={form.jam_mulai} onChange={e => setForm({...form, jam_mulai: e.target.value})} className="w-full px-3 py-2 border rounded-lg text-sm" />
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-1">Jam Selesai</label>
-                  <select value={form.jam_selesai} onChange={e => setForm({...form, jam_selesai: e.target.value})} className="w-full px-3 py-2 border rounded-lg text-sm">
-                    {jamPelajaran.map(j => <option key={j.selesai} value={j.selesai}>{j.selesai}</option>)}
-                  </select>
+                  <input type="time" value={form.jam_selesai} onChange={e => setForm({...form, jam_selesai: e.target.value})} className="w-full px-3 py-2 border rounded-lg text-sm" />
                 </div>
               </div>
               <p className="text-xs text-gray-500 -mt-1">
-                Durasi 1 JTM {jenjang || 'default'}: <strong>{jtmMenit(jenjang)} menit</strong> (KMA 736/2026)
+                Referensi 1 JTM {jenjang || 'default'}: <strong>{jtmMenit(jenjang)} menit</strong> (KMA 736/2026). Jam bebas diisi manual.
               </p>
               <div className="flex gap-2 pt-2">
                 <button type="button" onClick={() => setShowForm(false)} className="flex-1 px-4 py-2 border rounded-lg text-sm">Batal</button>

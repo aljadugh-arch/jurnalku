@@ -461,6 +461,7 @@ for (const col of [
   ['settings', 'geo_radius', 'INTEGER DEFAULT 200'],
   ['settings', 'background', "TEXT DEFAULT ''"],
   ['settings', 'jenjang', "TEXT DEFAULT ''"],
+  ['settings', 'hari_libur', "TEXT DEFAULT '[\"jumat\",\"minggu\"]'"],
   ['wa_gateway_config', 'tenant_id', "TEXT DEFAULT 'default'"],
   ['broadcast_log', 'tenant_id', "TEXT DEFAULT 'default'"],
   ['broadcast_detail', 'tenant_id', "TEXT DEFAULT 'default'"],
@@ -836,12 +837,12 @@ app.get('/api/settings', (req, res) => {
 })
 
 app.put('/api/settings', ADMIN, (req, res) => {
-  const { nama_lembaga, alamat, telepon, email, theme, primary_color, accent_color, sidebar_color, geo_latitude, geo_longitude, geo_radius, jenjang } = req.body
+  const { nama_lembaga, alamat, telepon, email, theme, primary_color, accent_color, sidebar_color, geo_latitude, geo_longitude, geo_radius, jenjang, hari_libur } = req.body
   const id = 'main_' + req.tenantId
-  db.prepare(`INSERT INTO settings (id, tenant_id, nama_lembaga, alamat, telepon, email, theme, primary_color, accent_color, sidebar_color, geo_latitude, geo_longitude, geo_radius, jenjang, updated_at)
-    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,datetime('now'))
-    ON CONFLICT(id) DO UPDATE SET nama_lembaga=excluded.nama_lembaga, alamat=excluded.alamat, telepon=excluded.telepon, email=excluded.email, theme=excluded.theme, primary_color=excluded.primary_color, accent_color=excluded.accent_color, sidebar_color=excluded.sidebar_color, geo_latitude=excluded.geo_latitude, geo_longitude=excluded.geo_longitude, geo_radius=excluded.geo_radius, jenjang=excluded.jenjang, updated_at=datetime('now')`)
-    .run(id, req.tenantId, nama_lembaga, alamat, telepon, email, theme, primary_color, accent_color, sidebar_color, geo_latitude || null, geo_longitude || null, geo_radius || 200, jenjang || '')
+  db.prepare(`INSERT INTO settings (id, tenant_id, nama_lembaga, alamat, telepon, email, theme, primary_color, accent_color, sidebar_color, geo_latitude, geo_longitude, geo_radius, jenjang, hari_libur, updated_at)
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,datetime('now'))
+    ON CONFLICT(id) DO UPDATE SET nama_lembaga=excluded.nama_lembaga, alamat=excluded.alamat, telepon=excluded.telepon, email=excluded.email, theme=excluded.theme, primary_color=excluded.primary_color, accent_color=excluded.accent_color, sidebar_color=excluded.sidebar_color, geo_latitude=excluded.geo_latitude, geo_longitude=excluded.geo_longitude, geo_radius=excluded.geo_radius, jenjang=excluded.jenjang, hari_libur=excluded.hari_libur, updated_at=datetime('now')`)
+    .run(id, req.tenantId, nama_lembaga, alamat, telepon, email, theme, primary_color, accent_color, sidebar_color, geo_latitude || null, geo_longitude || null, geo_radius || 200, jenjang || '', JSON.stringify(hari_libur || []))
   res.json({ success: true })
 })
 
