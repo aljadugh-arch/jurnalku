@@ -96,14 +96,17 @@ export default function JadwalPage() {
       const taAktif = taRes.data.find((t: any) => t.aktif)
       const namaLembaga = (settings.nama_lembaga as string) || ''
 
-      // Kode Guru: huruf A,B,C... berurutan sesuai kemunculan pertama di jadwal
+      // Kode Guru: pakai kode manual dari data GTK (field kode_guru).
+      // Guru tanpa kode manual di-fallback ke huruf otomatis A,B,C... (urutan kemunculan pertama di jadwal)
       const kodeMap = new Map<string, string>()
       const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
       let idx = 0
       allRows.forEach(r => {
         if (r.gtk_id && !kodeMap.has(r.gtk_id)) {
-          kodeMap.set(r.gtk_id, idx < 26 ? letters[idx] : 'A' + letters[idx - 26])
-          idx++
+          const gtk = gtks.find(g => g.id === r.gtk_id)
+          const manual = (gtk?.kode_guru || '').trim()
+          kodeMap.set(r.gtk_id, manual || (idx < 26 ? letters[idx] : 'A' + letters[idx - 26]))
+          if (!manual) idx++
         }
       })
       const guruList = gtks.filter(g => kodeMap.has(g.id))

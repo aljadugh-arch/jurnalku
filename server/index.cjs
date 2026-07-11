@@ -465,7 +465,8 @@ for (const col of [
   ['wa_gateway_config', 'tenant_id', "TEXT DEFAULT 'default'"],
   ['broadcast_log', 'tenant_id', "TEXT DEFAULT 'default'"],
   ['broadcast_detail', 'tenant_id', "TEXT DEFAULT 'default'"],
-  ['modul_ajar', 'kurikulum', "TEXT DEFAULT 'merdeka'"]
+  ['modul_ajar', 'kurikulum', "TEXT DEFAULT 'merdeka'"],
+  ['gtk', 'kode_guru', "TEXT DEFAULT ''"]
 ]) {
   try { db.prepare(`ALTER TABLE ${col[0]} ADD COLUMN ${col[1]} ${col[2]}`).run() } catch {}
 }
@@ -923,16 +924,16 @@ app.get('/api/gtk', authMiddleware, (req, res) => {
 
 app.post('/api/gtk', ADMIN, (req, res) => {
   const id = uuidv4()
-  const { nip, nuptk, nama, jenis_kelamin, tempat_lahir, tanggal_lahir, alamat, no_hp, email, jabatan, status_kepegawaian, bidang_studi } = req.body
-  db.prepare('INSERT INTO gtk (id, nip, nuptk, nama, jenis_kelamin, tempat_lahir, tanggal_lahir, alamat, no_hp, email, jabatan, status_kepegawaian, bidang_studi, tenant_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
-    .run(id, nip, nuptk, nama, jenis_kelamin, tempat_lahir, tanggal_lahir, alamat, no_hp, email, jabatan, status_kepegawaian, bidang_studi, req.tenantId)
+  const { nip, nuptk, nama, jenis_kelamin, tempat_lahir, tanggal_lahir, alamat, no_hp, email, jabatan, status_kepegawaian, bidang_studi, kode_guru } = req.body
+  db.prepare('INSERT INTO gtk (id, nip, nuptk, nama, jenis_kelamin, tempat_lahir, tanggal_lahir, alamat, no_hp, email, jabatan, status_kepegawaian, bidang_studi, kode_guru, tenant_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
+    .run(id, nip, nuptk, nama, jenis_kelamin, tempat_lahir, tanggal_lahir, alamat, no_hp, email, jabatan, status_kepegawaian, bidang_studi, kode_guru || '', req.tenantId)
   res.json({ id })
 })
 
 app.put('/api/gtk/:id', ADMIN, (req, res) => {
-  const { nip, nuptk, nama, jenis_kelamin, tempat_lahir, tanggal_lahir, alamat, no_hp, email, jabatan, status_kepegawaian, bidang_studi, status } = req.body
-  db.prepare('UPDATE gtk SET nip=?, nuptk=?, nama=?, jenis_kelamin=?, tempat_lahir=?, tanggal_lahir=?, alamat=?, no_hp=?, email=?, jabatan=?, status_kepegawaian=?, bidang_studi=?, status=? WHERE id=? AND tenant_id=?')
-    .run(nip, nuptk, nama, jenis_kelamin, tempat_lahir, tanggal_lahir, alamat, no_hp, email, jabatan, status_kepegawaian, bidang_studi, status, req.params.id, req.tenantId)
+  const { nip, nuptk, nama, jenis_kelamin, tempat_lahir, tanggal_lahir, alamat, no_hp, email, jabatan, status_kepegawaian, bidang_studi, status, kode_guru } = req.body
+  db.prepare('UPDATE gtk SET nip=?, nuptk=?, nama=?, jenis_kelamin=?, tempat_lahir=?, tanggal_lahir=?, alamat=?, no_hp=?, email=?, jabatan=?, status_kepegawaian=?, bidang_studi=?, status=?, kode_guru=? WHERE id=? AND tenant_id=?')
+    .run(nip, nuptk, nama, jenis_kelamin, tempat_lahir, tanggal_lahir, alamat, no_hp, email, jabatan, status_kepegawaian, bidang_studi, status, kode_guru || '', req.params.id, req.tenantId)
   res.json({ success: true })
 })
 

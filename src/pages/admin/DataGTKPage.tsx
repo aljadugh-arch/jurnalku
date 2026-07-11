@@ -8,13 +8,13 @@ import { ResponsiveTable } from '../../components/ui'
 interface GTK {
   id: string; nip: string; nuptk: string; nama: string; jenis_kelamin: string
   tempat_lahir: string; tanggal_lahir: string; alamat: string; no_hp: string
-  email: string; jabatan: string; status_kepegawaian: string; bidang_studi: string; status: string; foto?: string
+  email: string; jabatan: string; status_kepegawaian: string; bidang_studi: string; kode_guru: string; status: string; foto?: string
 }
 
 const emptyForm = {
   nip: '', nuptk: '', nama: '', jenis_kelamin: 'L', tempat_lahir: '',
   tanggal_lahir: '', alamat: '', no_hp: '', email: '', jabatan: 'guru',
-  status_kepegawaian: 'honorer', bidang_studi: '', status: 'aktif'
+  status_kepegawaian: 'honorer', bidang_studi: '', kode_guru: '', status: 'aktif'
 }
 
 export default function DataGTKPage() {
@@ -53,7 +53,7 @@ export default function DataGTKPage() {
   }
 
   const handleEdit = (g: GTK) => {
-    setForm({ nip: g.nip || '', nuptk: g.nuptk || '', nama: g.nama, jenis_kelamin: g.jenis_kelamin, tempat_lahir: g.tempat_lahir || '', tanggal_lahir: g.tanggal_lahir || '', alamat: g.alamat || '', no_hp: g.no_hp || '', email: g.email || '', jabatan: g.jabatan, status_kepegawaian: g.status_kepegawaian, bidang_studi: g.bidang_studi || '', status: g.status })
+    setForm({ nip: g.nip || '', nuptk: g.nuptk || '', nama: g.nama, jenis_kelamin: g.jenis_kelamin, tempat_lahir: g.tempat_lahir || '', tanggal_lahir: g.tanggal_lahir || '', alamat: g.alamat || '', no_hp: g.no_hp || '', email: g.email || '', jabatan: g.jabatan, status_kepegawaian: g.status_kepegawaian, bidang_studi: g.bidang_studi || '', kode_guru: g.kode_guru || '', status: g.status })
     setEditId(g.id); setShowModal(true)
   }
 
@@ -77,8 +77,8 @@ export default function DataGTKPage() {
   }
 
   const handleExport = () => {
-    const header = 'NIP,NUPTK,Nama,JK,Jabatan,Status Kepegawaian,Bidang Studi,Email,No HP'
-    const rows = data.map(g => [g.nip, g.nuptk, g.nama, g.jenis_kelamin, g.jabatan, g.status_kepegawaian, g.bidang_studi, g.email, g.no_hp].join(','))
+    const header = 'NIP,NUPTK,Nama,JK,Kode Guru,Jabatan,Status Kepegawaian,Bidang Studi,Email,No HP'
+    const rows = data.map(g => [g.nip, g.nuptk, g.nama, g.jenis_kelamin, g.kode_guru, g.jabatan, g.status_kepegawaian, g.bidang_studi, g.email, g.no_hp].join(','))
     const csv = [header, ...rows].join('\n')
     const blob = new Blob([csv], { type: 'text/csv' })
     const url = URL.createObjectURL(blob)
@@ -95,7 +95,7 @@ export default function DataGTKPage() {
       const c = lines[i].split(',').map(s => s.trim())
       if (c.length < 3) continue
       try {
-        await api.post('/gtk', { nip: c[0], nuptk: c[1], nama: c[2], jenis_kelamin: c[3] || 'L', tempat_lahir: '', tanggal_lahir: '', alamat: '', no_hp: c[8] || '', email: c[7] || '', jabatan: 'guru', status_kepegawaian: c[5] || 'honorer', bidang_studi: c[6] || '' })
+        await api.post('/gtk', { nip: c[0], nuptk: c[1], nama: c[2], jenis_kelamin: c[3] || 'L', kode_guru: c[4] || '', tempat_lahir: '', tanggal_lahir: '', alamat: '', no_hp: c[9] || '', email: c[8] || '', jabatan: c[5] || 'guru', status_kepegawaian: c[6] || 'honorer', bidang_studi: c[7] || '' })
         count++
       } catch {}
     }
@@ -147,6 +147,7 @@ export default function DataGTKPage() {
                 </div>
               ) },
               { key: 'nama', header: 'Nama', className: 'font-medium text-gray-800' },
+              { key: 'kode_guru', header: 'Kode', className: 'font-mono text-xs text-center', render: (g) => g.kode_guru || '-' },
               { key: 'nip', header: 'NIP', className: 'font-mono text-xs', hideOnMobile: true, render: (g) => g.nip || '-' },
               { key: 'jenis_kelamin', header: 'JK' },
               { key: 'jabatan', header: 'Jabatan', className: 'capitalize', render: (g) => g.jabatan.replace('_', ' ') },
@@ -189,7 +190,10 @@ export default function DataGTKPage() {
                 <div><label className="block text-xs font-medium text-gray-600 mb-1">Jabatan</label><select value={form.jabatan} onChange={e => setForm({...form, jabatan: e.target.value})} className="w-full px-3 py-2 border rounded-lg text-sm"><option value="guru">Guru</option><option value="kepala_sekolah">Kepala Sekolah</option><option value="staff_tu">Staff TU</option><option value="operator">Operator</option></select></div>
                 <div><label className="block text-xs font-medium text-gray-600 mb-1">Status</label><select value={form.status_kepegawaian} onChange={e => setForm({...form, status_kepegawaian: e.target.value})} className="w-full px-3 py-2 border rounded-lg text-sm"><option value="pns">PNS</option><option value="pppk">PPPK</option><option value="honorer">Honorer</option></select></div>
               </div>
-              <div><label className="block text-xs font-medium text-gray-600 mb-1">Bidang Studi</label><input value={form.bidang_studi} onChange={e => setForm({...form, bidang_studi: e.target.value})} className="w-full px-3 py-2 border rounded-lg text-sm" /></div>
+              <div className="grid grid-cols-2 gap-3">
+                <div><label className="block text-xs font-medium text-gray-600 mb-1">Bidang Studi</label><input value={form.bidang_studi} onChange={e => setForm({...form, bidang_studi: e.target.value})} className="w-full px-3 py-2 border rounded-lg text-sm" /></div>
+                <div><label className="block text-xs font-medium text-gray-600 mb-1" title="Kode inisial guru dipakai di export jadwal Excel (mis. A, B, MMY)">Kode Guru</label><input value={form.kode_guru} onChange={e => setForm({...form, kode_guru: e.target.value.toUpperCase()})} maxLength={5} className="w-full px-3 py-2 border rounded-lg text-sm uppercase" placeholder="mis. A" /></div>
+              </div>
               <div className="grid grid-cols-2 gap-3">
                 <div><label className="block text-xs font-medium text-gray-600 mb-1">Tempat Lahir</label><input value={form.tempat_lahir} onChange={e => setForm({...form, tempat_lahir: e.target.value})} className="w-full px-3 py-2 border rounded-lg text-sm" /></div>
                 <div><label className="block text-xs font-medium text-gray-600 mb-1">Tanggal Lahir</label><input type="date" value={form.tanggal_lahir} onChange={e => setForm({...form, tanggal_lahir: e.target.value})} className="w-full px-3 py-2 border rounded-lg text-sm" /></div>
@@ -209,17 +213,17 @@ export default function DataGTKPage() {
       {showImport && (
         <ImportExcel
           title="Import Data GTK"
-          templateUrl="/templates/template-gtk.xls"
-          templateName="template-gtk.xls"
-          headerRow={2}
-          columnMap={{ 'NIP': 'nip', 'NUPTK': 'nuptk', 'Nama Lengkap': 'nama', 'JK': 'jenis_kelamin', 'Tempat Lahir': 'tempat_lahir', 'TGL Lahir': 'tanggal_lahir', 'Alamat': 'alamat', 'No. HP': 'no_hp', 'Email': 'email', 'Jabatan': 'jabatan', 'Status Kepegawaian': 'status_kepegawaian', 'Bidang Studi': 'bidang_studi' }}
+          templateUrl="/templates/template-gtk.xlsx"
+          templateName="template-gtk.xlsx"
+          headerRow={1}
+          columnMap={{ 'NIP': 'nip', 'NUPTK': 'nuptk', 'Nama Lengkap': 'nama', 'JK': 'jenis_kelamin', 'Kode Guru': 'kode_guru', 'Tempat Lahir': 'tempat_lahir', 'TGL Lahir': 'tanggal_lahir', 'Alamat': 'alamat', 'No. HP': 'no_hp', 'Email': 'email', 'Jabatan': 'jabatan', 'Status Kepegawaian': 'status_kepegawaian', 'Bidang Studi': 'bidang_studi' }}
           onImport={async (rows) => {
             for (const row of rows) {
               if (!row.nama) continue
               const jk = (row.jenis_kelamin || 'L').toString().charAt(0).toUpperCase()
               await api.post('/gtk', {
                 nip: String(row.nip || ''), nuptk: String(row.nuptk || ''), nama: row.nama,
-                jenis_kelamin: jk === 'P' ? 'P' : 'L', tempat_lahir: row.tempat_lahir || '',
+                jenis_kelamin: jk === 'P' ? 'P' : 'L', kode_guru: String(row.kode_guru || '').toUpperCase(), tempat_lahir: row.tempat_lahir || '',
                 tanggal_lahir: row.tanggal_lahir || '', alamat: row.alamat || '',
                 no_hp: String(row.no_hp || ''), email: row.email || '',
                 jabatan: row.jabatan || 'Guru', status_kepegawaian: row.status_kepegawaian || 'Honorer',
