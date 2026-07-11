@@ -111,12 +111,15 @@ export default function JadwalPage() {
       })
       const guruList = gtks.filter(g => kodeMap.has(g.id))
 
-      const cap = (h: string) => h.toUpperCase()
+      // Export mengikuti pola referensi: Sabtu, Ahad, Senin, Selasa, Rabo, Kamis (Jumat libur disaring).
+      const exportHariOrder = ['sabtu', 'minggu', 'senin', 'selasa', 'rabu', 'kamis', 'jumat']
+      const hariExport = exportHariOrder.filter(h => hari.includes(h as any))
+      const cap = (h: string) => ({ minggu: 'AHAD', rabu: 'RABO' } as Record<string, string>)[h] || h.toUpperCase()
       const findSlot = (rombelId: string, h: string, jam: typeof jamPelajaran[0]) =>
         allRows.find(r => r.rombel_id === rombelId && r.hari === h && r.jam_mulai <= jam.mulai && r.jam_selesai >= jam.selesai)
 
       const nRombel = rombels.length
-      const nHari = hari.length
+      const nHari = hariExport.length
       const COL_WAKTU = 3 // A,B,C = HARI,JAM,WAKTU
       const COL_REKAP_START = COL_WAKTU + nRombel * 2 + 1 // +1 kolom pemisah kosong
       const COL_REKAP = { no: COL_REKAP_START, kg: COL_REKAP_START + 1, nama: COL_REKAP_START + 2, hariStart: COL_REKAP_START + 3 }
@@ -128,7 +131,9 @@ export default function JadwalPage() {
 
       // Baris 1-4: judul (merge full width)
       wsData.push(['JADWAL PELAJARAN']); merges.push({ s: { r: 0, c: 0 }, e: { r: 0, c: lastCol } })
-      wsData.push([])
+      wsData.push([]); merges.push({ s: { r: 1, c: 0 }, e: { r: 1, c: COL_REKAP_START - 1 } })
+      const r1 = wsData[1]; r1[COL_REKAP.no] = 'JUMLAH JAM NGAJAR'
+      merges.push({ s: { r: 1, c: COL_REKAP.no }, e: { r: 1, c: COL_TOTAL } })
       wsData.push([namaLembaga]); merges.push({ s: { r: 2, c: 0 }, e: { r: 2, c: lastCol } })
       wsData.push([`TAHUN PELAJARAN ${taAktif ? taAktif.nama + ' ' + taAktif.semester : ''}`]); merges.push({ s: { r: 3, c: 0 }, e: { r: 3, c: lastCol } })
 
@@ -137,11 +142,11 @@ export default function JadwalPage() {
       const h1: any[] = ['HARI', 'JAM', 'WAKTU']
       rombels.forEach(r => { h1.push(r.nama, '') })
       h1.push('') // kolom pemisah
-      h1.push('NO', 'KG', 'NAMA GURU', 'JUMLAH JAM', ...hari.map(() => ''), 'TOTAL')
+      h1.push('NO', 'KG', 'NAMA GURU', 'JUMLAH JAM', ...hariExport.map(() => ''), 'TOTAL')
       const h2: any[] = ['', '', '']
       rombels.forEach(() => h2.push('KG', 'MAPEL'))
       h2.push('')
-      h2.push('', '', '', ...hari.map(cap), '')
+      h2.push('', '', '', ...hariExport.map(cap), '')
       wsData.push(h1, h2)
       // merge vertikal HARI/JAM/WAKTU
       ;[0, 1, 2].forEach(c => merges.push({ s: { r: rowHeaderIdx, c }, e: { r: rowHeaderIdx + 1, c } }))
@@ -160,7 +165,8 @@ export default function JadwalPage() {
       // Baris data: per hari, per jam — sisipkan baris "Istirahat" di antara slot jam
       const istirahatSetelah = [4, 6]
       const guruRekapRows: number[] = [] // baris (0-indexed) tempat rekap guru mulai ditulis
-      hari.forEach(h => {
+      hariExport.forEach(h => {
+        const hariRowStart = wsData.length
         jamPelajaran.forEach((jam, ji) => {
           const rIdx = wsData.length
           if (guruRekapRows.length < guruList.length) guruRekapRows.push(rIdx)
@@ -177,11 +183,13 @@ export default function JadwalPage() {
             merges.push({ s: { r: wsData.length - 1, c: COL_WAKTU }, e: { r: wsData.length - 1, c: COL_WAKTU + nRombel * 2 - 1 } })
           }
         })
+        const hariRowEnd = wsData.length - 1
+        if (hariRowEnd > hariRowStart) merges.push({ s: { r: hariRowStart, c: 0 }, e: { r: hariRowEnd, c: 0 } })
       })
 
       // Rekap jam mengajar guru ditempel di kolom kanan mulai baris data pertama
       guruList.forEach((g, gi) => {
-        const perHari = hari.map(h => allRows.filter(r => r.gtk_id === g.id && r.hari === h).length)
+        const perHari = hariExport.map(h => allRows.filter(r => r.gtk_id === g.id && r.hari === h).length)
         const total = perHari.reduce((a, b) => a + b, 0)
         const rIdx = guruRekapRows[gi]
         if (rIdx == null) return
@@ -193,7 +201,7 @@ export default function JadwalPage() {
       const wb = XLSX.utils.book_new()
       const ws = XLSX.utils.aoa_to_sheet(wsData)
       ws['!merges'] = merges
-      ws['!cols'] = [{ wch: 10 }, { wch: 6 }, { wch: 14 }, ...rombels.flatMap(() => [{ wch: 5 }, { wch: 16 }]), { wch: 2 }, { wch: 5 }, { wch: 5 }, { wch: 22 }, ...hari.map(() => ({ wch: 6 })), { wch: 7 }]
+      ws['!cols'] = [{ wch: 10 }, { wch: 6 }, { wch: 14 }, ...rombels.flatMap(() => [{ wch: 5 }, { wch: 16 }]), { wch: 2 }, { wch: 5 }, { wch: 5 }, { wch: 22 }, ...hariExport.map(() => ({ wch: 6 })), { wch: 7 }]
       XLSX.utils.book_append_sheet(wb, ws, 'Master Jadwal')
       XLSX.writeFile(wb, `Master_Jadwal_${namaLembaga || 'Lembaga'}.xlsx`)
       toast.success('Master jadwal diunduh')
