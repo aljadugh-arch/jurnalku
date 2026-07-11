@@ -5,6 +5,7 @@ import { useAuthStore } from './stores/authStore'
 import { useSettingsStore } from './stores/settingsStore'
 import DashboardLayout from './components/layout/DashboardLayout'
 import LandingPage from './pages/LandingPage'
+import PanduanPage from './pages/PanduanPage'
 import LoginPage from './pages/auth/LoginPage'
 import RegisterPage from './pages/auth/RegisterPage'
 import ForgotPasswordPage from './pages/auth/ForgotPasswordPage'
@@ -75,6 +76,7 @@ export default function App() {
       <Toaster position="top-right" />
       <Routes>
         <Route path="/" element={<LandingPage />} />
+        <Route path="/panduan" element={<PanduanPage />} />
         <Route path="/login" element={<LoginPage />} />
         <Route path="/register" element={<RegisterPage />} />
         <Route path="/forgot-password" element={<ForgotPasswordPage />} />

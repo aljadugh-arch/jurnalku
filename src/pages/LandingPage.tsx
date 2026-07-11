@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import { useSettingsStore } from '../stores/settingsStore'
 import {
   School, BookOpen, Users, Calendar, Shield, BarChart3, ArrowRight,
-  CheckCircle, Zap, Clock, Globe, Menu, X, ChevronRight, Star, Smartphone
+  CheckCircle, Zap, Clock, Globe, Menu, X, ChevronRight, Star, Smartphone, PlayCircle
 } from 'lucide-react'
 
 const features = [
@@ -55,7 +55,7 @@ export default function LandingPage() {
             {/* Desktop nav */}
             <div className="hidden md:flex items-center gap-6">
               <a href="#fitur" className="text-sm font-medium text-gray-600 hover:text-gray-900 transition-colors">Fitur</a>
-              <a href="#panduan" className="text-sm font-medium text-gray-600 hover:text-gray-900 transition-colors">Panduan</a>
+              <Link to="/panduan" className="text-sm font-medium text-gray-600 hover:text-gray-900 transition-colors">Panduan</Link>
               <a href="#testimoni" className="text-sm font-medium text-gray-600 hover:text-gray-900 transition-colors">Testimoni</a>
               <a href="#demo" className="text-sm font-medium text-gray-600 hover:text-gray-900 transition-colors">Demo</a>
               <Link to="/login" className="text-sm font-medium text-gray-600 hover:text-gray-900 transition-colors">Masuk</Link>
@@ -72,7 +72,7 @@ export default function LandingPage() {
           {mobileOpen && (
             <div className="md:hidden -mx-4 sm:-mx-6 lg:-mx-8 px-4 sm:px-6 lg:px-8 pb-4 space-y-2 border-t border-gray-100 pt-3 bg-white shadow-lg">
               <a href="#fitur" className="block px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 rounded-lg" onClick={() => setMobileOpen(false)}>Fitur</a>
-              <a href="#panduan" className="block px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 rounded-lg" onClick={() => setMobileOpen(false)}>Panduan</a>
+              <Link to="/panduan" className="block px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 rounded-lg" onClick={() => setMobileOpen(false)}>Panduan</Link>
               <a href="#testimoni" className="block px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 rounded-lg" onClick={() => setMobileOpen(false)}>Testimoni</a>
               <a href="#demo" className="block px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 rounded-lg" onClick={() => setMobileOpen(false)}>Demo</a>
               <Link to="/login" className="block px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 rounded-lg" onClick={() => setMobileOpen(false)}>Masuk</Link>
@@ -105,7 +105,7 @@ export default function LandingPage() {
             </p>
             <div className="flex flex-col sm:flex-row items-center justify-center gap-3 mb-10">
               <Link to="/register" className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-7 py-3.5 bg-gray-900 text-white rounded-full font-semibold text-base hover:bg-gray-800 transition-all shadow-lg shadow-gray-900/20">
-                Mulai Sekarang <ArrowRight size={18} />
+                Daftar Gratis Coba Sekarang <ArrowRight size={18} />
               </Link>
               <Link to="/login" className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-7 py-3.5 border border-gray-300 text-gray-700 rounded-full font-semibold text-base hover:bg-gray-50 transition-all">
                 Masuk
@@ -113,7 +113,6 @@ export default function LandingPage() {
             </div>
             <div className="flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-sm text-gray-400">
               <span className="flex items-center gap-1.5"><CheckCircle size={14} className="text-green-500" />Gratis 30 hari</span>
-              <span className="flex items-center gap-1.5"><CheckCircle size={14} className="text-green-500" />Tanpa kartu kredit</span>
               <span className="flex items-center gap-1.5"><CheckCircle size={14} className="text-green-500" />Setup 15 menit</span>
             </div>
           </div>
@@ -164,14 +163,10 @@ export default function LandingPage() {
           </div>
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-10 items-center">
             {/* Video */}
-            <div className="relative rounded-2xl overflow-hidden shadow-lg border border-gray-200 aspect-video bg-gray-900">
-              <iframe
-                className="absolute inset-0 w-full h-full"
-                src="https://www.youtube.com/embed/videoseries?list=PLrAXtmErZgOeiKm4sgNOknGvNjby9efdf"
-                title="Panduan JURNALKU"
-                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                allowFullScreen
-              />
+            <div className="relative rounded-2xl overflow-hidden shadow-lg border border-gray-200 aspect-video bg-gray-900 flex flex-col items-center justify-center text-center p-6">
+              <PlayCircle size={48} className="text-red-500 mb-3" />
+              <p className="text-white font-semibold">Video Tutorial YouTube</p>
+              <p className="text-gray-400 text-sm mt-1">Coming Soon</p>
             </div>
             {/* Steps */}
             <div className="space-y-4">
@@ -189,9 +184,14 @@ export default function LandingPage() {
                   </div>
                 </div>
               ))}
-              <a href="/register" className="inline-flex items-center gap-2 mt-2 px-6 py-3 bg-primary text-white rounded-lg font-medium hover:bg-primary-dark transition-colors">
-                Mulai Sekarang
-              </a>
+              <div className="flex flex-wrap gap-3 mt-2">
+                <a href="/register" className="inline-flex items-center gap-2 px-6 py-3 bg-primary text-white rounded-lg font-medium hover:bg-primary-dark transition-colors">
+                  Daftar Gratis Coba Sekarang
+                </a>
+                <Link to="/panduan" className="inline-flex items-center gap-2 px-6 py-3 border border-gray-300 text-gray-700 rounded-lg font-medium hover:bg-gray-50 transition-colors">
+                  Baca Panduan Lengkap <ChevronRight size={16} />
+                </Link>
+              </div>
             </div>
           </div>
         </div>
@@ -239,21 +239,22 @@ export default function LandingPage() {
                 <Users size={32} className="text-white" />
               </div>
               <h3 className="text-xl font-bold text-gray-900 mb-2">Akun Demo</h3>
-              <p className="text-sm text-gray-500">Login dan jelajahi semua fitur JURNALKU</p>
+              <p className="text-sm text-gray-500">Pilih role, login dan jelajahi semua fitur JURNALKU</p>
+              <p className="text-xs text-gray-400 mt-1">URL: <a href="https://demo.jurnal.cc.cd" target="_blank" rel="noreferrer" className="font-mono font-semibold text-primary hover:underline">demo.jurnal.cc.cd</a> · Password: <span className="font-mono font-semibold text-gray-700">demo123</span></p>
             </div>
-            <div className="bg-gray-50 rounded-xl p-4 mb-6 space-y-2">
-              <div className="flex justify-between items-center">
-                <span className="text-sm text-gray-500">URL</span>
-                <a href="https://demo.jurnal.cc.cd" target="_blank" rel="noreferrer" className="text-sm font-mono font-semibold text-primary hover:underline">demo.jurnal.cc.cd</a>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-sm text-gray-500">Email</span>
-                <span className="text-sm font-mono font-semibold text-gray-800">admin@jurnal.cc.cd</span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-sm text-gray-500">Password</span>
-                <span className="text-sm font-mono font-semibold text-gray-800">admin123</span>
-              </div>
+            <div className="bg-gray-50 rounded-xl p-4 mb-6 space-y-2 text-sm">
+              {[
+                { role: 'Admin Lembaga', email: 'admin@jurnal.cc.cd', pwd: 'admin123', badge: 'bg-indigo-100 text-indigo-700' },
+                { role: 'Kepala Sekolah', email: 'kepala@jurnal.cc.cd', pwd: 'demo123', badge: 'bg-purple-100 text-purple-700' },
+                { role: 'Guru', email: 'guru@jurnal.cc.cd', pwd: 'demo123', badge: 'bg-blue-100 text-blue-700' },
+                { role: 'Wali Kelas', email: 'walikelas@jurnal.cc.cd', pwd: 'demo123', badge: 'bg-teal-100 text-teal-700' },
+                { role: 'Siswa', email: 'siswa@jurnal.cc.cd', pwd: 'demo123', badge: 'bg-green-100 text-green-700' },
+              ].map(a => (
+                <div key={a.email} className="flex items-center justify-between gap-2 py-1.5 border-b border-gray-100 last:border-0">
+                  <span className={`shrink-0 text-xs font-semibold px-2 py-0.5 rounded-full ${a.badge}`}>{a.role}</span>
+                  <span className="font-mono text-xs text-gray-700 truncate flex-1 text-right">{a.email}</span>
+                </div>
+              ))}
             </div>
             <a href="https://demo.jurnal.cc.cd/login" target="_blank" rel="noreferrer" className="w-full inline-flex items-center justify-center gap-2 px-6 py-3 bg-gray-900 text-white rounded-xl font-semibold hover:bg-gray-800 transition-all shadow-sm">
               Buka Demo <ArrowRight size={18} />
