@@ -89,6 +89,71 @@ export default function JadwalPage() {
     return jadwal.find(j => j.hari === h && j.jam_mulai <= jam.mulai && j.jam_selesai >= jam.selesai)
   }
 
+  const exportMasterExcel = async () => {
+    try {
+      const [jadwalAll, taRes] = await Promise.all([api.get('/jadwal'), api.get('/tahun-ajaran')])
+      const allRows: Jadwal[] = jadwalAll.data
+      const taAktif = taRes.data.find((t: any) => t.aktif)
+      const namaLembaga = (settings.nama_lembaga as string) || ''
+
+      // Kode Guru: huruf A,B,C... berurutan sesuai kemunculan pertama di jadwal
+      const kodeMap = new Map<string, string>()
+      const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
+      let idx = 0
+      allRows.forEach(r => {
+        if (r.gtk_id && !kodeMap.has(r.gtk_id)) {
+          kodeMap.set(r.gtk_id, idx < 26 ? letters[idx] : 'A' + letters[idx - 26])
+          idx++
+        }
+      })
+      const guruList = gtks.filter(g => kodeMap.has(g.id))
+
+      const cap = (h: string) => h.charAt(0).toUpperCase() + h.slice(1)
+      const findSlot = (rombelId: string, h: string, jam: typeof jamPelajaran[0]) =>
+        allRows.find(r => r.rombel_id === rombelId && r.hari === h && r.jam_mulai <= jam.mulai && r.jam_selesai >= jam.selesai)
+
+      const header1 = ['HARI', 'JAM', 'WAKTU', ...rombels.flatMap(r => [r.nama, '']), 'NO', 'KG', 'NAMA GURU', ...hari.map(cap), 'TOTAL']
+      const header2 = ['', '', '', ...rombels.flatMap(() => ['KG', 'MAPEL']), '', '', '', ...hari.map(() => ''), '']
+
+      const dataRows: any[][] = []
+      hari.forEach(h => {
+        jamPelajaran.forEach((jam, ji) => {
+          const row: any[] = [ji === 0 ? cap(h) : '', jam.ke, `${jam.mulai}-${jam.selesai}`]
+          rombels.forEach(r => {
+            const slot = findSlot(r.id, h, jam)
+            row.push(slot?.gtk_id ? kodeMap.get(slot.gtk_id) : '', slot ? (slot.mapel_nama || '') : '')
+          })
+          dataRows.push(row)
+        })
+      })
+      // Rekap jam mengajar guru ditempel di kolom kanan, baris sejajar (isi kosong bila guru habis)
+      guruList.forEach((g, gi) => {
+        const perHari = hari.map(h => allRows.filter(r => r.gtk_id === g.id && r.hari === h).length)
+        const total = perHari.reduce((a, b) => a + b, 0)
+        const row = dataRows[gi] || (dataRows[gi] = [])
+        const rekap = [gi + 1, kodeMap.get(g.id), g.nama, ...perHari, total]
+        const offset = 3 + rombels.length * 2
+        rekap.forEach((v, i) => { row[offset + i] = v })
+      })
+
+      const wsData = [
+        ['JADWAL PELAJARAN'],
+        [],
+        [namaLembaga],
+        [`TAHUN PELAJARAN ${taAktif ? taAktif.nama + ' ' + taAktif.semester : ''}`],
+        header1,
+        header2,
+        ...dataRows
+      ]
+      const wb = XLSX.utils.book_new()
+      const ws = XLSX.utils.aoa_to_sheet(wsData)
+      ws['!cols'] = [{ wch: 10 }, { wch: 6 }, { wch: 14 }, ...rombels.flatMap(() => [{ wch: 5 }, { wch: 16 }]), { wch: 5 }, { wch: 5 }, { wch: 22 }, ...hari.map(() => ({ wch: 6 })), { wch: 7 }]
+      XLSX.utils.book_append_sheet(wb, ws, 'Master Jadwal')
+      XLSX.writeFile(wb, `Master_Jadwal_${namaLembaga || 'Lembaga'}.xlsx`)
+      toast.success('Master jadwal diunduh')
+    } catch { toast.error('Gagal export master jadwal') }
+  }
+
   const exportExcel = () => {
     const rombelNama = rombels.find(r => r.id === selectedRombel)?.nama || 'Jadwal'
     const wsData = [['Jadwal Pelajaran - ' + rombelNama], [], ['Jam', ...hari.map(h => h.charAt(0).toUpperCase() + h.slice(1))]]
@@ -135,6 +200,9 @@ export default function JadwalPage() {
         <div className="flex flex-wrap gap-2">
           <button onClick={exportExcel} className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg text-sm hover:bg-green-700">
             <FileSpreadsheet size={16} /> Excel
+          </button>
+          <button onClick={exportMasterExcel} className="flex items-center gap-2 px-4 py-2 bg-emerald-700 text-white rounded-lg text-sm hover:bg-emerald-800">
+            <FileSpreadsheet size={16} /> Master Excel (Semua Rombel)
           </button>
           <button onClick={exportPDF} className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg text-sm hover:bg-red-700">
             <Download size={16} /> PDF
