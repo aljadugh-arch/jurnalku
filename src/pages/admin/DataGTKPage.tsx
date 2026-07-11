@@ -215,10 +215,19 @@ export default function DataGTKPage() {
           templateUrl="/templates/template-gtk.xls"
           templateName="template-gtk.xls"
           headerRow={2}
-          columnMap={{ 'Kode GTK': 'nip', 'Nama Lengkap': 'nama', 'TGL Lahir': 'tanggal_lahir', 'NIP/NUPTK': 'nuptk', 'No. HP': 'no_hp' }}
+          columnMap={{ 'NIP': 'nip', 'NUPTK': 'nuptk', 'Nama Lengkap': 'nama', 'JK': 'jenis_kelamin', 'Tempat Lahir': 'tempat_lahir', 'TGL Lahir': 'tanggal_lahir', 'Alamat': 'alamat', 'No. HP': 'no_hp', 'Email': 'email', 'Jabatan': 'jabatan', 'Status Kepegawaian': 'status_kepegawaian', 'Bidang Studi': 'bidang_studi' }}
           onImport={async (rows) => {
             for (const row of rows) {
-              await api.post('/gtk', { ...row, jenis_kelamin: 'L', jabatan: 'guru', status_kepegawaian: 'honorer', status: 'aktif' })
+              if (!row.nama) continue
+              const jk = (row.jenis_kelamin || 'L').toString().charAt(0).toUpperCase()
+              await api.post('/gtk', {
+                nip: String(row.nip || ''), nuptk: String(row.nuptk || ''), nama: row.nama,
+                jenis_kelamin: jk === 'P' ? 'P' : 'L', tempat_lahir: row.tempat_lahir || '',
+                tanggal_lahir: row.tanggal_lahir || '', alamat: row.alamat || '',
+                no_hp: String(row.no_hp || ''), email: row.email || '',
+                jabatan: row.jabatan || 'Guru', status_kepegawaian: row.status_kepegawaian || 'Honorer',
+                bidang_studi: row.bidang_studi || '', status: 'aktif',
+              })
             }
             fetchData()
           }}

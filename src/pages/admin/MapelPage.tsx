@@ -125,10 +125,15 @@ export default function MapelPage() {
           templateUrl="/templates/template-mapel.xls"
           templateName="template-mapel.xls"
           headerRow={2}
-          columnMap={{ 'Kode MAPEL': 'kode', 'Nama Mata Pelajaran': 'nama' }}
+          columnMap={{ 'Kode MAPEL': 'kode', 'Nama Mata Pelajaran': 'nama', 'Kelompok': 'kelompok', 'Jam Per Minggu': 'jam_per_minggu' }}
           onImport={async (rows) => {
             for (const row of rows) {
-              await api.post('/mapel', { ...row, kelompok: 'wajib', jam_per_minggu: 2 })
+              if (!row.nama) continue
+              await api.post('/mapel', {
+                kode: String(row.kode || ''), nama: row.nama,
+                kelompok: row.kelompok || 'wajib',
+                jam_per_minggu: Number(row.jam_per_minggu) || 2,
+              })
             }
             fetchData()
           }}

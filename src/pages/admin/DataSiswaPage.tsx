@@ -283,7 +283,9 @@ export default function DataSiswaPage() {
             for (const row of rows) {
               if (!row.nama) continue
               const jk = (row.jenis_kelamin || 'L').toString().charAt(0).toUpperCase()
-              await api.post('/siswa', { nis: String(row.nis || ''), nisn: String(row.nisn || ''), nama: row.nama, jenis_kelamin: jk, tempat_lahir: row.tempat_lahir || '', tanggal_lahir: row.tanggal_lahir || '', alamat: row.alamat || '', no_hp: String(row.no_hp || ''), nama_ortu: row.nama_ortu || '', rombel_id: '', status: 'aktif' })
+              const rk = (row.rombel_kode || '').toString().trim().toLowerCase()
+              const rombel = rk ? rombels.find(r => (r.nama || '').toString().trim().toLowerCase() === rk) : null
+              await api.post('/siswa', { nis: String(row.nis || ''), nisn: String(row.nisn || ''), nama: row.nama, jenis_kelamin: jk === 'P' ? 'P' : 'L', tempat_lahir: row.tempat_lahir || '', tanggal_lahir: row.tanggal_lahir || '', alamat: row.alamat || '', no_hp: String(row.no_hp || ''), nama_ortu: row.nama_ortu || '', rombel_id: rombel?.id || '', status: 'aktif' })
             }
             fetchData()
           }}
