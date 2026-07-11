@@ -278,7 +278,7 @@ export default function LandingPage() {
                 Daftar gratis sekarang. Setup 15 menit. Langsung pakai.
               </p>
               <Link to="/register" className="inline-flex items-center gap-2 px-8 py-4 bg-white text-gray-900 rounded-full font-bold text-base hover:bg-gray-100 shadow-2xl transition-all hover:scale-105">
-                Daftar Gratis — Tanpa Kartu Kredit <ArrowRight size={18} />
+                Daftar Gratis Coba Sekarang <ArrowRight size={18} />
               </Link>
               <p className="text-sm text-gray-500 mt-4">
                 <Clock size={14} className="inline mr-1" /> Gratis 30 hari. Batal kapan saja.
