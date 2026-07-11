@@ -41,3 +41,35 @@ export function composeNama(jenjang: string, tingkat: string, paralel: string): 
   if (jenjang === 'RA') return paralel ? `${t}-${paralel}` : t
   return paralel ? `${t}-${paralel}` : t
 }
+
+// Durasi 1 Jam Tatap Muka (JTM) per jenjang — KMA 736/2026.
+// RA:30, MI:35, MTs:40, MA/MAK:45 menit.
+export const JTM_MENIT: Record<string, number> = { RA: 30, MI: 35, MTs: 40, MA: 45 }
+
+export function jtmMenit(jenjang: string): number {
+  return JTM_MENIT[jenjang] || 45 // fallback MA/umum
+}
+
+// Generate slot jam pelajaran dari durasi JTM jenjang.
+// mulai 07:00, istirahat 15 menit setelah slot ke-4 dan ke-6.
+export function generateJamPelajaran(
+  jenjang: string,
+  jumlah = 10,
+  mulaiJam = '07:00',
+  istirahatSetelah: number[] = [4, 6],
+): { ke: number; mulai: string; selesai: string }[] {
+  const durasi = jtmMenit(jenjang)
+  const pad = (n: number) => n.toString().padStart(2, '0')
+  const toStr = (mnt: number) => `${pad(Math.floor(mnt / 60) % 24)}:${pad(mnt % 60)}`
+  const [h, m] = mulaiJam.split(':').map(Number)
+  let cursor = h * 60 + m
+  const out: { ke: number; mulai: string; selesai: string }[] = []
+  for (let ke = 1; ke <= jumlah; ke++) {
+    const mulai = cursor
+    const selesai = cursor + durasi
+    out.push({ ke, mulai: toStr(mulai), selesai: toStr(selesai) })
+    cursor = selesai
+    if (istirahatSetelah.includes(ke)) cursor += 15 // istirahat 15 menit
+  }
+  return out
+}

@@ -1,8 +1,10 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { Plus, Trash2, AlertTriangle, Check, X, Download, FileSpreadsheet } from 'lucide-react'
 import toast from 'react-hot-toast'
 import api from '../../services/api'
 import * as XLSX from 'xlsx'
+import { generateJamPelajaran, jtmMenit } from '../../lib/jenjang'
+import { useSettingsStore } from '../../stores/settingsStore'
 
 interface Jadwal {
   id: string; mapel_id: string; rombel_id: string; gtk_id: string; hari: string; jam_mulai: string; jam_selesai: string; ruangan: string
@@ -10,16 +12,6 @@ interface Jadwal {
 }
 
 const hari = ['senin', 'selasa', 'rabu', 'kamis', 'jumat', 'sabtu'] as const
-const jamPelajaran = [
-  { ke: 1, mulai: '07:00', selesai: '07:45' },
-  { ke: 2, mulai: '07:45', selesai: '08:30' },
-  { ke: 3, mulai: '08:30', selesai: '09:15' },
-  { ke: 4, mulai: '09:15', selesai: '10:00' },
-  { ke: 5, mulai: '10:15', selesai: '11:00' },
-  { ke: 6, mulai: '11:00', selesai: '11:45' },
-  { ke: 7, mulai: '12:30', selesai: '13:15' },
-  { ke: 8, mulai: '13:15', selesai: '14:00' },
-]
 
 export default function JadwalPage() {
   const [jadwal, setJadwal] = useState<Jadwal[]>([])
@@ -29,7 +21,15 @@ export default function JadwalPage() {
   const [selectedRombel, setSelectedRombel] = useState('')
   const [conflicts, setConflicts] = useState<any[]>([])
   const [showForm, setShowForm] = useState(false)
+  const settings = useSettingsStore(s => s.settings)
+  const jenjang = (settings.jenjang as string) || ''
+  const jamPelajaran = useMemo(() => generateJamPelajaran(jenjang, 10), [jenjang])
   const [form, setForm] = useState({ mapel_id: '', rombel_id: '', gtk_id: '', hari: 'senin', jam_mulai: '07:00', jam_selesai: '07:45', ruangan: '' })
+
+  // sinkronkan default jam form dgn slot pertama saat jenjang berubah
+  useEffect(() => {
+    if (jamPelajaran[0]) setForm(f => ({ ...f, jam_mulai: jamPelajaran[0].mulai, jam_selesai: jamPelajaran[0].selesai }))
+  }, [jamPelajaran])
 
   useEffect(() => {
     Promise.all([api.get('/rombel'), api.get('/mapel'), api.get('/gtk')]).then(([r, m, g]) => {
@@ -263,9 +263,12 @@ export default function JadwalPage() {
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">Jam Mulai</label>
-                  <select value={form.jam_mulai} onChange={e => setForm({...form, jam_mulai: e.target.value})} className="w-full px-3 py-2 border rounded-lg text-sm">
-                    {jamPelajaran.map(j => <option key={j.mulai} value={j.mulai}>{j.mulai}</option>)}
+                  <label className="block text-xs font-medium text-gray-600 mb-1">Jam Ke / Mulai</label>
+                  <select value={form.jam_mulai} onChange={e => {
+                    const slot = jamPelajaran.find(j => j.mulai === e.target.value)
+                    setForm({...form, jam_mulai: e.target.value, jam_selesai: slot ? slot.selesai : form.jam_selesai})
+                  }} className="w-full px-3 py-2 border rounded-lg text-sm">
+                    {jamPelajaran.map(j => <option key={j.mulai} value={j.mulai}>Jam ke-{j.ke} ({j.mulai})</option>)}
                   </select>
                 </div>
                 <div>
@@ -275,6 +278,9 @@ export default function JadwalPage() {
                   </select>
                 </div>
               </div>
+              <p className="text-xs text-gray-500 -mt-1">
+                Durasi 1 JTM {jenjang || 'default'}: <strong>{jtmMenit(jenjang)} menit</strong> (KMA 736/2026)
+              </p>
               <div className="flex gap-2 pt-2">
                 <button type="button" onClick={() => setShowForm(false)} className="flex-1 px-4 py-2 border rounded-lg text-sm">Batal</button>
                 <button type="submit" className="flex-1 px-4 py-2 bg-primary text-white rounded-lg text-sm">Simpan</button>
