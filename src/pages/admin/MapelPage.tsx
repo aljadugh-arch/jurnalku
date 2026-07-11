@@ -122,7 +122,8 @@ export default function MapelPage() {
       {showImport && (
         <ImportExcel
           title="Import Mata Pelajaran"
-          templateName="master-mapel-v2.xls"
+          templateUrl="/templates/template-mapel.xls"
+          templateName="template-mapel.xls"
           headerRow={2}
           columnMap={{ 'Kode MAPEL': 'kode', 'Nama Mata Pelajaran': 'nama' }}
           onImport={async (rows) => {

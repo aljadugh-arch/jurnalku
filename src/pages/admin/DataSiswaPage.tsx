@@ -275,9 +275,10 @@ export default function DataSiswaPage() {
       {showImport && (
         <ImportExcel
           title="Import Data Siswa"
-          templateName="master-siswa-v2.xls"
-          headerRow={0}
-          columnMap={{ 'Nama': 'nama', 'NAMA': 'nama', 'NIS': 'nis', 'NISN': 'nisn', 'JK': 'jenis_kelamin', 'Jenis Kelamin': 'jenis_kelamin', 'Tempat Lahir': 'tempat_lahir', 'Tanggal Lahir': 'tanggal_lahir', 'Alamat': 'alamat', 'No HP': 'no_hp', 'Nama Ortu': 'nama_ortu' }}
+          templateUrl="/templates/template-siswa.xls"
+          templateName="template-siswa.xls"
+          headerRow={2}
+          columnMap={{ 'Nama': 'nama', 'NAMA': 'nama', 'NIS': 'nis', 'NISN': 'nisn', 'Kode Rombel': 'rombel_kode', 'JK': 'jenis_kelamin', 'Jenis Kelamin': 'jenis_kelamin', 'Tempat Lahir': 'tempat_lahir', 'Tanggal Lahir': 'tanggal_lahir', 'Alamat': 'alamat', 'No HP': 'no_hp', 'Nama Ortu': 'nama_ortu' }}
           onImport={async (rows) => {
             for (const row of rows) {
               if (!row.nama) continue

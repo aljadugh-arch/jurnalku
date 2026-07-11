@@ -212,7 +212,8 @@ export default function DataGTKPage() {
       {showImport && (
         <ImportExcel
           title="Import Data GTK"
-          templateName="master-gtk-v2.xls"
+          templateUrl="/templates/template-gtk.xls"
+          templateName="template-gtk.xls"
           headerRow={2}
           columnMap={{ 'Kode GTK': 'nip', 'Nama Lengkap': 'nama', 'TGL Lahir': 'tanggal_lahir', 'NIP/NUPTK': 'nuptk', 'No. HP': 'no_hp' }}
           onImport={async (rows) => {

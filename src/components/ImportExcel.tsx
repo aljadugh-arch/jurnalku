@@ -71,10 +71,17 @@ export default function ImportExcel({ title, templateUrl, templateName, headerRo
           <button onClick={onClose} className="p-1 hover:bg-gray-100 rounded"><X size={20} /></button>
         </div>
 
-        {templateName && (
-          <div className="bg-blue-50 border border-blue-100 rounded-lg p-3 mb-4">
-            <p className="text-sm text-blue-700">Template: <strong>{templateName}</strong></p>
-            <p className="text-xs text-blue-500 mt-1">Download template dari folder template-jurnal/, isi data, lalu upload kembali.</p>
+        {(templateUrl || templateName) && (
+          <div className="bg-blue-50 border border-blue-100 rounded-lg p-3 mb-4 flex items-center justify-between gap-3">
+            <div>
+              <p className="text-sm text-blue-700">Template: <strong>{templateName || 'Excel'}</strong></p>
+              <p className="text-xs text-blue-500 mt-1">Download template, isi data, lalu upload kembali.</p>
+            </div>
+            {templateUrl && (
+              <a href={templateUrl} download className="shrink-0 inline-flex items-center gap-1 px-3 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700">
+                <Download size={16} /> Download
+              </a>
+            )}
           </div>
         )}
 
