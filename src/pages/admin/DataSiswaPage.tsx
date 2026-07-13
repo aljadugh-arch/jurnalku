@@ -4,6 +4,8 @@ import toast from 'react-hot-toast'
 import api from '../../services/api'
 import { ResponsiveTable } from '../../components/ui'
 import ImportExcel from '../../components/ImportExcel'
+import { formatTanggal, normalizeDate } from '../../lib/dateFormat'
+import { matchRombel } from '../../lib/rombelMatch'
 
 interface Siswa {
   id: string
@@ -77,7 +79,7 @@ export default function DataSiswaPage() {
   }
 
   const handleEdit = (siswa: Siswa) => {
-    setForm({ nis: siswa.nis, nisn: siswa.nisn, nama: siswa.nama, jenis_kelamin: siswa.jenis_kelamin, tempat_lahir: siswa.tempat_lahir, tanggal_lahir: siswa.tanggal_lahir, alamat: siswa.alamat, no_hp: siswa.no_hp, nama_ortu: siswa.nama_ortu, rombel_id: siswa.rombel_id || '', status: siswa.status })
+    setForm({ nis: siswa.nis, nisn: siswa.nisn, nama: siswa.nama, jenis_kelamin: siswa.jenis_kelamin, tempat_lahir: siswa.tempat_lahir, tanggal_lahir: normalizeDate(siswa.tanggal_lahir), alamat: siswa.alamat, no_hp: siswa.no_hp, nama_ortu: siswa.nama_ortu, rombel_id: siswa.rombel_id || '', status: siswa.status })
     setEditId(siswa.id)
     setShowModal(true)
   }
@@ -163,7 +165,7 @@ export default function DataSiswaPage() {
               { key: 'nis', header: 'NIS', className: 'font-mono' },
               { key: 'nisn', header: 'NISN', className: 'font-mono text-xs', hideOnMobile: true },
               { key: 'jenis_kelamin', header: 'JK' },
-              { key: 'ttl', header: 'TTL', hideOnMobile: true, render: (s) => (s.tempat_lahir || '') + ', ' + (s.tanggal_lahir || '') },
+              { key: 'ttl', header: 'TTL', hideOnMobile: true, render: (s) => (s.tempat_lahir || '') + ', ' + formatTanggal(s.tanggal_lahir) },
               { key: 'status', header: 'Status', render: (s) => (
                 <span className={'px-2 py-1 rounded-full text-xs font-medium ' + (s.status === 'aktif' ? 'bg-green-100 text-green-700' : s.status === 'lulus' ? 'bg-blue-100 text-blue-700' : 'bg-red-100 text-red-700')}>
                   {s.status}
@@ -188,8 +190,8 @@ export default function DataSiswaPage() {
 
       {/* Modal Tambah/Edit */}
       {showModal && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto p-6">
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-start justify-center p-4 pt-6 sm:pt-10 overflow-y-auto">
+          <div className="bg-white rounded-2xl w-full max-w-lg max-h-[calc(100vh-3rem)] overflow-y-auto p-6">
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-lg font-bold text-gray-800">{editId ? 'Edit Siswa' : 'Tambah Siswa'}</h2>
               <button onClick={() => setShowModal(false)} className="p-1 hover:bg-gray-100 rounded-lg"><X size={20} /></button>
@@ -277,13 +279,16 @@ export default function DataSiswaPage() {
           headerRow={2}
           columnMap={{ 'Nama': 'nama', 'NAMA': 'nama', 'NIS': 'nis', 'NISN': 'nisn', 'Kode Rombel': 'rombel_kode', 'JK': 'jenis_kelamin', 'Jenis Kelamin': 'jenis_kelamin', 'Tempat Lahir': 'tempat_lahir', 'Tanggal Lahir': 'tanggal_lahir', 'Alamat': 'alamat', 'No HP': 'no_hp', 'Nama Ortu': 'nama_ortu' }}
           onImport={async (rows) => {
+            let gagal = 0
             for (const row of rows) {
               if (!row.nama) continue
               const jk = (row.jenis_kelamin || 'L').toString().charAt(0).toUpperCase()
-              const rk = (row.rombel_kode || '').toString().trim().toLowerCase()
-              const rombel = rk ? rombels.find(r => (r.nama || '').toString().trim().toLowerCase() === rk) : null
-              await api.post('/siswa', { nis: String(row.nis || ''), nisn: String(row.nisn || ''), nama: row.nama, jenis_kelamin: jk === 'P' ? 'P' : 'L', tempat_lahir: row.tempat_lahir || '', tanggal_lahir: row.tanggal_lahir || '', alamat: row.alamat || '', no_hp: String(row.no_hp || ''), nama_ortu: row.nama_ortu || '', rombel_id: rombel?.id || '', status: 'aktif' })
+              const rombel = matchRombel(row.rombel_kode, rombels)
+              try {
+                await api.post('/siswa', { nis: String(row.nis || ''), nisn: String(row.nisn || ''), nama: row.nama, jenis_kelamin: jk === 'P' ? 'P' : 'L', tempat_lahir: row.tempat_lahir || '', tanggal_lahir: row.tanggal_lahir || '', alamat: row.alamat || '', no_hp: String(row.no_hp || ''), nama_ortu: row.nama_ortu || '', rombel_id: rombel?.id || '', status: 'aktif' })
+              } catch { gagal++ }
             }
+            if (gagal > 0) toast.error(gagal + ' baris gagal (NIS kosong/duplikat)')
             fetchData()
           }}
           onClose={() => setShowImport(false)}

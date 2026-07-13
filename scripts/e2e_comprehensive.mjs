@@ -1,5 +1,5 @@
 // Comprehensive E2E: ALL endpoints, ALL modules, ALL features
-const BASE = 'https://jurnal.cc.cd/api';
+const BASE = process.env.E2E_BASE || 'https://staging.jurnal.cc.cd/api';
 const stamp = Date.now().toString(36);
 const email = `e2e-${stamp}@test.local`;
 const password = 'Password123!';
@@ -145,7 +145,7 @@ try {
   await req('GET', '/jenis-tagihan');
 
   // ===================== TAGIHAN =====================
-  await req('POST', '/tagihan/generate', { jenis_tagihan_id: jenisTagihan.id, rombel_id: rombel1.id, bulan: 7, tahun: 2026 });
+  await req('POST', '/tagihan/generate', { jenis_nama: 'SPP Juli', nominal: 100000, rombel_id: rombel1.id, bulan: 7, tahun: 2026 });
   const tagihanList = await req('GET', `/tagihan?siswa_id=${siswa1.id}`);
   assert(tagihanList.length >= 1, 'tagihan generated');
   await req('PUT', `/tagihan/${tagihanList[0].id}/bayar`, { metode_bayar: 'tunai', keterangan: 'Bayar langsung' });

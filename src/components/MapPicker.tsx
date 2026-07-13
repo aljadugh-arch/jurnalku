@@ -86,9 +86,14 @@ export default function MapPicker({ lat, lng, radius, onChange }: MapPickerProps
 
   const handleLocate = () => {
     if (!navigator.geolocation) return
-    navigator.geolocation.getCurrentPosition((pos) => {
-      onChange(pos.coords.latitude, pos.coords.longitude)
-    })
+    navigator.geolocation.getCurrentPosition(
+      (pos) => onChange(pos.coords.latitude, pos.coords.longitude),
+      (err) => {
+        console.warn('[geo] gagal:', err.message)
+        alert('Gagal ambil lokasi: ' + err.message + '\nPastikan izin lokasi diaktifkan & pakai koneksi HTTPS.')
+      },
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+    )
   }
 
   return (

@@ -8,6 +8,8 @@ export default function GuruJurnalPage() {
   const [showForm, setShowForm] = useState(false)
   const [mapels, setMapels] = useState<any[]>([])
   const [rombels, setRombels] = useState<any[]>([])
+  const [jadwalHariIni, setJadwalHariIni] = useState<any[]>([])
+  const [hariLabel, setHariLabel] = useState('')
   const [form, setForm] = useState({ mapel_id: '', rombel_id: '', tanggal: new Date().toISOString().split('T')[0], jam_ke: 1, materi: '', kegiatan: '', catatan: '' })
 
   useEffect(() => {
@@ -16,6 +18,26 @@ export default function GuruJurnalPage() {
       setMapels(m.data); setRombels(r.data)
     })
   }, [])
+
+  // Reload jadwal hari ini setiap tanggal berubah — auto-isi mapel & rombel guru.
+  useEffect(() => {
+    api.get('/jurnal/jadwal-hari-ini', { params: { tanggal: form.tanggal } })
+      .then(res => {
+        setJadwalHariIni(res.data.jadwal || [])
+        setHariLabel(res.data.hari || '')
+      })
+      .catch(() => { setJadwalHariIni([]); setHariLabel('') })
+  }, [form.tanggal])
+
+  const applyJadwal = (j: any, idx: number) => {
+    setForm(f => ({
+      ...f,
+      mapel_id: j.mapel_id || f.mapel_id,
+      rombel_id: j.rombel_id || f.rombel_id,
+      jam_ke: idx + 1,
+    }))
+    toast.success(`Auto-isi: ${j.mapel_nama || '-'} • ${j.rombel_nama || '-'}`)
+  }
 
   const loadData = async () => {
     const res = await api.get('/jurnal/me')
@@ -127,6 +149,26 @@ export default function GuruJurnalPage() {
                     {[1,2,3,4,5,6,7,8].map(j => <option key={j} value={j}>Jam ke-{j}</option>)}
                   </select>
                 </div>
+              </div>
+
+              {/* Jadwal hari ini — klik untuk auto-isi mapel & rombel */}
+              <div className="rounded-lg border border-primary/30 bg-primary/5 p-3">
+                <p className="text-xs font-semibold text-primary uppercase tracking-wide mb-1">
+                  Jadwal Saya {hariLabel ? `(${hariLabel})` : ''}
+                </p>
+                {jadwalHariIni.length === 0 ? (
+                  <p className="text-xs text-gray-500">Belum ada jadwal untuk tanggal ini.</p>
+                ) : (
+                  <div className="flex flex-wrap gap-2">
+                    {jadwalHariIni.map((j, i) => (
+                      <button key={j.jadwal_id || i} type="button" onClick={() => applyJadwal(j, i)}
+                        className="text-left rounded-md border border-primary/40 bg-white px-2 py-1.5 text-xs hover:bg-primary/10">
+                        <div className="font-medium text-gray-800">{j.mapel_nama || j.mapel_kode || '-'}</div>
+                        <div className="text-gray-500">{j.rombel_nama || '-'}{j.jam_mulai ? ` · ${j.jam_mulai}` : ''}</div>
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1">Mata Pelajaran</label>

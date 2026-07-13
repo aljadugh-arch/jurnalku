@@ -2,6 +2,7 @@ import { useState, useRef } from 'react'
 import { Upload, FileSpreadsheet, X, Download } from 'lucide-react'
 import * as XLSX from 'xlsx'
 import toast from 'react-hot-toast'
+import { normalizeDate } from '../lib/dateFormat'
 
 interface ImportExcelProps {
   title: string
@@ -32,20 +33,32 @@ export default function ImportExcel({ title, templateUrl, templateName, headerRo
         const sh = wb.Sheets[wb.SheetNames[0]]
         const rows: any[][] = XLSX.utils.sheet_to_json(sh, { header: 1 })
 
-        if (rows.length <= headerRow) { toast.error('File kosong atau baris header tidak ditemukan'); return }
+        if (rows.length === 0) { toast.error('File kosong atau baris header tidak ditemukan'); return }
 
-        const hdrs = (rows[headerRow] as string[]).map(h => (h || '').toString().trim())
+        let detectedHeaderRow = headerRow
+        let bestMatchCount = -1
+        const maxScan = Math.min(rows.length, 10)
+        for (let r = 0; r < maxScan; r++) {
+          const matchCount = ((rows[r] || []) as any[]).filter(h => columnMap[(h || '').toString().trim()]).length
+          if (matchCount > bestMatchCount) { bestMatchCount = matchCount; detectedHeaderRow = r }
+        }
+        if (bestMatchCount <= 0) {
+          toast.error('Tidak ada kolom cocok. Download ulang template terbaru, jangan ubah baris header.')
+          return
+        }
+
+        const hdrs = (rows[detectedHeaderRow] as string[]).map(h => (h || '').toString().trim())
         setHeaders(hdrs)
 
         const mapped: Record<string, any>[] = []
-        for (let i = headerRow + 1; i < rows.length; i++) {
+        for (let i = detectedHeaderRow + 1; i < rows.length; i++) {
           const row = rows[i]
           if (!row || row.every(c => !c)) continue // skip empty rows
           const obj: Record<string, any> = {}
           hdrs.forEach((h, idx) => {
             const field = columnMap[h]
             if (field && row[idx] !== undefined && row[idx] !== null) {
-              obj[field] = row[idx].toString().trim()
+              obj[field] = (/(tanggal|tgl|date)/i.test(field) ? normalizeDate(row[idx]) : row[idx]).toString().trim()
             }
           })
           if (Object.keys(obj).length > 0) mapped.push(obj)

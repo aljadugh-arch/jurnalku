@@ -5,22 +5,47 @@ import toast from 'react-hot-toast'
 import api from '../../services/api'
 import * as XLSX from 'xlsx'
 
+type Mode = 'weekly' | 'monthly' | 'semester' | 'yearly'
+
 export default function RekapAbsensiPage() {
   const [tab, setTab] = useState<'siswa' | 'gtk'>('siswa')
-  const [bulan, setBulan] = useState(() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}` })
+  const [mode, setMode] = useState<Mode>('monthly')
+  const today = new Date()
+  const iso = (d: Date) => d.toISOString().slice(0, 10)
+  const [bulan, setBulan] = useState(() => { const d = today; return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}` })
+  const [mulai, setMulai] = useState(() => iso(today))
+  const [tahun, setTahun] = useState(() => String(today.getFullYear()))
+  const [tahunAjaran, setTahunAjaran] = useState(() => {
+    const y = today.getFullYear(); const m = today.getMonth() + 1
+    return m >= 7 ? `${y}/${y+1}` : `${y-1}/${y}`
+  })
+  const [semester, setSemester] = useState<'ganjil' | 'genap'>(() => (today.getMonth() + 1) >= 7 ? 'ganjil' : 'genap')
   const [rekapSiswa, setRekapSiswa] = useState<any[]>([])
   const [rekapGtk, setRekapGtk] = useState<any[]>([])
   const [summary, setSummary] = useState<any>({ hadir: 0, sakit: 0, izin: 0, alpha: 0 })
+  const [periodeLabel, setPeriodeLabel] = useState('')
 
-  useEffect(() => { loadRekap() }, [bulan, tab])
+  useEffect(() => { loadRekap() }, [mode, bulan, mulai, tahun, tahunAjaran, semester, tab])
+
+  const buildParams = () => {
+    const p: any = { tipe: tab, mode }
+    if (mode === 'weekly') p.mulai = mulai
+    else if (mode === 'monthly') p.bulan = bulan
+    else if (mode === 'yearly') p.tahun = tahun
+    else if (mode === 'semester') { p.tahun_ajaran = tahunAjaran; p.semester = semester }
+    return p
+  }
 
   const loadRekap = async () => {
     try {
-      const res = await api.get('/rekap-absensi', { params: { bulan, tipe: tab } })
+      const res = await api.get('/rekap-absensi', { params: buildParams() })
       if (tab === 'siswa') setRekapSiswa(res.data.detail)
       else setRekapGtk(res.data.detail)
       setSummary(res.data.summary)
-    } catch { /* empty */ }
+      setPeriodeLabel(res.data.label || '')
+    } catch (e: any) {
+      toast.error(e.response?.data?.error || 'Gagal memuat rekap')
+    }
   }
 
   const data = tab === 'siswa' ? rekapSiswa : rekapGtk
@@ -41,8 +66,13 @@ export default function RekapAbsensiPage() {
       d.hadir, d.sakit, d.izin, d.alpha,
       d.total > 0 ? Math.round(d.hadir / d.total * 100) + '%' : '0%'
     ])
+    const periodeStr = periodeLabel || bulan
+    const suffix = mode === 'weekly' ? `week_${mulai}`
+      : mode === 'yearly' ? `year_${tahun}`
+      : mode === 'semester' ? `sem_${semester}_${tahunAjaran.replace('/', '-')}`
+      : `bulan_${bulan}`
     const ws = XLSX.utils.aoa_to_sheet([
-      [`Rekapitulasi Absensi ${tab === 'siswa' ? 'Siswa' : 'GTK'} - ${bulan}`],
+      [`Rekapitulasi Absensi ${tab === 'siswa' ? 'Siswa' : 'GTK'} — ${periodeStr}`],
       [],
       header,
       ...rows
@@ -50,7 +80,7 @@ export default function RekapAbsensiPage() {
     ws['!cols'] = header.map(() => ({ wch: 15 }))
     const wb = XLSX.utils.book_new()
     XLSX.utils.book_append_sheet(wb, ws, 'Rekap')
-    XLSX.writeFile(wb, `Rekap_Absensi_${tab}_${bulan}.xlsx`)
+    XLSX.writeFile(wb, `Rekap_Absensi_${tab}_${suffix}.xlsx`)
     toast.success('Excel diunduh')
   }
 
@@ -63,7 +93,7 @@ export default function RekapAbsensiPage() {
     const rows = data.map((d: any, i: number) =>
       `<tr><td>${i+1}</td><td>${d.nama}</td><td>${d.nis||d.nip||''}</td><td>${d.rombel_nama||d.jabatan||''}</td><td>${d.hadir}</td><td>${d.sakit}</td><td>${d.izin}</td><td>${d.alpha}</td><td>${d.total>0?Math.round(d.hadir/d.total*100):'0'}%</td></tr>`
     ).join('')
-    printWindow.document.write(`<!DOCTYPE html><html><head><title>Rekap Absensi</title><style>body{font-family:Arial,sans-serif;padding:20px;font-size:12px}table{border-collapse:collapse;width:100%}th,td{border:1px solid #ddd;padding:6px;text-align:center}th{background:#f3f4f6}@media print{body{padding:0}}</style></head><body><h2 style="text-align:center">Rekapitulasi Absensi ${tab === 'siswa' ? 'Siswa' : 'GTK'}</h2><h3 style="text-align:center">Periode: ${bulan}</h3><p>Total: Hadir ${summary.hadir} | Sakit ${summary.sakit} | Izin ${summary.izin} | Alpha ${summary.alpha}</p><table><thead><tr>${header}</tr></thead><tbody>${rows}</tbody></table><script>setTimeout(()=>window.print(),500)<\/script></body></html>`)
+    printWindow.document.write(`<!DOCTYPE html><html><head><title>Rekap Absensi</title><style>body{font-family:Arial,sans-serif;padding:20px;font-size:12px}table{border-collapse:collapse;width:100%}th,td{border:1px solid #ddd;padding:6px;text-align:center}th{background:#f3f4f6}@media print{body{padding:0}}</style></head><body><h2 style="text-align:center">Rekapitulasi Absensi ${tab === 'siswa' ? 'Siswa' : 'GTK'}</h2><h3 style="text-align:center">Periode: ${bulan}</h3><p>Total: Hadir ${summary.hadir} | Sakit ${summary.sakit} | Izin ${summary.izin} | Alpha ${summary.alpha}</p><table><thead><tr>${header}</tr></thead><tbody>${rows}</tbody></table><script>setTimeout(()=>window.print(),500)</script></body></html>`)
     printWindow.document.close()
   }
 
@@ -72,7 +102,8 @@ export default function RekapAbsensiPage() {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-gray-800 font-display">Rekapitulasi Absensi</h1>
-          <p className="text-gray-500 text-sm mt-1">Rekap kehadiran siswa dan GTK per bulan</p>
+          <p className="text-gray-500 text-sm mt-1">Rekap kehadiran siswa dan GTK — mingguan, bulanan, semester, tahunan</p>
+          {periodeLabel && <p className="text-xs text-gray-400 mt-0.5">Periode: {periodeLabel}</p>}
         </div>
         <div className="flex gap-2">
           <button onClick={exportExcel} className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg text-sm hover:bg-green-700">
@@ -85,7 +116,7 @@ export default function RekapAbsensiPage() {
       </div>
 
       {/* Filter */}
-      <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100 flex flex-wrap gap-4 items-center">
+      <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100 flex flex-wrap gap-3 items-center">
         <div className="flex bg-gray-100 rounded-lg p-1">
           <button onClick={() => setTab('siswa')} className={`px-4 py-1.5 rounded-md text-sm font-medium transition flex items-center gap-1 ${tab === 'siswa' ? 'bg-white shadow text-primary' : 'text-gray-600'}`}>
             <GraduationCap size={16} /> Siswa
@@ -94,7 +125,36 @@ export default function RekapAbsensiPage() {
             <Users size={16} /> GTK
           </button>
         </div>
-        <input type="month" value={bulan} onChange={e => setBulan(e.target.value)} className="px-3 py-2 border rounded-lg text-sm" />
+        <select value={mode} onChange={e => setMode(e.target.value as Mode)} className="px-3 py-2 border rounded-lg text-sm">
+          <option value="weekly">Mingguan (7 hari)</option>
+          <option value="monthly">Bulanan</option>
+          <option value="semester">Per-Semester</option>
+          <option value="yearly">Tahunan</option>
+        </select>
+        {mode === 'weekly' && (
+          <label className="text-xs text-gray-600 flex items-center gap-2">Mulai
+            <input type="date" value={mulai} onChange={e => setMulai(e.target.value)} className="px-3 py-2 border rounded-lg text-sm" />
+          </label>
+        )}
+        {mode === 'monthly' && (
+          <input type="month" value={bulan} onChange={e => setBulan(e.target.value)} className="px-3 py-2 border rounded-lg text-sm" />
+        )}
+        {mode === 'yearly' && (
+          <label className="text-xs text-gray-600 flex items-center gap-2">Tahun
+            <input type="number" min="2020" max="2100" value={tahun} onChange={e => setTahun(e.target.value)} className="px-3 py-2 border rounded-lg text-sm w-28" />
+          </label>
+        )}
+        {mode === 'semester' && (
+          <>
+            <label className="text-xs text-gray-600 flex items-center gap-2">Tahun Ajaran
+              <input type="text" value={tahunAjaran} onChange={e => setTahunAjaran(e.target.value)} placeholder="2026/2027" className="px-3 py-2 border rounded-lg text-sm w-32" />
+            </label>
+            <select value={semester} onChange={e => setSemester(e.target.value as 'ganjil' | 'genap')} className="px-3 py-2 border rounded-lg text-sm">
+              <option value="ganjil">Ganjil</option>
+              <option value="genap">Genap</option>
+            </select>
+          </>
+        )}
       </div>
 
       {/* Summary Cards */}

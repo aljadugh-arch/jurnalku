@@ -56,7 +56,7 @@ export default function JurnalPage() {
     const rows = data.map((d, i) =>
       `<tr><td>${i+1}</td><td>${d.tanggal}</td><td>${d.guru_nama||''}</td><td>${d.mapel_nama||''}</td><td>${d.rombel_nama||''}</td><td>${d.jam_ke||''}</td><td>${d.materi||''}</td><td>${d.status}</td></tr>`
     ).join('')
-    printWindow.document.write(`<!DOCTYPE html><html><head><title>Jurnal Mengajar</title><style>body{font-family:Arial,sans-serif;padding:20px;font-size:11px}table{border-collapse:collapse;width:100%}th,td{border:1px solid #ddd;padding:5px}th{background:#f3f4f6;font-size:10px}@media print{body{padding:0}}</style></head><body><h2 style="text-align:center">Jurnal Mengajar</h2><table><thead><tr><th>No</th><th>Tanggal</th><th>Guru</th><th>Mapel</th><th>Rombel</th><th>Jam</th><th>Materi</th><th>Status</th></tr></thead><tbody>${rows}</tbody></table><script>setTimeout(()=>window.print(),500)<\/script></body></html>`)
+    printWindow.document.write(`<!DOCTYPE html><html><head><title>Jurnal Mengajar</title><style>body{font-family:Arial,sans-serif;padding:20px;font-size:11px}table{border-collapse:collapse;width:100%}th,td{border:1px solid #ddd;padding:5px}th{background:#f3f4f6;font-size:10px}@media print{body{padding:0}}</style></head><body><h2 style="text-align:center">Jurnal Mengajar</h2><table><thead><tr><th>No</th><th>Tanggal</th><th>Guru</th><th>Mapel</th><th>Rombel</th><th>Jam</th><th>Materi</th><th>Status</th></tr></thead><tbody>${rows}</tbody></table><script>setTimeout(()=>window.print(),500)</script></body></html>`)
     printWindow.document.close()
   }
 

@@ -101,7 +101,7 @@ export default function PengajarPage() {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-gray-800 font-display">Data Pengajar</h1>
-          <p className="text-gray-500 text-sm mt-1">Penugasan guru mengajar per kelas dan mapel</p>
+          <p className="text-gray-500 text-sm mt-1">Penugasan guru mengajar per kelas dan mapel. Guru yang sama boleh ditambahkan berkali-kali untuk mapel/rombel berbeda.</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <input ref={fileRef} type="file" accept=".xlsx,.xls" onChange={handleImport} className="hidden" />

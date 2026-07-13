@@ -16,6 +16,8 @@ const app = express()
 const PORT = process.env.PORT || 3001
 const IS_PROD = process.env.NODE_ENV === 'production'
 const JWT_SECRET = process.env.JWT_SECRET || 'jurnalku-secret-key-2024'
+const todayJakarta = () => new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Jakarta' })
+const timeJakarta = () => new Date().toLocaleTimeString('en-GB', { timeZone: 'Asia/Jakarta', hour: '2-digit', minute: '2-digit', hour12: false })
 
 // FATAL: refuse to boot in production with the default secret
 if (IS_PROD && JWT_SECRET === 'jurnalku-secret-key-2024') {
@@ -184,6 +186,16 @@ db.exec(`
     FOREIGN KEY (gtk_id) REFERENCES gtk(id)
   );
 
+  CREATE TABLE IF NOT EXISTS template_jadwal (
+    id TEXT PRIMARY KEY,
+    nama TEXT NOT NULL,
+    jenis TEXT DEFAULT 'reguler',
+    maks_jtm INTEGER DEFAULT 15,
+    keterangan TEXT,
+    tenant_id TEXT NOT NULL,
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP
+  );
+
   CREATE TABLE IF NOT EXISTS jurnal_mengajar (
     id TEXT PRIMARY KEY,
     guru_id TEXT NOT NULL,
@@ -245,6 +257,28 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_rapor_siswa ON rapor(siswa_id);
   CREATE INDEX IF NOT EXISTS idx_rapor_semester ON rapor(tahun_ajaran, semester, jenis);
   CREATE UNIQUE INDEX IF NOT EXISTS idx_rapor_unique ON rapor(siswa_id, mapel_id, tahun_ajaran, semester, jenis);
+
+  CREATE TABLE IF NOT EXISTS catatan_kepribadian (
+    id TEXT PRIMARY KEY,
+    siswa_id TEXT NOT NULL,
+    tahun_ajaran TEXT NOT NULL,
+    semester TEXT NOT NULL,
+    sikap_spiritual TEXT DEFAULT '',
+    sikap_sosial TEXT DEFAULT '',
+    kelakuan TEXT DEFAULT 'Baik',
+    kerajinan TEXT DEFAULT 'Baik',
+    kerapian TEXT DEFAULT 'Baik',
+    kedisiplinan TEXT DEFAULT 'Baik',
+    catatan_wali_kelas TEXT DEFAULT '',
+    saran TEXT DEFAULT '',
+    tenant_id TEXT DEFAULT 'default',
+    created_at TEXT DEFAULT (datetime('now')),
+    updated_at TEXT,
+    FOREIGN KEY (siswa_id) REFERENCES siswa(id)
+  );
+  CREATE INDEX IF NOT EXISTS idx_catatan_kepribadian_tenant ON catatan_kepribadian(tenant_id);
+  CREATE INDEX IF NOT EXISTS idx_catatan_kepribadian_siswa ON catatan_kepribadian(siswa_id);
+  CREATE UNIQUE INDEX IF NOT EXISTS idx_catatan_kepribadian_unique ON catatan_kepribadian(siswa_id, tahun_ajaran, semester, tenant_id);
 
   CREATE TABLE IF NOT EXISTS rapor_sync_log (
     id TEXT PRIMARY KEY,
@@ -455,6 +489,77 @@ if (!existTA) {
 }
 
 setupTenantTables(db)
+
+// Migrasi: kolom UNIQUE global (nip/nis/kode) peninggalan pra-multi-tenant bikin
+// import/edit gagal begitu ada NIP/NIS kosong kedua atau kode sama antar-sekolah.
+// Ganti jadi UNIQUE composite per-tenant via recreate table (aman: tidak ada FK ke kolom ini).
+function migrateUniquePerTenant(db) {
+  try {
+    const idx = db.prepare("PRAGMA index_list(gtk)").all()
+    const hasGlobalUnique = idx.some(i => i.unique && i.origin === 'u' && !i.name.includes('tenant'))
+    if (hasGlobalUnique) {
+      db.exec(`
+        DROP TABLE IF EXISTS gtk_new;
+        CREATE TABLE gtk_new (
+          id TEXT PRIMARY KEY, nip TEXT, nuptk TEXT, nama TEXT NOT NULL, jenis_kelamin TEXT NOT NULL,
+          tempat_lahir TEXT, tanggal_lahir TEXT, alamat TEXT, no_hp TEXT, email TEXT,
+          jabatan TEXT DEFAULT 'guru', status_kepegawaian TEXT DEFAULT 'honorer', bidang_studi TEXT,
+          foto TEXT, status TEXT DEFAULT 'aktif', created_at TEXT DEFAULT (datetime('now')),
+          tenant_id TEXT DEFAULT 'default', kode_guru TEXT DEFAULT ''
+        );
+        INSERT INTO gtk_new SELECT id, NULLIF(nip,''), nuptk, nama, jenis_kelamin, tempat_lahir, tanggal_lahir, alamat, no_hp, email, jabatan, status_kepegawaian, bidang_studi, foto, status, created_at, tenant_id, kode_guru FROM gtk;
+        DROP TABLE gtk;
+        ALTER TABLE gtk_new RENAME TO gtk;
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_gtk_nip_tenant ON gtk(nip, tenant_id) WHERE nip IS NOT NULL;
+        CREATE INDEX IF NOT EXISTS idx_gtk_tenant ON gtk(tenant_id);
+      `)
+      console.log('[migrate] gtk: UNIQUE global -> per-tenant OK')
+    }
+  } catch (e) { console.error('migrate gtk unique failed', e.message) }
+
+  try {
+    const idx = db.prepare("PRAGMA index_list(siswa)").all()
+    const hasGlobalUnique = idx.some(i => i.unique && i.origin === 'u')
+    if (hasGlobalUnique) {
+      db.exec(`
+        DROP TABLE IF EXISTS siswa_new;
+        CREATE TABLE siswa_new (
+          id TEXT PRIMARY KEY, nis TEXT NOT NULL, nisn TEXT, nama TEXT NOT NULL, jenis_kelamin TEXT NOT NULL,
+          tempat_lahir TEXT, tanggal_lahir TEXT, alamat TEXT, no_hp TEXT, nama_ortu TEXT,
+          rombel_id TEXT, foto TEXT, status TEXT DEFAULT 'aktif', created_at TEXT DEFAULT (datetime('now')),
+          tenant_id TEXT DEFAULT 'default'
+        );
+        INSERT INTO siswa_new SELECT id, nis, nisn, nama, jenis_kelamin, tempat_lahir, tanggal_lahir, alamat, no_hp, nama_ortu, rombel_id, foto, status, created_at, tenant_id FROM siswa;
+        DROP TABLE siswa;
+        ALTER TABLE siswa_new RENAME TO siswa;
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_siswa_nis_tenant ON siswa(nis, tenant_id);
+        CREATE INDEX IF NOT EXISTS idx_siswa_tenant ON siswa(tenant_id);
+      `)
+      console.log('[migrate] siswa: UNIQUE global -> per-tenant OK')
+    }
+  } catch (e) { console.error('migrate siswa unique failed', e.message) }
+
+  try {
+    const idx = db.prepare("PRAGMA index_list(mapel)").all()
+    const hasGlobalUnique = idx.some(i => i.unique && i.origin === 'u')
+    if (hasGlobalUnique) {
+      db.exec(`
+        DROP TABLE IF EXISTS mapel_new;
+        CREATE TABLE mapel_new (
+          id TEXT PRIMARY KEY, kode TEXT NOT NULL, nama TEXT NOT NULL, kelompok TEXT DEFAULT 'wajib',
+          tingkat TEXT DEFAULT '[]', jam_per_minggu INTEGER DEFAULT 2, tenant_id TEXT DEFAULT 'default'
+        );
+        INSERT INTO mapel_new SELECT id, kode, nama, kelompok, tingkat, jam_per_minggu, tenant_id FROM mapel;
+        DROP TABLE mapel;
+        ALTER TABLE mapel_new RENAME TO mapel;
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_mapel_kode_tenant ON mapel(kode, tenant_id);
+        CREATE INDEX IF NOT EXISTS idx_mapel_tenant ON mapel(tenant_id);
+      `)
+      console.log('[migrate] mapel: UNIQUE global -> per-tenant OK')
+    }
+  } catch (e) { console.error('migrate mapel unique failed', e.message) }
+}
+
 for (const col of [
   ['settings', 'geo_latitude', 'REAL'],
   ['settings', 'geo_longitude', 'REAL'],
@@ -466,10 +571,51 @@ for (const col of [
   ['broadcast_log', 'tenant_id', "TEXT DEFAULT 'default'"],
   ['broadcast_detail', 'tenant_id', "TEXT DEFAULT 'default'"],
   ['modul_ajar', 'kurikulum', "TEXT DEFAULT 'merdeka'"],
-  ['gtk', 'kode_guru', "TEXT DEFAULT ''"]
+  ['gtk', 'kode_guru', "TEXT DEFAULT ''"],
+  ['jadwal', 'template_id', 'TEXT'],
+  ['users', 'gtk_id', 'TEXT'],
+  ['users', 'kode_guru', "TEXT DEFAULT ''"],
+  // Absensi siswa: pisah masuk & pulang (Item 1)
+  ['absensi_siswa', 'waktu_masuk', 'TEXT'],
+  ['absensi_siswa', 'waktu_pulang', 'TEXT'],
+  ['absensi_siswa', 'status_pulang', "TEXT DEFAULT ''"],
+  ['absensi_siswa', 'keterangan_pulang', "TEXT DEFAULT ''"],
+  // Catatan kepribadian: sikap umum tunggal (Item 2)
+  ['catatan_kepribadian', 'sikap_umum', "TEXT DEFAULT ''"],
 ]) {
   try { db.prepare(`ALTER TABLE ${col[0]} ADD COLUMN ${col[1]} ${col[2]}`).run() } catch {}
 }
+
+// Backfill link users->gtk untuk akun guru/kepala lama yang belum punya gtk_id.
+// Cocokkan via nip, lalu kode_guru, lalu email (per tenant). Idempoten.
+try {
+  const orphans = db.prepare("SELECT id, nip, kode_guru, email, tenant_id FROM users WHERE (gtk_id IS NULL OR gtk_id='') AND role IN ('guru','kepala')").all()
+  const findByNip = db.prepare('SELECT id, kode_guru FROM gtk WHERE nip = ? AND tenant_id = ?')
+  const findByKode = db.prepare("SELECT id FROM gtk WHERE kode_guru = ? AND kode_guru != '' AND tenant_id = ?")
+  const findByEmail = db.prepare("SELECT id, kode_guru FROM gtk WHERE email = ? AND email != '' AND tenant_id = ?")
+  const upd = db.prepare('UPDATE users SET gtk_id = ?, kode_guru = COALESCE(NULLIF(kode_guru,\'\'), ?) WHERE id = ?')
+  for (const u of orphans) {
+    let g = (u.nip ? findByNip.get(u.nip, u.tenant_id) : null)
+      || (u.kode_guru ? findByKode.get(u.kode_guru, u.tenant_id) : null)
+      || (u.email ? findByEmail.get(u.email, u.tenant_id) : null)
+    if (g) upd.run(g.id, g.kode_guru || '', u.id)
+  }
+} catch (e) { console.error('backfill users.gtk_id gagal:', e.message) }
+
+// Jalankan migrasi UNIQUE per-tenant SETELAH semua kolom (kode_guru dll) dipastikan ada.
+// FK dimatikan sementara karena recreate table siswa/gtk direferensikan FK dari tabel absensi.
+try {
+  db.pragma('foreign_keys = OFF')
+  migrateUniquePerTenant(db)
+} finally {
+  db.pragma('foreign_keys = ON')
+}
+
+db.exec(`CREATE TABLE IF NOT EXISTS template_jadwal (
+  id TEXT PRIMARY KEY, nama TEXT NOT NULL, jenis TEXT DEFAULT 'reguler',
+  maks_jtm INTEGER DEFAULT 15, keterangan TEXT, tenant_id TEXT DEFAULT 'default',
+  created_at TEXT DEFAULT (datetime('now'))
+)`)
 // Backfill legacy global rows -> 'default' tenant
 try { db.prepare("UPDATE wa_gateway_config SET tenant_id='default' WHERE tenant_id IS NULL OR tenant_id=''").run() } catch {}
 try { db.prepare("UPDATE broadcast_log SET tenant_id='default' WHERE tenant_id IS NULL OR tenant_id=''").run() } catch {}
@@ -520,7 +666,7 @@ const isEmail = (v) => typeof v === 'string' && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.tes
 const isStr = (v, min = 1, max = 200) => typeof v === 'string' && v.trim().length >= min && v.length <= max
 // Returns error string or null
 function vLogin({ email, password }) {
-  if (!isEmail(email)) return 'Email tidak valid'
+  if (!isStr(email, 1, 120)) return 'Email/kode guru wajib diisi'
   if (!isStr(password, 1, 100)) return 'Password wajib diisi'
   return null
 }
@@ -550,16 +696,45 @@ function tDb(req) {
 }
 
 // ==================== AUTH ====================
+// Resolve baris GTK milik user login. Prioritas: gtk_id (link kuat) -> nip -> kode_guru -> email.
+// Semua scoped tenant. Dipakai ceklok, absensi-saya, dashboard, wali-kelas.
+function resolveGtkForUser(userId, tenantId) {
+  const u = db.prepare('SELECT * FROM users WHERE id = ?').get(userId)
+  if (!u) return null
+  const tid = tenantId || u.tenant_id
+  let gtk = null
+  if (u.gtk_id) gtk = db.prepare('SELECT * FROM gtk WHERE id = ? AND tenant_id = ?').get(u.gtk_id, tid)
+  if (!gtk && u.nip) gtk = db.prepare('SELECT * FROM gtk WHERE nip = ? AND tenant_id = ?').get(u.nip, tid)
+  if (!gtk && u.kode_guru) gtk = db.prepare("SELECT * FROM gtk WHERE kode_guru = ? AND kode_guru != '' AND tenant_id = ?").get(u.kode_guru, tid)
+  if (!gtk && u.email) gtk = db.prepare("SELECT * FROM gtk WHERE email = ? AND email != '' AND tenant_id = ?").get(u.email, tid)
+  // Kalau ketemu tapi users.gtk_id kosong, simpan biar next lookup instan.
+  if (gtk && !u.gtk_id) { try { db.prepare('UPDATE users SET gtk_id = ? WHERE id = ?').run(gtk.id, u.id) } catch {} }
+  return gtk
+}
+
 app.post('/api/auth/login', authLimiter, (req, res) => {
   const { email, password } = req.body
   const vErr = vLogin(req.body); if (vErr) return res.status(400).json({ error: vErr })
   const tenantId = req.tenantId || 'default'
-  // super_admin can login from any tenant
-  let user = db.prepare('SELECT * FROM users WHERE email = ? AND tenant_id = ?').get(email, tenantId)
-  if (!user) user = db.prepare("SELECT * FROM users WHERE email = ? AND role = 'super_admin'").get(email)
-  if (!user) user = db.prepare('SELECT * FROM users WHERE email = ?').get(email)
+  const ident = String(email).trim()
+  const identLower = ident.toLowerCase()
+  // 1) Email langsung (per tenant, lalu super_admin, lalu global email).
+  let user = db.prepare('SELECT * FROM users WHERE lower(email) = ? AND tenant_id = ?').get(identLower, tenantId)
+  if (!user) user = db.prepare("SELECT * FROM users WHERE lower(email) = ? AND role = 'super_admin'").get(identLower)
+  if (!user) user = db.prepare('SELECT * FROM users WHERE lower(email) = ?').get(identLower)
+  // 2) Kode guru / NIP -> cari GTK di tenant, lalu user yang terhubung.
+  if (!user) {
+    const g = db.prepare("SELECT * FROM gtk WHERE tenant_id = ? AND ((kode_guru != '' AND lower(kode_guru) = ?) OR nip = ?)").get(tenantId, identLower, ident)
+    if (g) {
+      user = db.prepare('SELECT * FROM users WHERE gtk_id = ? AND tenant_id = ?').get(g.id, tenantId)
+        || (g.nip ? db.prepare('SELECT * FROM users WHERE nip = ? AND tenant_id = ?').get(g.nip, tenantId) : null)
+        || (g.email ? db.prepare('SELECT * FROM users WHERE lower(email) = ? AND tenant_id = ?').get(String(g.email).toLowerCase(), tenantId) : null)
+    }
+  }
+  // 3) Fallback users.kode_guru / users.nip langsung.
+  if (!user) user = db.prepare("SELECT * FROM users WHERE tenant_id = ? AND ((kode_guru != '' AND lower(kode_guru) = ?) OR nip = ?)").get(tenantId, identLower, ident)
   if (!user || !bcrypt.compareSync(password, user.password)) {
-    return res.status(401).json({ error: 'Email atau password salah' })
+    return res.status(401).json({ error: 'Email/kode guru atau password salah' })
   }
   const token = jwt.sign({ id: user.id, role: user.role, nama: user.nama, email: user.email, tenant_id: user.tenant_id }, JWT_SECRET, { expiresIn: '24h' })
   res.json({ token, user: { id: user.id, nama: user.nama, email: user.email, role: user.role, nip: user.nip, nis: user.nis, avatar: user.avatar } })
@@ -803,7 +978,7 @@ app.post('/api/users/from-gtk', ADMIN, (req, res) => {
   if (!items.length) return res.status(400).json({ error: 'Tidak ada guru dipilih' })
   const slug = (db.prepare('SELECT slug FROM tenants WHERE id = ?').get(req.tenantId) || {}).slug || 'app'
   const created = [], skipped = []
-  const insert = db.prepare('INSERT INTO users (id, nama, email, password, role, nip, tenant_id) VALUES (?,?,?,?,?,?,?)')
+  const insert = db.prepare('INSERT INTO users (id, nama, email, password, role, nip, gtk_id, kode_guru, tenant_id) VALUES (?,?,?,?,?,?,?,?,?)')
   const tx = db.transaction(() => {
     for (const it of items) {
       const g = db.prepare('SELECT * FROM gtk WHERE id = ? AND tenant_id = ?').get(it.gtk_id, req.tenantId)
@@ -814,8 +989,8 @@ app.post('/api/users/from-gtk', ADMIN, (req, res) => {
       const email = (g.email && g.email.trim()) ? g.email.trim() : `${(g.nip || g.id).toString().replace(/\s/g,'')}@${slug}.local`
       if (db.prepare('SELECT id FROM users WHERE email = ?').get(email)) { skipped.push({ nama: g.nama, alasan: 'email sudah dipakai: ' + email }); continue }
       const id = uuidv4()
-      insert.run(id, g.nama, email, bcrypt.hashSync(pwd, 10), role, g.nip || null, req.tenantId)
-      created.push({ id, nama: g.nama, email, password_default: (it.password ? undefined : pwd), role })
+      insert.run(id, g.nama, email, bcrypt.hashSync(pwd, 10), role, g.nip || null, g.id, g.kode_guru || '', req.tenantId)
+      created.push({ id, nama: g.nama, email, kode_guru: g.kode_guru || '', password_default: (it.password ? undefined : pwd), role })
     }
   })
   tx()
@@ -873,6 +1048,35 @@ app.delete('/api/settings/background', ADMIN, (req, res) => {
   res.json({ success: true })
 })
 
+app.post('/api/settings/reset-data', ADMIN, (req, res) => {
+  const { confirm } = req.body || {}
+  if (confirm !== 'RESET DATA') return res.status(400).json({ error: 'Ketik RESET DATA untuk konfirmasi' })
+  const tables = [
+    'broadcast_detail', 'broadcast_log', 'wa_gateway_config',
+    'absensi_kegiatan', 'kegiatan_khusus',
+    'rapor_sync_log', 'catatan_kepribadian', 'rapor', 'penilaian_harian',
+    'absensi_ekskul', 'ekskul_anggota', 'ekskul',
+    'absensi_siswa', 'absensi_guru', 'jurnal_mengajar',
+    'tagihan', 'jenis_tagihan', 'tabungan',
+    'modul_ajar', 'pengajar', 'jadwal', 'template_jadwal', 'kalender_kbm',
+    'siswa', 'rombel', 'mapel', 'gtk', 'tahun_ajaran'
+  ]
+  const deleted = {}
+  const tx = db.transaction(() => {
+    db.prepare('DELETE FROM users WHERE tenant_id=? AND role NOT IN (\'admin\',\'super_admin\')').run(req.tenantId)
+    for (const table of tables) {
+      try {
+        const info = db.prepare(`DELETE FROM ${table} WHERE tenant_id=?`).run(req.tenantId)
+        deleted[table] = info.changes
+      } catch (e) {
+        deleted[table] = 'skip'
+      }
+    }
+  })
+  tx()
+  res.json({ success: true, deleted })
+})
+
 // ==================== SISWA ====================
 app.get('/api/siswa', authMiddleware, (req, res) => {
   const { search, rombel_id, status } = req.query
@@ -888,16 +1092,26 @@ app.get('/api/siswa', authMiddleware, (req, res) => {
 app.post('/api/siswa', ADMIN, (req, res) => {
   const id = uuidv4()
   const { nis, nisn, nama, jenis_kelamin, tempat_lahir, tanggal_lahir, alamat, no_hp, nama_ortu, rombel_id } = req.body
-  db.prepare('INSERT INTO siswa (id, nis, nisn, nama, jenis_kelamin, tempat_lahir, tanggal_lahir, alamat, no_hp, nama_ortu, rombel_id, tenant_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)')
-    .run(id, nis, nisn, nama, jenis_kelamin, tempat_lahir, tanggal_lahir, alamat, no_hp, nama_ortu, rombel_id, req.tenantId)
-  res.json({ id })
+  try {
+    db.prepare('INSERT INTO siswa (id, nis, nisn, nama, jenis_kelamin, tempat_lahir, tanggal_lahir, alamat, no_hp, nama_ortu, rombel_id, tenant_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)')
+      .run(id, nis, nisn, nama, jenis_kelamin, tempat_lahir, tanggal_lahir, alamat, no_hp, nama_ortu, rombel_id, req.tenantId)
+    res.json({ id })
+  } catch (e) {
+    if (e.code === 'SQLITE_CONSTRAINT_UNIQUE' || e.code === 'SQLITE_CONSTRAINT') return res.status(400).json({ error: 'NIS ' + nis + ' sudah dipakai siswa lain.' })
+    throw e
+  }
 })
 
 app.put('/api/siswa/:id', ADMIN, (req, res) => {
   const { nis, nisn, nama, jenis_kelamin, tempat_lahir, tanggal_lahir, alamat, no_hp, nama_ortu, rombel_id, status } = req.body
-  db.prepare('UPDATE siswa SET nis=?, nisn=?, nama=?, jenis_kelamin=?, tempat_lahir=?, tanggal_lahir=?, alamat=?, no_hp=?, nama_ortu=?, rombel_id=?, status=? WHERE id=? AND tenant_id=?')
-    .run(nis, nisn, nama, jenis_kelamin, tempat_lahir, tanggal_lahir, alamat, no_hp, nama_ortu, rombel_id, status, req.params.id, req.tenantId)
-  res.json({ success: true })
+  try {
+    db.prepare('UPDATE siswa SET nis=?, nisn=?, nama=?, jenis_kelamin=?, tempat_lahir=?, tanggal_lahir=?, alamat=?, no_hp=?, nama_ortu=?, rombel_id=?, status=? WHERE id=? AND tenant_id=?')
+      .run(nis, nisn, nama, jenis_kelamin, tempat_lahir, tanggal_lahir, alamat, no_hp, nama_ortu, rombel_id, status, req.params.id, req.tenantId)
+    res.json({ success: true })
+  } catch (e) {
+    if (e.code === 'SQLITE_CONSTRAINT_UNIQUE' || e.code === 'SQLITE_CONSTRAINT') return res.status(400).json({ error: 'NIS ' + nis + ' sudah dipakai siswa lain.' })
+    throw e
+  }
 })
 
 app.delete('/api/siswa/:id', ADMIN, (req, res) => {
@@ -913,36 +1127,99 @@ app.delete('/api/siswa/:id', ADMIN, (req, res) => {
 // ==================== GTK ====================
 app.get('/api/gtk', authMiddleware, (req, res) => {
   const { search, jabatan, status_kepegawaian } = req.query
-  let sql = 'SELECT * FROM gtk WHERE 1=1 AND tenant_id=?'
+  let sql = `SELECT g.*, COALESCE(GROUP_CONCAT(DISTINCT m.nama), '') as bidang_studi
+    FROM gtk g
+    LEFT JOIN pengajar p ON p.gtk_id = g.id AND p.tenant_id = g.tenant_id
+    LEFT JOIN mapel m ON m.id = p.mapel_id AND m.tenant_id = g.tenant_id
+    WHERE 1=1 AND g.tenant_id=?`
   const params = [req.tenantId]
-  if (search) { sql += ' AND (nama LIKE ? OR nip LIKE ?)'; params.push(`%${search}%`, `%${search}%`) }
-  if (jabatan) { sql += ' AND jabatan = ?'; params.push(jabatan) }
-  if (status_kepegawaian) { sql += ' AND status_kepegawaian = ?'; params.push(status_kepegawaian) }
-  sql += ' ORDER BY nama'
+  if (search) { sql += ' AND (g.nama LIKE ? OR g.nip LIKE ?)'; params.push(`%${search}%`, `%${search}%`) }
+  if (jabatan) { sql += ' AND g.jabatan = ?'; params.push(jabatan) }
+  if (status_kepegawaian) { sql += ' AND g.status_kepegawaian = ?'; params.push(status_kepegawaian) }
+  sql += ' GROUP BY g.id ORDER BY g.nama'
   res.json(db.prepare(sql).all(...params))
 })
 
 app.post('/api/gtk', ADMIN, (req, res) => {
   const id = uuidv4()
   const { nip, nuptk, nama, jenis_kelamin, tempat_lahir, tanggal_lahir, alamat, no_hp, email, jabatan, status_kepegawaian, bidang_studi, kode_guru } = req.body
-  db.prepare('INSERT INTO gtk (id, nip, nuptk, nama, jenis_kelamin, tempat_lahir, tanggal_lahir, alamat, no_hp, email, jabatan, status_kepegawaian, bidang_studi, kode_guru, tenant_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
-    .run(id, nip, nuptk, nama, jenis_kelamin, tempat_lahir, tanggal_lahir, alamat, no_hp, email, jabatan, status_kepegawaian, bidang_studi, kode_guru || '', req.tenantId)
-  res.json({ id })
+  try {
+    db.prepare('INSERT INTO gtk (id, nip, nuptk, nama, jenis_kelamin, tempat_lahir, tanggal_lahir, alamat, no_hp, email, jabatan, status_kepegawaian, bidang_studi, kode_guru, tenant_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
+      .run(id, nip || null, nuptk, nama, jenis_kelamin, tempat_lahir, tanggal_lahir, alamat, no_hp, email, jabatan, status_kepegawaian, bidang_studi, kode_guru || '', req.tenantId)
+    res.json({ id })
+  } catch (e) {
+    if (e.code === 'SQLITE_CONSTRAINT_UNIQUE' || e.code === 'SQLITE_CONSTRAINT') return res.status(400).json({ error: 'NIP ' + nip + ' sudah dipakai GTK lain.' })
+    throw e
+  }
 })
 
 app.put('/api/gtk/:id', ADMIN, (req, res) => {
   const { nip, nuptk, nama, jenis_kelamin, tempat_lahir, tanggal_lahir, alamat, no_hp, email, jabatan, status_kepegawaian, bidang_studi, status, kode_guru } = req.body
-  db.prepare('UPDATE gtk SET nip=?, nuptk=?, nama=?, jenis_kelamin=?, tempat_lahir=?, tanggal_lahir=?, alamat=?, no_hp=?, email=?, jabatan=?, status_kepegawaian=?, bidang_studi=?, status=?, kode_guru=? WHERE id=? AND tenant_id=?')
-    .run(nip, nuptk, nama, jenis_kelamin, tempat_lahir, tanggal_lahir, alamat, no_hp, email, jabatan, status_kepegawaian, bidang_studi, status, kode_guru || '', req.params.id, req.tenantId)
-  res.json({ success: true })
+  try {
+    db.prepare('UPDATE gtk SET nip=?, nuptk=?, nama=?, jenis_kelamin=?, tempat_lahir=?, tanggal_lahir=?, alamat=?, no_hp=?, email=?, jabatan=?, status_kepegawaian=?, bidang_studi=?, status=?, kode_guru=? WHERE id=? AND tenant_id=?')
+      .run(nip || null, nuptk, nama, jenis_kelamin, tempat_lahir, tanggal_lahir, alamat, no_hp, email, jabatan, status_kepegawaian, bidang_studi, status, kode_guru || '', req.params.id, req.tenantId)
+    res.json({ success: true })
+  } catch (e) {
+    if (e.code === 'SQLITE_CONSTRAINT_UNIQUE' || e.code === 'SQLITE_CONSTRAINT') return res.status(400).json({ error: 'NIP ' + nip + ' sudah dipakai GTK lain.' })
+    throw e
+  }
 })
 
 app.delete('/api/gtk/:id', ADMIN, (req, res) => {
+  const id = req.params.id
+  const tenantId = req.tenantId
+  const force = req.query.force === '1' || req.query.force === 'true'
+  const countRef = (table, col) => {
+    try { return db.prepare(`SELECT COUNT(*) c FROM ${table} WHERE tenant_id=? AND ${col}=?`).get(tenantId, id).c } catch { return 0 }
+  }
+  // Riwayat penting: TIDAK boleh terhapus otomatis walau force (jejak akademik).
+  const histRefs = [
+    ['jurnal_mengajar', 'gtk_id', 'jurnal mengajar'],
+    ['absensi_guru', 'gtk_id', 'absensi guru'],
+    ['supervisi', 'guru_id', 'supervisi'],
+  ].map(([table, col, label]) => ({ table, col, label, count: countRef(table, col) })).filter(x => x.count > 0)
+  // Data penugasan: boleh ikut terhapus saat force (bukan riwayat).
+  const assignRefs = [
+    ['jadwal', 'gtk_id', 'jadwal'],
+    ['pengajar', 'gtk_id', 'pengajar'],
+    ['modul_ajar', 'gtk_id', 'modul ajar'],
+    ['ekskul', 'pembina_id', 'ekskul'],
+  ].map(([table, col, label]) => ({ table, col, label, count: countRef(table, col) })).filter(x => x.count > 0)
+
+  if (histRefs.length) {
+    const detail = histRefs.map(x => `${x.label}: ${x.count}`).join(', ')
+    return res.status(400).json({ error: `GTK punya riwayat ${detail}. Tidak bisa dihapus demi jaga jejak akademik.`, kind: 'history' })
+  }
+  if (assignRefs.length && !force) {
+    const detail = assignRefs.map(x => `${x.label}: ${x.count}`).join(', ')
+    return res.status(409).json({ error: `GTK masih dipakai di ${detail}.`, kind: 'assignment', refs: assignRefs.map(x => ({ label: x.label, count: x.count })) })
+  }
+
   try {
-    db.prepare('DELETE FROM gtk WHERE id = ? AND tenant_id=?').run(req.params.id, req.tenantId)
-    res.json({ success: true })
+    const tx = db.transaction(() => {
+      db.prepare('UPDATE rombel SET wali_kelas_id=NULL WHERE wali_kelas_id=? AND tenant_id=?').run(id, tenantId)
+      if (force) {
+        if (assignRefs.some(x => x.table === 'ekskul')) {
+          try {
+            const ekskuls = db.prepare('SELECT id FROM ekskul WHERE tenant_id=? AND pembina_id=?').all(tenantId, id)
+            for (const e of ekskuls) {
+              try { db.prepare('DELETE FROM ekskul_anggota WHERE ekskul_id=?').run(e.id) } catch {}
+              try { db.prepare('DELETE FROM absensi_ekskul WHERE ekskul_id=?').run(e.id) } catch {}
+            }
+          } catch {}
+        }
+        for (const x of assignRefs) {
+          try { db.prepare(`DELETE FROM ${x.table} WHERE tenant_id=? AND ${x.col}=?`).run(tenantId, id) } catch {}
+        }
+      }
+      const info = db.prepare('DELETE FROM gtk WHERE id = ? AND tenant_id=?').run(id, tenantId)
+      return info.changes
+    })
+    const changes = tx()
+    if (!changes) return res.status(404).json({ error: 'GTK tidak ditemukan di tenant ini.' })
+    res.json({ success: true, forced: force })
   } catch (e) {
-    if (e.code === 'SQLITE_CONSTRAINT_FOREIGNKEY') return res.status(400).json({ error: 'GTK masih digunakan di data lain (jadwal/pengajar/ekskul). Hapus data terkait dulu.' })
+    if (e.code === 'SQLITE_CONSTRAINT_FOREIGNKEY') return res.status(400).json({ error: 'GTK masih digunakan di data lain. Hapus/pindahkan data terkait dulu.' })
     throw e
   }
 })
@@ -969,8 +1246,13 @@ app.get('/api/mapel', authMiddleware, (req, res) => {
 app.post('/api/mapel', ADMIN, (req, res) => {
   const id = uuidv4()
   const { kode, nama, kelompok, jam_per_minggu } = req.body
-  db.prepare('INSERT INTO mapel (id, kode, nama, kelompok, jam_per_minggu, tenant_id) VALUES (?,?,?,?,?,?)').run(id, kode, nama, kelompok, jam_per_minggu, req.tenantId)
-  res.json({ id })
+  try {
+    db.prepare('INSERT INTO mapel (id, kode, nama, kelompok, jam_per_minggu, tenant_id) VALUES (?,?,?,?,?,?)').run(id, kode, nama, kelompok, jam_per_minggu, req.tenantId)
+    res.json({ id })
+  } catch (e) {
+    if (e.code === 'SQLITE_CONSTRAINT_UNIQUE' || e.code === 'SQLITE_CONSTRAINT') return res.status(400).json({ error: 'Kode mapel ' + kode + ' sudah dipakai.' })
+    throw e
+  }
 })
 
 app.delete('/api/mapel/:id', ADMIN, (req, res) => {
@@ -1154,27 +1436,34 @@ app.post('/api/absensi-kegiatan/bulk', STAFF, (req, res) => {
 
 // ==================== GURU DASHBOARD ====================
 app.get('/api/guru/dashboard', authMiddleware, (req, res) => {
-  const user = db.prepare('SELECT * FROM users WHERE id = ?').get(req.user.id)
-  const gtk = user?.nip ? db.prepare('SELECT * FROM gtk WHERE nip = ?').get(user.nip) : null
+  const gtk = resolveGtkForUser(req.user.id, req.tenantId)
   const gtkId = gtk?.id
-  if (!gtkId) return res.json({ jadwal_hari_ini: [], rekap_jurnal: { draft: 0, submitted: 0, approved: 0 }, rombel_count: 0 })
+  if (!gtkId) return res.json({ jadwal_hari_ini: [], rekap_jurnal: { draft: 0, submitted: 0, approved: 0 }, rombel_count: 0, wali_rombel: [] })
   
   const days = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu']
   const today = days[new Date().getDay()]
-  const jadwal = db.prepare(`SELECT j.*, m.nama as mapel_nama, r.nama as rombel_nama FROM jadwal j LEFT JOIN mapel m ON j.mapel_id = m.id LEFT JOIN rombel r ON j.rombel_id = r.id WHERE j.gtk_id = ? AND j.hari = ? ORDER BY j.jam_mulai`).all(gtkId, today)
+  const jadwal = db.prepare(`SELECT j.*, m.nama as mapel_nama, r.nama as rombel_nama FROM jadwal j LEFT JOIN mapel m ON j.mapel_id = m.id LEFT JOIN rombel r ON j.rombel_id = r.id WHERE j.gtk_id = ? AND j.hari = ? AND j.tenant_id=? ORDER BY j.jam_mulai`).all(gtkId, today, req.tenantId)
   
-  const draft = db.prepare("SELECT COUNT(*) as c FROM jurnal_mengajar WHERE guru_id=? AND status='draft'").get(gtkId).c
-  const submitted = db.prepare("SELECT COUNT(*) as c FROM jurnal_mengajar WHERE guru_id=? AND status='submitted'").get(gtkId).c
-  const approved = db.prepare("SELECT COUNT(*) as c FROM jurnal_mengajar WHERE guru_id=? AND status='approved'").get(gtkId).c
-  const rombelCount = db.prepare("SELECT COUNT(DISTINCT rombel_id) as c FROM pengajar WHERE gtk_id=?").get(gtkId).c
+  const draft = db.prepare("SELECT COUNT(*) as c FROM jurnal_mengajar WHERE guru_id=? AND tenant_id=? AND status='draft'").get(gtkId, req.tenantId).c
+  const submitted = db.prepare("SELECT COUNT(*) as c FROM jurnal_mengajar WHERE guru_id=? AND tenant_id=? AND status='submitted'").get(gtkId, req.tenantId).c
+  const approved = db.prepare("SELECT COUNT(*) as c FROM jurnal_mengajar WHERE guru_id=? AND tenant_id=? AND status='approved'").get(gtkId, req.tenantId).c
+  const rombelCount = db.prepare("SELECT COUNT(DISTINCT rombel_id) as c FROM pengajar WHERE gtk_id=? AND tenant_id=?").get(gtkId, req.tenantId).c
+  const waliRombel = db.prepare(`SELECT r.*, (SELECT COUNT(*) FROM siswa s WHERE s.rombel_id=r.id AND s.tenant_id=?) as jumlah_siswa FROM rombel r WHERE r.wali_kelas_id=? AND r.tenant_id=? ORDER BY r.tingkat, r.nama`).all(req.tenantId, gtkId, req.tenantId)
   
-  res.json({ jadwal_hari_ini: jadwal, rekap_jurnal: { draft, submitted, approved }, rombel_count: rombelCount, gtk: gtk })
+  res.json({ jadwal_hari_ini: jadwal, rekap_jurnal: { draft, submitted, approved }, rombel_count: rombelCount, wali_rombel: waliRombel, gtk: gtk })
+})
+
+app.get('/api/guru/wali-kelas', authMiddleware, (req, res) => {
+  const gtk = resolveGtkForUser(req.user.id, req.tenantId)
+  if (!gtk) return res.json({ gtk: null, rombels: [], siswa: [] })
+  const rombels = db.prepare(`SELECT r.*, (SELECT COUNT(*) FROM siswa s WHERE s.rombel_id=r.id AND s.tenant_id=?) as jumlah_siswa FROM rombel r WHERE r.wali_kelas_id=? AND r.tenant_id=? ORDER BY r.tingkat, r.nama`).all(req.tenantId, gtk.id, req.tenantId)
+  const siswa = db.prepare(`SELECT s.*, r.nama as rombel_nama FROM siswa s JOIN rombel r ON s.rombel_id=r.id WHERE r.wali_kelas_id=? AND s.tenant_id=? ORDER BY r.tingkat, r.nama, s.nama`).all(gtk.id, req.tenantId)
+  res.json({ gtk, rombels, siswa })
 })
 
 // ==================== GURU ABSENSI (CEKLOK) ====================
 app.get('/api/guru/absensi-saya', authMiddleware, (req, res) => {
-  const user = db.prepare('SELECT * FROM users WHERE id = ?').get(req.user.id)
-  const gtk = user?.nip ? db.prepare('SELECT * FROM gtk WHERE nip = ?').get(user.nip) : null
+  const gtk = resolveGtkForUser(req.user.id, req.tenantId)
   if (!gtk) return res.json({ today: null, history: [] })
   const today = new Date().toISOString().split('T')[0]
   const todayRecord = db.prepare('SELECT * FROM absensi_guru WHERE gtk_id = ? AND tanggal = ?').get(gtk.id, today)
@@ -1183,9 +1472,8 @@ app.get('/api/guru/absensi-saya', authMiddleware, (req, res) => {
 })
 
 app.post('/api/guru/ceklok', STAFF, (req, res) => {
-  const user = db.prepare('SELECT * FROM users WHERE id = ?').get(req.user.id)
-  const gtk = user?.nip ? db.prepare('SELECT * FROM gtk WHERE nip = ?').get(user.nip) : null
-  if (!gtk) return res.status(400).json({ error: 'Data GTK tidak ditemukan' })
+  const gtk = resolveGtkForUser(req.user.id, req.tenantId)
+  if (!gtk) return res.status(400).json({ error: 'Akun Anda belum terhubung ke data GTK. Minta admin buatkan akun dari menu Data GTK (Buat Akun Guru).' })
   const { type, latitude, longitude } = req.body
   const geo = db.prepare('SELECT geo_latitude, geo_longitude, geo_radius FROM settings WHERE tenant_id = ?').get(req.tenantId)
   if (geo?.geo_latitude && geo?.geo_longitude) {
@@ -1319,34 +1607,77 @@ app.post('/api/notif/cek-guru-ceklok', STAFF, async (req, res) => {
 })
 
 // ==================== REKAP ABSENSI ====================
+// mode: 'monthly' (default, param bulan=YYYY-MM), 'weekly' (param mulai=YYYY-MM-DD; 7 hari),
+//       'semester' (param tahun_ajaran=YYYY/YYYY + semester=ganjil|genap),
+//       'yearly'   (param tahun=YYYY -> 12 bulan). tipe: 'siswa' | 'gtk'.
+function buildRekapRange(q) {
+  const mode = (q.mode || 'monthly').toLowerCase()
+  if (mode === 'weekly') {
+    const start = q.mulai || q.tanggal_mulai
+    if (!start) return { error: 'Parameter mulai (YYYY-MM-DD) wajib untuk mode weekly' }
+    const d = new Date(start + 'T00:00:00')
+    if (isNaN(d.getTime())) return { error: 'Format mulai tidak valid' }
+    const end = new Date(d.getTime() + 6 * 86400000)
+    const iso = x => x.toISOString().slice(0, 10)
+    return { mode, from: iso(d), to: iso(end), label: `Minggu ${iso(d)} s/d ${iso(end)}` }
+  }
+  if (mode === 'semester') {
+    const ta = q.tahun_ajaran
+    const sem = (q.semester || '').toLowerCase()
+    if (!ta || !['ganjil', 'genap'].includes(sem)) return { error: 'tahun_ajaran (YYYY/YYYY) & semester (ganjil|genap) wajib' }
+    const [ay1, ay2] = ta.split('/').map(x => parseInt(x, 10))
+    if (!ay1 || !ay2) return { error: 'Format tahun_ajaran salah' }
+    // Ganjil: Jul(y1)-Des(y1); Genap: Jan(y2)-Jun(y2)
+    if (sem === 'ganjil') return { mode, from: `${ay1}-07-01`, to: `${ay1}-12-31`, label: `Semester Ganjil ${ta}` }
+    return { mode, from: `${ay2}-01-01`, to: `${ay2}-06-30`, label: `Semester Genap ${ta}` }
+  }
+  if (mode === 'yearly') {
+    const y = parseInt(q.tahun || '', 10)
+    if (!y) return { error: 'Parameter tahun (YYYY) wajib' }
+    return { mode, from: `${y}-01-01`, to: `${y}-12-31`, label: `Tahun ${y}` }
+  }
+  // monthly (default)
+  const bulan = q.bulan
+  if (!bulan) return { error: 'Parameter bulan (YYYY-MM) wajib' }
+  const [yy, mm] = bulan.split('-').map(x => parseInt(x, 10))
+  if (!yy || !mm) return { error: 'Format bulan salah' }
+  const lastDay = new Date(yy, mm, 0).getDate()
+  return { mode: 'monthly', from: `${bulan}-01`, to: `${bulan}-${String(lastDay).padStart(2, '0')}`, label: `Bulan ${bulan}` }
+}
+
 app.get('/api/rekap-absensi', authMiddleware, (req, res) => {
-  const { bulan, tipe } = req.query // bulan: "2026-07", tipe: "siswa"|"gtk"
-  if (!bulan) return res.status(400).json({ error: 'Parameter bulan wajib' })
-  const prefix = bulan + '%'
+  const { tipe } = req.query
+  // Backward compat: kalau hanya bulan+tipe -> monthly.
+  const range = buildRekapRange(req.query)
+  if (range.error) return res.status(400).json({ error: range.error })
+  const { from, to, mode, label } = range
+
+  const cnt = (table, id, col, status) =>
+    db.prepare(`SELECT COUNT(*) as c FROM ${table} WHERE ${col}=? AND tanggal BETWEEN ? AND ? AND status=? AND tenant_id=?`)
+      .get(id, from, to, status, req.tenantId).c
 
   if (tipe === 'gtk') {
     const gtks = db.prepare("SELECT id, nama, nip, jabatan FROM gtk WHERE tenant_id = ? ORDER BY nama").all(req.tenantId)
     const detail = gtks.map(g => {
-      const hadir = db.prepare("SELECT COUNT(*) as c FROM absensi_guru WHERE gtk_id=? AND tanggal LIKE ? AND status='hadir' AND tenant_id=?").get(g.id, prefix, req.tenantId).c
-      const sakit = db.prepare("SELECT COUNT(*) as c FROM absensi_guru WHERE gtk_id=? AND tanggal LIKE ? AND status='sakit' AND tenant_id=?").get(g.id, prefix, req.tenantId).c
-      const izin = db.prepare("SELECT COUNT(*) as c FROM absensi_guru WHERE gtk_id=? AND tanggal LIKE ? AND status='izin' AND tenant_id=?").get(g.id, prefix, req.tenantId).c
-      const alpha = db.prepare("SELECT COUNT(*) as c FROM absensi_guru WHERE gtk_id=? AND tanggal LIKE ? AND status='alpha' AND tenant_id=?").get(g.id, prefix, req.tenantId).c
+      const hadir = cnt('absensi_guru', g.id, 'gtk_id', 'hadir')
+      const sakit = cnt('absensi_guru', g.id, 'gtk_id', 'sakit')
+      const izin  = cnt('absensi_guru', g.id, 'gtk_id', 'izin')
+      const alpha = cnt('absensi_guru', g.id, 'gtk_id', 'alpha')
       return { ...g, hadir, sakit, izin, alpha, total: hadir + sakit + izin + alpha }
     })
     const summary = { hadir: detail.reduce((s,d) => s+d.hadir, 0), sakit: detail.reduce((s,d) => s+d.sakit, 0), izin: detail.reduce((s,d) => s+d.izin, 0), alpha: detail.reduce((s,d) => s+d.alpha, 0) }
-    res.json({ detail, summary })
-  } else {
-    const siswa = db.prepare("SELECT s.id, s.nama, s.nis, r.nama as rombel_nama FROM siswa s LEFT JOIN rombel r ON s.rombel_id = r.id WHERE s.tenant_id = ? ORDER BY r.nama, s.nama").all(req.tenantId)
-    const detail = siswa.map(s => {
-      const hadir = db.prepare("SELECT COUNT(*) as c FROM absensi_siswa WHERE siswa_id=? AND tanggal LIKE ? AND status='hadir' AND tenant_id=?").get(s.id, prefix, req.tenantId).c
-      const sakit = db.prepare("SELECT COUNT(*) as c FROM absensi_siswa WHERE siswa_id=? AND tanggal LIKE ? AND status='sakit' AND tenant_id=?").get(s.id, prefix, req.tenantId).c
-      const izin = db.prepare("SELECT COUNT(*) as c FROM absensi_siswa WHERE siswa_id=? AND tanggal LIKE ? AND status='izin' AND tenant_id=?").get(s.id, prefix, req.tenantId).c
-      const alpha = db.prepare("SELECT COUNT(*) as c FROM absensi_siswa WHERE siswa_id=? AND tanggal LIKE ? AND status='alpha' AND tenant_id=?").get(s.id, prefix, req.tenantId).c
-      return { ...s, hadir, sakit, izin, alpha, total: hadir + sakit + izin + alpha }
-    })
-    const summary = { hadir: detail.reduce((s,d) => s+d.hadir, 0), sakit: detail.reduce((s,d) => s+d.sakit, 0), izin: detail.reduce((s,d) => s+d.izin, 0), alpha: detail.reduce((s,d) => s+d.alpha, 0) }
-    res.json({ detail, summary })
+    return res.json({ mode, from, to, label, detail, summary })
   }
+  const siswa = db.prepare("SELECT s.id, s.nama, s.nis, r.nama as rombel_nama FROM siswa s LEFT JOIN rombel r ON s.rombel_id = r.id WHERE s.tenant_id = ? ORDER BY r.nama, s.nama").all(req.tenantId)
+  const detail = siswa.map(s => {
+    const hadir = cnt('absensi_siswa', s.id, 'siswa_id', 'hadir')
+    const sakit = cnt('absensi_siswa', s.id, 'siswa_id', 'sakit')
+    const izin  = cnt('absensi_siswa', s.id, 'siswa_id', 'izin')
+    const alpha = cnt('absensi_siswa', s.id, 'siswa_id', 'alpha')
+    return { ...s, hadir, sakit, izin, alpha, total: hadir + sakit + izin + alpha }
+  })
+  const summary = { hadir: detail.reduce((s,d) => s+d.hadir, 0), sakit: detail.reduce((s,d) => s+d.sakit, 0), izin: detail.reduce((s,d) => s+d.izin, 0), alpha: detail.reduce((s,d) => s+d.alpha, 0) }
+  res.json({ mode, from, to, label, detail, summary })
 })
 
 // ==================== KALENDER KBM ====================
@@ -1460,7 +1791,7 @@ app.get('/api/jadwal', authMiddleware, (req, res) => {
 })
 
 app.post('/api/jadwal', ADMIN, (req, res) => {
-  const { mapel_id, rombel_id, gtk_id, hari, jam_mulai, jam_selesai, ruangan } = req.body
+  const { mapel_id, rombel_id, gtk_id, hari, jam_mulai, jam_selesai, ruangan, template_id } = req.body
   const overlap = '((j.jam_mulai < ? AND j.jam_selesai > ?) OR (j.jam_mulai < ? AND j.jam_selesai > ?) OR (j.jam_mulai >= ? AND j.jam_selesai <= ?))'
   const ovParams = [jam_selesai, jam_mulai, jam_selesai, jam_mulai, jam_mulai, jam_selesai]
   // 1. Anti-tabrakan GURU (guru tidak bisa 2 kelas sekaligus)
@@ -1477,9 +1808,55 @@ app.post('/api/jadwal', ADMIN, (req, res) => {
       .get(ruangan, hari, req.tenantId, ...ovParams)
     if (roomConflict) return res.status(409).json({ error: `Jadwal Ganda (Ruangan): ruangan ${ruangan} sudah dipakai kelas ${roomConflict.rombel_nama} jam ${roomConflict.jam_mulai}-${roomConflict.jam_selesai} (${hari})` })
   }
+  // 4. Validasi maks JTM per minggu bila template dipilih
+  if (template_id) {
+    const tpl = db.prepare('SELECT * FROM template_jadwal WHERE id=? AND tenant_id=?').get(template_id, req.tenantId)
+    if (tpl) {
+      const jamGuru = db.prepare('SELECT COUNT(*) as c FROM jadwal WHERE gtk_id=? AND template_id=? AND tenant_id=?').get(gtk_id, template_id, req.tenantId).c
+      if (jamGuru >= tpl.maks_jtm) return res.status(409).json({ error: `Melebihi maks JTM (${tpl.maks_jtm}) untuk template "${tpl.nama}"` })
+    }
+  }
+  if (!mapel_id || !rombel_id || !gtk_id) return res.status(400).json({ error: 'Mapel/kegiatan, rombel, dan guru wajib dipilih.' })
+  const mapel = db.prepare('SELECT id FROM mapel WHERE id=? AND tenant_id=?').get(mapel_id, req.tenantId)
+  if (!mapel) return res.status(400).json({ error: 'Mapel/kegiatan tidak ditemukan. Muat ulang halaman lalu pilih lagi.' })
   const id = uuidv4()
-  db.prepare('INSERT INTO jadwal (id, mapel_id, rombel_id, gtk_id, hari, jam_mulai, jam_selesai, ruangan, tenant_id) VALUES (?,?,?,?,?,?,?,?,?)').run(id, mapel_id, rombel_id, gtk_id, hari, jam_mulai, jam_selesai, ruangan, req.tenantId)
-  res.json({ id })
+  try {
+    db.prepare('INSERT INTO jadwal (id, mapel_id, rombel_id, gtk_id, hari, jam_mulai, jam_selesai, ruangan, template_id, tenant_id) VALUES (?,?,?,?,?,?,?,?,?,?)').run(id, mapel_id, rombel_id, gtk_id, hari, jam_mulai, jam_selesai, ruangan, template_id || null, req.tenantId)
+    res.json({ id })
+  } catch (e) {
+    if (e.code === 'SQLITE_CONSTRAINT_FOREIGNKEY' || e.code === 'SQLITE_CONSTRAINT') return res.status(400).json({ error: 'Data jadwal tidak valid. Pastikan kegiatan/mapel, rombel, dan guru sudah dipilih.' })
+    throw e
+  }
+})
+
+app.put('/api/jadwal/:id', ADMIN, (req, res) => {
+  const { mapel_id, rombel_id, gtk_id, hari, jam_mulai, jam_selesai, ruangan, template_id } = req.body
+  const jadwalId = req.params.id
+  const overlap = '((j.jam_mulai < ? AND j.jam_selesai > ?) OR (j.jam_mulai < ? AND j.jam_selesai > ?) OR (j.jam_mulai >= ? AND j.jam_selesai <= ?))'
+  const ovParams = [jam_selesai, jam_mulai, jam_selesai, jam_mulai, jam_mulai, jam_selesai]
+  // exclude diri sendiri (j.id != ?) dari semua cek tabrakan
+  const gConflict = db.prepare(`SELECT j.*, r.nama as rombel_nama FROM jadwal j LEFT JOIN rombel r ON j.rombel_id = r.id WHERE j.gtk_id = ? AND j.hari = ? AND j.tenant_id = ? AND j.id != ? AND ${overlap}`)
+    .get(gtk_id, hari, req.tenantId, jadwalId, ...ovParams)
+  if (gConflict) return res.status(409).json({ error: `Jadwal Ganda (Guru): guru sudah mengajar di kelas ${gConflict.rombel_nama} jam ${gConflict.jam_mulai}-${gConflict.jam_selesai} (${hari})` })
+  const rConflict = db.prepare(`SELECT j.*, m.nama as mapel_nama FROM jadwal j LEFT JOIN mapel m ON j.mapel_id = m.id WHERE j.rombel_id = ? AND j.hari = ? AND j.tenant_id = ? AND j.id != ? AND ${overlap}`)
+    .get(rombel_id, hari, req.tenantId, jadwalId, ...ovParams)
+  if (rConflict) return res.status(409).json({ error: `Jadwal Ganda (Kelas): kelas sudah ada pelajaran ${rConflict.mapel_nama} jam ${rConflict.jam_mulai}-${rConflict.jam_selesai} (${hari})` })
+  if (ruangan) {
+    const roomConflict = db.prepare(`SELECT j.*, r.nama as rombel_nama FROM jadwal j LEFT JOIN rombel r ON j.rombel_id = r.id WHERE j.ruangan = ? AND j.ruangan != '' AND j.hari = ? AND j.tenant_id = ? AND j.id != ? AND ${overlap}`)
+      .get(ruangan, hari, req.tenantId, jadwalId, ...ovParams)
+    if (roomConflict) return res.status(409).json({ error: `Jadwal Ganda (Ruangan): ruangan ${ruangan} sudah dipakai kelas ${roomConflict.rombel_nama} jam ${roomConflict.jam_mulai}-${roomConflict.jam_selesai} (${hari})` })
+  }
+  if (template_id) {
+    const tpl = db.prepare('SELECT * FROM template_jadwal WHERE id=? AND tenant_id=?').get(template_id, req.tenantId)
+    if (tpl) {
+      const jamGuru = db.prepare('SELECT COUNT(*) as c FROM jadwal WHERE gtk_id=? AND template_id=? AND tenant_id=? AND id != ?').get(gtk_id, template_id, req.tenantId, jadwalId).c
+      if (jamGuru >= tpl.maks_jtm) return res.status(409).json({ error: `Melebihi maks JTM (${tpl.maks_jtm}) untuk template "${tpl.nama}"` })
+    }
+  }
+  const result = db.prepare('UPDATE jadwal SET mapel_id=?, rombel_id=?, gtk_id=?, hari=?, jam_mulai=?, jam_selesai=?, ruangan=?, template_id=? WHERE id=? AND tenant_id=?')
+    .run(mapel_id, rombel_id, gtk_id, hari, jam_mulai, jam_selesai, ruangan, template_id || null, jadwalId, req.tenantId)
+  if (result.changes === 0) return res.status(404).json({ error: 'Jadwal tidak ditemukan' })
+  res.json({ success: true })
 })
 
 // Scan konflik jadwal otomatis (semua bentrok guru/kelas/ruangan)
@@ -1503,6 +1880,28 @@ app.get('/api/jadwal/konflik', authMiddleware, (req, res) => {
 
 app.delete('/api/jadwal/:id', ADMIN, (req, res) => {
   db.prepare('DELETE FROM jadwal WHERE id = ? AND tenant_id=?').run(req.params.id, req.tenantId)
+  res.json({ success: true })
+})
+
+// ==================== TEMPLATE JADWAL ====================
+app.get('/api/template-jadwal', authMiddleware, (req, res) => {
+  res.json(db.prepare('SELECT * FROM template_jadwal WHERE tenant_id=? ORDER BY created_at DESC').all(req.tenantId))
+})
+
+app.post('/api/template-jadwal', ADMIN, (req, res) => {
+  const { nama, jenis, maks_jtm, keterangan } = req.body
+  if (!nama) return res.status(400).json({ error: 'Nama template wajib diisi' })
+  const jtm = Number(maks_jtm) || 15
+  if (jtm < 1 || jtm > 40) return res.status(400).json({ error: 'Maks JTM harus 1-40' })
+  const id = uuidv4()
+  db.prepare('INSERT INTO template_jadwal (id, nama, jenis, maks_jtm, keterangan, tenant_id) VALUES (?,?,?,?,?,?)').run(id, nama, jenis || 'reguler', jtm, keterangan || '', req.tenantId)
+  res.json({ id })
+})
+
+app.delete('/api/template-jadwal/:id', ADMIN, (req, res) => {
+  const used = db.prepare('SELECT COUNT(*) as c FROM jadwal WHERE template_id=? AND tenant_id=?').get(req.params.id, req.tenantId).c
+  if (used > 0) return res.status(400).json({ error: `Template dipakai ${used} jadwal. Lepas dulu sebelum hapus.` })
+  db.prepare('DELETE FROM template_jadwal WHERE id = ? AND tenant_id=?').run(req.params.id, req.tenantId)
   res.json({ success: true })
 })
 
@@ -1650,33 +2049,90 @@ app.get('/api/absensi-siswa', authMiddleware, (req, res) => {
 })
 
 app.post('/api/absensi-siswa', STAFF, (req, res) => {
-  const { siswa_id, rombel_id, tanggal, status, waktu_absen, metode, keterangan } = req.body
+  // jenis: 'masuk' (default) | 'pulang'. Kalau 'pulang', field yang diupdate adalah waktu_pulang & status_pulang.
+  const { siswa_id, rombel_id, tanggal, status, waktu_absen, metode, keterangan, jenis } = req.body
+  const isPulang = jenis === 'pulang'
+  const jam = waktu_absen || null
   const id = uuidv4()
   const exists = db.prepare('SELECT id FROM absensi_siswa WHERE siswa_id = ? AND tanggal = ? AND tenant_id = ?').get(siswa_id, tanggal, req.tenantId)
   if (exists) {
-    db.prepare('UPDATE absensi_siswa SET status=?, waktu_absen=?, metode=?, keterangan=? WHERE id=?').run(status, waktu_absen || null, metode || 'manual', keterangan || '', exists.id)
-    sendAbsensiNotifToWali(siswa_id, status, tanggal).catch(() => {})
-    return res.json({ id: exists.id, updated: true })
+    if (isPulang) {
+      db.prepare('UPDATE absensi_siswa SET status_pulang=?, waktu_pulang=?, keterangan_pulang=?, metode=COALESCE(?, metode) WHERE id=?')
+        .run(status, jam, keterangan || '', metode || null, exists.id)
+    } else {
+      db.prepare('UPDATE absensi_siswa SET status=?, waktu_absen=?, waktu_masuk=?, metode=?, keterangan=? WHERE id=?')
+        .run(status, jam, jam, metode || 'manual', keterangan || '', exists.id)
+    }
+    sendAbsensiNotifToWali(siswa_id, isPulang ? (status + ' (pulang)') : status, tanggal).catch(() => {})
+    return res.json({ id: exists.id, updated: true, jenis: isPulang ? 'pulang' : 'masuk' })
   }
-  db.prepare('INSERT INTO absensi_siswa (id, siswa_id, rombel_id, tanggal, status, waktu_absen, metode, keterangan, tenant_id) VALUES (?,?,?,?,?,?,?,?,?)').run(id, siswa_id, rombel_id || null, tanggal, status, waktu_absen || null, metode || 'manual', keterangan || '', req.tenantId)
-  sendAbsensiNotifToWali(siswa_id, status, tanggal).catch(() => {})
-  res.json({ id })
+  if (isPulang) {
+    // Belum ada record masuk -> tetap buat row baru, tandai kolom pulang saja
+    db.prepare('INSERT INTO absensi_siswa (id, siswa_id, rombel_id, tanggal, status, status_pulang, waktu_pulang, metode, keterangan_pulang, tenant_id) VALUES (?,?,?,?,?,?,?,?,?,?)')
+      .run(id, siswa_id, rombel_id || null, tanggal, 'hadir', status, jam, metode || 'manual', keterangan || '', req.tenantId)
+  } else {
+    db.prepare('INSERT INTO absensi_siswa (id, siswa_id, rombel_id, tanggal, status, waktu_absen, waktu_masuk, metode, keterangan, tenant_id) VALUES (?,?,?,?,?,?,?,?,?,?)')
+      .run(id, siswa_id, rombel_id || null, tanggal, status, jam, jam, metode || 'manual', keterangan || '', req.tenantId)
+  }
+  sendAbsensiNotifToWali(siswa_id, isPulang ? (status + ' (pulang)') : status, tanggal).catch(() => {})
+  res.json({ id, jenis: isPulang ? 'pulang' : 'masuk' })
 })
 
 app.post('/api/absensi-siswa/bulk', STAFF, (req, res) => {
-  const { tanggal, rombel_id, data } = req.body
+  // jenis: 'masuk' (default) | 'pulang' — bulk seragam untuk 1 sesi
+  const { tanggal, rombel_id, data, jenis } = req.body
+  const isPulang = jenis === 'pulang'
   if (!data || !Array.isArray(data)) return res.status(400).json({ error: 'Data harus array' })
   let count = 0
   for (const d of data) {
     const exists = db.prepare('SELECT id FROM absensi_siswa WHERE siswa_id = ? AND tanggal = ? AND tenant_id = ?').get(d.siswa_id, tanggal, req.tenantId)
+    const jam = d.waktu_absen || null
     if (exists) {
-      db.prepare('UPDATE absensi_siswa SET status=?, waktu_absen=?, metode=?, keterangan=? WHERE id=?').run(d.status, d.waktu_absen || null, d.metode || 'manual', d.keterangan || '', exists.id)
+      if (isPulang) {
+        db.prepare('UPDATE absensi_siswa SET status_pulang=?, waktu_pulang=?, keterangan_pulang=?, metode=COALESCE(?, metode) WHERE id=?')
+          .run(d.status, jam, d.keterangan || '', d.metode || null, exists.id)
+      } else {
+        db.prepare('UPDATE absensi_siswa SET status=?, waktu_absen=?, waktu_masuk=?, metode=?, keterangan=? WHERE id=?')
+          .run(d.status, jam, jam, d.metode || 'manual', d.keterangan || '', exists.id)
+      }
     } else {
-      db.prepare('INSERT INTO absensi_siswa (id, siswa_id, rombel_id, tanggal, status, waktu_absen, metode, keterangan, tenant_id) VALUES (?,?,?,?,?,?,?,?,?)').run(uuidv4(), d.siswa_id, rombel_id || null, tanggal, d.status, d.waktu_absen || null, d.metode || 'manual', d.keterangan || '', req.tenantId)
+      if (isPulang) {
+        db.prepare('INSERT INTO absensi_siswa (id, siswa_id, rombel_id, tanggal, status, status_pulang, waktu_pulang, metode, keterangan_pulang, tenant_id) VALUES (?,?,?,?,?,?,?,?,?,?)')
+          .run(uuidv4(), d.siswa_id, rombel_id || null, tanggal, 'hadir', d.status, jam, d.metode || 'manual', d.keterangan || '', req.tenantId)
+      } else {
+        db.prepare('INSERT INTO absensi_siswa (id, siswa_id, rombel_id, tanggal, status, waktu_absen, waktu_masuk, metode, keterangan, tenant_id) VALUES (?,?,?,?,?,?,?,?,?,?)')
+          .run(uuidv4(), d.siswa_id, rombel_id || null, tanggal, d.status, jam, jam, d.metode || 'manual', d.keterangan || '', req.tenantId)
+      }
     }
     count++
   }
-  res.json({ count })
+  res.json({ count, jenis: isPulang ? 'pulang' : 'masuk' })
+})
+
+// QR permanen per siswa = siswa.id (UUID, tidak pernah berubah). Scan -> tandai hadir hari ini.
+app.post('/api/absensi-siswa/qr-scan', STAFF, (req, res) => {
+  const raw = req.body.token
+  if (!raw) return res.status(400).json({ error: 'Token QR kosong' })
+  // QR bisa berisi id murni, atau URL/teks yang memuat id. Ambil token bersih.
+  let token = String(raw).trim()
+  // Kalau QR berisi URL (mis. .../s/<id>) ambil segmen terakhir.
+  if (token.includes('/')) token = token.split('/').filter(Boolean).pop() || token
+  if (token.includes('?')) token = token.split('?')[0]
+  let siswa = db.prepare('SELECT * FROM siswa WHERE id = ? AND tenant_id = ?').get(token, req.tenantId)
+  // Fallback: QR lama/manual mungkin memuat NIS/NISN.
+  if (!siswa) siswa = db.prepare('SELECT * FROM siswa WHERE (nis = ? OR nisn = ?) AND tenant_id = ?').get(token, token, req.tenantId)
+  if (!siswa) return res.status(404).json({ error: 'QR tidak dikenali / siswa tidak ditemukan' })
+  const tanggal = todayJakarta()
+  const waktu = timeJakarta()
+  const exists = db.prepare('SELECT id, status FROM absensi_siswa WHERE siswa_id = ? AND tanggal = ? AND tenant_id = ?').get(siswa.id, tanggal, req.tenantId)
+  if (exists) {
+    if (exists.status === 'hadir') return res.json({ siswa: { nama: siswa.nama, nis: siswa.nis }, already: true })
+    db.prepare('UPDATE absensi_siswa SET status=?, waktu_absen=?, metode=? WHERE id=?').run('hadir', waktu, 'qr', exists.id)
+  } else {
+    db.prepare('INSERT INTO absensi_siswa (id, siswa_id, rombel_id, tanggal, status, waktu_absen, metode, tenant_id) VALUES (?,?,?,?,?,?,?,?)').run(uuidv4(), siswa.id, siswa.rombel_id, tanggal, 'hadir', waktu, 'qr', req.tenantId)
+  }
+  sendAbsensiNotifToWali(siswa.id, 'hadir', tanggal).catch(() => {})
+  res.json({ siswa: { nama: siswa.nama, nis: siswa.nis }, waktu })
 })
 
 // ==================== ABSENSI GURU ====================
@@ -1702,10 +2158,29 @@ app.post('/api/absensi-guru', STAFF, (req, res) => {
 })
 
 // ==================== JURNAL MENGAJAR ====================
+// Jadwal hari ini untuk guru login. Frontend pakai untuk auto-isi mapel & rombel di form jurnal.
+// Query opt: ?tanggal=YYYY-MM-DD (default hari ini Jakarta) -> mapping hari dalam bahasa Indonesia.
+const HARI_ID = ['minggu', 'senin', 'selasa', 'rabu', 'kamis', 'jumat', 'sabtu']
+app.get('/api/jurnal/jadwal-hari-ini', authMiddleware, (req, res) => {
+  const gtk = resolveGtkForUser(req.user.id, req.tenantId)
+  if (!gtk) return res.json({ gtk_id: null, hari: null, jadwal: [] })
+  const tgl = req.query.tanggal || todayJakarta()
+  const d = new Date(tgl + 'T00:00:00+07:00')
+  const hari = HARI_ID[isNaN(d.getTime()) ? new Date().getDay() : d.getDay()]
+  const rows = db.prepare(`SELECT j.id as jadwal_id, j.mapel_id, j.rombel_id, j.jam_mulai, j.jam_selesai, j.ruangan,
+    m.nama as mapel_nama, m.kode as mapel_kode, r.nama as rombel_nama
+    FROM jadwal j
+    LEFT JOIN mapel m ON j.mapel_id = m.id
+    LEFT JOIN rombel r ON j.rombel_id = r.id
+    WHERE j.gtk_id = ? AND lower(j.hari) = ? AND j.tenant_id = ?
+    ORDER BY j.jam_mulai`).all(gtk.id, hari, req.tenantId)
+  res.json({ gtk_id: gtk.id, tanggal: tgl, hari, jadwal: rows })
+})
+
 app.get('/api/jurnal/me', authMiddleware, (req, res) => {
-  const user = db.prepare("SELECT * FROM users WHERE id = ?").get(req.user.id)
-  if (!user || !user.gtk_id) return res.json([])
-  const rows = db.prepare(`SELECT j.*, m.nama as mapel_nama, r.nama as rombel_nama FROM jurnal_mengajar j LEFT JOIN mapel m ON j.mapel_id = m.id LEFT JOIN rombel r ON j.rombel_id = r.id WHERE j.guru_id = ? ORDER BY j.tanggal DESC, j.jam_ke`).all(user.gtk_id)
+  const gtk = resolveGtkForUser(req.user.id, req.tenantId)
+  if (!gtk) return res.json([])
+  const rows = db.prepare(`SELECT j.*, m.nama as mapel_nama, r.nama as rombel_nama FROM jurnal_mengajar j LEFT JOIN mapel m ON j.mapel_id = m.id LEFT JOIN rombel r ON j.rombel_id = r.id WHERE j.guru_id = ? ORDER BY j.tanggal DESC, j.jam_ke`).all(gtk.id)
   res.json(rows)
 })
 
@@ -1844,6 +2319,66 @@ app.get('/api/penilaian-harian/rekap/:siswa_id', authMiddleware, (req, res) => {
   }
   sql += ' GROUP BY p.mapel_id ORDER BY m.nama'
   res.json(db.prepare(sql).all(...params))
+})
+
+// ==================== CATATAN KEPRIBADIAN ====================
+app.get('/api/catatan-kepribadian', authMiddleware, (req, res) => {
+  const { siswa_id, rombel_id, tahun_ajaran, semester } = req.query
+  let sql = `SELECT c.*, s.nama as siswa_nama, s.nis, r.nama as rombel_nama
+    FROM catatan_kepribadian c
+    LEFT JOIN siswa s ON c.siswa_id = s.id
+    LEFT JOIN rombel r ON s.rombel_id = r.id
+    WHERE c.tenant_id=?`
+  const params = [req.tenantId]
+  if (siswa_id) { sql += ' AND c.siswa_id=?'; params.push(siswa_id) }
+  if (rombel_id) { sql += ' AND s.rombel_id=?'; params.push(rombel_id) }
+  if (tahun_ajaran) { sql += ' AND c.tahun_ajaran=?'; params.push(tahun_ajaran) }
+  if (semester) { sql += ' AND c.semester=?'; params.push(semester) }
+  sql += ' ORDER BY s.nama'
+  res.json(db.prepare(sql).all(...params))
+})
+
+app.put('/api/catatan-kepribadian', STAFF, (req, res) => {
+  const { siswa_id, tahun_ajaran, semester, sikap_spiritual, sikap_sosial, kelakuan, kerajinan, kerapian, kedisiplinan, catatan_wali_kelas, saran } = req.body
+  if (!siswa_id || !tahun_ajaran || !semester) return res.status(400).json({ error: 'siswa_id, tahun_ajaran, semester wajib' })
+  const siswa = db.prepare('SELECT id FROM siswa WHERE id=? AND tenant_id=?').get(siswa_id, req.tenantId)
+  if (!siswa) return res.status(404).json({ error: 'Siswa tidak ditemukan' })
+  const id = uuidv4()
+  db.prepare(`INSERT INTO catatan_kepribadian (id, siswa_id, tahun_ajaran, semester, sikap_spiritual, sikap_sosial, kelakuan, kerajinan, kerapian, kedisiplinan, catatan_wali_kelas, saran, tenant_id, updated_at)
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,datetime('now'))
+    ON CONFLICT(siswa_id, tahun_ajaran, semester, tenant_id) DO UPDATE SET
+    sikap_spiritual=excluded.sikap_spiritual,
+    sikap_sosial=excluded.sikap_sosial,
+    kelakuan=excluded.kelakuan,
+    kerajinan=excluded.kerajinan,
+    kerapian=excluded.kerapian,
+    kedisiplinan=excluded.kedisiplinan,
+    catatan_wali_kelas=excluded.catatan_wali_kelas,
+    saran=excluded.saran,
+    updated_at=datetime('now')`)
+    .run(id, siswa_id, tahun_ajaran, semester, sikap_spiritual || '', sikap_sosial || '', kelakuan || 'Baik', kerajinan || 'Baik', kerapian || 'Baik', kedisiplinan || 'Baik', catatan_wali_kelas || '', saran || '', req.tenantId)
+  res.json({ success: true })
+})
+
+app.post('/api/catatan-kepribadian/bulk', STAFF, (req, res) => {
+  const { tahun_ajaran, semester, data } = req.body
+  if (!tahun_ajaran || !semester || !Array.isArray(data)) return res.status(400).json({ error: 'tahun_ajaran, semester, data wajib' })
+  const upsert = db.prepare(`INSERT INTO catatan_kepribadian (id, siswa_id, tahun_ajaran, semester, sikap_spiritual, sikap_sosial, kelakuan, kerajinan, kerapian, kedisiplinan, catatan_wali_kelas, saran, tenant_id, updated_at)
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,datetime('now'))
+    ON CONFLICT(siswa_id, tahun_ajaran, semester, tenant_id) DO UPDATE SET
+    sikap_spiritual=excluded.sikap_spiritual, sikap_sosial=excluded.sikap_sosial, kelakuan=excluded.kelakuan, kerajinan=excluded.kerajinan, kerapian=excluded.kerapian, kedisiplinan=excluded.kedisiplinan, catatan_wali_kelas=excluded.catatan_wali_kelas, saran=excluded.saran, updated_at=datetime('now')`)
+  let count = 0
+  const tx = db.transaction(rows => {
+    for (const d of rows) {
+      if (!d.siswa_id) continue
+      const siswa = db.prepare('SELECT id FROM siswa WHERE id=? AND tenant_id=?').get(d.siswa_id, req.tenantId)
+      if (!siswa) continue
+      upsert.run(uuidv4(), d.siswa_id, tahun_ajaran, semester, d.sikap_spiritual || '', d.sikap_sosial || '', d.kelakuan || 'Baik', d.kerajinan || 'Baik', d.kerapian || 'Baik', d.kedisiplinan || 'Baik', d.catatan_wali_kelas || '', d.saran || '', req.tenantId)
+      count++
+    }
+  })
+  tx(data)
+  res.json({ count })
 })
 
 // ==================== RAPOR TENGAH SEMESTER ====================
@@ -2140,6 +2675,17 @@ app.use((req, res, next) => {
   if (req.path.startsWith('/api')) return res.status(404).json({ error: 'Not found' })
   if (req.method !== 'GET') return next()
   res.sendFile(path.join(__dirname, '..', 'dist', 'index.html'))
+})
+
+// Global error handler: cegah crash 500 kosong, kembalikan JSON error yang bisa dibaca frontend
+app.use((err, req, res, next) => {
+  console.error('Unhandled error:', req.method, req.path, err.message)
+  if (res.headersSent) return next(err)
+  if (err.code === 'SQLITE_CONSTRAINT_UNIQUE' || err.code === 'SQLITE_CONSTRAINT')
+    return res.status(400).json({ error: 'Data duplikat (kode/NIP/NIS sudah dipakai).' })
+  if (err.code === 'SQLITE_CONSTRAINT_FOREIGNKEY')
+    return res.status(400).json({ error: 'Data masih dipakai di tabel lain. Hapus data terkait dulu.' })
+  res.status(500).json({ error: 'Terjadi kesalahan server: ' + (err.message || 'unknown') })
 })
 
 // Start server

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Save } from 'lucide-react'
+import { AlertTriangle, Save, Trash2 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import api from '../../services/api'
 import { applyTheme } from '../../lib/applyTheme'
@@ -20,6 +20,8 @@ export default function SettingsPage() {
   })
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  const [resetConfirm, setResetConfirm] = useState('')
+  const [resetting, setResetting] = useState(false)
   const [logo, setLogo] = useState('')
   const [background, setBackground] = useState('')
   const setSettings = useSettingsStore(s => s.setSettings)
@@ -85,6 +87,19 @@ export default function SettingsPage() {
       setSettings({ background: '' })
       toast.success('Background dihapus')
     } catch { toast.error('Gagal menghapus background') }
+  }
+
+  const handleResetData = async () => {
+    if (resetConfirm !== 'RESET DATA') return toast.error('Ketik RESET DATA dulu')
+    if (!confirm('Hapus semua data operasional tenant ini? Data tidak bisa dikembalikan tanpa backup.')) return
+    setResetting(true)
+    try {
+      await api.post('/settings/reset-data', { confirm: resetConfirm })
+      toast.success('Data operasional berhasil direset')
+      setResetConfirm('')
+    } catch (e: any) {
+      toast.error(e.response?.data?.error || 'Gagal reset data')
+    } finally { setResetting(false) }
   }
 
   const presets = [
@@ -229,8 +244,26 @@ export default function SettingsPage() {
       </div>
 
       <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
-        <h2 className="text-lg font-semibold text-gray-800 mb-4">Geolokasi Ceklok Guru</h2>
-        <p className="text-sm text-gray-500 mb-4">Klik pada peta atau geser marker untuk menentukan titik sekolah. Guru hanya bisa ceklok dalam radius yang ditentukan.</p>
+        <div className="flex items-start justify-between gap-3 mb-4">
+          <div>
+            <h2 className="text-lg font-semibold text-gray-800">Geolokasi Ceklok Guru</h2>
+            <p className="text-sm text-gray-500">Klik pada peta atau geser marker untuk menentukan titik sekolah. Guru hanya bisa ceklok dalam radius yang ditentukan.</p>
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              if (!navigator.geolocation) return alert('Browser tidak mendukung geolokasi')
+              navigator.geolocation.getCurrentPosition(
+                (p) => setForm(f => ({ ...f, geo_latitude: p.coords.latitude.toFixed(6), geo_longitude: p.coords.longitude.toFixed(6) })),
+                (err) => alert('Gagal ambil lokasi: ' + err.message + '\nPastikan izin lokasi aktif & pakai HTTPS.'),
+                { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+              )
+            }}
+            className="shrink-0 rounded-lg border border-primary/40 bg-primary/5 px-3 py-2 text-xs text-primary hover:bg-primary/10"
+          >
+            Ambil Lokasi Saya (Presisi)
+          </button>
+        </div>
         <MapPicker
           lat={form.geo_latitude ? parseFloat(form.geo_latitude) : null}
           lng={form.geo_longitude ? parseFloat(form.geo_longitude) : null}
@@ -249,6 +282,22 @@ export default function SettingsPage() {
           <div>
             <label className="block text-sm font-medium text-gray-600 mb-1">Radius Meter</label>
             <input type="number" min="10" value={form.geo_radius} onChange={e => setForm({...form, geo_radius: e.target.value})} className="w-full px-4 py-2 border rounded-lg text-sm" />
+          </div>
+        </div>
+      </div>
+
+      <div className="rounded-xl border border-red-200 bg-red-50 p-6 shadow-sm">
+        <div className="flex items-start gap-3">
+          <AlertTriangle className="mt-0.5 shrink-0 text-red-600" size={22} />
+          <div className="min-w-0 flex-1">
+            <h2 className="text-lg font-semibold text-red-800">Reset Data Operasional</h2>
+            <p className="mt-1 text-sm text-red-700">Menghapus siswa, GTK, rombel, mapel, jadwal, absensi, jurnal, rapor, tagihan, tabungan, ekskul, modul ajar, dan user non-admin. Pengaturan lembaga dan akun admin tetap aman.</p>
+            <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-[1fr_auto]">
+              <input value={resetConfirm} onChange={e => setResetConfirm(e.target.value)} placeholder="Ketik: RESET DATA" className="rounded-lg border border-red-300 px-4 py-2 text-sm" />
+              <button onClick={handleResetData} disabled={resetting || resetConfirm !== 'RESET DATA'} className="inline-flex items-center justify-center gap-2 rounded-lg bg-red-600 px-4 py-2 text-sm text-white hover:bg-red-700 disabled:opacity-50">
+                <Trash2 size={16} /> {resetting ? 'Mereset...' : 'Reset Semua Data'}
+              </button>
+            </div>
           </div>
         </div>
       </div>

@@ -35,6 +35,7 @@ import RekapAbsensiPage from './pages/admin/RekapAbsensiPage'
 import NotifSettingsPage from './pages/admin/NotifSettingsPage'
 import TenantManagementPage from './pages/admin/TenantManagementPage'
 import RaporPage from './pages/admin/RaporPage'
+import CatatanKepribadianPage from './pages/admin/CatatanKepribadianPage'
 import GuruDashboard from './pages/guru/GuruDashboard'
 import GuruJurnalPage from './pages/guru/GuruJurnalPage'
 import GuruAbsensiPage from './pages/guru/GuruAbsensiPage'
@@ -113,6 +114,7 @@ export default function App() {
             <ProtectedRoute allowedRoles={['super_admin']}><TenantManagementPage /></ProtectedRoute>
           } />
           <Route path="rapor" element={<RaporPage />} />
+          <Route path="catatan-kepribadian" element={<CatatanKepribadianPage />} />
           <Route path="change-password" element={<ChangePasswordPage />} />
           <Route path="profile" element={<ProfilePage />} />
           <Route path="users" element={
@@ -141,6 +143,7 @@ export default function App() {
           <Route path="modul-ajar" element={<GuruModulAjarPage />} />
           <Route path="rombel" element={<GuruRombelPage />} />
           <Route path="penilaian-harian" element={<GuruPenilaianHarianPage />} />
+          <Route path="catatan-kepribadian" element={<CatatanKepribadianPage />} />
           <Route path="profile" element={<ProfilePage />} />
           <Route path="change-password" element={<ChangePasswordPage />} />
         </Route>

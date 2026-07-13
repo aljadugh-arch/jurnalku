@@ -4,6 +4,7 @@ import toast from 'react-hot-toast'
 import api from '../../services/api'
 import ImportExcel from '../../components/ImportExcel'
 import { ResponsiveTable } from '../../components/ui'
+import { formatTanggal, normalizeDate } from '../../lib/dateFormat'
 
 interface GTK {
   id: string; nip: string; nuptk: string; nama: string; jenis_kelamin: string
@@ -53,7 +54,7 @@ export default function DataGTKPage() {
   }
 
   const handleEdit = (g: GTK) => {
-    setForm({ nip: g.nip || '', nuptk: g.nuptk || '', nama: g.nama, jenis_kelamin: g.jenis_kelamin, tempat_lahir: g.tempat_lahir || '', tanggal_lahir: g.tanggal_lahir || '', alamat: g.alamat || '', no_hp: g.no_hp || '', email: g.email || '', jabatan: g.jabatan, status_kepegawaian: g.status_kepegawaian, bidang_studi: g.bidang_studi || '', kode_guru: g.kode_guru || '', status: g.status })
+    setForm({ nip: g.nip || '', nuptk: g.nuptk || '', nama: g.nama, jenis_kelamin: g.jenis_kelamin, tempat_lahir: g.tempat_lahir || '', tanggal_lahir: normalizeDate(g.tanggal_lahir), alamat: g.alamat || '', no_hp: g.no_hp || '', email: g.email || '', jabatan: g.jabatan, status_kepegawaian: g.status_kepegawaian, bidang_studi: g.bidang_studi || '', kode_guru: g.kode_guru || '', status: g.status })
     setEditId(g.id); setShowModal(true)
   }
 
@@ -72,8 +73,26 @@ export default function DataGTKPage() {
 
   const handleDelete = async (id: string, nama: string) => {
     if (!confirm('Hapus GTK ' + nama + '?')) return
-    try { await api.delete('/gtk/' + id); toast.success('Berhasil dihapus'); fetchData() }
-    catch { toast.error('Gagal menghapus') }
+    try {
+      await api.delete('/gtk/' + id)
+      toast.success('Berhasil dihapus')
+      fetchData()
+    } catch (err: any) {
+      const data = err.response?.data
+      if (data?.kind === 'assignment') {
+        const refs = (data.refs || []).map((r: any) => `${r.label}: ${r.count}`).join(', ')
+        if (!confirm(`GTK masih dipakai di ${refs}.\n\nHapus GTK sekaligus data penugasan terkait?`)) return
+        try {
+          await api.delete('/gtk/' + id + '?force=1')
+          toast.success('GTK dan data penugasan terkait dihapus')
+          fetchData()
+        } catch (forceErr: any) {
+          toast.error(forceErr.response?.data?.error || 'Gagal menghapus paksa')
+        }
+        return
+      }
+      toast.error(data?.error || 'Gagal menghapus')
+    }
   }
 
   const handleExport = () => {
@@ -150,6 +169,7 @@ export default function DataGTKPage() {
               { key: 'kode_guru', header: 'Kode', className: 'font-mono text-xs text-center', render: (g) => g.kode_guru || '-' },
               { key: 'nip', header: 'NIP', className: 'font-mono text-xs', hideOnMobile: true, render: (g) => g.nip || '-' },
               { key: 'jenis_kelamin', header: 'JK' },
+              { key: 'ttl', header: 'TTL', hideOnMobile: true, render: (g) => (g.tempat_lahir || '') + ', ' + formatTanggal(g.tanggal_lahir) },
               { key: 'jabatan', header: 'Jabatan', className: 'capitalize', render: (g) => g.jabatan.replace('_', ' ') },
               { key: 'bidang_studi', header: 'Bidang Studi', hideOnMobile: true, render: (g) => g.bidang_studi || '-' },
               { key: 'status', header: 'Status', render: (g) => (
@@ -173,8 +193,8 @@ export default function DataGTKPage() {
 
       {/* Modal Tambah/Edit */}
       {showModal && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto p-6">
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-start justify-center p-4 pt-6 sm:pt-10 overflow-y-auto">
+          <div className="bg-white rounded-2xl w-full max-w-lg max-h-[calc(100vh-3rem)] overflow-y-auto p-6">
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-lg font-bold text-gray-800">{editId ? 'Edit GTK' : 'Tambah GTK'}</h2>
               <button onClick={() => setShowModal(false)} className="p-1 hover:bg-gray-100 rounded-lg"><X size={20} /></button>
@@ -191,7 +211,7 @@ export default function DataGTKPage() {
                 <div><label className="block text-xs font-medium text-gray-600 mb-1">Status</label><select value={form.status_kepegawaian} onChange={e => setForm({...form, status_kepegawaian: e.target.value})} className="w-full px-3 py-2 border rounded-lg text-sm"><option value="pns">PNS</option><option value="pppk">PPPK</option><option value="honorer">Honorer</option></select></div>
               </div>
               <div className="grid grid-cols-2 gap-3">
-                <div><label className="block text-xs font-medium text-gray-600 mb-1">Bidang Studi</label><input value={form.bidang_studi} onChange={e => setForm({...form, bidang_studi: e.target.value})} className="w-full px-3 py-2 border rounded-lg text-sm" /></div>
+                <div><label className="block text-xs font-medium text-gray-600 mb-1">Bidang Studi</label><div className="w-full px-3 py-2 border rounded-lg text-sm bg-gray-50 text-gray-600 min-h-[38px]">{form.bidang_studi || 'Diambil otomatis dari menu Pengajar'}</div></div>
                 <div><label className="block text-xs font-medium text-gray-600 mb-1" title="Kode inisial guru dipakai di export jadwal Excel (mis. A, B, MMY)">Kode Guru</label><input value={form.kode_guru} onChange={e => setForm({...form, kode_guru: e.target.value.toUpperCase()})} maxLength={5} className="w-full px-3 py-2 border rounded-lg text-sm uppercase" placeholder="mis. A" /></div>
               </div>
               <div className="grid grid-cols-2 gap-3">
@@ -218,18 +238,22 @@ export default function DataGTKPage() {
           headerRow={1}
           columnMap={{ 'NIP': 'nip', 'NUPTK': 'nuptk', 'Nama Lengkap': 'nama', 'JK': 'jenis_kelamin', 'Kode Guru': 'kode_guru', 'Tempat Lahir': 'tempat_lahir', 'TGL Lahir': 'tanggal_lahir', 'Alamat': 'alamat', 'No. HP': 'no_hp', 'Email': 'email', 'Jabatan': 'jabatan', 'Status Kepegawaian': 'status_kepegawaian', 'Bidang Studi': 'bidang_studi' }}
           onImport={async (rows) => {
+            let gagal = 0
             for (const row of rows) {
               if (!row.nama) continue
               const jk = (row.jenis_kelamin || 'L').toString().charAt(0).toUpperCase()
-              await api.post('/gtk', {
-                nip: String(row.nip || ''), nuptk: String(row.nuptk || ''), nama: row.nama,
-                jenis_kelamin: jk === 'P' ? 'P' : 'L', kode_guru: String(row.kode_guru || '').toUpperCase(), tempat_lahir: row.tempat_lahir || '',
-                tanggal_lahir: row.tanggal_lahir || '', alamat: row.alamat || '',
-                no_hp: String(row.no_hp || ''), email: row.email || '',
-                jabatan: row.jabatan || 'Guru', status_kepegawaian: row.status_kepegawaian || 'Honorer',
-                bidang_studi: row.bidang_studi || '', status: 'aktif',
-              })
+              try {
+                await api.post('/gtk', {
+                  nip: String(row.nip || ''), nuptk: String(row.nuptk || ''), nama: row.nama,
+                  jenis_kelamin: jk === 'P' ? 'P' : 'L', kode_guru: String(row.kode_guru || '').toUpperCase(), tempat_lahir: row.tempat_lahir || '',
+                  tanggal_lahir: row.tanggal_lahir || '', alamat: row.alamat || '',
+                  no_hp: String(row.no_hp || ''), email: row.email || '',
+                  jabatan: row.jabatan || 'Guru', status_kepegawaian: row.status_kepegawaian || 'Honorer',
+                  bidang_studi: row.bidang_studi || '', status: 'aktif',
+                })
+              } catch { gagal++ }
             }
+            if (gagal > 0) toast.error(gagal + ' baris gagal (NIP duplikat/data tidak valid)')
             fetchData()
           }}
           onClose={() => setShowImport(false)}

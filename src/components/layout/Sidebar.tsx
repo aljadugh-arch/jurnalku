@@ -7,7 +7,7 @@ import {
   LayoutDashboard, Users, GraduationCap, BookOpen, Calendar,
   ClipboardList, UserCheck, QrCode, MapPin,
   X, ChevronDown, ChevronRight, LogOut, School, Layers,
-  Activity, Globe, Sparkles, DollarSign, Settings, MessageSquare, FileText, AlertCircle, ClipboardCheck
+  Activity, Globe, Sparkles, DollarSign, Settings, MessageSquare, FileText, AlertCircle, ClipboardCheck, ScrollText
 } from 'lucide-react'
 import { clsx } from 'clsx'
 import { roleLabel } from '../../lib/roles'
@@ -20,12 +20,16 @@ interface MenuItem {
   children?: { label: string; path: string }[]
 }
 
+// Admin/operator/TU sekolah juga masuk kategori GTK. Menu ceklok pribadi dinaikkan ke atas
+// biar mereka bisa presensi kehadiran diri seperti guru pada umumnya.
 const adminMenuItems: MenuItem[] = [
   { label: 'Dashboard', icon: <LayoutDashboard size={20} />, path: '/admin' },
+  { label: 'Ceklok Saya', icon: <MapPin size={20} />, path: '/guru/absensi-guru' },
   { label: 'Data Siswa', icon: <GraduationCap size={20} />, path: '/admin/siswa' },
   { label: 'Data GTK', icon: <Users size={20} />, path: '/admin/gtk' },
   { label: 'Mata Pelajaran', icon: <BookOpen size={20} />, path: '/admin/mapel' },
   { label: 'Rapor Siswa', icon: <FileText size={20} />, path: '/admin/rapor' },
+  { label: 'Catatan Kepribadian', icon: <ScrollText size={20} />, path: '/admin/catatan-kepribadian' },
   { label: 'Rombongan Belajar', icon: <Layers size={20} />, path: '/admin/rombel' },
   {
     label: 'Jadwal Pelajaran', icon: <Calendar size={20} />,
@@ -75,11 +79,12 @@ const guruMenuItems: MenuItem[] = [
   { label: 'Dashboard', icon: <LayoutDashboard size={20} />, path: '/guru' },
   { label: 'Jurnal Mengajar', icon: <ClipboardList size={20} />, path: '/guru/jurnal' },
   { label: 'Penilaian Harian', icon: <BookOpen size={20} />, path: '/guru/penilaian-harian' },
+  { label: 'Catatan Kepribadian', icon: <ScrollText size={20} />, path: '/guru/catatan-kepribadian' },
   { label: 'Jadwal Saya', icon: <Calendar size={20} />, path: '/guru/jadwal' },
   { label: 'Absensi Siswa', icon: <QrCode size={20} />, path: '/guru/absensi-siswa' },
   { label: 'Absensi Saya', icon: <MapPin size={20} />, path: '/guru/absensi-guru' },
   { label: 'Modul Ajar', icon: <Sparkles size={20} />, path: '/guru/modul-ajar' },
-  { label: 'Rombel Saya', icon: <Layers size={20} />, path: '/guru/rombel' },
+  { label: 'Kelas Wali Saya', icon: <Layers size={20} />, path: '/guru/rombel' },
 ]
 
 const siswaMenuItems: MenuItem[] = [
@@ -89,12 +94,14 @@ const siswaMenuItems: MenuItem[] = [
   { label: 'Ekskul', icon: <Activity size={20} />, path: '/siswa/ekskul' },
 ]
 
-// Kepala Madrasah/Sekolah = pimpinan, read-only. Lihat data & laporan, tanpa menu config/tulis.
+// Kepala Madrasah/Sekolah = pimpinan, tetap punya ceklok sendiri karena masuk kategori GTK.
 const kepalaMenuItems: MenuItem[] = [
   { label: 'Dashboard', icon: <LayoutDashboard size={20} />, path: '/admin' },
+  { label: 'Ceklok Saya', icon: <MapPin size={20} />, path: '/guru/absensi-guru' },
   { label: 'Data Siswa', icon: <GraduationCap size={20} />, path: '/admin/siswa' },
   { label: 'Data GTK', icon: <Users size={20} />, path: '/admin/gtk' },
   { label: 'Rapor Siswa', icon: <FileText size={20} />, path: '/admin/rapor' },
+  { label: 'Catatan Kepribadian', icon: <ScrollText size={20} />, path: '/admin/catatan-kepribadian' },
   { label: 'Rombongan Belajar', icon: <Layers size={20} />, path: '/admin/rombel' },
   { label: 'Jurnal Mengajar', icon: <ClipboardList size={20} />, path: '/admin/jurnal' },
   { label: 'Supervisi Guru', icon: <ClipboardCheck size={20} />, path: '/admin/supervisi' },
@@ -156,13 +163,13 @@ export default function Sidebar() {
       {/* Mobile backdrop overlay */}
       {isOpen && (
         <div 
-          className="fixed inset-0 bg-black/50 z-30 lg:hidden"
+          className="hidden"
           onClick={toggle}
         />
       )}
 
       <aside className={clsx(
-        'fixed top-0 left-0 h-full bg-sidebar text-white z-40 transition-all duration-300 flex flex-col',
+        'fixed top-0 left-0 hidden h-full bg-sidebar text-white z-40 transition-all duration-300 lg:flex flex-col',
         isOpen ? 'w-64' : 'w-0 lg:w-20',
         !isOpen && 'overflow-hidden lg:overflow-visible'
       )}

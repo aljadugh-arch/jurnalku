@@ -1,6 +1,7 @@
 import { Outlet } from 'react-router-dom'
 import Sidebar from './Sidebar'
 import Header from './Header'
+import BottomNavigation from './BottomNavigation'
 import { useSidebarStore } from '../../stores/sidebarStore'
 import { useAuthStore } from '../../stores/authStore'
 import { useSettingsStore } from '../../stores/settingsStore'
@@ -30,9 +31,10 @@ export default function DashboardLayout() {
             <Eye size={14} /> Mode Pimpinan (Kepala Madrasah/Sekolah) — akses hanya-lihat, tidak dapat mengubah data.
           </div>
         )}
-        <main className={clsx('p-4 sm:p-6 overflow-x-hidden', background && 'min-h-screen bg-white/70 dark:bg-gray-950/80 backdrop-blur-sm')}>
+        <main className={clsx('p-4 pb-28 sm:p-6 sm:pb-32 lg:pb-6 overflow-x-hidden', background && 'min-h-screen bg-white/70 dark:bg-gray-950/80 backdrop-blur-sm')}>
           <Outlet />
         </main>
+        <BottomNavigation />
       </div>
     </div>
   )
