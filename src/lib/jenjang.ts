@@ -57,8 +57,9 @@ export function generateJamPelajaran(
   jumlah = 10,
   mulaiJam = '07:00',
   istirahatSetelah: number[] = [4, 6],
+  durasiMenit = jtmMenit(jenjang),
 ): { ke: number; mulai: string; selesai: string }[] {
-  const durasi = jtmMenit(jenjang)
+  const durasi = durasiMenit
   const pad = (n: number) => n.toString().padStart(2, '0')
   const toStr = (mnt: number) => `${pad(Math.floor(mnt / 60) % 24)}:${pad(mnt % 60)}`
   const [h, m] = mulaiJam.split(':').map(Number)

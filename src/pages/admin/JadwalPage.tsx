@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react'
-import { Plus, Trash2, AlertTriangle, X, Download, FileSpreadsheet, Pencil, Settings2, Wand2 } from 'lucide-react'
+import { Plus, Trash2, AlertTriangle, X, Download, FileSpreadsheet, Pencil, Settings2, Wand2, Upload } from 'lucide-react'
 import toast from 'react-hot-toast'
 import api from '../../services/api'
 import * as XLSX from 'xlsx'
@@ -42,8 +42,10 @@ export default function JadwalPage() {
     try { return JSON.parse((settings as any).hari_libur || '["jumat"]') } catch { return ['jumat'] }
   }, [settings])
   const hari = useMemo(() => SEMUA_HARI.filter(h => !hariLibur.includes(h)), [hariLibur])
-  const jamPelajaran = useMemo(() => generateJamPelajaran(jenjang, 10), [jenjang])
-  const [form, setForm] = useState({ mapel_id: '', rombel_id: '', gtk_id: '', hari: 'senin', jam_mulai: '07:00', jam_selesai: '07:45', ruangan: '', template_id: '', jenis_kegiatan: 'mapel', nama_kegiatan: '' })
+  const durasiJtm = Number((settings as any).durasi_jtm) || (/^(RA|TK|MI|SD)$/i.test(jenjang) ? 35 : 40)
+  const awalMapel = useMemo(() => jadwal.filter(j => j.jenis_kegiatan && j.jenis_kegiatan !== 'mapel').sort((a,b) => b.jam_selesai.localeCompare(a.jam_selesai))[0]?.jam_selesai || '07:00', [jadwal])
+  const jamPelajaran = useMemo(() => generateJamPelajaran(jenjang, 10, awalMapel, [], durasiJtm), [jenjang, awalMapel, durasiJtm])
+  const [form, setForm] = useState({ mapel_id: '', rombel_id: '', gtk_id: '', hari: 'senin', jam_mulai: '07:00', jam_selesai: '07:40', ruangan: '', template_id: '', jenis_kegiatan: 'mapel', nama_kegiatan: '', semua_rombel: false })
   const mapelReguler = useMemo(() => mapels.filter(m => m.kelompok !== 'kegiatan'), [mapels])
   const mapelKegiatan = useMemo(() => mapels.filter(m => m.kelompok === 'kegiatan'), [mapels])
 
@@ -84,9 +86,8 @@ export default function JadwalPage() {
 
   // Build time slots: merge actual jadwal ranges + generated, remove overlaps
   const allTimeSlots = useMemo(() => {
-    const durasi = jtmMenit(jenjang)
+
     const toMin = (t: string) => { const [h, m] = t.split(':').map(Number); return h * 60 + m }
-    const toTime = (n: number) => `${String(Math.floor(n / 60)).padStart(2,'0')}:${String(n % 60).padStart(2,'0')}`
 
     // Actual slots matching grid tetap Jam 1, Jam 2, dst; hanya waktu di luar grid dianggap custom.
     const actual = Array.from(new Set(jadwal.map(j => `${j.jam_mulai}|${j.jam_selesai}`))).map(k => {
@@ -110,12 +111,12 @@ export default function JadwalPage() {
     return sorted.map((s, i) => ({ ke: s.standardKe || i + 1, ...s }))
   }, [jamPelajaran, jadwal, jenjang])
 
-  const resetForm = () => setForm({ mapel_id: '', rombel_id: '', gtk_id: '', hari: hari[0] || 'senin', jam_mulai: jamPelajaran[0]?.mulai || '07:00', jam_selesai: jamPelajaran[0]?.selesai || '07:45', ruangan: '', template_id: '', jenis_kegiatan: 'mapel', nama_kegiatan: '' })
+  const resetForm = () => setForm({ mapel_id: '', rombel_id: '', gtk_id: '', hari: hari[0] || 'senin', jam_mulai: jamPelajaran[0]?.mulai || '07:00', jam_selesai: jamPelajaran[0]?.selesai || '07:40', ruangan: '', template_id: '', jenis_kegiatan: 'mapel', nama_kegiatan: '', semua_rombel: false })
 
   const openAdd = () => { setEditId(null); resetForm(); setShowForm(true) }
   const openEdit = (slot: Jadwal) => {
     setEditId(slot.id)
-    setForm({ mapel_id: slot.mapel_id, rombel_id: slot.rombel_id, gtk_id: slot.gtk_id, hari: slot.hari, jam_mulai: slot.jam_mulai, jam_selesai: slot.jam_selesai, ruangan: slot.ruangan || '', template_id: slot.template_id || '', jenis_kegiatan: slot.jenis_kegiatan || 'mapel', nama_kegiatan: slot.nama_kegiatan || '' })
+    setForm({ mapel_id: slot.mapel_id, rombel_id: slot.rombel_id, gtk_id: slot.gtk_id, hari: slot.hari, jam_mulai: slot.jam_mulai, jam_selesai: slot.jam_selesai, ruangan: slot.ruangan || '', template_id: slot.template_id || '', jenis_kegiatan: slot.jenis_kegiatan || 'mapel', nama_kegiatan: slot.nama_kegiatan || '', semua_rombel: false })
     setShowForm(true)
   }
 
@@ -126,14 +127,14 @@ export default function JadwalPage() {
     if (form.jenis_kegiatan === 'istirahat' && !form.nama_kegiatan.trim()) { toast.error('Nama istirahat wajib diisi'); return }
     if (form.jenis_kegiatan === 'kegiatan' && !form.nama_kegiatan.trim()) { toast.error('Nama kegiatan wajib diisi'); return }
     if (!selectedRombel && form.jenis_kegiatan === 'mapel') { toast.error('Rombel wajib dipilih'); return }
-    const payload = { ...form, rombel_id: selectedRombel, template_id: form.template_id || null }
+    const payload = { ...form, rombel_id: form.semua_rombel && form.jenis_kegiatan !== 'mapel' ? null : selectedRombel, template_id: form.template_id || null }
     try {
       if (editId) {
         await api.put('/jadwal/' + editId, payload)
         toast.success('Jadwal diperbarui')
       } else {
         await api.post('/jadwal', payload)
-        toast.success('Jadwal ditambahkan')
+        toast.success(form.semua_rombel ? `Jadwal ditambahkan ke ${rombels.length} rombel` : 'Jadwal ditambahkan')
       }
       setShowForm(false); setEditId(null)
       loadJadwal()
@@ -440,6 +441,42 @@ export default function JadwalPage() {
     toast.success('Excel diunduh')
   }
 
+  const downloadImportTemplate = () => {
+    const ws = XLSX.utils.aoa_to_sheet([
+      ['rombel', 'hari', 'jenis', 'nama', 'mapel', 'guru', 'jam_mulai', 'jam_selesai', 'ruangan'],
+      ['SEMUA', 'senin', 'kegiatan', 'Apel Pagi', '', '', '07:15', '07:30', ''],
+      ['SEMUA', 'senin', 'istirahat', 'Istirahat', '', '', '09:30', '09:45', ''],
+      ['VII-A', 'senin', 'mapel', '', 'Bahasa Indonesia', 'Nama Guru', '07:30', '08:10', 'R.1'],
+    ])
+    const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, 'Jadwal')
+    XLSX.writeFile(wb, 'template_import_jadwal.xlsx')
+  }
+
+  const importJadwal = (file?: File) => {
+    if (!file) return
+    const reader = new FileReader()
+    reader.onload = async e => {
+      try {
+        const wb = XLSX.read(e.target?.result, { type: 'array' })
+        const rows = XLSX.utils.sheet_to_json<any>(wb.Sheets[wb.SheetNames[0]], { defval: '' })
+        let count = 0
+        for (const row of rows) {
+          const jenis = String(row.jenis || 'mapel').toLowerCase()
+          const mapel = mapels.find(m => m.nama.trim().toLowerCase() === String(row.mapel).trim().toLowerCase())
+          const guru = gtks.find(g => g.nama.trim().toLowerCase() === String(row.guru).trim().toLowerCase())
+          const targets = String(row.rombel).trim().toUpperCase() === 'SEMUA' ? rombels : rombels.filter(r => r.nama.trim().toLowerCase() === String(row.rombel).trim().toLowerCase())
+          if (!targets.length || (jenis === 'mapel' && (!mapel || !guru))) throw new Error(`Data tidak ditemukan: ${row.rombel} / ${row.mapel} / ${row.guru}`)
+          for (const rb of targets) {
+            await api.post('/jadwal', { rombel_id: rb.id, jenis_kegiatan: jenis, nama_kegiatan: row.nama || '', mapel_id: mapel?.id || null, gtk_id: guru?.id || null, hari: String(row.hari).toLowerCase(), jam_mulai: row.jam_mulai, jam_selesai: row.jam_selesai, ruangan: row.ruangan || '' })
+            count++
+          }
+        }
+        toast.success(`${count} jadwal berhasil diimpor`); loadJadwal()
+      } catch (err: any) { toast.error(err.response?.data?.error || err.message || 'Import gagal') }
+    }
+    reader.readAsArrayBuffer(file)
+  }
+
   const exportPDF = () => {
     const rombelNama = rombels.find(r => r.id === selectedRombel)?.nama || 'Jadwal'
     const printWindow = window.open('', '_blank')
@@ -465,6 +502,8 @@ export default function JadwalPage() {
           <p className="text-gray-500 text-sm mt-1">Kelola jadwal dengan sistem anti tabrakan</p>
         </div>
         <div className="flex flex-wrap gap-2">
+          <button onClick={downloadImportTemplate} className="flex items-center gap-2 px-4 py-2 bg-white border text-gray-700 rounded-lg text-sm"><Download size={16} /> Template Import</button>
+          <label className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm cursor-pointer"><Upload size={16} /> Import Excel<input type="file" accept=".xls,.xlsx" className="hidden" onChange={e => { importJadwal(e.target.files?.[0]); e.target.value = '' }} /></label>
           <button onClick={exportExcel} className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg text-sm hover:bg-green-700">
             <FileSpreadsheet size={16} /> Excel
           </button>
@@ -520,7 +559,7 @@ export default function JadwalPage() {
               {allTimeSlots.map(jam => (
                 <tr key={`${jam.mulai}-${jam.selesai}`} className="hover:bg-gray-50">
                   <td className="px-4 py-3 text-gray-600 whitespace-nowrap">
-                    <div className="text-xs font-medium">{jam.isCustom ? '⏰' : `Jam ${jam.ke}`}</div>
+                    <div className="text-xs font-medium">{jam.isCustom ? 'Kegiatan/istirahat' : `Jam ${jam.ke}`}</div>
                     <div className="text-[10px] text-gray-400">{jam.mulai}-{jam.selesai}</div>
                   </td>
                   {hari.map(h => {
@@ -563,7 +602,7 @@ export default function JadwalPage() {
                     {slotsHari.map(({ jam, slot }) => (
                       <div key={jam.ke} className="flex items-start gap-3 bg-primary/5 border border-primary/20 rounded-lg p-2.5">
                         <div className="shrink-0 text-center">
-                          <p className="text-xs font-bold text-primary">Jam {jam.ke}</p>
+                          <p className="text-xs font-bold text-primary">{slot!.jenis_kegiatan === 'istirahat' ? 'Istirahat' : slot!.jenis_kegiatan === 'kegiatan' ? 'Jam 0' : `Jam ${jam.ke}`}</p>
                           <p className="text-[10px] text-gray-400">{jam.mulai}-{jam.selesai}</p>
                         </div>
                         <div className="min-w-0 flex-1">
@@ -627,6 +666,7 @@ export default function JadwalPage() {
                   <label className="block text-xs font-medium text-gray-600 mb-1">Nama Kegiatan</label>
                   <input type="text" value={form.nama_kegiatan} onChange={e => setForm({...form, nama_kegiatan: e.target.value})} placeholder={form.jenis_kegiatan === 'istirahat' ? 'Istirahat Sholat Dhuha / Dhuhur' : 'Apel Pagi / Upacara / Pembiasaan'} className="w-full px-3 py-2 border rounded-lg text-sm" maxLength={100} />
                   <p className="text-xs text-gray-400 mt-1">{form.jenis_kegiatan === 'istirahat' ? 'Contoh: Istirahat Sholat Dhuha, Istirahat Sholat Dhuhur' : 'Contoh: Apel Pagi, Upacara Bendera, Pembiasaan'}</p>
+                  {!editId && <label className="flex items-center gap-2 mt-3 p-3 bg-blue-50 border border-blue-200 rounded-lg text-sm text-blue-800"><input type="checkbox" checked={form.semua_rombel} onChange={e => setForm({...form, semua_rombel: e.target.checked})} /> Tambahkan ke semua rombel ({rombels.length})</label>}
                 </div>
               )}
               <div>
@@ -661,7 +701,7 @@ export default function JadwalPage() {
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-1">Jam Mulai</label>
-                  <input type="time" value={form.jam_mulai} onChange={e => setForm({...form, jam_mulai: e.target.value})} className="w-full px-3 py-2 border rounded-lg text-sm" />
+                  <input type="time" value={form.jam_mulai} onChange={e => { const [h,m]=e.target.value.split(':').map(Number), end=h*60+m+durasiJtm; setForm({...form, jam_mulai:e.target.value, jam_selesai:`${String(Math.floor(end/60)%24).padStart(2,'0')}:${String(end%60).padStart(2,'0')}`}) }} className="w-full px-3 py-2 border rounded-lg text-sm" />
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-1">Jam Selesai</label>
@@ -669,7 +709,7 @@ export default function JadwalPage() {
                 </div>
               </div>
               <p className="text-xs text-gray-500 -mt-1">
-                Referensi 1 JTM {jenjang || 'default'}: <strong>{jtmMenit(jenjang)} menit</strong> (KMA 736/2026). Jam bebas diisi manual.
+                Durasi 1 JTM: <strong>{durasiJtm} menit</strong>. Jam selesai tetap bisa diubah manual.
               </p>
               <div className="flex gap-2 pt-2">
                 <button type="button" onClick={() => { setShowForm(false); setEditId(null) }} className="flex-1 px-4 py-2 border rounded-lg text-sm">Batal</button>

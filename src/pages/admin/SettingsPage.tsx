@@ -16,7 +16,7 @@ export default function SettingsPage() {
   const [form, setForm] = useState({
     nama_lembaga: '', alamat: '', telepon: '', email: '',
     theme: 'light', primary_color: '#1e40af', accent_color: '#059669', sidebar_color: '#1e293b',
-    geo_latitude: '', geo_longitude: '', geo_radius: '200', jenjang: '', hari_libur: ['jumat'] as string[],
+    geo_latitude: '', geo_longitude: '', geo_radius: '200', jenjang: '', durasi_jtm: '40', hari_libur: ['jumat'] as string[],
     bg_size: 'cover', bg_position: 'center', bg_repeat: 'no-repeat', bg_blur: 0
   })
   const [loading, setLoading] = useState(true)
@@ -42,7 +42,7 @@ export default function SettingsPage() {
       setForm({
         nama_lembaga: s.nama_lembaga || '', alamat: s.alamat || '', telepon: s.telepon || '', email: s.email || '',
         theme: s.theme || 'light', primary_color: s.primary_color || '#1e40af', accent_color: s.accent_color || '#059669', sidebar_color: s.sidebar_color || '#1e293b',
-        geo_latitude: s.geo_latitude || '', geo_longitude: s.geo_longitude || '', geo_radius: s.geo_radius || '200', jenjang: s.jenjang || '',
+        geo_latitude: s.geo_latitude || '', geo_longitude: s.geo_longitude || '', geo_radius: s.geo_radius || '200', jenjang: s.jenjang || '', durasi_jtm: String(s.durasi_jtm || (/^(RA|TK|MI|SD)$/i.test(s.jenjang || '') ? 35 : 40)),
         hari_libur: (() => { try { return JSON.parse(s.hari_libur || '["jumat"]') } catch { return ['jumat'] } })(),
         bg_size: s.bg_size || 'cover', bg_position: s.bg_position || 'center',
         bg_repeat: s.bg_repeat || 'no-repeat', bg_blur: s.bg_blur || 0
@@ -168,6 +168,11 @@ export default function SettingsPage() {
               {JENJANG_OPTIONS.map(j => <option key={j.value} value={j.value}>{j.label}</option>)}
             </select>
             <p className="text-xs text-gray-400 mt-1">Menentukan penamaan tingkat/kelas di Rombel (RA=A,B • MI=1-6 • MTs=7-9 • MA=10-12)</p>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-600 mb-1">Durasi 1 Jam Pelajaran (menit)</label>
+            <input type="number" min="20" max="120" value={form.durasi_jtm} onChange={e => setForm({...form, durasi_jtm: e.target.value})} className="w-full px-4 py-2 border rounded-lg text-sm" />
+            <p className="text-xs text-gray-400 mt-1">Default MI/SD 35 menit, MTs/SMP dan MA/SMA 40 menit; dapat diubah admin.</p>
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-600 mb-2">Hari Libur</label>
