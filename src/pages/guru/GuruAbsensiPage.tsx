@@ -2,12 +2,14 @@ import { useState, useEffect } from 'react'
 import { MapPin, Clock, Loader2 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import api from '../../services/api'
+import { useSettingsStore } from '../../stores/settingsStore'
 
 export default function GuruAbsensiPage() {
+  const settings = useSettingsStore(s => s.settings)
   const [loading, setLoading] = useState(false)
   const [todayRecord, setTodayRecord] = useState<any>(null)
   const [history, setHistory] = useState<any[]>([])
-  const [location, setLocation] = useState<{lat: number, lng: number} | null>(null)
+  const [location, setLocation] = useState<{lat: number, lng: number, acc?: number} | null>(null)
 
   useEffect(() => { loadData() }, [])
 
@@ -19,13 +21,14 @@ export default function GuruAbsensiPage() {
     } catch {}
   }
 
-  const getLocation = (): Promise<{lat: number, lng: number}> => {
+  const getLocation = (): Promise<{lat: number, lng: number, acc: number}> => {
     return new Promise((resolve, reject) => {
       if (!navigator.geolocation) return reject(new Error('Geolocation tidak didukung'))
+      // maximumAge:0 memaksa fix baru (bukan cache) agar lebih presisi.
       navigator.geolocation.getCurrentPosition(
-        pos => resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
+        pos => resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude, acc: pos.coords.accuracy }),
         err => reject(err),
-        { enableHighAccuracy: true, timeout: 10000 }
+        { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
       )
     })
   }
@@ -35,7 +38,12 @@ export default function GuruAbsensiPage() {
     try {
       const loc = await getLocation()
       setLocation(loc)
-      const res = await api.post('/guru/ceklok', { type, latitude: loc.lat, longitude: loc.lng })
+      // Tolak fix GPS yang terlalu kasar (biasanya masih pakai IP/WiFi, belum lock satelit).
+      if (loc.acc && loc.acc > 200) {
+        toast.error(`Sinyal GPS lemah (akurasi ±${Math.round(loc.acc)}m). Keluar ruangan / aktifkan GPS presisi tinggi lalu coba lagi.`)
+        return
+      }
+      const res = await api.post('/guru/ceklok', { type, latitude: loc.lat, longitude: loc.lng, accuracy: loc.acc })
       toast.success(type === 'masuk' ? `Ceklok masuk berhasil: ${res.data.waktu_masuk}` : `Ceklok pulang berhasil: ${res.data.waktu_pulang}`)
       loadData()
     } catch (err: any) {
@@ -75,9 +83,15 @@ export default function GuruAbsensiPage() {
           Ceklok Kehadiran
         </h3>
 
+        {!settings?.geo_latitude && (
+          <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 mb-4">
+            <p className="text-xs text-amber-800">⚠️ Admin belum setting lokasi sekolah. Ceklok sementara tidak dibatasi radius.</p>
+          </div>
+        )}
+
         <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
           <p className="text-sm text-blue-700">
-            <strong>Lokasi Anda:</strong> {location ? `${location.lat.toFixed(6)}, ${location.lng.toFixed(6)}` : 'Belum terdeteksi (akan otomatis saat ceklok)'}
+            <strong>Lokasi Anda:</strong> {location ? `${location.lat.toFixed(6)}, ${location.lng.toFixed(6)}${location.acc ? ` (±${Math.round(location.acc)}m)` : ''}` : 'Belum terdeteksi (akan otomatis saat ceklok)'}
           </p>
         </div>
 

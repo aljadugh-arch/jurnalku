@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { QrCode, Save, X, Printer, ScanLine, Camera } from 'lucide-react'
+import { QrCode, Save, X, Printer, ScanLine, Camera, Download } from 'lucide-react'
 import { QRCodeSVG } from 'qrcode.react'
 import { Html5Qrcode } from 'html5-qrcode'
 import toast from 'react-hot-toast'
@@ -91,44 +91,97 @@ export default function AbsensiSiswaPage() {
     alpha: siswaList.length - Object.values(currentMap).filter(s => s && s !== 'alpha').length,
   }
 
-  // === Cetak Kartu QR (KTS/KTA) ===
+  // === Cetak Kartu Tanda Siswa (KTS) — pakai template PNG depan & belakang ===
+  // Koordinat overlay relatif thd template 1011x639 (dipakai sebagai persen).
   const handlePrintKartu = () => {
     const win = window.open('', '_blank')
     if (!win) { toast.error('Popup diblokir browser, izinkan popup untuk cetak'); return }
-    const cards = siswaList.map(s => `
+    const pct = (v: number, base: number) => (v / base * 100).toFixed(3) + '%'
+    const cards = siswaList.map(s => {
+      const qr = qrToSvgString(s.id)
+      const ttl = [s.tempat_lahir, s.tanggal_lahir].filter(Boolean).join(', ')
+      // DEPAN
+      const depan = `
       <div class="card">
-        <div class="card-head">KARTU TANDA SISWA</div>
-        <div class="card-body">
-          <div class="qr">${qrToSvgString(s.id)}</div>
-          <div class="info">
-            <div class="nama">${s.nama}</div>
-            <div class="nis">NIS: ${s.nis}</div>
-          </div>
-        </div>
-      </div>`).join('')
-    win.document.write(`<html><head><title>Cetak Kartu Siswa</title><style>
-      @page { size: A4; margin: 10mm; }
-      body { font-family: Arial, sans-serif; }
-      .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8mm; }
-      .card { border: 1px solid #333; border-radius: 6px; padding: 6px; text-align: center; page-break-inside: avoid; }
-      .card-head { font-size: 9px; font-weight: bold; margin-bottom: 4px; }
-      .card-body { display: flex; align-items: center; gap: 6px; }
-      .qr svg { width: 60px; height: 60px; }
-      .info { text-align: left; flex: 1; }
-      .nama { font-size: 11px; font-weight: bold; }
-      .nis { font-size: 9px; color: #444; }
+        <img class="bg" src="/kts-depan.png" />
+        ${s.foto ? `<img class="foto" src="${s.foto.startsWith('http') ? s.foto : location.origin + s.foto}" />` : '<div class="foto foto-empty"></div>'}
+        <div class="nama-depan">${s.nama || ''}</div>
+        <div class="data nisn">${s.nisn || '-'} / ${s.nis || '-'}</div>
+        <div class="data jk">${s.jenis_kelamin || '-'}</div>
+        <div class="data ttl">${ttl || '-'}</div>
+        <div class="data alamat">${s.alamat || '-'}</div>
+      </div>`
+      // BELAKANG
+      const belakang = `
+      <div class="card">
+        <img class="bg" src="/kts-belakang.png" />
+        <div class="nama-belakang">${s.nama || ''}</div>
+        <div class="qr-belakang">${qr}</div>
+      </div>`
+      return depan + belakang
+    }).join('')
+    win.document.write(`<html><head><title>Cetak KTS</title><style>
+      @page { size: A4; margin: 8mm; }
+      body { font-family: Arial, sans-serif; margin: 0; }
+      .grid { display: flex; flex-wrap: wrap; gap: 6mm; }
+      .card { position: relative; width: 85.6mm; height: 54.1mm; page-break-inside: avoid; overflow: hidden; border-radius: 3mm; }
+      .card .bg { position: absolute; inset: 0; width: 100%; height: 100%; }
+      .card > *:not(.bg) { position: absolute; }
+      .foto { left: ${pct(18,1011)}; top: ${pct(205,639)}; width: ${pct(200,1011)}; height: ${pct(255,639)}; object-fit: cover; }
+      .foto-empty { background: #fff; }
+      .nama-depan { left: ${pct(290,1011)}; top: ${pct(212,639)}; width: ${pct(460,1011)}; font-size: 3.2mm; font-weight: bold; color: #14532d; line-height: 1.1; }
+      .data { left: ${pct(290,1011)}; width: ${pct(470,1011)}; font-size: 2.4mm; color: #111; line-height: 1.1; }
+      .nisn   { top: ${pct(262,639)}; }
+      .jk     { top: ${pct(295,639)}; }
+      .ttl    { top: ${pct(328,639)}; }
+      .alamat { top: ${pct(361,639)}; }
+      .nama-belakang { left: ${pct(740,1011)}; top: ${pct(150,639)}; width: ${pct(210,1011)}; text-align: center; font-size: 2.6mm; font-weight: bold; color: #fff; }
+      .qr-belakang { left: ${pct(755,1011)}; top: ${pct(195,639)}; width: ${pct(175,1011)}; }
+      .qr-belakang svg { width: 100%; height: auto; background: #fff; padding: 2px; }
     </style></head><body><div class="grid">${cards}</div></body></html>`)
     win.document.close()
-    setTimeout(() => win.print(), 400)
+    win.onload = () => setTimeout(() => win.print(), 300)
+    setTimeout(() => { try { win.print() } catch {} }, 800)
   }
 
-  // Render QRCodeSVG to a static SVG string via a hidden container (qrcode.react adalah React component,
-  // untuk print window terpisah kita generate SVG manual pakai lib qrcode inti yang dipakai qrcode.react)
+  // Ambil string SVG QR dari container tersembunyi (dirender via qrcode.react).
   const qrToSvgString = (value: string) => {
-    // Fallback ringan: pakai <img> dari API publik goqr hanya sbg cadangan kalau perlu,
-    // tapi utamakan qrcode.react di modal preview. Untuk window cetak terpisah, pakai canvas snapshot.
     const el = document.getElementById(`qr-src-${value}`)
     return el ? el.innerHTML : ''
+  }
+
+  // === Export QR per-siswa ke PNG ===
+  const exportQrPng = (siswa: any) => {
+    const el = document.getElementById(`qr-src-${siswa.id}`)
+    const svg = el?.querySelector('svg')
+    if (!svg) { toast.error('QR belum siap'); return }
+    const size = 512
+    const svgStr = new XMLSerializer().serializeToString(svg)
+    const img = new Image()
+    const url = 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(svgStr)))
+    img.onload = () => {
+      const canvas = document.createElement('canvas')
+      canvas.width = size; canvas.height = size
+      const ctx = canvas.getContext('2d')!
+      ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, size, size)
+      ctx.drawImage(img, 0, 0, size, size)
+      canvas.toBlob(blob => {
+        if (!blob) return
+        const a = document.createElement('a')
+        a.href = URL.createObjectURL(blob)
+        a.download = `QR-${siswa.nis || siswa.id}-${(siswa.nama || '').replace(/\s+/g, '_')}.png`
+        a.click()
+        setTimeout(() => URL.revokeObjectURL(a.href), 1000)
+      }, 'image/png')
+    }
+    img.onerror = () => toast.error('Gagal render QR')
+    img.src = url
+  }
+
+  const exportAllQrPng = () => {
+    if (siswaList.length === 0) return
+    toast.success(`Mengunduh ${siswaList.length} QR PNG...`)
+    siswaList.forEach((s, i) => setTimeout(() => exportQrPng(s), i * 350))
   }
 
   // === Scan QR utk absensi ===
@@ -144,6 +197,9 @@ export default function AbsensiSiswaPage() {
       }
       return
     }
+    let processing = false
+    let lastToken = ''
+    let lastAt = 0
     const timer = setTimeout(async () => {
       try {
         const scanner = new Html5Qrcode(scanBoxId)
@@ -152,15 +208,23 @@ export default function AbsensiSiswaPage() {
           { facingMode: 'environment' },
           { fps: 10, qrbox: 220 },
           async (decodedText) => {
+            // Cegah banjir alert: 1 proses/scan + abaikan QR sama dalam 3 detik.
+            const now = Date.now()
+            if (processing) return
+            if (decodedText === lastToken && now - lastAt < 3000) return
+            processing = true
+            lastToken = decodedText
+            lastAt = now
+            try { await scannerRef.current?.pause(true) } catch {}
             try {
               const res = await api.post('/absensi-siswa/qr-scan', { token: decodedText })
-              if (res.data.already) toast(`${res.data.siswa.nama} sudah absen hadir`, { icon: 'ℹ️' })
-              else toast.success(`Hadir: ${res.data.siswa.nama} (${res.data.siswa.nis})`)
-              try { await scannerRef.current?.pause(true) } catch {}
+              if (res.data.already) toast(`${res.data.siswa.nama} sudah absen ${res.data.sesi || ''}`.trim(), { icon: 'ℹ️', id: 'qr-scan' })
+              else toast.success(`${res.data.sesi === 'pulang' ? 'Pulang' : 'Hadir'}: ${res.data.siswa.nama} (${res.data.siswa.nis})`, { id: 'qr-scan' })
               loadData()
-              setTimeout(() => { try { scannerRef.current?.resume() } catch {} }, 1200)
             } catch (err: any) {
-              toast.error(err.response?.data?.error || 'QR tidak dikenali')
+              toast.error(err.response?.data?.error || 'QR tidak dikenali', { id: 'qr-scan' })
+            } finally {
+              setTimeout(() => { processing = false; try { scannerRef.current?.resume() } catch {} }, 1500)
             }
           },
           () => {}
@@ -283,9 +347,12 @@ export default function AbsensiSiswaPage() {
           <div className="bg-white rounded-2xl w-full max-w-2xl p-6 max-h-[85vh] flex flex-col">
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-lg font-bold text-gray-800">QR Code Siswa - {rombels.find(r => r.id === selectedRombel)?.nama}</h2>
-              <div className="flex gap-2">
+              <div className="flex flex-wrap gap-2">
+                <button onClick={exportAllQrPng} className="flex items-center gap-2 px-3 py-1.5 bg-emerald-600 text-white rounded-lg text-sm hover:bg-emerald-700">
+                  <Download size={14} /> Export Semua QR
+                </button>
                 <button onClick={handlePrintKartu} className="flex items-center gap-2 px-3 py-1.5 bg-primary text-white rounded-lg text-sm hover:bg-primary-dark">
-                  <Printer size={14} /> Cetak Kartu
+                  <Printer size={14} /> Cetak KTS
                 </button>
                 <button onClick={() => setShowQrModal(false)} className="p-1 hover:bg-gray-100 rounded-lg"><X size={20} /></button>
               </div>
@@ -294,8 +361,11 @@ export default function AbsensiSiswaPage() {
               {siswaList.map(s => (
                 <div key={s.id} className="border rounded-xl p-3 text-center">
                   <QRCodeSVG value={s.id} size={100} level="M" className="mx-auto" />
-                  <p className="text-sm font-medium text-gray-800 mt-2">{s.nama}</p>
+                  <p className="text-sm font-medium text-gray-800 mt-2 truncate" title={s.nama}>{s.nama}</p>
                   <p className="text-xs text-gray-500">NIS: {s.nis}</p>
+                  <button onClick={() => exportQrPng(s)} className="mt-2 w-full flex items-center justify-center gap-1 px-2 py-1 bg-gray-100 hover:bg-gray-200 rounded-lg text-xs text-gray-700">
+                    <Download size={12} /> PNG
+                  </button>
                 </div>
               ))}
             </div>

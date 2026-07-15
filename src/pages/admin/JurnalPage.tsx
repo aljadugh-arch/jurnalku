@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { Download, FileSpreadsheet, Eye, CheckCircle, XCircle, Clock } from 'lucide-react'
 import toast from 'react-hot-toast'
 import api from '../../services/api'
+import ResponsiveTable from '../../components/ui/ResponsiveTable'
 import * as XLSX from 'xlsx'
 
 export default function JurnalPage() {
@@ -78,13 +79,13 @@ export default function JurnalPage() {
       </div>
 
       {/* Filter */}
-      <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100 flex flex-wrap gap-3 items-center">
-        <input type="date" value={filter.tanggal} onChange={e => setFilter({...filter, tanggal: e.target.value})} className="px-3 py-2 border rounded-lg text-sm" />
-        <select value={filter.guru_id} onChange={e => setFilter({...filter, guru_id: e.target.value})} className="px-3 py-2 border rounded-lg text-sm">
+      <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100 grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <input type="date" value={filter.tanggal} onChange={e => setFilter({...filter, tanggal: e.target.value})} className="w-full min-w-0 px-3 py-2 border rounded-lg text-sm" />
+        <select value={filter.guru_id} onChange={e => setFilter({...filter, guru_id: e.target.value})} className="w-full min-w-0 px-3 py-2 border rounded-lg text-sm">
           <option value="">Semua Guru</option>
           {gtks.map(g => <option key={g.id} value={g.id}>{g.nama}</option>)}
         </select>
-        <select value={filter.status} onChange={e => setFilter({...filter, status: e.target.value})} className="px-3 py-2 border rounded-lg text-sm">
+        <select value={filter.status} onChange={e => setFilter({...filter, status: e.target.value})} className="w-full min-w-0 px-3 py-2 border rounded-lg text-sm">
           <option value="">Semua Status</option>
           <option value="draft">Draft</option>
           <option value="submitted">Submitted</option>
@@ -94,57 +95,39 @@ export default function JurnalPage() {
       </div>
 
       {/* Table */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-        <div className="overflow-x-auto -mx-2 px-2">
-          <table className="w-full text-sm">
-            <thead className="bg-gray-50 border-b">
-              <tr>
-                <th className="text-left px-4 py-3 font-medium text-gray-600">Tanggal</th>
-                <th className="text-left px-4 py-3 font-medium text-gray-600">Guru</th>
-                <th className="text-left px-4 py-3 font-medium text-gray-600">Mapel</th>
-                <th className="text-left px-4 py-3 font-medium text-gray-600">Rombel</th>
-                <th className="text-center px-4 py-3 font-medium text-gray-600">Jam</th>
-                <th className="text-left px-4 py-3 font-medium text-gray-600">Materi</th>
-                <th className="text-left px-4 py-3 font-medium text-gray-600">Status</th>
-                <th className="text-left px-4 py-3 font-medium text-gray-600">Aksi</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100">
-              {data.length === 0 && (
-                <tr><td colSpan={8} className="px-4 py-8 text-center text-gray-400">Belum ada jurnal</td></tr>
+      <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 sm:p-5">
+        <ResponsiveTable<any>
+          columns={[
+            { key: 'tanggal', header: 'Tanggal', hideOnMobile: true, className: 'text-xs' },
+            { key: 'guru_nama', header: 'Guru', className: 'font-medium text-gray-800' },
+            { key: 'mapel_nama', header: 'Mapel', hideOnMobile: true },
+            { key: 'rombel_nama', header: 'Rombel' },
+            { key: 'jam_ke', header: 'Jam', className: 'text-center', hideOnMobile: true },
+            { key: 'materi', header: 'Materi', hideOnMobile: true, className: 'max-w-[160px] lg:max-w-[240px]', render: (j) => <span className="truncate block">{j.materi}</span> },
+            { key: 'status', header: 'Status', render: (j) => (
+              <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                j.status === 'approved' ? 'bg-green-100 text-green-700' :
+                j.status === 'submitted' ? 'bg-blue-100 text-blue-700' :
+                j.status === 'rejected' ? 'bg-red-100 text-red-700' :
+                'bg-yellow-100 text-yellow-700'
+              }`}>{j.status}</span>
+            ) },
+          ]}
+          rows={data}
+          rowKey={(j) => j.id}
+          empty="Belum ada jurnal"
+          actions={(j) => (
+            <div className="flex items-center gap-1">
+              <button onClick={() => setDetail(j)} className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg" title="Detail"><Eye size={16} /></button>
+              {j.status === 'submitted' && (
+                <>
+                  <button onClick={() => updateStatus(j.id, 'approved')} className="p-1.5 text-green-600 hover:bg-green-50 rounded-lg" title="Approve"><CheckCircle size={16} /></button>
+                  <button onClick={() => updateStatus(j.id, 'rejected')} className="p-1.5 text-red-600 hover:bg-red-50 rounded-lg" title="Reject"><XCircle size={16} /></button>
+                </>
               )}
-              {data.map(j => (
-                <tr key={j.id} className="hover:bg-gray-50">
-                  <td className="px-4 py-3 text-gray-600 text-xs">{j.tanggal}</td>
-                  <td className="px-4 py-3 font-medium text-gray-800">{j.guru_nama}</td>
-                  <td className="px-4 py-3 text-gray-600">{j.mapel_nama}</td>
-                  <td className="px-4 py-3 text-gray-600">{j.rombel_nama}</td>
-                  <td className="px-4 py-3 text-center text-gray-600">{j.jam_ke}</td>
-                  <td className="px-4 py-3 text-gray-600 max-w-[200px] truncate">{j.materi}</td>
-                  <td className="px-4 py-3">
-                    <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                      j.status === 'approved' ? 'bg-green-100 text-green-700' :
-                      j.status === 'submitted' ? 'bg-blue-100 text-blue-700' :
-                      j.status === 'rejected' ? 'bg-red-100 text-red-700' :
-                      'bg-yellow-100 text-yellow-700'
-                    }`}>{j.status}</span>
-                  </td>
-                  <td className="px-4 py-3">
-                    <div className="flex items-center gap-1">
-                      <button onClick={() => setDetail(j)} className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg" title="Detail"><Eye size={16} /></button>
-                      {j.status === 'submitted' && (
-                        <>
-                          <button onClick={() => updateStatus(j.id, 'approved')} className="p-1.5 text-green-600 hover:bg-green-50 rounded-lg" title="Approve"><CheckCircle size={16} /></button>
-                          <button onClick={() => updateStatus(j.id, 'rejected')} className="p-1.5 text-red-600 hover:bg-red-50 rounded-lg" title="Reject"><XCircle size={16} /></button>
-                        </>
-                      )}
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+            </div>
+          )}
+        />
       </div>
 
       {/* Detail Modal */}

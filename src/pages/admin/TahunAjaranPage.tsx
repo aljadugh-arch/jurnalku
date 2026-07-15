@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { Plus, Check, Trash2, X } from 'lucide-react'
 import toast from 'react-hot-toast'
 import api from '../../services/api'
+import ResponsiveTable from '../../components/ui/ResponsiveTable'
 
 interface TahunAjaran {
   id: string; nama: string; semester: string; tanggal_mulai: string; tanggal_selesai: string; aktif: number
@@ -49,50 +50,30 @@ export default function TahunAjaranPage() {
         </button>
       </div>
 
-      <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-        <div className="overflow-x-auto -mx-2 px-2">
-          <table className="w-full text-sm">
-            <thead className="bg-gray-50 border-b">
-              <tr>
-                <th className="text-left px-4 py-3 font-medium text-gray-600">No</th>
-                <th className="text-left px-4 py-3 font-medium text-gray-600">Tahun Ajaran</th>
-                <th className="text-left px-4 py-3 font-medium text-gray-600">Semester</th>
-                <th className="text-left px-4 py-3 font-medium text-gray-600">Mulai</th>
-                <th className="text-left px-4 py-3 font-medium text-gray-600">Selesai</th>
-                <th className="text-left px-4 py-3 font-medium text-gray-600">Status</th>
-                <th className="text-left px-4 py-3 font-medium text-gray-600">Aksi</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100">
-              {data.length === 0 && (
-                <tr><td colSpan={7} className="px-4 py-8 text-center text-gray-400">Belum ada data tahun ajaran</td></tr>
-              )}
-              {data.map((ta, i) => (
-                <tr key={ta.id} className="hover:bg-gray-50">
-                  <td className="px-4 py-3 text-gray-600">{i + 1}</td>
-                  <td className="px-4 py-3 font-medium text-gray-800">{ta.nama}</td>
-                  <td className="px-4 py-3 text-gray-600">{ta.semester}</td>
-                  <td className="px-4 py-3 text-gray-600">{ta.tanggal_mulai}</td>
-                  <td className="px-4 py-3 text-gray-600">{ta.tanggal_selesai}</td>
-                  <td className="px-4 py-3">
-                    {ta.aktif ? (
-                      <span className="inline-flex items-center gap-1 px-2 py-1 bg-green-100 text-green-700 rounded-full text-xs font-medium"><Check size={12} /> Aktif</span>
-                    ) : (
-                      <span className="px-2 py-1 bg-gray-100 text-gray-500 rounded-full text-xs">Nonaktif</span>
-                    )}
-                  </td>
-                  <td className="px-4 py-3">
-                    <div className="flex items-center gap-1">
-                      {!ta.aktif && (
-                        <button onClick={() => handleActivate(ta.id)} className="px-2 py-1 text-xs bg-green-50 text-green-700 rounded hover:bg-green-100">Aktifkan</button>
-                      )}
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+      <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 sm:p-5">
+        <ResponsiveTable<TahunAjaran>
+          columns={[
+            { key: 'nama', header: 'Tahun Ajaran', className: 'font-medium text-gray-800' },
+            { key: 'semester', header: 'Semester' },
+            { key: 'tanggal_mulai', header: 'Mulai', hideOnMobile: true },
+            { key: 'tanggal_selesai', header: 'Selesai', hideOnMobile: true },
+            { key: 'status', header: 'Status', render: (ta) => (
+              ta.aktif ? (
+                <span className="inline-flex items-center gap-1 px-2 py-1 bg-green-100 text-green-700 rounded-full text-xs font-medium"><Check size={12} /> Aktif</span>
+              ) : (
+                <span className="px-2 py-1 bg-gray-100 text-gray-500 rounded-full text-xs">Nonaktif</span>
+              )
+            ) },
+          ]}
+          rows={data}
+          rowKey={(ta) => ta.id}
+          empty="Belum ada data tahun ajaran"
+          actions={(ta) => (
+            !ta.aktif ? (
+              <button onClick={() => handleActivate(ta.id)} className="px-2 py-1 text-xs bg-green-50 text-green-700 rounded hover:bg-green-100">Aktifkan</button>
+            ) : null
+          )}
+        />
       </div>
 
       {showForm && (

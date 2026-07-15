@@ -1,14 +1,15 @@
 import { useState, useEffect, useMemo } from 'react'
-import { Plus, Trash2, AlertTriangle, X, Download, FileSpreadsheet, Pencil, Settings2 } from 'lucide-react'
+import { Plus, Trash2, AlertTriangle, X, Download, FileSpreadsheet, Pencil, Settings2, Wand2 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import api from '../../services/api'
 import * as XLSX from 'xlsx'
 import ExcelJS from 'exceljs'
 import { generateJamPelajaran, jtmMenit } from '../../lib/jenjang'
+import BulkDeleteButton from '../../components/BulkDeleteButton'
 import { useSettingsStore } from '../../stores/settingsStore'
 
 interface Jadwal {
-  id: string; mapel_id: string; rombel_id: string; gtk_id: string; hari: string; jam_mulai: string; jam_selesai: string; ruangan: string; template_id?: string | null
+  id: string; mapel_id: string; rombel_id: string; gtk_id: string; hari: string; jam_mulai: string; jam_selesai: string; ruangan: string; template_id?: string | null; jenis_kegiatan?: string; nama_kegiatan?: string
   mapel_nama?: string; gtk_nama?: string; rombel_nama?: string
 }
 
@@ -24,6 +25,10 @@ export default function JadwalPage() {
   const [rombels, setRombels] = useState<any[]>([])
   const [mapels, setMapels] = useState<any[]>([])
   const [gtks, setGtks] = useState<any[]>([])
+  const [pengajar, setPengajar] = useState<any[]>([])
+  const [generating, setGenerating] = useState(false)
+  const [showGenerate, setShowGenerate] = useState(false)
+  const [generateRules, setGenerateRules] = useState({ maks: 2, aturan: "Pujianto: senin, selasa, rabu, kamis, jumat, sabtu\nMuhammad Shofiqin: senin, selasa, rabu, kamis, jumat, sabtu\nM.'Ainur Rofiq: senin, selasa, rabu, kamis, jumat, sabtu\nDarsani: sabtu, senin, rabu" })
   const [templates, setTemplates] = useState<any[]>([])
   const [selectedRombel, setSelectedRombel] = useState('')
   const [conflicts, setConflicts] = useState<any[]>([])
@@ -34,11 +39,11 @@ export default function JadwalPage() {
   const settings = useSettingsStore(s => s.settings)
   const jenjang = (settings.jenjang as string) || ''
   const hariLibur: string[] = useMemo(() => {
-    try { return JSON.parse((settings as any).hari_libur || '["jumat","minggu"]') } catch { return ['jumat', 'minggu'] }
+    try { return JSON.parse((settings as any).hari_libur || '["jumat"]') } catch { return ['jumat'] }
   }, [settings])
   const hari = useMemo(() => SEMUA_HARI.filter(h => !hariLibur.includes(h)), [hariLibur])
   const jamPelajaran = useMemo(() => generateJamPelajaran(jenjang, 10), [jenjang])
-  const [form, setForm] = useState({ mapel_id: '', rombel_id: '', gtk_id: '', hari: 'senin', jam_mulai: '07:00', jam_selesai: '07:45', ruangan: '', template_id: '' })
+  const [form, setForm] = useState({ mapel_id: '', rombel_id: '', gtk_id: '', hari: 'senin', jam_mulai: '07:00', jam_selesai: '07:45', ruangan: '', template_id: '', jenis_kegiatan: 'mapel', nama_kegiatan: '' })
   const mapelReguler = useMemo(() => mapels.filter(m => m.kelompok !== 'kegiatan'), [mapels])
   const mapelKegiatan = useMemo(() => mapels.filter(m => m.kelompok === 'kegiatan'), [mapels])
 
@@ -53,8 +58,8 @@ export default function JadwalPage() {
   }, [hari])
 
   useEffect(() => {
-    Promise.all([api.get('/rombel'), api.get('/mapel'), api.get('/gtk'), api.get('/template-jadwal')]).then(async ([r, m, g, t]) => {
-      setRombels(r.data); setGtks(g.data); setTemplates(t.data)
+    Promise.all([api.get('/rombel'), api.get('/mapel'), api.get('/gtk'), api.get('/template-jadwal'), api.get('/pengajar')]).then(async ([r, m, g, t, p]) => {
+      setRombels(r.data); setGtks(g.data); setTemplates(t.data); setPengajar(p.data)
       // Seed mapel kegiatan khusus kalau belum ada (sekali saja, idempotent by kode)
       const existingKodes = new Set(m.data.map((x: any) => x.kode))
       const missing = KEGIATAN_KHUSUS_DEFAULT.filter(k => !existingKodes.has(k.kode))
@@ -77,20 +82,50 @@ export default function JadwalPage() {
     setJadwal(res.data)
   }
 
-  const resetForm = () => setForm({ mapel_id: '', rombel_id: '', gtk_id: '', hari: hari[0] || 'senin', jam_mulai: jamPelajaran[0]?.mulai || '07:00', jam_selesai: jamPelajaran[0]?.selesai || '07:45', ruangan: '', template_id: '' })
+  // Build time slots: merge actual jadwal ranges + generated, remove overlaps
+  const allTimeSlots = useMemo(() => {
+    const durasi = jtmMenit(jenjang)
+    const toMin = (t: string) => { const [h, m] = t.split(':').map(Number); return h * 60 + m }
+    const toTime = (n: number) => `${String(Math.floor(n / 60)).padStart(2,'0')}:${String(n % 60).padStart(2,'0')}`
+
+    // Actual slots matching grid tetap Jam 1, Jam 2, dst; hanya waktu di luar grid dianggap custom.
+    const actual = Array.from(new Set(jadwal.map(j => `${j.jam_mulai}|${j.jam_selesai}`))).map(k => {
+      const [mulai, selesai] = k.split('|')
+      const standardIndex = jamPelajaran.findIndex(j => j.mulai === mulai && j.selesai === selesai)
+      return { mulai, selesai, isCustom: standardIndex < 0, standardKe: standardIndex + 1 }
+    })
+
+    const generated = jamPelajaran.map(j => ({ mulai: j.mulai, selesai: j.selesai, isCustom: false, standardKe: j.ke }))
+
+    // Merge: keep generated only if it does NOT overlap with any actual slot
+    const merged = [...actual]
+    for (const g of generated) {
+      const gMulai = toMin(g.mulai); const gSelesai = toMin(g.selesai)
+      const overlaps = actual.some(a => toMin(a.mulai) < gSelesai && toMin(a.selesai) > gMulai)
+      if (!overlaps) merged.push(g)
+    }
+
+    // Sort by mulai, re-number ke
+    const sorted = merged.sort((a, b) => a.mulai.localeCompare(b.mulai))
+    return sorted.map((s, i) => ({ ke: s.standardKe || i + 1, ...s }))
+  }, [jamPelajaran, jadwal, jenjang])
+
+  const resetForm = () => setForm({ mapel_id: '', rombel_id: '', gtk_id: '', hari: hari[0] || 'senin', jam_mulai: jamPelajaran[0]?.mulai || '07:00', jam_selesai: jamPelajaran[0]?.selesai || '07:45', ruangan: '', template_id: '', jenis_kegiatan: 'mapel', nama_kegiatan: '' })
 
   const openAdd = () => { setEditId(null); resetForm(); setShowForm(true) }
   const openEdit = (slot: Jadwal) => {
     setEditId(slot.id)
-    setForm({ mapel_id: slot.mapel_id, rombel_id: slot.rombel_id, gtk_id: slot.gtk_id, hari: slot.hari, jam_mulai: slot.jam_mulai, jam_selesai: slot.jam_selesai, ruangan: slot.ruangan || '', template_id: slot.template_id || '' })
+    setForm({ mapel_id: slot.mapel_id, rombel_id: slot.rombel_id, gtk_id: slot.gtk_id, hari: slot.hari, jam_mulai: slot.jam_mulai, jam_selesai: slot.jam_selesai, ruangan: slot.ruangan || '', template_id: slot.template_id || '', jenis_kegiatan: slot.jenis_kegiatan || 'mapel', nama_kegiatan: slot.nama_kegiatan || '' })
     setShowForm(true)
   }
 
   const handleSubmitForm = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!form.mapel_id) { toast.error('Mapel/kegiatan wajib dipilih'); return }
-    if (!form.gtk_id) { toast.error('Guru/penanggung jawab wajib dipilih'); return }
-    if (!selectedRombel) { toast.error('Rombel wajib dipilih'); return }
+    if (form.jenis_kegiatan === 'mapel' && !form.mapel_id) { toast.error('Mapel wajib dipilih'); return }
+    if (form.jenis_kegiatan === 'mapel' && !form.gtk_id) { toast.error('Guru wajib dipilih untuk mapel'); return }
+    if (form.jenis_kegiatan === 'istirahat' && !form.nama_kegiatan.trim()) { toast.error('Nama istirahat wajib diisi'); return }
+    if (form.jenis_kegiatan === 'kegiatan' && !form.nama_kegiatan.trim()) { toast.error('Nama kegiatan wajib diisi'); return }
+    if (!selectedRombel && form.jenis_kegiatan === 'mapel') { toast.error('Rombel wajib dipilih'); return }
     const payload = { ...form, rombel_id: selectedRombel, template_id: form.template_id || null }
     try {
       if (editId) {
@@ -104,6 +139,40 @@ export default function JadwalPage() {
       loadJadwal()
       checkConflicts(true)
     } catch (err: any) { toast.error(err.response?.data?.error || 'Gagal simpan jadwal') }
+  }
+
+  // Mapel yg diajar guru terpilih di rombel aktif (dari relasi Pengajar)
+  const mapelGuruDiRombel = useMemo(() => {
+    if (!form.gtk_id || !selectedRombel) return []
+    return pengajar.filter(p => p.gtk_id === form.gtk_id && p.rombel_id === selectedRombel)
+  }, [pengajar, form.gtk_id, selectedRombel])
+
+  // Saat pilih guru: auto-isi mapel bila guru punya tepat 1 mapel di rombel ini
+  const onGuruChange = (gtkId: string) => {
+    const cocok = pengajar.filter(p => p.gtk_id === gtkId && p.rombel_id === selectedRombel)
+    setForm(f => ({ ...f, gtk_id: gtkId, mapel_id: cocok.length === 1 ? cocok[0].mapel_id : f.mapel_id }))
+    if (cocok.length === 0 && gtkId) toast('Guru ini belum terdaftar mengajar di rombel terpilih (menu Pengajar).', { icon: 'ℹ️' })
+  }
+
+  const onMapelChange = (mapelId: string) => {
+    const cocok = pengajar.filter(p => p.mapel_id === mapelId && p.rombel_id === selectedRombel)
+    setForm(f => ({ ...f, mapel_id: mapelId, gtk_id: cocok.length === 1 ? cocok[0].gtk_id : f.gtk_id }))
+  }
+
+  const handleGenerate = async () => {
+    setGenerating(true)
+    try {
+      const slots = allTimeSlots.filter(s => !s.isCustom).map(j => ({ ke: j.ke, mulai: j.mulai, selesai: j.selesai }))
+      const res = await api.post('/jadwal/generate', { hari, slots, overwrite: false, template_id: form.template_id || null, maks_jam_mapel_per_hari: generateRules.maks, aturan_hari_guru: generateRules.aturan })
+      const kurang = res.data.kurang || []
+      toast.success(`${res.data.created} slot jadwal dibuat otomatis`)
+      if (kurang.length) {
+        const nama = kurang.map((k: any) => gtks.find(g => g.id === k.gtk_id)?.nama || k.gtk_id).slice(0, 5).join(', ')
+        toast(`${kurang.length} guru belum penuh target jam: ${nama}${kurang.length > 5 ? '...' : ''}`, { icon: '⚠️', duration: 6000 })
+      }
+      loadJadwal(); checkConflicts(true); setShowGenerate(false)
+    } catch (err: any) { toast.error(err.response?.data?.error || 'Gagal generate jadwal') }
+    finally { setGenerating(false) }
   }
 
   const handleDelete = async (id: string) => {
@@ -146,8 +215,8 @@ export default function JadwalPage() {
     } catch { if (!silent) toast.error('Gagal cek konflik') }
   }
 
-  const getSlot = (h: string, jam: typeof jamPelajaran[0]) => {
-    return jadwal.find(j => j.hari === h && j.jam_mulai <= jam.mulai && j.jam_selesai >= jam.selesai)
+  const getSlot = (h: string, jam: { mulai: string; selesai: string }) => {
+    return jadwal.find(j => j.hari === h && j.jam_mulai === jam.mulai && j.jam_selesai === jam.selesai)
   }
 
   // Palette warna kontras utk fill kode guru (siklus otomatis, tak perlu define per orang)
@@ -252,7 +321,7 @@ export default function JadwalPage() {
             const slot = findSlot(rb.id, h, jam)
             const c = COL_WAKTU + i * 2
             if (slot?.gtk_id) { row[c] = kodeMap.get(slot.gtk_id); guruCellRefs.push({ r, c, gtkId: slot.gtk_id }) }
-            if (slot) row[c + 1] = slot.mapel_nama || ''
+            if (slot) row[c + 1] = slot.jenis_kegiatan === 'mapel' ? (slot.mapel_nama || '') : (slot.nama_kegiatan || '')
           })
           setRow(r, row)
           r++
@@ -359,7 +428,7 @@ export default function JadwalPage() {
       const row = [`Jam ${jam.ke} (${jam.mulai}-${jam.selesai})`]
       hari.forEach(h => {
         const slot = getSlot(h, jam)
-        row.push(slot ? `${slot.mapel_nama || ''} - ${slot.gtk_nama || ''} (${slot.ruangan || ''})` : '-')
+        row.push(slot ? `${slot.jenis_kegiatan === 'mapel' ? (slot.mapel_nama || '') : (slot.nama_kegiatan || '')} - ${slot.gtk_nama || ''} (${slot.ruangan || ''})` : '-')
       })
       wsData.push(row)
     })
@@ -380,7 +449,7 @@ export default function JadwalPage() {
       rows += `<tr><td style="padding:6px;border:1px solid #ddd;font-size:11px;white-space:nowrap">Jam ${jam.ke}<br/><small>${jam.mulai}-${jam.selesai}</small></td>`
       hari.forEach(h => {
         const slot = getSlot(h, jam)
-        rows += `<td style="padding:6px;border:1px solid #ddd;font-size:11px">${slot ? `<b>${slot.mapel_nama || ''}</b><br/>${slot.gtk_nama || ''}<br/><small>${slot.ruangan || ''}</small>` : '-'}</td>`
+        rows += `<td style="padding:6px;border:1px solid #ddd;font-size:11px">${slot ? `<b>${slot.jenis_kegiatan === 'mapel' ? (slot.mapel_nama || '') : (slot.nama_kegiatan || '')}</b><br/>${slot.gtk_nama || ''}<br/><small>${slot.ruangan || ''}</small>` : '-'}</td>`
       })
       rows += '</tr>'
     })
@@ -411,9 +480,13 @@ export default function JadwalPage() {
           <button onClick={() => setShowTemplateModal(true)} className="flex items-center gap-2 px-4 py-2 bg-gray-600 text-white rounded-lg text-sm hover:bg-gray-700">
             <Settings2 size={16} /> Template Jadwal
           </button>
+          <button onClick={() => setShowGenerate(true)} disabled={generating} className="flex items-center gap-2 px-4 py-2 bg-violet-600 text-white rounded-lg text-sm hover:bg-violet-700 disabled:opacity-60">
+            <Wand2 size={16} /> {generating ? 'Menyusun...' : 'Generate Otomatis'}
+          </button>
           <button onClick={openAdd} className="flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-lg text-sm hover:bg-primary-dark">
             <Plus size={16} /> Tambah Jadwal
           </button>
+          <BulkDeleteButton kategori="jadwal" label="Jadwal" onDone={loadJadwal} />
         </div>
       </div>
 
@@ -444,10 +517,10 @@ export default function JadwalPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
-              {jamPelajaran.map(jam => (
-                <tr key={jam.ke} className="hover:bg-gray-50">
+              {allTimeSlots.map(jam => (
+                <tr key={`${jam.mulai}-${jam.selesai}`} className="hover:bg-gray-50">
                   <td className="px-4 py-3 text-gray-600 whitespace-nowrap">
-                    <div className="text-xs font-medium">Jam {jam.ke}</div>
+                    <div className="text-xs font-medium">{jam.isCustom ? '⏰' : `Jam ${jam.ke}`}</div>
                     <div className="text-[10px] text-gray-400">{jam.mulai}-{jam.selesai}</div>
                   </td>
                   {hari.map(h => {
@@ -456,7 +529,7 @@ export default function JadwalPage() {
                       <td key={h} className="px-4 py-3">
                         {slot ? (
                           <div className="bg-primary/5 border border-primary/20 rounded-lg p-2 group relative">
-                            <p className="text-xs font-medium text-primary">{slot.mapel_nama || mapels.find(m => m.id === slot.mapel_id)?.nama}</p>
+                            <p className="text-xs font-medium text-primary">{slot.jenis_kegiatan === 'mapel' ? (slot.mapel_nama || mapels.find(m => m.id === slot.mapel_id)?.nama) : slot.nama_kegiatan}</p>
                             <p className="text-[10px] text-gray-500">{slot.gtk_nama || gtks.find(g => g.id === slot.gtk_id)?.nama}</p>
                             <p className="text-[10px] text-gray-400">{slot.ruangan}</p>
                             <div className="absolute top-1 right-1 flex gap-1 opacity-0 group-hover:opacity-100">
@@ -479,7 +552,7 @@ export default function JadwalPage() {
         {/* Mobile: grouped by day */}
         <div className="md:hidden divide-y divide-gray-100">
           {hari.map(h => {
-            const slotsHari = jamPelajaran.map(jam => ({ jam, slot: getSlot(h, jam) })).filter(x => x.slot)
+            const slotsHari = allTimeSlots.map(jam => ({ jam, slot: getSlot(h, jam) })).filter(x => x.slot)
             return (
               <div key={h} className="p-3">
                 <p className="text-sm font-semibold text-gray-800 capitalize mb-2">{h}</p>
@@ -518,23 +591,53 @@ export default function JadwalPage() {
             </div>
             <form onSubmit={handleSubmitForm} className="space-y-3">
               <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1">Mata Pelajaran / Kegiatan</label>
-                <select value={form.mapel_id} onChange={e => setForm({...form, mapel_id: e.target.value})} className="w-full px-3 py-2 border rounded-lg text-sm">
-                  <option value="">-- Pilih --</option>
-                  <optgroup label="Mata Pelajaran">
-                    {mapelReguler.map(m => <option key={m.id} value={m.id}>{m.nama}</option>)}
-                  </optgroup>
-                  <optgroup label="Kegiatan Khusus">
-                    {mapelKegiatan.map(m => <option key={m.id} value={m.id}>{m.nama}</option>)}
-                  </optgroup>
-                </select>
+                <label className="block text-xs font-medium text-gray-600 mb-2">Jenis</label>
+                <div className="flex gap-4">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input type="radio" name="jenis" value="mapel" checked={form.jenis_kegiatan === 'mapel'} onChange={e => setForm({...form, jenis_kegiatan: e.target.value, nama_kegiatan: '', mapel_id: ''})} className="w-4 h-4" />
+                    <span className="text-sm">Mata Pelajaran</span>
+                  </label>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input type="radio" name="jenis" value="istirahat" checked={form.jenis_kegiatan === 'istirahat'} onChange={e => setForm({...form, jenis_kegiatan: e.target.value, mapel_id: '', nama_kegiatan: 'Istirahat Sholat Dhuha'})} className="w-4 h-4" />
+                    <span className="text-sm">Istirahat</span>
+                  </label>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input type="radio" name="jenis" value="kegiatan" checked={form.jenis_kegiatan === 'kegiatan'} onChange={e => setForm({...form, jenis_kegiatan: e.target.value, mapel_id: '', nama_kegiatan: 'Apel Pagi'})} className="w-4 h-4" />
+                    <span className="text-sm">Kegiatan</span>
+                  </label>
+                </div>
               </div>
+              {form.jenis_kegiatan === 'mapel' ? (
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">Mata Pelajaran</label>
+                  <select value={form.mapel_id} onChange={e => onMapelChange(e.target.value)} className="w-full px-3 py-2 border rounded-lg text-sm">
+                    <option value="">-- Pilih --</option>
+                    {mapelGuruDiRombel.length > 0 && (
+                      <optgroup label="Mapel Guru Ini (disarankan)">
+                        {mapelGuruDiRombel.map(p => <option key={'pg-' + p.id} value={p.mapel_id}>{p.mapel_nama}</option>)}
+                      </optgroup>
+                    )}
+                    <optgroup label="Mata Pelajaran">
+                      {mapelReguler.map(m => <option key={m.id} value={m.id}>{m.nama}</option>)}
+                    </optgroup>
+                  </select>
+                </div>
+              ) : (
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">Nama Kegiatan</label>
+                  <input type="text" value={form.nama_kegiatan} onChange={e => setForm({...form, nama_kegiatan: e.target.value})} placeholder={form.jenis_kegiatan === 'istirahat' ? 'Istirahat Sholat Dhuha / Dhuhur' : 'Apel Pagi / Upacara / Pembiasaan'} className="w-full px-3 py-2 border rounded-lg text-sm" maxLength={100} />
+                  <p className="text-xs text-gray-400 mt-1">{form.jenis_kegiatan === 'istirahat' ? 'Contoh: Istirahat Sholat Dhuha, Istirahat Sholat Dhuhur' : 'Contoh: Apel Pagi, Upacara Bendera, Pembiasaan'}</p>
+                </div>
+              )}
               <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1">Guru</label>
-                <select value={form.gtk_id} onChange={e => setForm({...form, gtk_id: e.target.value})} className="w-full px-3 py-2 border rounded-lg text-sm">
+                <label className="block text-xs font-medium text-gray-600 mb-1">{form.jenis_kegiatan === 'mapel' ? 'Guru (wajib)' : 'Guru / Penanggung Jawab (opsional)'}</label>
+                <select value={form.gtk_id} onChange={e => onGuruChange(e.target.value)} className="w-full px-3 py-2 border rounded-lg text-sm">
                   <option value="">-- Pilih --</option>
-                  {gtks.map(g => <option key={g.id} value={g.id}>{g.nama}</option>)}
+                  {gtks.map(g => <option key={g.id} value={g.id}>{g.nama}{g.kode_guru ? ` (${g.kode_guru})` : ''}</option>)}
                 </select>
+                {mapelGuruDiRombel.length > 0 && (
+                  <p className="text-[11px] text-emerald-600 mt-1">Mengajar di kelas ini: {mapelGuruDiRombel.map(p => p.mapel_nama).join(', ')}</p>
+                )}
               </div>
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1">Template Jadwal (opsional)</label>
@@ -573,6 +676,23 @@ export default function JadwalPage() {
                 <button type="submit" className="flex-1 px-4 py-2 bg-primary text-white rounded-lg text-sm">Simpan</button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {showGenerate && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setShowGenerate(false)}>
+          <div className="bg-white rounded-xl p-6 w-full max-w-lg" onClick={e => e.stopPropagation()}>
+            <h2 className="text-lg font-bold mb-4">Aturan Generate Otomatis</h2>
+            <label className="block text-xs font-medium text-gray-600 mb-1">Maks jam mapel per kelas per hari</label>
+            <input type="number" min={1} max={10} value={generateRules.maks} onChange={e => setGenerateRules({...generateRules, maks: Number(e.target.value)})} className="w-full px-3 py-2 border rounded-lg text-sm mb-3" />
+            <label className="block text-xs font-medium text-gray-600 mb-1">Hari guru tersedia</label>
+            <textarea rows={6} value={generateRules.aturan} onChange={e => setGenerateRules({...generateRules, aturan: e.target.value})} className="w-full px-3 py-2 border rounded-lg text-sm" />
+            <p className="text-xs text-gray-400 mt-1">Format: Nama Guru: senin, selasa. Guru tanpa aturan bebas dijadwalkan.</p>
+            <div className="flex gap-2 mt-4">
+              <button onClick={() => setShowGenerate(false)} className="flex-1 px-4 py-2 border rounded-lg text-sm">Batal</button>
+              <button onClick={handleGenerate} disabled={generating} className="flex-1 px-4 py-2 bg-violet-600 text-white rounded-lg text-sm">{generating ? 'Menyusun...' : 'Generate'}</button>
+            </div>
           </div>
         </div>
       )}

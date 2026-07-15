@@ -14,8 +14,7 @@ export default function GuruPenilaianHarianPage() {
   const [success, setSuccess] = useState(false)
 
   useEffect(() => {
-    loadMapel()
-    loadRombel()
+    loadPengajarSaya()
   }, [])
 
   useEffect(() => {
@@ -24,19 +23,12 @@ export default function GuruPenilaianHarianPage() {
     }
   }, [selectedRombel])
 
-  const loadMapel = async () => {
+  // Auto-scope: hanya mapel & kelas yg diampu guru ini (dari data Pengajar)
+  const loadPengajarSaya = async () => {
     try {
-      const { data } = await api.get('/mapel')
-      setMapelList(data)
-    } catch (e) {
-      console.error(e)
-    }
-  }
-
-  const loadRombel = async () => {
-    try {
-      const { data } = await api.get('/rombel')
-      setRombelList(data)
+      const { data } = await api.get('/guru/pengajar-saya')
+      setMapelList(data.mapel || [])
+      setRombelList(data.rombel || [])
     } catch (e) {
       console.error(e)
     }

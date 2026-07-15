@@ -103,6 +103,7 @@ export default function App() {
           <Route path="absensi-kokurikuler" element={<AbsensiKokurikulerPage />} />
           <Route path="absensi-kegiatan" element={<AbsensiKegiatanPage />} />
           <Route path="absensi-guru" element={<AbsensiGuruPage />} />
+          <Route path="ceklok" element={<GuruAbsensiPage />} />
           <Route path="modul-ajar" element={<ModulAjarPage />} />
           <Route path="tahun-ajaran" element={<TahunAjaranPage />} />
           <Route path="tagihan" element={<TagihanPage />} />

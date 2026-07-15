@@ -33,7 +33,9 @@ type NavItem = {
 
 const iconSize = 21
 
-function roleItems(role?: string): NavItem[] {
+function roleItems(role?: string, hideStaffCeklok?: boolean): NavItem[] {
+  const ceklok: NavItem = { label: 'Ceklok', path: '/guru/absensi-guru', icon: <MapPin size={iconSize} /> }
+  const ceklokStaff: NavItem = { label: 'Ceklok', path: '/admin/ceklok', icon: <MapPin size={iconSize} /> }
   if (role === 'guru' || role === 'wali_kelas') {
     return [
       { label: 'Home', path: '/guru', icon: <Home size={iconSize} /> },
@@ -63,6 +65,7 @@ function roleItems(role?: string): NavItem[] {
   if (role === 'kepala') {
     return [
       { label: 'Home', path: '/admin', icon: <Home size={iconSize} /> },
+      ...(hideStaffCeklok ? [] : [ceklokStaff]),
       { label: 'Presensi', path: '/admin/rekap-absensi', icon: <UserCheck size={iconSize} /> },
       { label: 'KBM', path: '/admin/jurnal', icon: <ClipboardList size={iconSize} /> },
       { label: 'Keuangan', path: '/admin/tagihan', icon: <DollarSign size={iconSize} /> },
@@ -75,6 +78,7 @@ function roleItems(role?: string): NavItem[] {
 
   return [
     { label: 'Rekap', path: '/admin', icon: <BarChart3 size={iconSize} /> },
+    ...(hideStaffCeklok ? [] : [ceklokStaff]),
     { label: 'Siswa', path: '/admin/siswa', icon: <GraduationCap size={iconSize} /> },
     { label: 'GTK', path: '/admin/gtk', icon: <Users size={iconSize} /> },
     { label: 'Jadwal', path: '/admin/jadwal', icon: <Calendar size={iconSize} /> },
@@ -110,7 +114,9 @@ export default function BottomNavigation() {
   const settings = useSettingsStore(s => s.settings)
   const location = useLocation()
   const [open, setOpen] = useState(false)
-  const items = useMemo(() => roleItems(role), [role])
+  // Demo tenant (demo.jurnal.cc.cd): ceklok hanya untuk guru, sembunyikan dari admin/kepala.
+  const isDemo = typeof window !== 'undefined' && window.location.hostname.startsWith('demo.')
+  const items = useMemo(() => roleItems(role, isDemo), [role, isDemo])
   const primary = items.slice(0, 4)
   const more = items.slice(4)
   const activeMore = more.some(item => isActive(location.pathname, item.path))

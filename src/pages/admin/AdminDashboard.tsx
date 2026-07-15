@@ -8,21 +8,29 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Responsive
 import api from '../../services/api'
 import { useAuthStore } from '../../stores/authStore'
 
+import SuperadminDashboard from './SuperadminDashboard'
+import MobileMenuGrid from '../../components/MobileMenuGrid'
+
 const COLORS = ['#3b82f6', '#f59e0b', '#8b5cf6', '#ef4444', '#10b981', '#ec4899']
 
-function StatCard({ label, value, icon, gradient, sub }: { label: string; value: number; icon: React.ReactNode; gradient: string; sub?: string }) {
-  return (
-    <div className="bg-white border border-gray-200 rounded-xl p-4 hover:shadow-md transition-all group">
-      <div className="flex items-start justify-between mb-3">
-        <div className={`w-9 h-9 bg-gradient-to-br ${gradient} rounded-lg flex items-center justify-center text-white group-hover:scale-110 transition-transform`}>
+function StatCard({ label, value, icon, gradient, sub, to }: { label: string; value: number; icon: React.ReactNode; gradient: string; sub?: string; to?: string }) {
+  const inner = (
+    <div className="bg-white border border-gray-200 rounded-xl p-2.5 sm:p-4 hover:shadow-md transition-all group h-full">
+      <div className="flex items-center gap-2 sm:items-start sm:justify-between sm:mb-3">
+        <div className={`w-8 h-8 sm:w-9 sm:h-9 shrink-0 bg-gradient-to-br ${gradient} rounded-lg flex items-center justify-center text-white group-hover:scale-110 transition-transform`}>
           {icon}
         </div>
-        {sub && <span className="text-[11px] text-gray-400 font-medium">{sub}</span>}
+        <div className="min-w-0 sm:hidden">
+          <div className="text-lg font-extrabold text-gray-900 leading-tight">{value}</div>
+          <div className="text-[10px] text-gray-500 truncate">{label}</div>
+        </div>
+        {sub && <span className="hidden sm:inline text-[11px] text-gray-400 font-medium">{sub}</span>}
       </div>
-      <div className="text-2xl font-extrabold text-gray-900">{value}</div>
-      <div className="text-xs text-gray-500 mt-0.5">{label}</div>
+      <div className="hidden sm:block text-2xl font-extrabold text-gray-900">{value}</div>
+      <div className="hidden sm:block text-xs text-gray-500 mt-0.5">{label}</div>
     </div>
   )
+  return to ? <Link to={to} className="block">{inner}</Link> : inner
 }
 
 function Card({ title, icon, children, className = '' }: { title: string; icon?: React.ReactNode; children: React.ReactNode; className?: string }) {
@@ -60,6 +68,10 @@ export default function AdminDashboard() {
     }).catch(() => setLoading(false))
   }, [])
 
+  // Superadmin: dashboard khusus (lembaga, langganan, invoice) — bukan card sekolah.
+  // Ditempatkan setelah semua hook agar tidak melanggar Rules of Hooks.
+  if (user?.role === 'super_admin') return <SuperadminDashboard />
+
   const getGreeting = () => {
     const h = new Date().getHours()
     if (h < 11) return 'Selamat Pagi'
@@ -79,12 +91,12 @@ export default function AdminDashboard() {
   if (!stats) return <div className="text-center py-20 text-gray-400 text-sm">Gagal memuat data</div>
 
   const statCards = [
-    { label: 'Total Siswa', value: stats.total_siswa, icon: <GraduationCap size={18} />, gradient: 'from-blue-500 to-indigo-600', sub: `${stats.siswa_aktif} aktif` },
-    { label: 'Total GTK', value: stats.total_gtk, icon: <Users size={18} />, gradient: 'from-green-500 to-emerald-600', sub: `${stats.gtk_aktif} aktif` },
-    { label: 'Rombel', value: stats.total_rombel, icon: <Layers size={18} />, gradient: 'from-purple-500 to-violet-600', sub: '' },
-    { label: 'Mapel', value: stats.total_mapel, icon: <BookOpen size={18} />, gradient: 'from-orange-500 to-amber-600', sub: '' },
-    { label: 'Jurnal Hari Ini', value: stats.jurnal_hari_ini, icon: <ClipboardList size={18} />, gradient: 'from-cyan-500 to-sky-600', sub: '' },
-    { label: 'Tagihan Belum Bayar', value: stats.tagihan?.belum_bayar || 0, icon: <DollarSign size={18} />, gradient: 'from-rose-500 to-red-600', sub: `${stats.tagihan?.lunas || 0} lunas` },
+    { label: 'Total Siswa', value: stats.total_siswa, icon: <GraduationCap size={18} />, gradient: 'from-blue-500 to-indigo-600', sub: `${stats.siswa_aktif} aktif`, to: '/admin/siswa' },
+    { label: 'Total GTK', value: stats.total_gtk, icon: <Users size={18} />, gradient: 'from-green-500 to-emerald-600', sub: `${stats.gtk_aktif} aktif`, to: '/admin/gtk' },
+    { label: 'Rombel', value: stats.total_rombel, icon: <Layers size={18} />, gradient: 'from-purple-500 to-violet-600', sub: '', to: '/admin/rombel' },
+    { label: 'Mapel', value: stats.total_mapel, icon: <BookOpen size={18} />, gradient: 'from-orange-500 to-amber-600', sub: '', to: '/admin/mapel' },
+    { label: 'Jurnal Hari Ini', value: stats.jurnal_hari_ini, icon: <ClipboardList size={18} />, gradient: 'from-cyan-500 to-sky-600', sub: '', to: '/admin/jurnal' },
+    { label: 'Tagihan Belum Bayar', value: stats.tagihan?.belum_bayar || 0, icon: <DollarSign size={18} />, gradient: 'from-rose-500 to-red-600', sub: `${stats.tagihan?.lunas || 0} lunas`, to: '/admin/tagihan' },
   ]
 
   const absensiSiswaPersen = stats.absensi_siswa.total > 0 ? Math.round(stats.absensi_siswa.hadir / stats.absensi_siswa.total * 100) : 0
@@ -95,41 +107,16 @@ export default function AdminDashboard() {
     { name: 'Tidak Hadir', value: (stats.absensi_siswa.total - stats.absensi_siswa.hadir) || 0 },
   ]
 
-  const quickActions = [
-    { label: 'Tambah Siswa', to: '/admin/siswa', icon: <GraduationCap size={16} />, color: 'text-blue-600 bg-blue-50' },
-    { label: 'Input Jurnal', to: '/admin/jurnal', icon: <ClipboardList size={16} />, color: 'text-cyan-600 bg-cyan-50' },
-    { label: 'Kelola GTK', to: '/admin/gtk', icon: <Users size={16} />, color: 'text-green-600 bg-green-50' },
-    { label: 'Absensi', to: '/admin/absensi-siswa', icon: <UserCheck size={16} />, color: 'text-violet-600 bg-violet-50' },
-  ]
-
   return (
     <div className="space-y-5">
       {/* Welcome header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
-          <h1 className="text-xl sm:text-2xl font-extrabold text-gray-900">{getGreeting()}, {user?.nama?.split(' ')[0] || 'Admin'} 👋</h1>
+          <h1 className="text-xl md:text-2xl font-extrabold text-gray-900">{getGreeting()}, {user?.nama?.split(' ')[0] || 'Admin'} 👋</h1>
           <p className="text-sm text-gray-500 mt-0.5 flex items-center gap-1.5">
             <CalendarDays size={14} /> {today}
           </p>
         </div>
-        <div className="flex items-center gap-2">
-          {quickActions.map(a => (
-            <Link key={a.to} to={a.to}
-              className={`hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium ${a.color} hover:opacity-80 transition-all`}>
-              {a.icon} {a.label}
-            </Link>
-          ))}
-        </div>
-      </div>
-
-      {/* Quick actions (mobile only) */}
-      <div className="sm:hidden grid grid-cols-2 gap-2">
-        {quickActions.map(a => (
-          <Link key={a.to} to={a.to}
-            className={`flex items-center gap-2 px-3 py-2.5 rounded-xl text-xs font-medium ${a.color} border border-transparent hover:shadow-sm transition-all`}>
-            {a.icon} {a.label} <ArrowRight size={12} className="ml-auto opacity-40" />
-          </Link>
-        ))}
       </div>
 
       {/* Stat Cards */}
@@ -138,6 +125,10 @@ export default function AdminDashboard() {
           <StatCard key={stat.label} {...stat} />
         ))}
       </div>
+
+      {/* Menu layanan mobile/tablet: di bawah stat cards */}
+      <MobileMenuGrid />
+
 
       {/* Charts row 1 */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
@@ -180,7 +171,8 @@ export default function AdminDashboard() {
 
         <div className="lg:col-span-2">
           <Card title="Rekap Absensi Siswa (7 Hari)" icon={<TrendingUp size={16} className="text-primary" />}>
-            <ResponsiveContainer width="100%" height={250}>
+            <div className="h-[200px] md:h-[250px]">
+            <ResponsiveContainer width="100%" height="100%">
               <BarChart data={stats.rekap_absensi} margin={{ top: 5, right: 5, left: -15, bottom: 5 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
                 <XAxis dataKey="hari" tick={{ fontSize: 11 }} />
@@ -193,13 +185,14 @@ export default function AdminDashboard() {
                 <Bar dataKey="siswa_alpha" name="Alpha" fill="#ef4444" radius={[4,4,0,0]} />
               </BarChart>
             </ResponsiveContainer>
+            </div>
           </Card>
         </div>
       </div>
 
       {/* Charts row 2 */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <Card title="Kehadiran Guru (7 Hari)" icon={<Users size={16} className="text-green-600" />}>
+        <Card title="Kehadiran Guru (7 Hari)" icon={<Users size={16} className="text-green-600" />} className="hidden md:block">
           <ResponsiveContainer width="100%" height={200}>
             <LineChart data={stats.rekap_absensi} margin={{ top: 5, right: 5, left: -15, bottom: 5 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />

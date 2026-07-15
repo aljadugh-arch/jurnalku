@@ -31,10 +31,20 @@ export default function MapPicker({ lat, lng, radius, onChange }: MapPickerProps
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return
     const map = L.map(containerRef.current).setView(defaultCenter, lat && lng ? 16 : 5)
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    const primaryTiles = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       attribution: '&copy; OpenStreetMap contributors',
       maxZoom: 19,
     }).addTo(map)
+    let fallbackLoaded = false
+    primaryTiles.on('tileerror', () => {
+      if (fallbackLoaded) return
+      fallbackLoaded = true
+      map.removeLayer(primaryTiles)
+      L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+        attribution: '&copy; OpenStreetMap contributors &copy; CARTO',
+        maxZoom: 20,
+      }).addTo(map)
+    })
 
     map.on('click', (e: L.LeafletMouseEvent) => {
       onChange(e.latlng.lat, e.latlng.lng)
@@ -75,12 +85,17 @@ export default function MapPicker({ lat, lng, radius, onChange }: MapPickerProps
     if (!search.trim()) return
     setSearching(true)
     try {
-      const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(search)}&limit=1`)
+      const res = await fetch(`/api/geocode/search?q=${encodeURIComponent(search)}`)
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
       const data = await res.json()
-      if (data[0]) {
+      if (data && data[0]) {
         onChange(parseFloat(data[0].lat), parseFloat(data[0].lon))
+      } else {
+        alert('Lokasi tidak ditemukan. Coba ketik lebih spesifik (mis. "MTS Al-Falah Jakarta") atau klik langsung di peta.')
       }
-    } catch {}
+    } catch {
+      alert('Gagal mencari lokasi. Periksa koneksi internet.')
+    }
     setSearching(false)
   }
 

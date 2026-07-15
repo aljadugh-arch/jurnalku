@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { Search, X } from 'lucide-react'
 import toast from 'react-hot-toast'
 import api from '../../services/api'
+import ResponsiveTable from '../../components/ui/ResponsiveTable'
 
 interface Tagihan {
   id: string; siswa_id: string; siswa_nama: string; nis: string
@@ -137,48 +138,36 @@ export default function TagihanPage() {
         </div>
       </div>
 
-      <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-        <div className="overflow-x-auto -mx-2 px-2">
-          <table className="w-full text-sm">
-            <thead className="bg-gray-50 border-b">
-              <tr>
-                <th className="text-left px-4 py-3 font-medium text-gray-600">Siswa</th>
-                <th className="text-left px-4 py-3 font-medium text-gray-600">Jenis</th>
-                <th className="text-left px-4 py-3 font-medium text-gray-600">Bulan</th>
-                <th className="text-left px-4 py-3 font-medium text-gray-600">Nominal</th>
-                <th className="text-left px-4 py-3 font-medium text-gray-600">Status</th>
-                <th className="text-left px-4 py-3 font-medium text-gray-600">Tgl Bayar</th>
-                <th className="text-left px-4 py-3 font-medium text-gray-600">Aksi</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100">
-              {loading ? (
-                <tr><td colSpan={7} className="px-4 py-8 text-center text-gray-400">Memuat...</td></tr>
-              ) : filtered.length === 0 ? (
-                <tr><td colSpan={7} className="px-4 py-8 text-center text-gray-400">Belum ada tagihan. Klik "Generate Tagihan" untuk membuat.</td></tr>
-              ) : filtered.map(t => (
-                <tr key={t.id} className="hover:bg-gray-50">
-                  <td className="px-4 py-3"><span className="font-medium text-gray-800">{t.siswa_nama}</span><br/><span className="text-xs text-gray-400">{t.nis}</span></td>
-                  <td className="px-4 py-3 text-gray-600">{t.jenis_nama}</td>
-                  <td className="px-4 py-3 text-gray-600">{t.bulan || '-'} {t.tahun}</td>
-                  <td className="px-4 py-3 font-medium text-gray-800">{fmt(t.nominal)}</td>
-                  <td className="px-4 py-3">
-                    <span className={'px-2 py-1 rounded-full text-xs font-medium ' + (t.status === 'lunas' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700')}>
-                      {t.status === 'lunas' ? 'Lunas' : 'Belum Bayar'}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3 text-gray-600">{t.tanggal_bayar || '-'}</td>
-                  <td className="px-4 py-3">
-                    <div className="flex gap-2">
-                      {t.status !== 'lunas' && <button onClick={() => handleBayar(t.id)} className="px-3 py-1 bg-green-600 text-white rounded text-xs hover:bg-green-700">Bayar</button>}
-                      {t.status === 'lunas' && <button onClick={() => handleKuitansi(t)} className="px-3 py-1 bg-blue-600 text-white rounded text-xs hover:bg-blue-700">Kuitansi</button>}
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+      <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 sm:p-5">
+        {loading ? (
+          <p className="text-gray-400 text-sm text-center py-8">Memuat...</p>
+        ) : (
+          <ResponsiveTable<Tagihan>
+            columns={[
+              { key: 'siswa', header: 'Siswa', className: 'font-medium text-gray-800', render: (t) => (
+                <><span className="font-medium text-gray-800">{t.siswa_nama}</span><br/><span className="text-xs text-gray-400">{t.nis}</span></>
+              ) },
+              { key: 'jenis_nama', header: 'Jenis' },
+              { key: 'bulan', header: 'Bulan', hideOnMobile: true, render: (t) => `${t.bulan || '-'} ${t.tahun}` },
+              { key: 'nominal', header: 'Nominal', className: 'font-medium', render: (t) => fmt(t.nominal) },
+              { key: 'status', header: 'Status', render: (t) => (
+                <span className={'px-2 py-1 rounded-full text-xs font-medium ' + (t.status === 'lunas' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700')}>
+                  {t.status === 'lunas' ? 'Lunas' : 'Belum Bayar'}
+                </span>
+              ) },
+              { key: 'tanggal_bayar', header: 'Tgl Bayar', hideOnMobile: true, render: (t) => t.tanggal_bayar || '-' },
+            ]}
+            rows={filtered}
+            rowKey={(t) => t.id}
+            empty="Belum ada tagihan. Klik 'Generate Tagihan' untuk membuat."
+            actions={(t) => (
+              <div className="flex gap-2">
+                {t.status !== 'lunas' && <button onClick={() => handleBayar(t.id)} className="px-3 py-1 bg-green-600 text-white rounded text-xs hover:bg-green-700">Bayar</button>}
+                {t.status === 'lunas' && <button onClick={() => handleKuitansi(t)} className="px-3 py-1 bg-blue-600 text-white rounded text-xs hover:bg-blue-700">Kuitansi</button>}
+              </div>
+            )}
+          />
+        )}
       </div>
 
       {showGenerate && (

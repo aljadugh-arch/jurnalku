@@ -36,7 +36,7 @@ export default function ResponsiveTable<T>({ columns, rows, rowKey, actions, emp
   return (
     <>
       {/* Desktop / tablet: real table */}
-      <div className="hidden md:block overflow-x-auto -mx-2 px-2">
+      <div className="hidden md:block overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-gray-200 text-left text-xs uppercase tracking-wide text-gray-500">

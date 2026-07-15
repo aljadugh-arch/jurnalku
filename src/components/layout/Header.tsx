@@ -26,6 +26,7 @@ export default function Header() {
     <header className="sticky top-0 z-30 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 px-6 py-3">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
+          {/* Sidebar hanya untuk desktop. Mobile/tablet memakai grid menu dashboard. */}
           <button onClick={toggle} className="hidden lg:block text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200">
             <Menu size={22} />
           </button>
@@ -60,7 +61,8 @@ export default function Header() {
             {showNotif && (
               <>
                 <div className="fixed inset-0 z-40" onClick={() => setShowNotif(false)} />
-                <div className="absolute right-0 mt-2 w-[calc(100vw-1.5rem)] max-w-[20rem] sm:w-80 bg-white dark:bg-gray-800 rounded-lg shadow-lg border dark:border-gray-700 z-50 overflow-hidden">
+                <div className="fixed left-3 right-3 top-16 sm:absolute sm:left-auto sm:right-0 sm:top-auto sm:mt-2 sm:w-80 bg-white dark:bg-gray-800 rounded-lg shadow-lg border dark:border-gray-700 z-50 overflow-hidden">
+                  <div className="max-h-[70vh] overflow-y-auto">
                   <div className="px-4 py-3 border-b dark:border-gray-700">
                     <p className="font-semibold text-gray-800 dark:text-gray-100">Notifikasi</p>
                     <p className="text-xs text-gray-500 dark:text-gray-400">3 notifikasi belum dibaca</p>
@@ -81,6 +83,7 @@ export default function Header() {
                   >
                     Pengaturan notifikasi
                   </button>
+                  </div>
                 </div>
               </>
             )}

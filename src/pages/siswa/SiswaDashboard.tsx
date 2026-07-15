@@ -3,6 +3,7 @@ import { Calendar, CheckCircle, BookOpen, Activity, ChevronRight, Clock, Clipboa
 import { useNavigate } from 'react-router-dom'
 import api from '../../services/api'
 import { Card, StatCard, Badge, Avatar } from '../../components/ui'
+import MobileMenuGrid from '../../components/MobileMenuGrid'
 
 function greetingByHour() {
   const h = new Date().getHours()
@@ -81,11 +82,14 @@ export default function SiswaDashboard() {
 
       {/* Rekap Absensi Bulan Ini */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <StatCard label="Hadir" value={data.rekap.hadir} icon={<CheckCircle size={18} />} gradient="from-green-500 to-emerald-600" />
-        <StatCard label="Sakit" value={data.rekap.sakit} icon={<Activity size={18} />} gradient="from-yellow-500 to-amber-600" />
-        <StatCard label="Izin" value={data.rekap.izin} icon={<Calendar size={18} />} gradient="from-blue-500 to-indigo-600" />
-        <StatCard label="Alpha" value={data.rekap.alpha} icon={<Activity size={18} />} gradient="from-red-500 to-rose-600" />
+        <StatCard label="Hadir" value={data.rekap.hadir} icon={<CheckCircle size={18} />} gradient="from-green-500 to-emerald-600" onClick={() => navigate('/siswa/absensi')} />
+        <StatCard label="Sakit" value={data.rekap.sakit} icon={<Activity size={18} />} gradient="from-yellow-500 to-amber-600" onClick={() => navigate('/siswa/absensi')} />
+        <StatCard label="Izin" value={data.rekap.izin} icon={<Calendar size={18} />} gradient="from-blue-500 to-indigo-600" onClick={() => navigate('/siswa/absensi')} />
+        <StatCard label="Alpha" value={data.rekap.alpha} icon={<Activity size={18} />} gradient="from-red-500 to-rose-600" onClick={() => navigate('/siswa/absensi')} />
       </div>
+
+      {/* Menu layanan mobile/tablet: di bawah stat cards */}
+      <MobileMenuGrid />
 
       {/* Persentase Kehadiran */}
       <Card title="Kehadiran Bulan Ini" icon={<CheckCircle size={18} className="text-primary" />}>
@@ -133,22 +137,6 @@ export default function SiswaDashboard() {
           })}
         </div>
       </Card>
-
-      {/* Quick Actions */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <button onClick={() => navigate('/siswa/absensi')} className="bg-white rounded-xl p-4 shadow-sm border border-gray-100 hover:shadow-md transition-shadow text-left">
-          <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-green-500 to-emerald-600 flex items-center justify-center text-white mb-2">
-            <CheckCircle size={20} />
-          </div>
-          <h4 className="font-medium text-gray-800 text-sm">Riwayat Absensi</h4>
-        </button>
-        <button onClick={() => navigate('/siswa/jadwal')} className="bg-white rounded-xl p-4 shadow-sm border border-gray-100 hover:shadow-md transition-shadow text-left">
-          <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white mb-2">
-            <BookOpen size={20} />
-          </div>
-          <h4 className="font-medium text-gray-800 text-sm">Jadwal Pelajaran</h4>
-        </button>
-      </div>
     </div>
   )
 }

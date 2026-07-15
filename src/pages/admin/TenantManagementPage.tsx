@@ -59,8 +59,33 @@ export default function TenantManagementPage() {
 
   if (loading) return <div className="flex items-center justify-center h-64"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div></div>
 
+  const totalTenants = tenants.length
+  const activeTenants = tenants.filter(t => t.aktif).length
+  const totalUsers = tenants.reduce((sum, t) => sum + (t.user_count || 0), 0)
+  const totalSiswa = tenants.reduce((sum, t) => sum + (t.siswa_count || 0), 0)
+
   return (
     <div className="space-y-6">
+      {/* Dashboard Stats */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="bg-white border border-gray-200 rounded-xl p-4">
+          <div className="text-sm text-gray-500">Total Lembaga</div>
+          <div className="text-2xl font-bold text-gray-900 mt-1">{totalTenants}</div>
+        </div>
+        <div className="bg-white border border-gray-200 rounded-xl p-4">
+          <div className="text-sm text-gray-500">Lembaga Aktif</div>
+          <div className="text-2xl font-bold text-green-600 mt-1">{activeTenants}</div>
+        </div>
+        <div className="bg-white border border-gray-200 rounded-xl p-4">
+          <div className="text-sm text-gray-500">Total Pengguna</div>
+          <div className="text-2xl font-bold text-gray-900 mt-1">{totalUsers}</div>
+        </div>
+        <div className="bg-white border border-gray-200 rounded-xl p-4">
+          <div className="text-sm text-gray-500">Total Siswa</div>
+          <div className="text-2xl font-bold text-gray-900 mt-1">{totalSiswa}</div>
+        </div>
+      </div>
+
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-display font-bold text-gray-800">Manajemen Lembaga</h1>

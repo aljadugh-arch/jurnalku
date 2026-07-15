@@ -20,17 +20,14 @@ interface MenuItem {
   children?: { label: string; path: string }[]
 }
 
-// Admin/operator/TU sekolah juga masuk kategori GTK. Menu ceklok pribadi dinaikkan ke atas
-// biar mereka bisa presensi kehadiran diri seperti guru pada umumnya.
+// Admin/operator/TU: urut sesuai alur input data — master data dulu, operasional, lalu pengaturan.
 const adminMenuItems: MenuItem[] = [
   { label: 'Dashboard', icon: <LayoutDashboard size={20} />, path: '/admin' },
-  { label: 'Ceklok Saya', icon: <MapPin size={20} />, path: '/guru/absensi-guru' },
   { label: 'Data Siswa', icon: <GraduationCap size={20} />, path: '/admin/siswa' },
   { label: 'Data GTK', icon: <Users size={20} />, path: '/admin/gtk' },
   { label: 'Mata Pelajaran', icon: <BookOpen size={20} />, path: '/admin/mapel' },
-  { label: 'Rapor Siswa', icon: <FileText size={20} />, path: '/admin/rapor' },
-  { label: 'Catatan Kepribadian', icon: <ScrollText size={20} />, path: '/admin/catatan-kepribadian' },
   { label: 'Rombongan Belajar', icon: <Layers size={20} />, path: '/admin/rombel' },
+  { label: 'Kalender KBM', icon: <Calendar size={20} />, path: '/admin/kalender-kbm' },
   {
     label: 'Jadwal Pelajaran', icon: <Calendar size={20} />,
     children: [
@@ -43,17 +40,20 @@ const adminMenuItems: MenuItem[] = [
     label: 'Absensi', icon: <UserCheck size={20} />,
     children: [
       { label: 'Absensi Siswa', path: '/admin/absensi-siswa' },
+      { label: 'Absensi Guru (Geolokasi)', path: '/admin/absensi-guru' },
+      { label: 'Rekapitulasi', path: '/admin/rekap-absensi' },
       { label: 'Ekstrakurikuler', path: '/admin/ekskul' },
       { label: 'Absensi Ekskul', path: '/admin/absensi-ekskul' },
       { label: 'Absensi Kokurikuler', path: '/admin/absensi-kokurikuler' },
       { label: 'Absensi Kegiatan', path: '/admin/absensi-kegiatan' },
-      { label: 'Absensi Guru (Geolokasi)', path: '/admin/absensi-guru' },
-      { label: 'Rekapitulasi', path: '/admin/rekap-absensi' },
     ]
   },
+  { label: 'Ceklok Saya', icon: <MapPin size={20} />, path: '/guru/absensi-guru' },
   { label: 'Jurnal Mengajar', icon: <ClipboardList size={20} />, path: '/admin/jurnal' },
-  { label: 'Kalender KBM', icon: <Calendar size={20} />, path: '/admin/kalender-kbm' },
+  { label: 'Rapor Siswa', icon: <FileText size={20} />, path: '/admin/rapor' },
+  { label: 'Catatan Kepribadian', icon: <ScrollText size={20} />, path: '/admin/catatan-kepribadian' },
   { label: 'Generator Modul Ajar', icon: <Sparkles size={20} />, path: '/admin/modul-ajar' },
+  { label: 'Tahun Ajaran', icon: <School size={20} />, path: '/admin/tahun-ajaran' },
   {
     label: 'Keuangan', icon: <DollarSign size={20} />,
     children: [
@@ -173,7 +173,7 @@ export default function Sidebar() {
         isOpen ? 'w-64' : 'w-0 lg:w-20',
         !isOpen && 'overflow-hidden lg:overflow-visible'
       )}
-        style={settings.background ? { backgroundImage: `linear-gradient(rgba(15,23,42,0.88), rgba(15,23,42,0.94)), url(${settings.background})`, backgroundSize: 'cover', backgroundPosition: 'center' } : undefined}
+        style={settings.background ? { backgroundImage: `linear-gradient(rgba(15,23,42,0.88), rgba(15,23,42,0.94)), url(${settings.background})`, backgroundSize: (settings.bg_size as string) || 'cover', backgroundPosition: (settings.bg_position as string) || 'center', backgroundRepeat: (settings.bg_repeat as string) || 'no-repeat' } : undefined}
       >
         <div className="flex items-center justify-between gap-3 px-4 py-5 border-b border-sidebar-hover">
           <div className="flex items-center gap-3 flex-1 min-w-0">

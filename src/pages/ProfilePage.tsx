@@ -5,6 +5,7 @@ import { Camera, Save, Lock } from 'lucide-react'
 import api from '../services/api'
 import { useAuthStore } from '../stores/authStore'
 import { roleLabel } from '../lib/roles'
+import { compressImage } from '../lib/image'
 
 export default function ProfilePage() {
   const navigate = useNavigate()
@@ -28,8 +29,9 @@ export default function ProfilePage() {
   const handleAvatar = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
+    const compressed = await compressImage(file) // resize->512px, JPEG q0.82
     const fd = new FormData()
-    fd.append('avatar', file)
+    fd.append('avatar', compressed)
     try {
       const res = await api.post('/auth/avatar', fd, { headers: { 'Content-Type': 'multipart/form-data' } })
       setAvatar(res.data.avatar)

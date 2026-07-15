@@ -1,7 +1,7 @@
 import { Outlet } from 'react-router-dom'
 import Sidebar from './Sidebar'
 import Header from './Header'
-import BottomNavigation from './BottomNavigation'
+import BottomNav from '../BottomNav'
 import { useSidebarStore } from '../../stores/sidebarStore'
 import { useAuthStore } from '../../stores/authStore'
 import { useSettingsStore } from '../../stores/settingsStore'
@@ -12,10 +12,17 @@ import { clsx } from 'clsx'
 export default function DashboardLayout() {
   const { isOpen } = useSidebarStore()
   const role = useAuthStore(s => s.user?.role)
-  const background = useSettingsStore(s => s.settings.background)
+  const settings = useSettingsStore(s => s.settings)
+  const background = settings.background
 
   const bgStyle = background
-    ? { backgroundImage: `url(${background})`, backgroundSize: 'cover', backgroundPosition: 'center', backgroundAttachment: 'fixed' as const }
+    ? {
+        backgroundImage: `url(${background})`,
+        backgroundSize: (settings.bg_size as string) || 'cover',
+        backgroundPosition: (settings.bg_position as string) || 'center',
+        backgroundRepeat: (settings.bg_repeat as string) || 'no-repeat',
+        backgroundAttachment: 'fixed' as const,
+      }
     : undefined
 
   return (
@@ -31,10 +38,10 @@ export default function DashboardLayout() {
             <Eye size={14} /> Mode Pimpinan (Kepala Madrasah/Sekolah) — akses hanya-lihat, tidak dapat mengubah data.
           </div>
         )}
-        <main className={clsx('p-4 pb-28 sm:p-6 sm:pb-32 lg:pb-6 overflow-x-hidden', background && 'min-h-screen bg-white/70 dark:bg-gray-950/80 backdrop-blur-sm')}>
+        <main className={clsx('p-4 pb-24 sm:p-6 sm:pb-24 lg:pb-6 overflow-x-hidden', background && 'min-h-screen bg-white/70 dark:bg-gray-950/80 backdrop-blur-sm')}>
           <Outlet />
         </main>
-        <BottomNavigation />
+        <BottomNav />
       </div>
     </div>
   )

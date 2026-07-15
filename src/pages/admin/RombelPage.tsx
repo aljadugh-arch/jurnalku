@@ -4,6 +4,7 @@ import toast from 'react-hot-toast'
 import * as XLSX from 'xlsx'
 import api from '../../services/api'
 import { useSettingsStore } from '../../stores/settingsStore'
+import BulkDeleteButton from '../../components/BulkDeleteButton'
 import { tingkatOptions, PARALEL_ALFABET, PARALEL_NUMERIK, composeNama } from '../../lib/jenjang'
 
 interface Rombel { id: string; nama: string; tingkat: string; tahun_ajaran: string; wali_kelas_id: string; wali_kelas_nama: string; kapasitas: number; jumlah_siswa: number }
@@ -141,6 +142,7 @@ export default function RombelPage() {
           <button onClick={() => { resetForm(); setShowModal(true) }} className="flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-lg text-sm hover:bg-primary-dark">
             <Plus size={16} /> Tambah Rombel
           </button>
+          <BulkDeleteButton kategori="rombel" label="Rombel" onDone={fetchData} />
         </div>
       </div>
 

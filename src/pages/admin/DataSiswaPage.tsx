@@ -1,9 +1,11 @@
 import { useState, useEffect } from 'react'
-import { Search, Plus, Edit, Trash2, Download, Upload, X, Camera } from 'lucide-react'
+import { Search, Plus, Edit, Trash2, Download, Upload, X, Camera, Eye } from 'lucide-react'
 import toast from 'react-hot-toast'
 import api from '../../services/api'
 import { ResponsiveTable } from '../../components/ui'
 import ImportExcel from '../../components/ImportExcel'
+import BulkDeleteButton from '../../components/BulkDeleteButton'
+import { compressImage } from '../../lib/image'
 import { formatTanggal, normalizeDate } from '../../lib/dateFormat'
 import { matchRombel } from '../../lib/rombelMatch'
 
@@ -38,6 +40,7 @@ export default function DataSiswaPage() {
   const [rombels, setRombels] = useState<any[]>([])
   const [showImport, setShowImport] = useState(false)
   const [uploadingFoto, setUploadingFoto] = useState(false)
+  const [detail, setDetail] = useState<Siswa | null>(null)
 
   const fetchData = async () => {
     try {
@@ -86,10 +89,11 @@ export default function DataSiswaPage() {
 
   const handleFoto = async (id: string, file?: File) => {
     if (!file) return
-    const fd = new FormData()
-    fd.append('foto', file)
     setUploadingFoto(true)
     try {
+      const compressed = await compressImage(file) // resize->512px, JPEG q0.82
+      const fd = new FormData()
+      fd.append('foto', compressed)
       await api.post('/siswa/' + id + '/foto', fd, { headers: { 'Content-Type': 'multipart/form-data' } })
       toast.success('Foto siswa berhasil diupload')
       fetchData()
@@ -135,6 +139,7 @@ export default function DataSiswaPage() {
           <button onClick={() => { setForm(emptyForm); setEditId(null); setShowModal(true) }} className="flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-lg text-sm hover:bg-primary-dark">
             <Plus size={16} /> Tambah Siswa
           </button>
+          <BulkDeleteButton kategori="siswa" label="Siswa" onDone={fetchData} />
         </div>
       </div>
 
@@ -151,21 +156,10 @@ export default function DataSiswaPage() {
         ) : (
           <ResponsiveTable<Siswa>
             columns={[
-              { key: 'no', header: 'No', hideOnMobile: true, render: (_r) => data.indexOf(_r) + 1 },
-              { key: 'foto', header: 'Foto', render: (s) => (
-                <div className="flex items-center gap-2">
-                  <img src={s.foto || '/logo-jurnalku-256.png'} alt={s.nama} className="w-9 h-9 rounded-full object-cover bg-gray-100 border" />
-                  <label className="p-1.5 text-primary hover:bg-primary/10 rounded-lg cursor-pointer" title="Upload foto">
-                    <Camera size={15} />
-                    <input type="file" accept="image/*" disabled={uploadingFoto} onChange={(e) => handleFoto(s.id, e.target.files?.[0])} className="hidden" />
-                  </label>
-                </div>
-              ) },
               { key: 'nama', header: 'Nama', className: 'font-medium text-gray-800' },
-              { key: 'nis', header: 'NIS', className: 'font-mono' },
-              { key: 'nisn', header: 'NISN', className: 'font-mono text-xs', hideOnMobile: true },
-              { key: 'jenis_kelamin', header: 'JK' },
-              { key: 'ttl', header: 'TTL', hideOnMobile: true, render: (s) => (s.tempat_lahir || '') + ', ' + formatTanggal(s.tanggal_lahir) },
+              { key: 'nis', header: 'NIS / NISN', render: (s) => (
+                <span className="font-mono text-xs">{s.nis || '-'}{s.nisn ? ' / ' + s.nisn : ''}</span>
+              ) },
               { key: 'status', header: 'Status', render: (s) => (
                 <span className={'px-2 py-1 rounded-full text-xs font-medium ' + (s.status === 'aktif' ? 'bg-green-100 text-green-700' : s.status === 'lulus' ? 'bg-blue-100 text-blue-700' : 'bg-red-100 text-red-700')}>
                   {s.status}
@@ -177,8 +171,9 @@ export default function DataSiswaPage() {
             empty="Belum ada data siswa"
             actions={(s) => (
               <>
-                <button onClick={() => handleEdit(s)} className="p-1.5 text-yellow-600 hover:bg-yellow-50 rounded-lg"><Edit size={16} /></button>
-                <button onClick={() => handleDelete(s.id, s.nama)} className="p-1.5 text-red-600 hover:bg-red-50 rounded-lg"><Trash2 size={16} /></button>
+                <button onClick={() => setDetail(s)} className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg" title="Detail"><Eye size={16} /></button>
+                <button onClick={() => handleEdit(s)} className="p-1.5 text-yellow-600 hover:bg-yellow-50 rounded-lg" title="Edit"><Edit size={16} /></button>
+                <button onClick={() => handleDelete(s.id, s.nama)} className="p-1.5 text-red-600 hover:bg-red-50 rounded-lg" title="Hapus"><Trash2 size={16} /></button>
               </>
             )}
           />
@@ -265,6 +260,43 @@ export default function DataSiswaPage() {
             <div className="flex gap-3 mt-6">
               <button onClick={() => setShowModal(false)} className="flex-1 px-4 py-2 border rounded-lg text-sm hover:bg-gray-50">Batal</button>
               <button onClick={handleSave} className="flex-1 px-4 py-2 bg-primary text-white rounded-lg text-sm hover:bg-primary-dark">Simpan</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Detail Siswa */}
+      {detail && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-start justify-center p-4 pt-6 sm:pt-10 overflow-y-auto" onClick={() => setDetail(null)}>
+          <div className="bg-white rounded-2xl w-full max-w-md max-h-[calc(100vh-3rem)] overflow-y-auto p-6" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-bold text-gray-800">Detail Siswa</h2>
+              <button onClick={() => setDetail(null)} className="p-1 hover:bg-gray-100 rounded-lg"><X size={20} /></button>
+            </div>
+            <div className="flex flex-col items-center mb-4">
+              <img src={detail.foto || '/logo-jurnalku-256.png'} alt={detail.nama} className="w-24 h-24 rounded-full object-cover bg-gray-100 border mb-2" />
+              <label className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs text-primary bg-primary/5 border border-primary/30 rounded-lg cursor-pointer hover:bg-primary/10">
+                <Camera size={14} /> Ganti Foto
+                <input type="file" accept="image/*" disabled={uploadingFoto} onChange={(e) => handleFoto(detail.id, e.target.files?.[0])} className="hidden" />
+              </label>
+            </div>
+            <div className="space-y-2 text-sm">
+              {[
+                ['Nama', detail.nama],
+                ['NIS', detail.nis || '-'],
+                ['NISN', detail.nisn || '-'],
+                ['Jenis Kelamin', detail.jenis_kelamin === 'P' ? 'Perempuan' : 'Laki-laki'],
+                ['Tempat, Tgl Lahir', (detail.tempat_lahir || '-') + ', ' + formatTanggal(detail.tanggal_lahir)],
+                ['Alamat', detail.alamat || '-'],
+                ['No HP', detail.no_hp || '-'],
+                ['Nama Orang Tua', detail.nama_ortu || '-'],
+                ['Status', detail.status],
+              ].map(([label, val]) => (
+                <div key={label} className="flex gap-2">
+                  <span className="text-gray-400 w-36 shrink-0">{label}</span>
+                  <span className="text-gray-800 font-medium break-words min-w-0">{val}</span>
+                </div>
+              ))}
             </div>
           </div>
         </div>
