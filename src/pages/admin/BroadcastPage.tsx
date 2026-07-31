@@ -117,7 +117,7 @@ export default function BroadcastPage() {
             <div className="bg-green-50 rounded-xl p-4 border border-green-100">
               <h3 className="font-medium text-gray-800 mb-2 text-sm">📱 Preview</h3>
               <div className="bg-white rounded-lg p-3 text-sm whitespace-pre-wrap shadow-sm max-h-40 overflow-y-auto">
-                {pesan}
+                {pesan.replace(/\{nama\}/g, 'Ahmad Fauzi').replace(/\{nis\}/g, '2024001').replace(/\{tanggal\}/g, new Date().toLocaleDateString('id-ID')).replace(/\{mapel\}/g, 'Matematika').replace(/\{jam\}/g, '07:30').replace(/\{jumlah\}/g, '250.000').replace(/\{status\}/g, 'Hadir').replace(/\{lembaga\}/g, 'JURNALKU').replace(/\{kelas\}/g, 'X-A').replace(/\{nip\}/g, '198501012010011001')}
               </div>
             </div>
 

@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react'
+import { ReactNode } from 'react'
 
 // ResponsiveTable: renders a real <table> on md+ screens, and stacked cards on
 // mobile — driven by a column config so pages don't hand-roll two layouts.

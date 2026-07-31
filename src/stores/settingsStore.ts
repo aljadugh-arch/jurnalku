@@ -9,8 +9,6 @@ interface Settings {
   primary_color?: string
   accent_color?: string
   sidebar_color?: string
-  background?: string
-  jenjang?: string
   [key: string]: unknown
 }
 

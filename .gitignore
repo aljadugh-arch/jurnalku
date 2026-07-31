@@ -1,27 +1,33 @@
-# Deps
-node_modules/
-dist/
-dist.old/
-
-# Env & secrets
-server/.env
-*.env
-
-# SQLite runtime
-server/*.db
-server/*.db-wal
-server/*.db-shm
-server/*.db.bak*
-
-# Logs & tmp
+# Logs
+logs
 *.log
-/tmp/
-.DS_Store
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
 
-# Uploads (runtime user data)
+node_modules
+dist
+dist-ssr
+*.local
+
+# Runtime / deploy artifacts
+server/.env
+server/*.db*
 server/uploads/
-public/uploads/
+server/wa-auth/
+backups/
+*.tar.gz
+*.tgz
 
-# Database backups
-backups/*.db
-backups/*.tgz
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?

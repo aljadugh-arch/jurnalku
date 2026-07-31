@@ -2,7 +2,6 @@ import { useState, useRef } from 'react'
 import { Upload, FileSpreadsheet, X, Download } from 'lucide-react'
 import * as XLSX from 'xlsx'
 import toast from 'react-hot-toast'
-import { normalizeDate } from '../lib/dateFormat'
 
 interface ImportExcelProps {
   title: string
@@ -23,57 +22,32 @@ export default function ImportExcel({ title, templateUrl, templateName, headerRo
   const handleFile = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
-    setPreview([]); setHeaders([])
     const reader = new FileReader()
-    reader.onerror = () => toast.error('Gagal membaca file. Coba file lain.')
     reader.onload = (evt) => {
-      try {
-        const data = new Uint8Array(evt.target?.result as ArrayBuffer)
-        const wb = XLSX.read(data, { type: 'array' })
-        const sh = wb.Sheets[wb.SheetNames[0]]
-        const rows: any[][] = XLSX.utils.sheet_to_json(sh, { header: 1 })
-
-        if (rows.length === 0) { toast.error('File kosong atau baris header tidak ditemukan'); return }
-
-        let detectedHeaderRow = headerRow
-        let bestMatchCount = -1
-        const maxScan = Math.min(rows.length, 10)
-        for (let r = 0; r < maxScan; r++) {
-          const matchCount = ((rows[r] || []) as any[]).filter(h => columnMap[(h || '').toString().trim()]).length
-          if (matchCount > bestMatchCount) { bestMatchCount = matchCount; detectedHeaderRow = r }
-        }
-        if (bestMatchCount <= 0) {
-          toast.error('Tidak ada kolom cocok. Download ulang template terbaru, jangan ubah baris header.')
-          return
-        }
-
-        const hdrs = (rows[detectedHeaderRow] as string[]).map(h => (h || '').toString().trim())
-        setHeaders(hdrs)
-
-        const mapped: Record<string, any>[] = []
-        for (let i = detectedHeaderRow + 1; i < rows.length; i++) {
-          const row = rows[i]
-          if (!row || row.every(c => !c)) continue // skip empty rows
-          const obj: Record<string, any> = {}
-          hdrs.forEach((h, idx) => {
-            const field = columnMap[h]
-            if (field && row[idx] !== undefined && row[idx] !== null) {
-              obj[field] = (/(tanggal|tgl|date)/i.test(field) ? normalizeDate(row[idx]) : row[idx]).toString().trim()
-            }
-          })
-          if (Object.keys(obj).length > 0) mapped.push(obj)
-        }
-
-        if (mapped.length === 0) {
-          toast.error('Tidak ada baris cocok. Pastikan kolom header sama persis dengan template.')
-          return
-        }
-        setPreview(mapped)
-      } catch (err: any) {
-        toast.error('File tidak bisa dibaca: ' + (err?.message || 'format tidak dikenali'))
-      } finally {
-        if (fileRef.current) fileRef.current.value = ''
+      const data = new Uint8Array(evt.target?.result as ArrayBuffer)
+      const wb = XLSX.read(data, { type: 'array' })
+      const sh = wb.Sheets[wb.SheetNames[0]]
+      const rows: any[][] = XLSX.utils.sheet_to_json(sh, { header: 1 })
+      
+      if (rows.length <= headerRow) { toast.error('File kosong atau format tidak sesuai'); return }
+      
+      const hdrs = (rows[headerRow] as string[]).map(h => (h || '').toString().trim())
+      setHeaders(hdrs)
+      
+      const mapped: Record<string, any>[] = []
+      for (let i = headerRow + 1; i < rows.length; i++) {
+        const row = rows[i]
+        if (!row || row.every(c => !c)) continue // skip empty rows
+        const obj: Record<string, any> = {}
+        hdrs.forEach((h, idx) => {
+          const field = columnMap[h]
+          if (field && row[idx] !== undefined && row[idx] !== null) {
+            obj[field] = row[idx].toString().trim()
+          }
+        })
+        if (Object.keys(obj).length > 0) mapped.push(obj)
       }
+      setPreview(mapped)
     }
     reader.readAsArrayBuffer(file)
   }
@@ -97,17 +71,10 @@ export default function ImportExcel({ title, templateUrl, templateName, headerRo
           <button onClick={onClose} className="p-1 hover:bg-gray-100 rounded"><X size={20} /></button>
         </div>
 
-        {(templateUrl || templateName) && (
-          <div className="bg-blue-50 border border-blue-100 rounded-lg p-3 mb-4 flex items-center justify-between gap-3">
-            <div>
-              <p className="text-sm text-blue-700">Template: <strong>{templateName || 'Excel'}</strong></p>
-              <p className="text-xs text-blue-500 mt-1">Download template, isi data, lalu upload kembali.</p>
-            </div>
-            {templateUrl && (
-              <a href={templateUrl} download className="shrink-0 inline-flex items-center gap-1 px-3 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700">
-                <Download size={16} /> Download
-              </a>
-            )}
+        {templateName && (
+          <div className="bg-blue-50 border border-blue-100 rounded-lg p-3 mb-4">
+            <p className="text-sm text-blue-700">Template: <strong>{templateName}</strong></p>
+            <p className="text-xs text-blue-500 mt-1">Download template dari folder template-jurnal/, isi data, lalu upload kembali.</p>
           </div>
         )}
 

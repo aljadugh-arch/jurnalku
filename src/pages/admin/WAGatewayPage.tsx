@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Wifi, WifiOff, Send, Settings, CheckCircle, XCircle } from 'lucide-react'
+import { MessageSquare, Wifi, WifiOff, Send, Settings, CheckCircle, XCircle } from 'lucide-react'
 import toast from 'react-hot-toast'
 import api from '../../services/api'
 

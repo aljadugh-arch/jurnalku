@@ -56,7 +56,7 @@ export default function GuruPenilaianHarianPage() {
     }
   }
 
-  const loadExistingPenilaian = async (_siswaIds: string[]) => {
+  const loadExistingPenilaian = async (siswaIds: string[]) => {
     if (!selectedMapel || !tanggal) return
     try {
       const { data } = await api.get(`/penilaian-harian?mapel_id=${selectedMapel}&tanggal_from=${tanggal}&tanggal_to=${tanggal}`)

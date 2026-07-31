@@ -5,7 +5,6 @@ import { useAuthStore } from './stores/authStore'
 import { useSettingsStore } from './stores/settingsStore'
 import DashboardLayout from './components/layout/DashboardLayout'
 import LandingPage from './pages/LandingPage'
-import PanduanPage from './pages/PanduanPage'
 import LoginPage from './pages/auth/LoginPage'
 import RegisterPage from './pages/auth/RegisterPage'
 import ForgotPasswordPage from './pages/auth/ForgotPasswordPage'
@@ -35,7 +34,6 @@ import RekapAbsensiPage from './pages/admin/RekapAbsensiPage'
 import NotifSettingsPage from './pages/admin/NotifSettingsPage'
 import TenantManagementPage from './pages/admin/TenantManagementPage'
 import RaporPage from './pages/admin/RaporPage'
-import CatatanKepribadianPage from './pages/admin/CatatanKepribadianPage'
 import GuruDashboard from './pages/guru/GuruDashboard'
 import GuruJurnalPage from './pages/guru/GuruJurnalPage'
 import GuruAbsensiPage from './pages/guru/GuruAbsensiPage'
@@ -51,9 +49,6 @@ import SiswaEkskulPage from './pages/siswa/SiswaEkskulPage'
 import ChangePasswordPage from './pages/ChangePasswordPage'
 import ProfilePage from './pages/ProfilePage'
 import UserManagementPage from './pages/admin/UserManagementPage'
-import DomainSetupPage from './pages/admin/DomainSetupPage'
-import SupervisiPage from './pages/admin/SupervisiPage'
-import EkskulPage from './pages/admin/EkskulPage'
 
 function ProtectedRoute({ children, allowedRoles }: { children: ReactNode, allowedRoles?: string[] }) {
   const { isAuthenticated, user } = useAuthStore()
@@ -77,7 +72,6 @@ export default function App() {
       <Toaster position="top-right" />
       <Routes>
         <Route path="/" element={<LandingPage />} />
-        <Route path="/panduan" element={<PanduanPage />} />
         <Route path="/login" element={<LoginPage />} />
         <Route path="/register" element={<RegisterPage />} />
         <Route path="/forgot-password" element={<ForgotPasswordPage />} />
@@ -99,7 +93,6 @@ export default function App() {
           <Route path="jurnal" element={<JurnalPage />} />
           <Route path="absensi-siswa" element={<AbsensiSiswaPage />} />
           <Route path="absensi-ekskul" element={<AbsensiEkskulPage />} />
-          <Route path="ekskul" element={<EkskulPage />} />
           <Route path="absensi-kokurikuler" element={<AbsensiKokurikulerPage />} />
           <Route path="absensi-kegiatan" element={<AbsensiKegiatanPage />} />
           <Route path="absensi-guru" element={<AbsensiGuruPage />} />
@@ -115,19 +108,14 @@ export default function App() {
             <ProtectedRoute allowedRoles={['super_admin']}><TenantManagementPage /></ProtectedRoute>
           } />
           <Route path="rapor" element={<RaporPage />} />
-          <Route path="catatan-kepribadian" element={<CatatanKepribadianPage />} />
           <Route path="change-password" element={<ChangePasswordPage />} />
           <Route path="profile" element={<ProfilePage />} />
           <Route path="users" element={
             <ProtectedRoute allowedRoles={['admin', 'super_admin']}><UserManagementPage /></ProtectedRoute>
           } />
           <Route path="broadcast" element={<BroadcastPage />} />
-          <Route path="domain-setup" element={
-            <ProtectedRoute allowedRoles={['admin']}><DomainSetupPage /></ProtectedRoute>
-          } />
           <Route path="kalender-kbm" element={<KalenderKBMPage />} />
           <Route path="rekap-absensi" element={<RekapAbsensiPage />} />
-          <Route path="supervisi" element={<SupervisiPage />} />
         </Route>
 
         {/* Guru Routes */}
@@ -144,7 +132,6 @@ export default function App() {
           <Route path="modul-ajar" element={<GuruModulAjarPage />} />
           <Route path="rombel" element={<GuruRombelPage />} />
           <Route path="penilaian-harian" element={<GuruPenilaianHarianPage />} />
-          <Route path="catatan-kepribadian" element={<CatatanKepribadianPage />} />
           <Route path="profile" element={<ProfilePage />} />
           <Route path="change-password" element={<ChangePasswordPage />} />
         </Route>

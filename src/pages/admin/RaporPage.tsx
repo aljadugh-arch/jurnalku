@@ -6,7 +6,6 @@ export default function RaporPage() {
   const [rombelList, setRombelList] = useState<any[]>([])
   const [siswaList, setSiswaList] = useState<any[]>([])
   const [rapor, setRapor] = useState<any[]>([])
-  const [catatan, setCatatan] = useState<any | null>(null)
   const [selectedRombel, setSelectedRombel] = useState('')
   const [selectedSiswa, setSelectedSiswa] = useState('')
   const [tahunAjaran, setTahunAjaran] = useState('2026/2027')
@@ -29,8 +28,6 @@ export default function RaporPage() {
     try {
       const { data } = await api.get(`/rapor?siswa_id=${selectedSiswa}&tahun_ajaran=${tahunAjaran}&semester=${semester}&jenis=${jenis}`)
       setRapor(data)
-      const c = await api.get(`/catatan-kepribadian?siswa_id=${selectedSiswa}&tahun_ajaran=${encodeURIComponent(tahunAjaran)}&semester=${semester}`)
-      setCatatan(c.data?.[0] || null)
     } catch (e) { console.error(e) }
   }
 
@@ -192,23 +189,6 @@ export default function RaporPage() {
             <p><strong>Formula:</strong> Nilai Akhir = (Pengetahuan × 50%) + (Keterampilan × 30%) + (Sikap × 20%)</p>
             <p className="mt-1"><strong>Predikat:</strong> A ≥ 90 | B ≥ 80 | C ≥ 70 | D &lt; 70</p>
           </div>
-          {catatan && (
-            <div className="p-6 border-t bg-white text-sm">
-              <h3 className="font-bold mb-3">Catatan Kepribadian</h3>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
-                <div><span className="text-gray-500">Kelakuan</span><p className="font-semibold">{catatan.kelakuan}</p></div>
-                <div><span className="text-gray-500">Kerajinan</span><p className="font-semibold">{catatan.kerajinan}</p></div>
-                <div><span className="text-gray-500">Kerapian</span><p className="font-semibold">{catatan.kerapian}</p></div>
-                <div><span className="text-gray-500">Kedisiplinan</span><p className="font-semibold">{catatan.kedisiplinan}</p></div>
-              </div>
-              <div className="space-y-2">
-                <p><strong>Sikap Spiritual:</strong> {catatan.sikap_spiritual || '-'}</p>
-                <p><strong>Sikap Sosial:</strong> {catatan.sikap_sosial || '-'}</p>
-                <p><strong>Catatan Wali Kelas:</strong> {catatan.catatan_wali_kelas || '-'}</p>
-                <p><strong>Saran:</strong> {catatan.saran || '-'}</p>
-              </div>
-            </div>
-          )}
         </div>
       )}
 

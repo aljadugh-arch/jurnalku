@@ -47,7 +47,7 @@ export default function MapelPage() {
           <h1 className="text-2xl font-bold text-gray-800 font-display">Mata Pelajaran</h1>
           <p className="text-gray-500 text-sm mt-1">Kelola data mata pelajaran ({data.length} mapel)</p>
         </div>
-        <div className="flex flex-wrap gap-2">
+        <div className="flex gap-2">
           <button onClick={() => setShowImport(true)} className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg text-sm hover:bg-green-700">
             <Upload size={16} /> Import
           </button>
@@ -108,18 +108,12 @@ export default function MapelPage() {
       {showImport && (
         <ImportExcel
           title="Import Mata Pelajaran"
-          templateUrl="/templates/template-mapel.xls"
-          templateName="template-mapel.xls"
+          templateName="master-mapel-v2.xls"
           headerRow={2}
-          columnMap={{ 'Kode MAPEL': 'kode', 'Nama Mata Pelajaran': 'nama', 'Kelompok': 'kelompok', 'Jam Per Minggu': 'jam_per_minggu' }}
+          columnMap={{ 'Kode MAPEL': 'kode', 'Nama Mata Pelajaran': 'nama' }}
           onImport={async (rows) => {
             for (const row of rows) {
-              if (!row.nama) continue
-              await api.post('/mapel', {
-                kode: String(row.kode || ''), nama: row.nama,
-                kelompok: row.kelompok || 'wajib',
-                jam_per_minggu: Number(row.jam_per_minggu) || 2,
-              })
+              await api.post('/mapel', { ...row, kelompok: 'wajib', jam_per_minggu: 2 })
             }
             fetchData()
           }}

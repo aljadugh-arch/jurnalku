@@ -2,11 +2,11 @@ import { useState, useEffect } from 'react'
 import api from '../../services/api'
 
 export default function TenantManagementPage() {
-  const [tenants, setTenants] = useState<any[]>([])
+  const [tenants, setTenants] = useState([])
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
   const [form, setForm] = useState({ slug: '', nama: '', email: '', telepon: '', plan: 'free', max_siswa: 100, max_gtk: 20 })
-  const [created, setCreated] = useState<any>(null)
+  const [created, setCreated] = useState(null)
 
   useEffect(() => { loadTenants() }, [])
 
@@ -19,7 +19,7 @@ export default function TenantManagementPage() {
     } finally { setLoading(false) }
   }
 
-  const handleCreate = async (e: React.FormEvent) => {
+  const handleCreate = async (e) => {
     e.preventDefault()
     try {
       const { data } = await api.post('/tenants', form)
@@ -27,34 +27,25 @@ export default function TenantManagementPage() {
       setShowForm(false)
       setForm({ slug: '', nama: '', email: '', telepon: '', plan: 'free', max_siswa: 100, max_gtk: 20 })
       loadTenants()
-    } catch (err: any) {
+    } catch (err) {
       alert(err.response?.data?.error || 'Gagal membuat tenant')
     }
   }
 
-  const toggleTenant = async (id: string, aktif: number) => {
+  const toggleTenant = async (id, aktif) => {
     try {
       await api.put(`/tenants/${id}`, { aktif: aktif ? 0 : 1 })
       loadTenants()
     } catch (e) { alert('Gagal update status') }
   }
 
-  const setCustomDomain = async (id: string) => {
-    const domain = prompt('Masukkan custom domain (contoh: jurnal.sekolahku.sch.id):\n\nCatatan: Setelah custom domain aktif, subdomain *.jurnal.cc.cd untuk lembaga ini TIDAK AKTIF lagi.')
+  const setCustomDomain = async (id) => {
+    const domain = prompt('Masukkan custom domain (contoh: jurnal.sekolahku.sch.id):')
     if (!domain) return
     try {
       await api.put(`/tenants/${id}/domain`, { domain_custom: domain })
       loadTenants()
-    } catch (e: any) { alert(e.response?.data?.error || 'Gagal set domain') }
-  }
-
-  const handleDelete = async (id: string, nama: string) => {
-    if (!confirm(`HAPUS LEMBAGA "${nama}"?\n\nSemua data (siswa, GTK, jadwal, absensi, tagihan, dll) akan dihapus permanen. Tindakan ini TIDAK BISA dibatalkan.`)) return
-    try {
-      const { data } = await api.delete(`/tenants/${id}`)
-      alert(`Lembaga "${data.deleted}" berhasil dihapus`)
-      loadTenants()
-    } catch (e: any) { alert(e.response?.data?.error || 'Gagal hapus lembaga') }
+    } catch (e) { alert(e.response?.data?.error || 'Gagal set domain') }
   }
 
   if (loading) return <div className="flex items-center justify-center h-64"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div></div>
@@ -177,22 +168,12 @@ export default function TenantManagementPage() {
                   <div className="text-xs text-gray-500">{t.email}</div>
                 </td>
                 <td className="px-4 py-3">
-                  {t.domain_custom ? (
-                    <span className="text-xs text-gray-400 line-through">{t.slug}.jurnal.cc.cd</span>
-                  ) : (
-                    <a href={`https://${t.slug}.jurnal.cc.cd`} target="_blank" rel="noreferrer" className="text-primary text-sm hover:underline">
-                      {t.slug}.jurnal.cc.cd
-                    </a>
-                  )}
+                  <a href={`https://${t.slug}.jurnal.cc.cd`} target="_blank" rel="noreferrer" className="text-primary text-sm hover:underline">
+                    {t.slug}.jurnal.cc.cd
+                  </a>
                 </td>
                 <td className="px-4 py-3 text-sm text-gray-600">
-                  {t.domain_custom ? (
-                    <a href={`https://${t.domain_custom}`} target="_blank" rel="noreferrer" className="text-primary text-sm hover:underline">
-                      {t.domain_custom}
-                    </a>
-                  ) : (
-                    <span className="text-gray-400">-</span>
-                  )}
+                  {t.domain_custom || <span className="text-gray-400">-</span>}
                 </td>
                 <td className="px-4 py-3">
                   <span className={`px-2 py-1 rounded-full text-xs font-medium ${t.plan === 'free' ? 'bg-gray-100 text-gray-600' : t.plan === 'pro' ? 'bg-blue-100 text-blue-700' : 'bg-purple-100 text-purple-700'}`}>
@@ -212,16 +193,6 @@ export default function TenantManagementPage() {
                     <button onClick={() => setCustomDomain(t.id)} className="text-xs px-2 py-1 rounded bg-blue-50 text-blue-600 hover:bg-blue-100">
                       Set Domain
                     </button>
-                    {t.id !== 'default' && (
-                      <button onClick={() => handleDelete(t.id, t.nama)} className="text-xs px-2 py-1 rounded bg-red-50 text-red-700 hover:bg-red-100">
-                        Hapus
-                      </button>
-                    )}
-                    {t.domain_custom && (
-                      <a href={`https://${t.domain_custom}`} target="_blank" rel="noreferrer" className="text-xs px-2 py-1 rounded bg-gray-50 text-gray-600 hover:bg-gray-100">
-                        Buka
-                      </a>
-                    )}
                   </div>
                 </td>
               </tr>

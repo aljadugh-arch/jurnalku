@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { useSidebarStore } from '../../stores/sidebarStore'
 import { useAuthStore } from '../../stores/authStore'
@@ -7,11 +7,10 @@ import {
   LayoutDashboard, Users, GraduationCap, BookOpen, Calendar,
   ClipboardList, UserCheck, QrCode, MapPin,
   X, ChevronDown, ChevronRight, LogOut, School, Layers,
-  Activity, Globe, Sparkles, DollarSign, Settings, MessageSquare, FileText, AlertCircle, ClipboardCheck, ScrollText
+  Activity, Globe, Sparkles, DollarSign, Settings, MessageSquare, FileText
 } from 'lucide-react'
 import { clsx } from 'clsx'
 import { roleLabel } from '../../lib/roles'
-import api from '../../services/api'
 
 interface MenuItem {
   label: string
@@ -20,14 +19,13 @@ interface MenuItem {
   children?: { label: string; path: string }[]
 }
 
-// Admin/operator/TU: urut sesuai alur input data — master data dulu, operasional, lalu pengaturan.
 const adminMenuItems: MenuItem[] = [
   { label: 'Dashboard', icon: <LayoutDashboard size={20} />, path: '/admin' },
   { label: 'Data Siswa', icon: <GraduationCap size={20} />, path: '/admin/siswa' },
   { label: 'Data GTK', icon: <Users size={20} />, path: '/admin/gtk' },
   { label: 'Mata Pelajaran', icon: <BookOpen size={20} />, path: '/admin/mapel' },
+  { label: 'Rapor Siswa', icon: <FileText size={20} />, path: '/admin/rapor' },
   { label: 'Rombongan Belajar', icon: <Layers size={20} />, path: '/admin/rombel' },
-  { label: 'Kalender KBM', icon: <Calendar size={20} />, path: '/admin/kalender-kbm' },
   {
     label: 'Jadwal Pelajaran', icon: <Calendar size={20} />,
     children: [
@@ -40,20 +38,16 @@ const adminMenuItems: MenuItem[] = [
     label: 'Absensi', icon: <UserCheck size={20} />,
     children: [
       { label: 'Absensi Siswa', path: '/admin/absensi-siswa' },
-      { label: 'Absensi Guru (Geolokasi)', path: '/admin/absensi-guru' },
-      { label: 'Rekapitulasi', path: '/admin/rekap-absensi' },
-      { label: 'Ekstrakurikuler', path: '/admin/ekskul' },
       { label: 'Absensi Ekskul', path: '/admin/absensi-ekskul' },
       { label: 'Absensi Kokurikuler', path: '/admin/absensi-kokurikuler' },
       { label: 'Absensi Kegiatan', path: '/admin/absensi-kegiatan' },
+      { label: 'Absensi Guru (Geolokasi)', path: '/admin/absensi-guru' },
+      { label: 'Rekapitulasi', path: '/admin/rekap-absensi' },
     ]
   },
-  { label: 'Ceklok Saya', icon: <MapPin size={20} />, path: '/guru/absensi-guru' },
   { label: 'Jurnal Mengajar', icon: <ClipboardList size={20} />, path: '/admin/jurnal' },
-  { label: 'Rapor Siswa', icon: <FileText size={20} />, path: '/admin/rapor' },
-  { label: 'Catatan Kepribadian', icon: <ScrollText size={20} />, path: '/admin/catatan-kepribadian' },
+  { label: 'Kalender KBM', icon: <Calendar size={20} />, path: '/admin/kalender-kbm' },
   { label: 'Generator Modul Ajar', icon: <Sparkles size={20} />, path: '/admin/modul-ajar' },
-  { label: 'Tahun Ajaran', icon: <School size={20} />, path: '/admin/tahun-ajaran' },
   {
     label: 'Keuangan', icon: <DollarSign size={20} />,
     children: [
@@ -79,12 +73,11 @@ const guruMenuItems: MenuItem[] = [
   { label: 'Dashboard', icon: <LayoutDashboard size={20} />, path: '/guru' },
   { label: 'Jurnal Mengajar', icon: <ClipboardList size={20} />, path: '/guru/jurnal' },
   { label: 'Penilaian Harian', icon: <BookOpen size={20} />, path: '/guru/penilaian-harian' },
-  { label: 'Catatan Kepribadian', icon: <ScrollText size={20} />, path: '/guru/catatan-kepribadian' },
   { label: 'Jadwal Saya', icon: <Calendar size={20} />, path: '/guru/jadwal' },
   { label: 'Absensi Siswa', icon: <QrCode size={20} />, path: '/guru/absensi-siswa' },
   { label: 'Absensi Saya', icon: <MapPin size={20} />, path: '/guru/absensi-guru' },
   { label: 'Modul Ajar', icon: <Sparkles size={20} />, path: '/guru/modul-ajar' },
-  { label: 'Kelas Wali Saya', icon: <Layers size={20} />, path: '/guru/rombel' },
+  { label: 'Rombel Saya', icon: <Layers size={20} />, path: '/guru/rombel' },
 ]
 
 const siswaMenuItems: MenuItem[] = [
@@ -94,17 +87,14 @@ const siswaMenuItems: MenuItem[] = [
   { label: 'Ekskul', icon: <Activity size={20} />, path: '/siswa/ekskul' },
 ]
 
-// Kepala Madrasah/Sekolah = pimpinan, tetap punya ceklok sendiri karena masuk kategori GTK.
+// Kepala Madrasah/Sekolah = pimpinan, read-only. Lihat data & laporan, tanpa menu config/tulis.
 const kepalaMenuItems: MenuItem[] = [
   { label: 'Dashboard', icon: <LayoutDashboard size={20} />, path: '/admin' },
-  { label: 'Ceklok Saya', icon: <MapPin size={20} />, path: '/guru/absensi-guru' },
   { label: 'Data Siswa', icon: <GraduationCap size={20} />, path: '/admin/siswa' },
   { label: 'Data GTK', icon: <Users size={20} />, path: '/admin/gtk' },
   { label: 'Rapor Siswa', icon: <FileText size={20} />, path: '/admin/rapor' },
-  { label: 'Catatan Kepribadian', icon: <ScrollText size={20} />, path: '/admin/catatan-kepribadian' },
   { label: 'Rombongan Belajar', icon: <Layers size={20} />, path: '/admin/rombel' },
   { label: 'Jurnal Mengajar', icon: <ClipboardList size={20} />, path: '/admin/jurnal' },
-  { label: 'Supervisi Guru', icon: <ClipboardCheck size={20} />, path: '/admin/supervisi' },
   {
     label: 'Absensi', icon: <UserCheck size={20} />,
     children: [
@@ -129,13 +119,6 @@ export default function Sidebar() {
   const settings = useSettingsStore(s => s.settings)
   const location = useLocation()
   const [expandedMenus, setExpandedMenus] = useState<string[]>([])
-  const [domainStatus, setDomainStatus] = useState<{ domain_custom: string | null; domain_status: string } | null>(null)
-
-  useEffect(() => {
-    if (user?.role === 'admin' || user?.role === 'super_admin') {
-      api.get('/tenant/domain-status').then(r => setDomainStatus(r.data)).catch(() => {})
-    }
-  }, [user?.role])
 
   const menuItems = (user?.role === 'kepala'
     ? kepalaMenuItems
@@ -163,18 +146,16 @@ export default function Sidebar() {
       {/* Mobile backdrop overlay */}
       {isOpen && (
         <div 
-          className="hidden"
+          className="fixed inset-0 bg-black/50 z-30 lg:hidden"
           onClick={toggle}
         />
       )}
 
       <aside className={clsx(
-        'fixed top-0 left-0 hidden h-full bg-sidebar text-white z-40 transition-all duration-300 lg:flex flex-col',
+        'fixed top-0 left-0 h-full bg-sidebar text-white z-40 transition-all duration-300 flex flex-col',
         isOpen ? 'w-64' : 'w-0 lg:w-20',
         !isOpen && 'overflow-hidden lg:overflow-visible'
-      )}
-        style={settings.background ? { backgroundImage: `linear-gradient(rgba(15,23,42,0.88), rgba(15,23,42,0.94)), url(${settings.background})`, backgroundSize: (settings.bg_size as string) || 'cover', backgroundPosition: (settings.bg_position as string) || 'center', backgroundRepeat: (settings.bg_repeat as string) || 'no-repeat' } : undefined}
-      >
+      )}>
         <div className="flex items-center justify-between gap-3 px-4 py-5 border-b border-sidebar-hover">
           <div className="flex items-center gap-3 flex-1 min-w-0">
             <div className="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 overflow-hidden bg-white/10">
@@ -195,22 +176,6 @@ export default function Sidebar() {
         </div>
 
         <nav className="flex-1 overflow-y-auto py-4 px-2">
-          {/* Domain setup alert (admin only, when custom domain is pending) */}
-          {domainStatus?.domain_custom && domainStatus.domain_status !== 'active' && (user?.role === 'admin') && (
-            <Link
-              to="/admin/domain-setup"
-              onClick={handleNav}
-              className={clsx(
-                'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm mb-2 transition-colors',
-                isActive('/admin/domain-setup')
-                  ? 'bg-amber-600 text-white'
-                  : 'bg-amber-500/20 text-amber-300 hover:bg-amber-500/30'
-              )}
-            >
-              <AlertCircle size={20} />
-              {isOpen && <span>Aktifkan Domain</span>}
-            </Link>
-          )}
           {menuItems.map((item) => (
             <div key={item.label} className="mb-1">
               {item.children ? (

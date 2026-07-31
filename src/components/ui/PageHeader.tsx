@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react'
+import { ReactNode } from 'react'
 
 // Compact page header: title + optional subtitle + right-side actions.
 // Responsive: stacks on mobile, row on sm+.

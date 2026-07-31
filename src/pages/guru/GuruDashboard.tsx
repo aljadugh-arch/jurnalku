@@ -3,7 +3,6 @@ import { Calendar, ClipboardList, BookOpen, QrCode, MapPin, Users, PenLine, Chev
 import { useNavigate } from 'react-router-dom'
 import api from '../../services/api'
 import { Card, StatCard, Badge, Avatar } from '../../components/ui'
-import MobileMenuGrid from '../../components/MobileMenuGrid'
 
 function greetingByHour() {
   const h = new Date().getHours()
@@ -28,7 +27,7 @@ function toMinutes(t: string) {
 }
 
 export default function GuruDashboard() {
-  const [data, setData] = useState<any>({ jadwal_hari_ini: [], rekap_jurnal: { draft: 0, submitted: 0, approved: 0 }, rombel_count: 0, wali_rombel: [], gtk: null })
+  const [data, setData] = useState<any>({ jadwal_hari_ini: [], rekap_jurnal: { draft: 0, submitted: 0, approved: 0 }, rombel_count: 0, gtk: null })
   const navigate = useNavigate()
 
   useEffect(() => {
@@ -83,15 +82,11 @@ export default function GuruDashboard() {
 
       {/* Quick Stats */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <StatCard label="Jadwal Hari Ini" value={data.jadwal_hari_ini.length + ' JP'} icon={<Calendar size={18} />} gradient="from-blue-500 to-indigo-600" onClick={() => navigate('/guru/jadwal')} />
-        <StatCard label="Jurnal Disetujui" value={data.rekap_jurnal.approved} icon={<CheckCircle2 size={18} />} gradient="from-green-500 to-emerald-600" sub={persenApproved + '% selesai'} onClick={() => navigate('/guru/jurnal')} />
-        <StatCard label="Jurnal Pending" value={pending} icon={<ClipboardList size={18} />} gradient="from-orange-500 to-amber-600" onClick={() => navigate('/guru/jurnal')} />
-        <StatCard label="Rombel Diampu" value={data.rombel_count} icon={<Users size={18} />} gradient="from-purple-500 to-fuchsia-600" onClick={() => navigate('/guru/rombel')} />
-        {data.wali_rombel.length > 0 && <StatCard label="Wali Kelas" value={data.wali_rombel.length} icon={<Users size={18} />} gradient="from-rose-500 to-pink-600" sub={data.wali_rombel.map((r: any) => r.nama).join(', ')} onClick={() => navigate('/guru/rombel')} />}
+        <StatCard label="Jadwal Hari Ini" value={data.jadwal_hari_ini.length + ' JP'} icon={<Calendar size={18} />} gradient="from-blue-500 to-indigo-600" />
+        <StatCard label="Jurnal Disetujui" value={data.rekap_jurnal.approved} icon={<CheckCircle2 size={18} />} gradient="from-green-500 to-emerald-600" sub={persenApproved + '% selesai'} />
+        <StatCard label="Jurnal Pending" value={pending} icon={<ClipboardList size={18} />} gradient="from-orange-500 to-amber-600" />
+        <StatCard label="Rombel Diampu" value={data.rombel_count} icon={<Users size={18} />} gradient="from-purple-500 to-fuchsia-600" />
       </div>
-
-      {/* Menu layanan: di bawah card stats, mobile/tablet only */}
-      <MobileMenuGrid />
 
       {/* Rekap Jurnal + progress */}
       <Card title="Rekap Jurnal" icon={<ClipboardList size={18} className="text-primary" />}>
@@ -160,6 +155,13 @@ export default function GuruDashboard() {
 
       {/* Quick Actions */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <button onClick={() => navigate('/guru/absensi-guru')} className="bg-white rounded-xl p-4 shadow-sm border border-gray-100 hover:shadow-md transition-shadow text-left">
+          <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-green-500 to-emerald-600 flex items-center justify-center text-white mb-3">
+            <MapPin size={18} />
+          </div>
+          <h4 className="font-medium text-gray-800">Ceklok Kehadiran</h4>
+          <p className="text-sm text-gray-500 mt-1">Absen masuk/pulang via GPS</p>
+        </button>
         <button onClick={() => navigate('/guru/absensi-siswa')} className="bg-white rounded-xl p-4 shadow-sm border border-gray-100 hover:shadow-md transition-shadow text-left">
           <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-purple-500 to-fuchsia-600 flex items-center justify-center text-white mb-3">
             <QrCode size={18} />
@@ -167,15 +169,6 @@ export default function GuruDashboard() {
           <h4 className="font-medium text-gray-800">Absensi Siswa</h4>
           <p className="text-sm text-gray-500 mt-1">Input absensi kelas</p>
         </button>
-        {data.wali_rombel.length > 0 && (
-          <button onClick={() => navigate('/guru/rombel')} className="bg-white rounded-xl p-4 shadow-sm border border-gray-100 hover:shadow-md transition-shadow text-left">
-            <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-rose-500 to-pink-600 flex items-center justify-center text-white mb-3">
-              <Users size={18} />
-            </div>
-            <h4 className="font-medium text-gray-800">Kelas Wali Saya</h4>
-            <p className="text-sm text-gray-500 mt-1">Pantau siswa dan rombel wali</p>
-          </button>
-        )}
         <button onClick={() => navigate('/guru/modul-ajar')} className="bg-white rounded-xl p-4 shadow-sm border border-gray-100 hover:shadow-md transition-shadow text-left">
           <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white mb-3">
             <BookOpen size={18} />

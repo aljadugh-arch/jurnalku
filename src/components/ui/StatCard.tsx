@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react'
+import { ReactNode } from 'react'
 
 // Compact stat card: gradient icon chip + big value. SaaS-modern.
 // Grid parent controls columns; card fills width and stays tidy on mobile.

@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react'
+import { ReactNode } from 'react'
 
 // Compact card container. SaaS-modern: soft shadow, rounded, thin border.
 export default function Card({ children, className = '', title, icon, action }: {

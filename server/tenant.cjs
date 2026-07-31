@@ -97,14 +97,14 @@ function tenantMiddleware(db) {
     if (host.endsWith('.' + BASE_DOMAIN)) {
       const slug = host.replace('.' + BASE_DOMAIN, '')
       if (slug && slug !== 'www') {
-        // Only match tenant if it does NOT have a custom domain (avoid double access)
-        tenant = db.prepare('SELECT * FROM tenants WHERE slug = ? AND aktif = 1 AND (domain_custom IS NULL OR domain_custom = \'\')').get(slug)
+        // Custom domain is an alias, not a replacement: tenant remains reachable by slug too.
+        tenant = db.prepare('SELECT * FROM tenants WHERE slug = ? AND aktif = 1').get(slug)
       }
     }
 
     // 2. Check custom domain mapping
     if (!tenant && host !== BASE_DOMAIN && host !== 'localhost') {
-      tenant = db.prepare('SELECT * FROM tenants WHERE domain_custom = ? AND aktif = 1').get(host)
+      tenant = db.prepare("SELECT * FROM tenants WHERE lower(trim(domain_custom, '.')) = ? AND aktif = 1").get(host.replace(/\.$/, ''))
     }
 
     // 3. Fallback to default tenant (main domain or localhost)

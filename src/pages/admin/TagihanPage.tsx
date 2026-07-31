@@ -3,6 +3,7 @@ import { Search, X } from 'lucide-react'
 import toast from 'react-hot-toast'
 import api from '../../services/api'
 import ResponsiveTable from '../../components/ui/ResponsiveTable'
+import FinanceExcelPanel from '../../components/FinanceExcelPanel'
 
 interface Tagihan {
   id: string; siswa_id: string; siswa_nama: string; nis: string
@@ -110,6 +111,8 @@ export default function TagihanPage() {
           Generate Tagihan
         </button>
       </div>
+
+      <FinanceExcelPanel />
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100">

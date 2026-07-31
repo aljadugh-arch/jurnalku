@@ -1,0 +1,10 @@
+const assert = require('node:assert/strict')
+const { parseGuruHariRules, guruBolehMengajar } = require('../server/jadwal-rules.cjs')
+
+const rules = parseGuruHariRules('Pujianto: senin, sabtu\nDarsani: sabtu, senin, rabu')
+assert.deepEqual(rules.pujianto, ['senin', 'sabtu'])
+assert.equal(guruBolehMengajar('Pujianto', 'minggu', rules), false)
+assert.equal(guruBolehMengajar('Pujianto', 'senin', rules), true)
+assert.equal(guruBolehMengajar('Guru Lain', 'minggu', rules), true)
+assert.throws(() => parseGuruHariRules('Pujianto senin'), /Format aturan/)
+console.log('jadwal rules tests passed')

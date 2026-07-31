@@ -35,7 +35,8 @@ class WAGateway {
     }
     phone = this.normalizePhone(phone)
     if (config.provider === 'baileys') {
-      return await this.sendViaBaileys(phone, message, config)
+      const { enqueue } = require('./wa-queue.cjs')
+      return enqueue(this.db, { tenantId, phone, message, key: `gateway:${require('crypto').randomUUID()}` })
     } else if (config.provider === 'sidobe') {
       return await this.sendViaSidobe(phone, message, config)
     }

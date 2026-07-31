@@ -6,6 +6,7 @@ import { applyTheme } from '../../lib/applyTheme'
 import { useSettingsStore } from '../../stores/settingsStore'
 import { JENJANG_OPTIONS } from '../../lib/jenjang'
 import MapPicker from '../../components/MapPicker'
+import JamPulangSiswa from '../../components/JamPulangSiswa'
 
 const HARI_OPTIONS = [
   { value: 'senin', label: 'Senin' }, { value: 'selasa', label: 'Selasa' }, { value: 'rabu', label: 'Rabu' },
@@ -16,7 +17,7 @@ export default function SettingsPage() {
   const [form, setForm] = useState({
     nama_lembaga: '', alamat: '', telepon: '', email: '',
     theme: 'light', primary_color: '#1e40af', accent_color: '#059669', sidebar_color: '#1e293b',
-    geo_latitude: '', geo_longitude: '', geo_radius: '200', jenjang: '', durasi_jtm: '40', hari_libur: ['jumat'] as string[],
+    geo_latitude: '', geo_longitude: '', geo_radius: '200', jenjang: '', hari_libur: ['jumat'] as string[],
     bg_size: 'cover', bg_position: 'center', bg_repeat: 'no-repeat', bg_blur: 0
   })
   const [loading, setLoading] = useState(true)
@@ -25,6 +26,7 @@ export default function SettingsPage() {
   const [resetting, setResetting] = useState(false)
   const [logo, setLogo] = useState('')
   const [background, setBackground] = useState('')
+  const [kts, setKts] = useState({ depan: '', belakang: '' })
   const [jam, setJam] = useState({
     sesi_masuk_mulai: '06:00', sesi_masuk_selesai: '07:30',
     sesi_pulang_mulai: '13:00', sesi_pulang_selesai: '15:00',
@@ -39,10 +41,11 @@ export default function SettingsPage() {
       const s = res.data || {}
       setLogo(s.logo || '')
       setBackground(s.background || '')
+      setKts({ depan: s.kts_depan || '', belakang: s.kts_belakang || '' })
       setForm({
         nama_lembaga: s.nama_lembaga || '', alamat: s.alamat || '', telepon: s.telepon || '', email: s.email || '',
         theme: s.theme || 'light', primary_color: s.primary_color || '#1e40af', accent_color: s.accent_color || '#059669', sidebar_color: s.sidebar_color || '#1e293b',
-        geo_latitude: s.geo_latitude || '', geo_longitude: s.geo_longitude || '', geo_radius: s.geo_radius || '200', jenjang: s.jenjang || '', durasi_jtm: String(s.durasi_jtm || (/^(RA|TK|MI|SD)$/i.test(s.jenjang || '') ? 35 : 40)),
+        geo_latitude: s.geo_latitude || '', geo_longitude: s.geo_longitude || '', geo_radius: s.geo_radius || '200', jenjang: s.jenjang || '',
         hari_libur: (() => { try { return JSON.parse(s.hari_libur || '["jumat"]') } catch { return ['jumat'] } })(),
         bg_size: s.bg_size || 'cover', bg_position: s.bg_position || 'center',
         bg_repeat: s.bg_repeat || 'no-repeat', bg_blur: s.bg_blur || 0
@@ -118,6 +121,25 @@ export default function SettingsPage() {
     } catch { toast.error('Gagal menghapus background') }
   }
 
+  const handleKtsChange = async (side: 'depan' | 'belakang', file?: File) => {
+    if (!file) return
+    const fd = new FormData(); fd.append(side, file)
+    try {
+      const res = await api.post('/settings/kts-template', fd, { headers: { 'Content-Type': 'multipart/form-data' } })
+      const url = res.data['kts_' + side]
+      setKts(v => ({ ...v, [side]: url })); setSettings({ ['kts_' + side]: url })
+      toast.success(`Template ${side} diunggah`)
+    } catch (e: any) { toast.error(e.response?.data?.error || 'Gagal mengunggah template') }
+  }
+
+  const resetKts = async (side: 'depan' | 'belakang') => {
+    try {
+      await api.delete('/settings/kts-template/' + side)
+      setKts(v => ({ ...v, [side]: '' })); setSettings({ ['kts_' + side]: '' })
+      toast.success(`Template ${side} kembali ke default`)
+    } catch { toast.error('Gagal mereset template') }
+  }
+
   const handleResetData = async () => {
     if (resetConfirm !== 'RESET DATA') return toast.error('Ketik RESET DATA dulu')
     if (!confirm('Hapus semua data operasional tenant ini? Data tidak bisa dikembalikan tanpa backup.')) return
@@ -168,11 +190,6 @@ export default function SettingsPage() {
               {JENJANG_OPTIONS.map(j => <option key={j.value} value={j.value}>{j.label}</option>)}
             </select>
             <p className="text-xs text-gray-400 mt-1">Menentukan penamaan tingkat/kelas di Rombel (RA=A,B • MI=1-6 • MTs=7-9 • MA=10-12)</p>
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-600 mb-1">Durasi 1 Jam Pelajaran (menit)</label>
-            <input type="number" min="20" max="120" value={form.durasi_jtm} onChange={e => setForm({...form, durasi_jtm: e.target.value})} className="w-full px-4 py-2 border rounded-lg text-sm" />
-            <p className="text-xs text-gray-400 mt-1">Default MI/SD 35 menit, MTs/SMP dan MA/SMA 40 menit; dapat diubah admin.</p>
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-600 mb-2">Hari Libur</label>
@@ -286,6 +303,23 @@ export default function SettingsPage() {
       </div>
 
       <div className="bg-white rounded-xl p-4 sm:p-6 shadow-sm border border-gray-100">
+        <h2 className="text-lg font-semibold text-gray-800">Template KTS</h2>
+        <p className="text-xs text-gray-500 mt-1 mb-4">Rasio kartu CR80 85.6:54 mm. Rekomendasi 1011x639 px. PNG, JPG, atau WebP, maks 5MB.</p>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          {(['depan', 'belakang'] as const).map(side => (
+            <div key={side} className="border rounded-xl p-3">
+              <p className="text-sm font-medium capitalize mb-2">{side}</p>
+              <img src={kts[side] || `/kts-${side}.png`} alt={`Template KTS ${side}`} className="w-full aspect-[85.6/54] object-contain border rounded-lg bg-gray-50" />
+              <div className="flex flex-wrap gap-2 mt-3">
+                <label className="px-3 py-2 bg-primary text-white rounded-lg text-xs cursor-pointer">Unggah {side}<input type="file" accept="image/png,image/jpeg,image/webp" className="hidden" onChange={e => { handleKtsChange(side, e.target.files?.[0]); e.target.value = '' }} /></label>
+                {kts[side] && <button type="button" onClick={() => resetKts(side)} className="px-3 py-2 border border-red-300 text-red-600 rounded-lg text-xs">Reset ke default</button>}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="bg-white rounded-xl p-4 sm:p-6 shadow-sm border border-gray-100">
         <h2 className="text-lg font-semibold text-gray-800 mb-4">Tampilan & Theme</h2>
         <div className="space-y-4">
           <div>
@@ -374,18 +408,20 @@ export default function SettingsPage() {
         </div>
       </div>
 
+      <JamPulangSiswa />
+
       <div className="bg-white rounded-xl p-4 sm:p-6 shadow-sm border border-gray-100">
         <div className="mb-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
           <div>
-            <h2 className="text-lg font-semibold text-gray-800">Jam Absensi & Ceklok</h2>
-            <p className="text-sm text-gray-500 mt-1">Atur jendela waktu sesi absensi QR siswa (masuk & pulang) serta batas ceklok GTK/guru. Absen di luar jam akan ditolak.</p>
+            <h2 className="text-lg font-semibold text-gray-800">Jam Kerja/Ceklok Guru</h2>
+            <p className="text-sm text-gray-500 mt-1">Batas ceklok GTK/guru, tidak terkait dengan QR siswa atau Jam Pulang Siswa per rombel.</p>
           </div>
           <button onClick={handleSaveJam} disabled={savingJam} className="shrink-0 inline-flex items-center justify-center gap-2 px-4 py-2 bg-primary text-white rounded-lg text-sm hover:bg-primary-dark disabled:opacity-50">
             {savingJam ? 'Menyimpan...' : 'Simpan Jam'}
           </button>
         </div>
 
-        <h3 className="text-sm font-semibold text-gray-700 mb-2">Sesi Absensi QR Siswa</h3>
+        <h3 className="text-sm font-semibold text-gray-700 mb-2">Jendela QR Siswa (legacy fallback)</h3>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
           <div><label className="block text-xs text-gray-500 mb-1">Masuk mulai</label><input type="time" value={jam.sesi_masuk_mulai} onChange={e => setJam({...jam, sesi_masuk_mulai: e.target.value})} className="w-full px-3 py-2 border rounded-lg text-sm" /></div>
           <div><label className="block text-xs text-gray-500 mb-1">Masuk selesai</label><input type="time" value={jam.sesi_masuk_selesai} onChange={e => setJam({...jam, sesi_masuk_selesai: e.target.value})} className="w-full px-3 py-2 border rounded-lg text-sm" /></div>
@@ -393,7 +429,7 @@ export default function SettingsPage() {
           <div><label className="block text-xs text-gray-500 mb-1">Pulang selesai</label><input type="time" value={jam.sesi_pulang_selesai} onChange={e => setJam({...jam, sesi_pulang_selesai: e.target.value})} className="w-full px-3 py-2 border rounded-lg text-sm" /></div>
         </div>
 
-        <h3 className="text-sm font-semibold text-gray-700 mb-2">Batas Ceklok GTK / Guru</h3>
+        <h3 className="text-sm font-semibold text-gray-700 mb-2">Batas Ceklok GTK / Guru · format 24 jam HH:mm WIB</h3>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           <div><label className="block text-xs text-gray-500 mb-1">Masuk mulai</label><input type="time" value={jam.ceklok_masuk_mulai} onChange={e => setJam({...jam, ceklok_masuk_mulai: e.target.value})} className="w-full px-3 py-2 border rounded-lg text-sm" /></div>
           <div><label className="block text-xs text-gray-500 mb-1">Masuk selesai</label><input type="time" value={jam.ceklok_masuk_selesai} onChange={e => setJam({...jam, ceklok_masuk_selesai: e.target.value})} className="w-full px-3 py-2 border rounded-lg text-sm" /></div>

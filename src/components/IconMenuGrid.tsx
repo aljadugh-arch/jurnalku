@@ -1,6 +1,7 @@
 import { useState } from 'react'
-import { createPortal } from 'react-dom'
-import { Users, GraduationCap, UserCheck, Calendar, BookOpen, Layers, ClipboardList, DollarSign, Settings, BarChart, Grid3x3, X } from 'lucide-react'
+
+import { Users, UserCheck, Calendar, BookOpen, Layers, ClipboardList, DollarSign, Settings, BarChart, Grid3x3 } from 'lucide-react'
+import PortalSheet from './ui/PortalSheet'
 import { useNavigate } from 'react-router-dom'
 import { useAuthStore } from '../stores/authStore'
 
@@ -81,22 +82,13 @@ export default function IconMenuGrid({ className = '' }: IconMenuGridProps) {
       </div>
 
       {/* Sheet menu lainnya — muncul dari ATAS (portal escape backdrop-filter containing block) */}
-      {showMore && createPortal(
-        <div className="fixed inset-0 z-[100] flex items-start justify-center bg-black/40 p-3 pt-4 sm:pt-16" onClick={() => setShowMore(false)}>
-          <div className="bg-white w-full sm:max-w-md rounded-2xl p-5 max-h-[85vh] overflow-y-auto shadow-2xl" onClick={e => e.stopPropagation()}>
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-base font-bold text-gray-800">Menu Lainnya</h3>
-              <button onClick={() => setShowMore(false)} className="p-1 hover:bg-gray-100 rounded-lg"><X size={20} /></button>
-            </div>
+      <PortalSheet open={showMore} onClose={() => setShowMore(false)} title="Menu Lainnya" align="top">
             <div className="grid grid-cols-4 gap-3 sm:gap-4">
               {rest.map((item) => (
                 <MenuButton key={item.path} item={item} onClick={() => { setShowMore(false); navigate(item.path) }} />
               ))}
             </div>
-          </div>
-        </div>,
-        document.body
-      )}
+      </PortalSheet>
     </div>
   )
 }

@@ -1,7 +1,5 @@
 @import "tailwindcss";
 
-@custom-variant dark (&:where(.dark, .dark *));
-
 @theme {
   --color-primary: #1e40af;
   --color-primary-light: #3b82f6;
@@ -22,44 +20,7 @@
 body {
   font-family: var(--font-sans);
   background-color: #f1f5f9;
-  transition: background-color 0.2s ease;
 }
-
-.dark body {
-  background-color: #0f172a;
-  color: #e2e8f0;
-}
-
-/* Global dark-mode retrofit: override common Tailwind utility classes so
-   existing pages get dark styling without per-file edits.
-   ponytail: blanket override, not per-component theming. Upgrade to
-   component-level dark: variants if a specific page looks off. */
-.dark .bg-white { background-color: #1e293b !important; }
-.dark .bg-gray-50 { background-color: #0f172a !important; }
-.dark .bg-gray-100 { background-color: #1e293b !important; }
-.dark .bg-gray-900 { background-color: #020617 !important; }
-.dark .text-gray-900 { color: #f8fafc !important; }
-.dark .text-gray-800 { color: #f1f5f9 !important; }
-.dark .text-gray-700 { color: #e2e8f0 !important; }
-.dark .text-gray-600 { color: #cbd5e1 !important; }
-.dark .text-gray-500 { color: #cbd5e1 !important; }
-.dark .text-gray-400 { color: #94a3b8 !important; }
-.dark .border-gray-100 { border-color: #334155 !important; }
-.dark .border-gray-200 { border-color: #334155 !important; }
-.dark .border-gray-300 { border-color: #475569 !important; }
-.dark .divide-gray-100 > * + * { border-color: #334155 !important; }
-.dark .divide-gray-200 > * + * { border-color: #334155 !important; }
-.dark .shadow-sm, .dark .shadow, .dark .shadow-md, .dark .shadow-lg { box-shadow: 0 1px 3px rgba(0,0,0,0.5) !important; }
-.dark input, .dark select, .dark textarea {
-  background-color: #1e293b !important;
-  color: #e2e8f0 !important;
-  border-color: #475569 !important;
-}
-.dark input::placeholder, .dark textarea::placeholder { color: #64748b !important; }
-.dark table { color: #e2e8f0; }
-.dark thead.bg-gray-50, .dark .bg-gray-50 th { background-color: #1e293b !important; }
-.dark .hover\:bg-gray-50:hover { background-color: #334155 !important; }
-.dark .hover\:bg-gray-100:hover { background-color: #334155 !important; }
 
 html, body {
   overflow-x: hidden;

@@ -1,14 +1,14 @@
 import { useState } from 'react'
-import { createPortal } from 'react-dom'
 import { Link } from 'react-router-dom'
-import { Grid3X3, X } from 'lucide-react'
+import { Grid3X3 } from 'lucide-react'
+import PortalSheet from './ui/PortalSheet'
 import { useAuthStore } from '../stores/authStore'
 import { flattenMenu, menuForRole, primaryGridForRole, type FlatMenu } from '../lib/menuItems'
 
 const colors = [
-  'bg-blue-50 text-blue-600', 'bg-emerald-50 text-emerald-600',
-  'bg-violet-50 text-violet-600', 'bg-amber-50 text-amber-600',
-  'bg-rose-50 text-rose-600', 'bg-cyan-50 text-cyan-600',
+  'bg-blue-600 text-white', 'bg-emerald-600 text-white',
+  'bg-violet-600 text-white', 'bg-amber-600 text-white',
+  'bg-rose-600 text-white', 'bg-cyan-600 text-white', 'bg-indigo-600 text-white',
 ]
 
 function MenuLink({ item, index, onClick }: { item: FlatMenu; index: number; onClick?: () => void }) {
@@ -46,25 +46,11 @@ export default function MobileMenuGrid() {
         </div>
       </section>
 
-      {showAll && createPortal(
-        <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center bg-black/50 p-0 sm:p-4" onClick={() => setShowAll(false)}>
-          <div className="w-full sm:max-w-2xl max-h-[88vh] overflow-y-auto rounded-t-3xl sm:rounded-3xl bg-white dark:bg-gray-900 p-5 shadow-2xl" onClick={e => e.stopPropagation()}>
-            <div className="sticky top-0 z-10 flex items-center justify-between bg-white dark:bg-gray-900 pb-4">
-              <div>
-                <h3 className="font-bold text-gray-900 dark:text-white">Semua Menu</h3>
-                <p className="text-xs text-gray-500">Pilih layanan yang dibutuhkan</p>
-              </div>
-              <button onClick={() => setShowAll(false)} className="p-2 rounded-xl bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300" aria-label="Tutup menu">
-                <X size={20} />
-              </button>
-            </div>
+      <PortalSheet open={showAll} onClose={() => setShowAll(false)} title="Semua Menu" description="Pilih layanan yang dibutuhkan">
             <div className="grid grid-cols-4 gap-x-2 gap-y-5">
               {items.map((item, index) => <MenuLink key={item.path} item={item} index={index} onClick={() => setShowAll(false)} />)}
             </div>
-          </div>
-        </div>,
-        document.body
-      )}
+      </PortalSheet>
     </>
   )
 }

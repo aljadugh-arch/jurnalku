@@ -9,9 +9,18 @@ interface AuthState {
   isAuthenticated: boolean
   login: (user: User, token: string) => void
   loginWithCredentials: (email: string, password: string) => Promise<void>
+  loginDemo: (role: string) => Promise<void>
   logout: () => void
   checkAuth: () => void
   updateUser: (partial: Partial<User>) => void
+}
+
+const demoAccounts: Record<string, { email: string; password: string }> = {
+  admin: { email: 'admin@jurnalku.id', password: 'admin123' },
+  kepala: { email: 'kepala@jurnalku.id', password: 'admin123' },
+  guru: { email: 'budi@jurnalku.id', password: 'admin123' },
+  siswa: { email: 'ahmad@jurnalku.id', password: 'admin123' },
+  wali_kelas: { email: 'siti@jurnalku.id', password: 'admin123' },
 }
 
 export const useAuthStore = create<AuthState>((set) => ({
@@ -24,6 +33,14 @@ export const useAuthStore = create<AuthState>((set) => ({
   },
   loginWithCredentials: async (email, password) => {
     const res = await api.post('/auth/login', { email, password })
+    localStorage.setItem('jurnalku_token', res.data.token)
+    set({ user: res.data.user, token: res.data.token, isAuthenticated: true })
+    await useSettingsStore.getState().loadSettings()
+  },
+  loginDemo: async (role) => {
+    const creds = demoAccounts[role]
+    if (!creds) return
+    const res = await api.post('/auth/login', creds)
     localStorage.setItem('jurnalku_token', res.data.token)
     set({ user: res.data.user, token: res.data.token, isAuthenticated: true })
     await useSettingsStore.getState().loadSettings()

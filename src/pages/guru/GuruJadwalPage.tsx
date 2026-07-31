@@ -8,12 +8,7 @@ export default function GuruJadwalPage() {
   const [jadwal, setJadwal] = useState<any[]>([])
 
   useEffect(() => {
-    api.get('/guru/dashboard').then(res => {
-      // Get gtk_id from dashboard, then fetch full jadwal
-      if (res.data.gtk?.id) {
-        api.get('/jadwal', { params: { gtk_id: res.data.gtk.id } }).then(r => setJadwal(r.data))
-      }
-    }).catch(() => {})
+    api.get('/guru/jadwal').then(res => setJadwal(res.data)).catch(() => {})
   }, [])
 
   return (

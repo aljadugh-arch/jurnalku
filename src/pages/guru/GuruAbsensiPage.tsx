@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { MapPin, Clock, Loader2 } from 'lucide-react'
+import { MapPin, Clock, Loader2, CheckCircle } from 'lucide-react'
 import toast from 'react-hot-toast'
 import api from '../../services/api'
 import { useSettingsStore } from '../../stores/settingsStore'

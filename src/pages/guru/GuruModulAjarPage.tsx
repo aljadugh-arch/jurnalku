@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { BookOpen, Sparkles, Loader2 } from 'lucide-react'
+import { BookOpen, Sparkles, FileText, Loader2 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import api from '../../services/api'
 

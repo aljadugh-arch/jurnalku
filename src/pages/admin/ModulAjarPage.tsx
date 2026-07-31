@@ -41,9 +41,76 @@ const dimensiProfil = [
   { id: 'komunikasi', label: 'Komunikasi', icon: '💬' },
 ]
 
+const dummyHasil = `# MODUL AJAR
+
+## I. INFORMASI UMUM
+- **Mata Pelajaran:** Fisika
+- **Fase/Kelas:** Kelas 10 SMA/MA/SMK (Fase E)
+- **Materi Pokok:** Hukum Newton tentang Gerak
+- **Alokasi Waktu:** 2 x 45 Menit
+- **Model Pembelajaran:** Problem Based Learning (PBL)
+- **Target Peserta Didik:** Peserta didik reguler/tipikal (umum)
+
+## II. TUJUAN PEMBELAJARAN
+Peserta didik mampu menganalisis dan menerapkan Hukum I, II, dan III Newton dalam kehidupan sehari-hari melalui eksperimen sederhana dan pemecahan masalah kontekstual.
+
+## III. PROFIL PELAJAR PANCASILA
+- Penalaran kritis
+- Kolaborasi
+- Kemandirian
+
+## IV. KEGIATAN PEMBELAJARAN
+
+### A. Pendahuluan (15 menit)
+1. Guru membuka pelajaran dengan salam dan doa
+2. Apersepsi: menampilkan video singkat tentang gaya dalam kehidupan sehari-hari
+3. Motivasi: mengapa benda bisa bergerak dan berhenti?
+4. Menyampaikan tujuan pembelajaran
+
+### B. Inti (60 menit)
+**Orientasi Masalah:**
+- Siswa mengamati demonstrasi: menarik kertas dari bawah gelas berisi air
+
+**Pengorganisasian:**
+- Siswa dibagi kelompok 4-5 orang
+- Setiap kelompok mendapat LK eksperimen
+
+**Penyelidikan:**
+- Eksperimen Hukum I Newton: koin di atas kartu
+- Eksperimen Hukum II Newton: mendorong benda berbeda massa
+- Eksperimen Hukum III Newton: balon roket
+
+**Presentasi:**
+- Setiap kelompok mempresentasikan hasil eksperimen
+- Diskusi kelas dan klarifikasi konsep
+
+### C. Penutup (15 menit)
+1. Refleksi: apa yang sudah dipelajari hari ini?
+2. Evaluasi formatif: 5 soal pilihan ganda via Kahoot
+3. Tindak lanjut: tugas mencari contoh penerapan Hukum Newton
+4. Doa dan salam penutup
+
+## V. ASESMEN
+### Asesmen Formatif:
+- Observasi keaktifan dalam diskusi kelompok
+- Kuis interaktif (Kahoot)
+
+### Asesmen Sumatif:
+- Laporan praktikum kelompok (Rubrik terlampir)
+- Tes tertulis uraian
+
+## VI. MEDIA & SUMBER BELAJAR
+- Video demonstrasi Hukum Newton (YouTube)
+- Alat praktikum: gelas, kartu, koin, balon, benang
+- Buku paket Fisika Kelas X
+- LKPD (terlampir)
+
+## VII. REFLEKSI GURU
+_(Diisi setelah pelaksanaan pembelajaran)_
+`
+
 export default function ModulAjarPage() {
   const [form, setForm] = useState({
-    kurikulum: 'merdeka',
     mapel: '',
     fase: '',
     materi_pokok: '',
@@ -79,105 +146,7 @@ export default function ModulAjarPage() {
     setLoading(true)
     try {
       // Generate modul (simpan ke DB, hasilnya simulasi template)
-      // Generate modul (simpan ke DB, hasilnya simulasi template)
-      const tp = form.tujuan_pembelajaran || ('Peserta didik mampu memahami dan menerapkan konsep ' + form.materi_pokok + ' dalam kehidupan sehari-hari.')
-      const dimensiList = form.dimensi.map(d => '- ' + (dimensiProfil.find(x => x.id === d)?.label || d)).join('\n')
-      let generatedText = ''
-      if (form.kurikulum === 'kbc') {
-        // KBC (Kurikulum Berbasis Cinta) + Deep Learning - Kemenag
-        const L = []
-        L.push('# MODUL AJAR - KURIKULUM BERBASIS CINTA (KBC)')
-        L.push('_Pendekatan Deep Learning: Mindful, Meaningful, Joyful Learning_')
-        L.push('')
-        L.push('## I. IDENTITAS')
-        L.push('- Mata Pelajaran: ' + form.mapel)
-        L.push('- Fase/Kelas: ' + form.fase)
-        L.push('- Materi Pokok: ' + form.materi_pokok)
-        L.push('- Alokasi Waktu: ' + form.alokasi_waktu)
-        L.push('- Pendekatan: ' + form.model_pembelajaran)
-        L.push('')
-        L.push('## II. TIGA DIMENSI CINTA (KBC)')
-        L.push('1. Cinta kepada Allah dan Rasul-Nya')
-        L.push('2. Cinta kepada sesama manusia dan lingkungan')
-        L.push('3. Cinta kepada tanah air dan kemajuan bangsa')
-        L.push('')
-        L.push('## III. TUJUAN PEMBELAJARAN')
-        L.push(tp)
-        L.push('')
-        L.push('## IV. DIMENSI PROFIL LULUSAN')
-        L.push(dimensiList || '- (belum dipilih)')
-        L.push('')
-        L.push('## V. KEGIATAN PEMBELAJARAN (DEEP LEARNING)')
-        L.push('')
-        L.push('### A. Mindful Learning - Berkesadaran (15 menit)')
-        L.push('1. Membuka dengan doa dan refleksi kesadaran diri')
-        L.push('2. Apersepsi bermakna terkait ' + form.materi_pokok)
-        L.push('3. Menyampaikan tujuan dengan penuh kehangatan')
-        L.push('')
-        L.push('### B. Meaningful Learning - Bermakna (60 menit)')
-        L.push('- Mengaitkan ' + form.materi_pokok + ' dengan nilai cinta & kehidupan nyata')
-        L.push('- Eksplorasi kolaboratif dan penyelidikan mendalam')
-        L.push('- Refleksi nilai dan presentasi hasil')
-        L.push('')
-        L.push('### C. Joyful Learning - Menggembirakan (15 menit)')
-        L.push('1. Perayaan hasil belajar (celebration of learning)')
-        L.push('2. Refleksi rasa syukur dan umpan balik positif')
-        L.push('3. Tindak lanjut dan penutup penuh cinta')
-        L.push('')
-        L.push('## VI. ASESMEN')
-        L.push('- Asesmen Sikap (spiritual & sosial): observasi nilai cinta')
-        L.push('- Asesmen Formatif: portofolio & refleksi')
-        L.push('- Asesmen Sumatif: proyek bermakna')
-        L.push('')
-        L.push('## VII. MEDIA & SUMBER BELAJAR')
-        L.push('- Buku paket ' + form.mapel + ' & sumber keislaman relevan')
-        L.push('- Media digital dan lingkungan sekitar')
-        generatedText = L.join('\n')
-      } else {
-        // Kurikulum Merdeka (default)
-        const L = []
-        L.push('# MODUL AJAR - KURIKULUM MERDEKA')
-        L.push('')
-        L.push('## I. INFORMASI UMUM')
-        L.push('- Mata Pelajaran: ' + form.mapel)
-        L.push('- Fase/Kelas: ' + form.fase)
-        L.push('- Materi Pokok: ' + form.materi_pokok)
-        L.push('- Alokasi Waktu: ' + form.alokasi_waktu)
-        L.push('- Model Pembelajaran: ' + form.model_pembelajaran)
-        L.push('- Target Peserta Didik: ' + form.target_peserta)
-        L.push('')
-        L.push('## II. TUJUAN PEMBELAJARAN')
-        L.push(tp)
-        L.push('')
-        L.push('## III. PROFIL PELAJAR PANCASILA')
-        L.push(dimensiList || '- (belum dipilih)')
-        L.push('')
-        L.push('## IV. KEGIATAN PEMBELAJARAN')
-        L.push('')
-        L.push('### A. Pendahuluan (15 menit)')
-        L.push('1. Guru membuka pelajaran dengan salam dan doa')
-        L.push('2. Apersepsi dan motivasi terkait ' + form.materi_pokok)
-        L.push('3. Menyampaikan tujuan pembelajaran')
-        L.push('')
-        L.push('### B. Inti (60 menit)')
-        L.push('- Orientasi masalah terkait ' + form.materi_pokok)
-        L.push('- Diskusi kelompok dan penyelidikan')
-        L.push('- Presentasi hasil dan klarifikasi')
-        L.push('')
-        L.push('### C. Penutup (15 menit)')
-        L.push('1. Refleksi pembelajaran')
-        L.push('2. Evaluasi formatif')
-        L.push('3. Tindak lanjut dan penutup')
-        L.push('')
-        L.push('## V. ASESMEN')
-        L.push('- Asesmen Formatif: Observasi dan kuis')
-        L.push('- Asesmen Sumatif: Tugas/laporan')
-        L.push('')
-        L.push('## VI. MEDIA & SUMBER BELAJAR')
-        L.push('- Buku paket ' + form.mapel)
-        L.push('- Media digital dan alat peraga')
-        generatedText = L.join('\n')
-      }
+      const generatedText = `# MODUL AJAR\n\n## I. INFORMASI UMUM\n- **Mata Pelajaran:** ${form.mapel}\n- **Fase/Kelas:** ${form.fase}\n- **Materi Pokok:** ${form.materi_pokok}\n- **Alokasi Waktu:** ${form.alokasi_waktu}\n- **Model Pembelajaran:** ${form.model_pembelajaran}\n- **Target Peserta Didik:** ${form.target_peserta}\n\n## II. TUJUAN PEMBELAJARAN\n${form.tujuan_pembelajaran || 'Peserta didik mampu memahami dan menerapkan konsep ' + form.materi_pokok + ' dalam kehidupan sehari-hari.'}\n\n## III. PROFIL PELAJAR PANCASILA\n${form.dimensi.map(d => '- ' + (dimensiProfil.find(x => x.id === d)?.label || d)).join('\n')}\n\n## IV. KEGIATAN PEMBELAJARAN\n\n### A. Pendahuluan (15 menit)\n1. Guru membuka pelajaran dengan salam dan doa\n2. Apersepsi dan motivasi terkait ${form.materi_pokok}\n3. Menyampaikan tujuan pembelajaran\n\n### B. Inti (60 menit)\n- Orientasi masalah terkait ${form.materi_pokok}\n- Diskusi kelompok dan penyelidikan\n- Presentasi hasil dan klarifikasi\n\n### C. Penutup (15 menit)\n1. Refleksi pembelajaran\n2. Evaluasi formatif\n3. Tindak lanjut dan penutup\n\n## V. ASESMEN\n- Asesmen Formatif: Observasi dan kuis\n- Asesmen Sumatif: Tugas/laporan\n\n## VI. MEDIA & SUMBER BELAJAR\n- Buku paket ${form.mapel}\n- Media digital dan alat peraga`
 
       await api.post('/modul-ajar', {
         mapel: form.mapel,
@@ -188,7 +157,6 @@ export default function ModulAjarPage() {
         target_peserta: form.target_peserta,
         tujuan_pembelajaran: form.tujuan_pembelajaran,
         alokasi_waktu: form.alokasi_waktu,
-        kurikulum: form.kurikulum,
         hasil: generatedText
       })
       setHasil(generatedText)
@@ -215,26 +183,6 @@ export default function ModulAjarPage() {
               <BookOpen size={18} className="text-primary" />
               I. Informasi Umum
             </h3>
-
-            <div className="mb-4">
-              <label className="block text-xs font-medium text-gray-500 uppercase mb-1">Kurikulum</label>
-              <div className="grid grid-cols-2 gap-2">
-                <button
-                  type="button"
-                  onClick={() => setForm({...form, kurikulum: 'merdeka'})}
-                  className={`px-3 py-2.5 rounded-lg text-xs font-medium border transition-all ${form.kurikulum === 'merdeka' ? 'border-primary bg-primary/10 text-primary' : 'border-gray-200 text-gray-600 hover:border-gray-300'}`}
-                >
-                  Kurikulum Merdeka
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setForm({...form, kurikulum: 'kbc'})}
-                  className={`px-3 py-2.5 rounded-lg text-xs font-medium border transition-all ${form.kurikulum === 'kbc' ? 'border-primary bg-primary/10 text-primary' : 'border-gray-200 text-gray-600 hover:border-gray-300'}`}
-                >
-                  KBC / Deep Learning
-                </button>
-              </div>
-            </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
@@ -274,7 +222,7 @@ export default function ModulAjarPage() {
 
           {/* Dimensi Profil Pelajar Pancasila */}
           <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
-            <h3 className="font-semibold text-gray-800 mb-3">{form.kurikulum === 'kbc' ? 'Dimensi Profil Lulusan (KBC)' : 'Dimensi Profil Pelajar Pancasila'}</h3>
+            <h3 className="font-semibold text-gray-800 mb-3">Dimensi Profil Pelajar Pancasila</h3>
             <p className="text-xs text-gray-400 mb-4">Pilih dimensi yang relevan dengan materi</p>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
               {dimensiProfil.map(d => (
@@ -400,11 +348,12 @@ export default function ModulAjarPage() {
 
           <div className="bg-gradient-to-br from-primary/10 to-blue-50 rounded-xl p-5 border border-primary/20">
             <Sparkles size={24} className="text-primary mb-2" />
-            <h4 className="font-medium text-gray-800 text-sm">{form.kurikulum === 'kbc' ? 'Template KBC / Deep Learning' : 'Template Kurikulum Merdeka'}</h4>
+            <h4 className="font-medium text-gray-800 text-sm">Powered by AI</h4>
             <p className="text-xs text-gray-600 mt-1">
-              {form.kurikulum === 'kbc'
-                ? 'Menyusun modul ajar Kurikulum Berbasis Cinta dengan pendekatan Deep Learning (mindful, meaningful, joyful).'
-                : 'Menyusun modul ajar lengkap sesuai format Kurikulum Merdeka dari data yang Anda isi.'}
+              Generator ini menghasilkan modul ajar lengkap sesuai format Kurikulum Merdeka dengan bantuan kecerdasan buatan.
+            </p>
+            <p className="text-xs text-gray-500 mt-2">
+              Ref: ai.jurnale.id v1.0.8
             </p>
           </div>
         </div>
