@@ -1906,15 +1906,21 @@ app.get('/api/guru/dashboard', authMiddleware, (req, res) => {
   if (!gtkId) return res.json({ jadwal_hari_ini: [], rekap_jurnal: { total: 0 }, rombel_count: 0, wali_rombel: [] })
   
   const today = require('./attendance-rules.cjs').hariJakarta()
-  const jadwal = db.prepare(`SELECT j.*, m.nama as mapel_nama, r.nama as rombel_nama FROM jadwal j JOIN mapel m ON j.mapel_id=m.id AND m.tenant_id=j.tenant_id LEFT JOIN rombel r ON j.rombel_id=r.id AND r.tenant_id=j.tenant_id WHERE j.gtk_id=? AND lower(j.hari)=? AND j.tenant_id=? AND j.jenis_kegiatan = 'mapel' ORDER BY j.jam_mulai`).all(gtkId, today, req.tenantId)
+  let jadwal = db.prepare(`SELECT j.*, m.nama as mapel_nama, r.nama as rombel_nama FROM jadwal j JOIN mapel m ON j.mapel_id=m.id AND m.tenant_id=j.tenant_id LEFT JOIN rombel r ON j.rombel_id=r.id AND r.tenant_id=j.tenant_id WHERE j.gtk_id=? AND lower(j.hari)=? AND j.tenant_id=? AND j.jenis_kegiatan = 'mapel' ORDER BY j.jam_mulai`).all(gtkId, today, req.tenantId)
+  if (!jadwal.length) jadwal = db.prepare(`SELECT j.*, m.nama as mapel_nama, r.nama as rombel_nama FROM jadwal j JOIN mapel m ON j.mapel_id=m.id AND m.tenant_id=j.tenant_id LEFT JOIN rombel r ON j.rombel_id=r.id AND r.tenant_id=j.tenant_id WHERE j.gtk_id=? AND j.tenant_id=? AND j.jenis_kegiatan = 'mapel' ORDER BY j.hari,j.jam_mulai`).all(gtkId, req.tenantId)
   
-  const totalJurnal = db.prepare("SELECT COUNT(*) as c FROM jurnal_mengajar WHERE guru_id=? AND tenant_id=?").get(gtkId, req.tenantId).c
+  const rekapJurnal = db.prepare(`SELECT
+    COUNT(*) as total,
+    COALESCE(SUM(CASE WHEN status='draft' THEN 1 ELSE 0 END), 0) as draft,
+    COALESCE(SUM(CASE WHEN status='submitted' THEN 1 ELSE 0 END), 0) as submitted,
+    COALESCE(SUM(CASE WHEN status='approved' THEN 1 ELSE 0 END), 0) as approved
+    FROM jurnal_mengajar WHERE guru_id=? AND tenant_id=?`).get(gtkId, req.tenantId)
   const rombelCount = db.prepare("SELECT COUNT(DISTINCT rombel_id) as c FROM pengajar WHERE gtk_id=? AND tenant_id=?").get(gtkId, req.tenantId).c
   const waliRombel = db.prepare(`SELECT r.*, (SELECT COUNT(*) FROM siswa s WHERE s.rombel_id=r.id AND s.tenant_id=?) as jumlah_siswa FROM rombel r WHERE r.wali_kelas_id=? AND r.tenant_id=? ORDER BY r.tingkat, r.nama`).all(req.tenantId, gtkId, req.tenantId)
   const mapelDiampu = db.prepare(`SELECT DISTINCT m.id, m.nama, m.kode, m.kelompok FROM pengajar p JOIN mapel m ON m.id=p.mapel_id AND m.tenant_id=p.tenant_id WHERE p.gtk_id=? AND p.tenant_id=? ORDER BY m.kelompok, m.nama`).all(gtkId, req.tenantId)
   const ekskulDiampu = db.prepare('SELECT id,nama,hari,jam_mulai,jam_selesai FROM ekskul WHERE pembina_id=? AND tenant_id=? ORDER BY nama').all(gtkId, req.tenantId)
   
-  res.json({ jadwal_hari_ini: jadwal, mapel_diampu: mapelDiampu, ekskul_diampu: ekskulDiampu, rekap_jurnal: { total: totalJurnal }, rombel_count: rombelCount, wali_rombel: waliRombel, gtk: gtk })
+  res.json({ jadwal_hari_ini: jadwal, mapel_diampu: mapelDiampu, ekskul_diampu: ekskulDiampu, rekap_jurnal: rekapJurnal, rombel_count: rombelCount, wali_rombel: waliRombel, gtk: gtk })
 })
 
 app.get('/api/guru/jadwal', authMiddleware, (req, res) => {
@@ -2284,6 +2290,12 @@ app.post('/api/rombel/bulk', ADMIN, (req, res) => {
   res.json({ success: true, count: created, errors })
 })
 
+function ensurePengajarFromJadwal({ gtk_id, mapel_id, rombel_id, tenant_id }) {
+  if (!gtk_id || !mapel_id || !rombel_id) return
+  const exists = db.prepare('SELECT id FROM pengajar WHERE gtk_id=? AND mapel_id=? AND rombel_id=? AND tenant_id=?').get(gtk_id, mapel_id, rombel_id, tenant_id)
+  if (!exists) db.prepare('INSERT INTO pengajar (id, gtk_id, mapel_id, rombel_id, jam_per_minggu, tenant_id) VALUES (?,?,?,?,?,?)').run(uuidv4(), gtk_id, mapel_id, rombel_id, 2, tenant_id)
+}
+
 // ==================== JADWAL ====================
 app.get('/api/jadwal', authMiddleware, (req, res) => {
   const { rombel_id, gtk_id } = req.query
@@ -2356,6 +2368,7 @@ app.post('/api/jadwal', ADMIN, (req, res) => {
   const id = uuidv4()
   try {
     db.prepare('INSERT INTO jadwal (id, mapel_id, rombel_id, gtk_id, hari, jam_mulai, jam_selesai, ruangan, template_id, jenis_kegiatan, nama_kegiatan, tenant_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)').run(id, mapel_id || null, rombel_id, gtk_id || null, hari, jam_mulai, jam_selesai, ruangan, template_id || null, jenis, nama_kegiatan || '', req.tenantId)
+    if (jenis === 'mapel') ensurePengajarFromJadwal({ gtk_id, mapel_id, rombel_id, tenant_id: req.tenantId })
     res.json({ id })
   } catch (e) {
     if (e.code === 'SQLITE_CONSTRAINT_FOREIGNKEY' || e.code === 'SQLITE_CONSTRAINT') return res.status(400).json({ error: 'Data tidak valid. Periksa rombel dan guru yang dipilih sudah terdaftar di sistem.' })
@@ -2490,6 +2503,7 @@ app.put('/api/jadwal/:id', ADMIN, (req, res) => {
   if (jenis === 'kegiatan' && (!nama_kegiatan || nama_kegiatan.trim().length < 2)) return res.status(400).json({ error: 'Nama kegiatan wajib diisi (min 2 karakter).' })
   const result = db.prepare('UPDATE jadwal SET mapel_id=?, rombel_id=?, gtk_id=?, hari=?, jam_mulai=?, jam_selesai=?, ruangan=?, template_id=?, jenis_kegiatan=?, nama_kegiatan=? WHERE id=? AND tenant_id=?')
     .run(mapel_id || null, rombel_id, gtk_id, hari, jam_mulai, jam_selesai, ruangan, template_id || null, jenis, nama_kegiatan || '', jadwalId, req.tenantId)
+  if (jenis === 'mapel') ensurePengajarFromJadwal({ gtk_id, mapel_id, rombel_id, tenant_id: req.tenantId })
   if (result.changes === 0) return res.status(404).json({ error: 'Jadwal tidak ditemukan' })
   res.json({ success: true })
 })

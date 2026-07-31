@@ -7,6 +7,7 @@ export default function GuruAbsensiSiswaPage() {
   const [rombels, setRombels] = useState<any[]>([])
   const [selectedRombel, setSelectedRombel] = useState('')
   const [tanggal, setTanggal] = useState(new Date().toISOString().split('T')[0])
+  const [sesi, setSesi] = useState<'masuk' | 'pulang'>('masuk')
   const [siswaList, setSiswaList] = useState<any[]>([])
   const [absensi, setAbsensi] = useState<Record<string, string>>({})
   const [saving, setSaving] = useState(false)
@@ -22,7 +23,7 @@ export default function GuruAbsensiSiswaPage() {
     if (selectedRombel && tanggal) {
       loadAbsensi()
     }
-  }, [selectedRombel, tanggal])
+  }, [selectedRombel, tanggal, sesi])
 
   const loadAbsensi = async () => {
     const [siswaRes, absenRes] = await Promise.all([
@@ -43,7 +44,7 @@ export default function GuruAbsensiSiswaPage() {
     setSaving(true)
     try {
       const data = siswaList.map(s => ({ siswa_id: s.id, status: absensi[s.id] || 'hadir' }))
-      await api.post('/absensi-siswa/bulk', { tanggal, rombel_id: selectedRombel, data })
+      await api.post('/absensi-siswa/bulk', { tanggal, rombel_id: selectedRombel, jenis: sesi, data })
       toast.success('Absensi siswa berhasil disimpan')
     } catch { toast.error('Gagal menyimpan absensi') }
     finally { setSaving(false) }
@@ -66,6 +67,10 @@ export default function GuruAbsensiSiswaPage() {
           {rombels.map(r => <option key={r.id} value={r.id}>{r.nama} ({r.tingkat})</option>)}
         </select>
         <input type="date" value={tanggal} onChange={e => setTanggal(e.target.value)} className="px-3 py-2 border border-gray-300 rounded-lg text-sm" />
+        <select value={sesi} onChange={e => setSesi(e.target.value as 'masuk' | 'pulang')} className="px-4 py-2 border border-gray-300 rounded-lg text-sm">
+          <option value="masuk">Sesi Masuk</option>
+          <option value="pulang">Sesi Pulang</option>
+        </select>
       </div>
 
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">

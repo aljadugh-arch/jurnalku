@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Plus, Trash2, X, Users } from 'lucide-react'
+import { Plus, Trash2, X, Users, Pencil } from 'lucide-react'
 import toast from 'react-hot-toast'
 import api from '../../services/api'
 
@@ -10,6 +10,7 @@ export default function RombelPage() {
   const [gtk, setGtk] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [showModal, setShowModal] = useState(false)
+  const [editing, setEditing] = useState<Rombel | null>(null)
   const [form, setForm] = useState({ nama: '', tingkat: 'X', tahun_ajaran: '2024/2025', wali_kelas_id: '', kapasitas: 36 })
 
   const fetchData = async () => {
@@ -22,12 +23,32 @@ export default function RombelPage() {
 
   useEffect(() => { fetchData() }, [])
 
+  const resetForm = () => {
+    setEditing(null)
+    setForm({ nama: '', tingkat: 'X', tahun_ajaran: '2024/2025', wali_kelas_id: '', kapasitas: 36 })
+  }
+
+  const openCreate = () => { resetForm(); setShowModal(true) }
+
+  const openEdit = (rombel: Rombel) => {
+    setEditing(rombel)
+    setForm({ nama: rombel.nama, tingkat: rombel.tingkat, tahun_ajaran: rombel.tahun_ajaran, wali_kelas_id: rombel.wali_kelas_id || '', kapasitas: rombel.kapasitas || 36 })
+    setShowModal(true)
+  }
+
+  const closeModal = () => { setShowModal(false); resetForm() }
+
   const handleSave = async () => {
     if (!form.nama || !form.tingkat) { toast.error('Nama dan tingkat wajib'); return }
     try {
-      await api.post('/rombel', form)
-      toast.success('Rombel berhasil ditambahkan')
-      setShowModal(false); setForm({ nama: '', tingkat: 'X', tahun_ajaran: '2024/2025', wali_kelas_id: '', kapasitas: 36 }); fetchData()
+      if (editing) {
+        await api.put('/rombel/' + editing.id, form)
+        toast.success('Rombel berhasil diperbarui')
+      } else {
+        await api.post('/rombel', form)
+        toast.success('Rombel berhasil ditambahkan')
+      }
+      closeModal(); fetchData()
     } catch (err: any) { toast.error(err.response?.data?.error || 'Gagal') }
   }
 
@@ -44,7 +65,7 @@ export default function RombelPage() {
           <h1 className="text-2xl font-bold text-gray-800 font-display">Rombongan Belajar</h1>
           <p className="text-gray-500 text-sm mt-1">Kelola kelas dan rombel ({data.length} rombel)</p>
         </div>
-        <button onClick={() => setShowModal(true)} className="flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-lg text-sm hover:bg-primary-dark">
+        <button onClick={openCreate} className="flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-lg text-sm hover:bg-primary-dark">
           <Plus size={16} /> Tambah Rombel
         </button>
       </div>
@@ -64,7 +85,7 @@ export default function RombelPage() {
                   <p className="text-xs text-gray-500">Tingkat {r.tingkat} • {r.tahun_ajaran}</p>
                 </div>
               </div>
-              <button onClick={() => handleDelete(r.id, r.nama)} className="p-1.5 text-red-500 hover:bg-red-50 rounded-lg"><Trash2 size={16} /></button>
+              <div className="flex items-center gap-1"><button onClick={() => openEdit(r)} className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg" title="Edit rombel"><Pencil size={16} /></button><button onClick={() => handleDelete(r.id, r.nama)} className="p-1.5 text-red-500 hover:bg-red-50 rounded-lg" title="Hapus rombel"><Trash2 size={16} /></button></div>
             </div>
             <div className="space-y-1 text-sm">
               <div className="flex justify-between text-gray-600"><span>Wali Kelas</span><span className="font-medium text-gray-800">{r.wali_kelas_nama || '-'}</span></div>
@@ -81,8 +102,8 @@ export default function RombelPage() {
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl w-full max-w-md p-6">
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-bold text-gray-800">Tambah Rombel</h2>
-              <button onClick={() => setShowModal(false)} className="p-1 hover:bg-gray-100 rounded-lg"><X size={20} /></button>
+              <h2 className="text-lg font-bold text-gray-800">{editing ? 'Edit Rombel' : 'Tambah Rombel'}</h2>
+              <button onClick={closeModal} className="p-1 hover:bg-gray-100 rounded-lg"><X size={20} /></button>
             </div>
             <div className="space-y-3">
               <div><label className="block text-xs font-medium text-gray-600 mb-1">Nama Rombel *</label><input value={form.nama} onChange={e => setForm({...form, nama: e.target.value})} placeholder="X-A" className="w-full px-3 py-2 border rounded-lg text-sm" /></div>
@@ -94,8 +115,8 @@ export default function RombelPage() {
               <div><label className="block text-xs font-medium text-gray-600 mb-1">Wali Kelas</label><select value={form.wali_kelas_id} onChange={e => setForm({...form, wali_kelas_id: e.target.value})} className="w-full px-3 py-2 border rounded-lg text-sm"><option value="">-- Pilih --</option>{gtk.map(g => <option key={g.id} value={g.id}>{g.nama}</option>)}</select></div>
             </div>
             <div className="flex gap-3 mt-6">
-              <button onClick={() => setShowModal(false)} className="flex-1 px-4 py-2 border rounded-lg text-sm">Batal</button>
-              <button onClick={handleSave} className="flex-1 px-4 py-2 bg-primary text-white rounded-lg text-sm hover:bg-primary-dark">Simpan</button>
+              <button onClick={closeModal} className="flex-1 px-4 py-2 border rounded-lg text-sm">Batal</button>
+              <button onClick={handleSave} className="flex-1 px-4 py-2 bg-primary text-white rounded-lg text-sm hover:bg-primary-dark">{editing ? 'Update' : 'Simpan'}</button>
             </div>
           </div>
         </div>

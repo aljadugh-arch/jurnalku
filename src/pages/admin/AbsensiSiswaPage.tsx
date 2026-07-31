@@ -12,6 +12,7 @@ const statusColors: Record<string, string> = {
 
 export default function AbsensiSiswaPage() {
   const [tanggal, setTanggal] = useState(new Date().toISOString().split('T')[0])
+  const [sesi, setSesi] = useState<'masuk' | 'pulang'>('masuk')
   const [rombels, setRombels] = useState<any[]>([])
   const [selectedRombel, setSelectedRombel] = useState('')
   const [siswaList, setSiswaList] = useState<any[]>([])
@@ -28,7 +29,7 @@ export default function AbsensiSiswaPage() {
 
   useEffect(() => {
     if (selectedRombel) loadData()
-  }, [selectedRombel, tanggal])
+  }, [selectedRombel, tanggal, sesi])
 
   const loadData = async () => {
     const [siswaRes, absensiRes] = await Promise.all([
@@ -38,7 +39,7 @@ export default function AbsensiSiswaPage() {
     setSiswaList(siswaRes.data)
     setExisting(absensiRes.data)
     const map: Record<string, string> = {}
-    for (const a of absensiRes.data) { map[a.siswa_id] = a.status }
+    for (const a of absensiRes.data) { map[a.siswa_id] = sesi === 'pulang' ? (a.status_pulang || a.status || 'hadir') : a.status }
     setAbsensi(map)
   }
 
@@ -54,8 +55,8 @@ export default function AbsensiSiswaPage() {
     }))
     setLoading(true)
     try {
-      await api.post('/absensi-siswa/bulk', { tanggal, rombel_id: selectedRombel, data })
-      toast.success('Absensi tersimpan')
+      await api.post('/absensi-siswa/bulk', { tanggal, rombel_id: selectedRombel, jenis: sesi, data })
+      toast.success(`Absensi ${sesi} tersimpan`)
       loadData()
     } catch (err: any) { toast.error(err.response?.data?.error || 'Gagal simpan') }
     finally { setLoading(false) }
@@ -106,6 +107,10 @@ export default function AbsensiSiswaPage() {
 
       <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100 flex flex-col sm:flex-row gap-3">
         <input type="date" value={tanggal} onChange={e => setTanggal(e.target.value)} className="px-3 py-2 border border-gray-300 rounded-lg text-sm" />
+        <select value={sesi} onChange={e => setSesi(e.target.value as 'masuk' | 'pulang')} className="px-4 py-2 border border-gray-300 rounded-lg text-sm">
+          <option value="masuk">Sesi Masuk</option>
+          <option value="pulang">Sesi Pulang</option>
+        </select>
         <select value={selectedRombel} onChange={e => setSelectedRombel(e.target.value)} className="px-4 py-2 border border-gray-300 rounded-lg text-sm">
           {rombels.map(r => <option key={r.id} value={r.id}>{r.nama}</option>)}
         </select>

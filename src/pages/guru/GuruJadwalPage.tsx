@@ -3,6 +3,7 @@ import { Calendar } from 'lucide-react'
 import api from '../../services/api'
 
 const hariList = ['Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu']
+const sameHari = (a?: string, b?: string) => String(a || '').toLocaleLowerCase('id-ID') === String(b || '').toLocaleLowerCase('id-ID')
 
 export default function GuruJadwalPage() {
   const [jadwal, setJadwal] = useState<any[]>([])
@@ -20,7 +21,7 @@ export default function GuruJadwalPage() {
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {hariList.map(hari => {
-          const items = jadwal.filter(j => j.hari === hari)
+          const items = jadwal.filter(j => sameHari(j.hari, hari))
           return (
             <div key={hari} className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
               <div className="px-4 py-3 bg-primary/5 border-b">
