@@ -1,0 +1,220 @@
+import { useState } from 'react'
+import { Link, useLocation } from 'react-router-dom'
+import { useSidebarStore } from '../../stores/sidebarStore'
+import { useAuthStore } from '../../stores/authStore'
+import {
+  LayoutDashboard, Users, GraduationCap, BookOpen, Calendar,
+  ClipboardList, UserCheck, QrCode, MapPin, FileText, Menu,
+  X, ChevronDown, ChevronRight, LogOut, School, Layers,
+  Activity, Globe, Sparkles, DollarSign, Wallet, Settings, MessageSquare
+} from 'lucide-react'
+import { clsx } from 'clsx'
+
+interface MenuItem {
+  label: string
+  icon: React.ReactNode
+  path?: string
+  children?: { label: string; path: string }[]
+}
+
+const adminMenuItems: MenuItem[] = [
+  { label: 'Dashboard', icon: <LayoutDashboard size={20} />, path: '/admin' },
+  { label: 'Data Siswa', icon: <GraduationCap size={20} />, path: '/admin/siswa' },
+  { label: 'Data GTK', icon: <Users size={20} />, path: '/admin/gtk' },
+  { label: 'Mata Pelajaran', icon: <BookOpen size={20} />, path: '/admin/mapel' },
+  { label: 'Rombongan Belajar', icon: <Layers size={20} />, path: '/admin/rombel' },
+  {
+    label: 'Jadwal Pelajaran', icon: <Calendar size={20} />,
+    children: [
+      { label: 'Kelola Jadwal', path: '/admin/jadwal' },
+      { label: 'Pengajar', path: '/admin/pengajar' },
+      { label: 'Wali Kelas', path: '/admin/wali-kelas' },
+    ]
+  },
+  {
+    label: 'Absensi', icon: <UserCheck size={20} />,
+    children: [
+      { label: 'Absensi Siswa', path: '/admin/absensi-siswa' },
+      { label: 'Absensi Ekskul', path: '/admin/absensi-ekskul' },
+      { label: 'Absensi Kokurikuler', path: '/admin/absensi-kokurikuler' },
+      { label: 'Absensi Kegiatan', path: '/admin/absensi-kegiatan' },
+      { label: 'Absensi Guru (Geolokasi)', path: '/admin/absensi-guru' },
+      { label: 'Rekapitulasi', path: '/admin/rekap-absensi' },
+    ]
+  },
+  { label: 'Jurnal Mengajar', icon: <ClipboardList size={20} />, path: '/admin/jurnal' },
+  { label: 'Kalender KBM', icon: <Calendar size={20} />, path: '/admin/kalender-kbm' },
+  { label: 'Generator Modul Ajar', icon: <Sparkles size={20} />, path: '/admin/modul-ajar' },
+  {
+    label: 'Keuangan', icon: <DollarSign size={20} />,
+    children: [
+      { label: 'Tagihan & Pembayaran', path: '/admin/tagihan' },
+      { label: 'Tabungan Siswa', path: '/admin/tabungan' },
+    ]
+  },
+  { label: 'Tahun Ajaran', icon: <School size={20} />, path: '/admin/tahun-ajaran' },
+  {
+    label: 'WhatsApp', icon: <MessageSquare size={20} />,
+    children: [
+      { label: 'Broadcast', path: '/admin/broadcast' },
+      { label: 'Konfigurasi Gateway', path: '/admin/wa-gateway' },
+      { label: 'Notifikasi Otomatis', path: '/admin/notif-settings' },
+    ]
+  },
+  { label: 'Pengaturan', icon: <Settings size={20} />, path: '/admin/settings' },
+  { label: 'Manajemen Lembaga', icon: <Globe size={20} />, path: '/admin/tenants' },
+]
+
+const guruMenuItems: MenuItem[] = [
+  { label: 'Dashboard', icon: <LayoutDashboard size={20} />, path: '/guru' },
+  { label: 'Jurnal Mengajar', icon: <ClipboardList size={20} />, path: '/guru/jurnal' },
+  { label: 'Jadwal Saya', icon: <Calendar size={20} />, path: '/guru/jadwal' },
+  { label: 'Absensi Siswa', icon: <QrCode size={20} />, path: '/guru/absensi-siswa' },
+  { label: 'Absensi Saya', icon: <MapPin size={20} />, path: '/guru/absensi-guru' },
+  { label: 'Modul Ajar', icon: <Sparkles size={20} />, path: '/guru/modul-ajar' },
+  { label: 'Rombel Saya', icon: <Layers size={20} />, path: '/guru/rombel' },
+]
+
+const siswaMenuItems: MenuItem[] = [
+  { label: 'Dashboard', icon: <LayoutDashboard size={20} />, path: '/siswa' },
+  { label: 'Absensi Saya', icon: <QrCode size={20} />, path: '/siswa/absensi' },
+  { label: 'Jadwal', icon: <Calendar size={20} />, path: '/siswa/jadwal' },
+  { label: 'Ekskul', icon: <Activity size={20} />, path: '/siswa/ekskul' },
+]
+
+export default function Sidebar() {
+  const { isOpen, toggle } = useSidebarStore()
+  const { user, logout } = useAuthStore()
+  const location = useLocation()
+  const [expandedMenus, setExpandedMenus] = useState<string[]>([])
+
+  const menuItems = user?.role === 'admin' || user?.role === 'super_admin'
+    ? adminMenuItems
+    : user?.role === 'guru' || user?.role === 'wali_kelas'
+      ? guruMenuItems
+      : siswaMenuItems
+
+  const toggleSubmenu = (label: string) => {
+    setExpandedMenus(prev =>
+      prev.includes(label) ? prev.filter(m => m !== label) : [...prev, label]
+    )
+  }
+
+  const isActive = (path?: string) => path === location.pathname
+
+  return (
+    <>
+      {/* Mobile backdrop overlay */}
+      {isOpen && (
+        <div 
+          className="fixed inset-0 bg-black/50 z-30 lg:hidden"
+          onClick={toggle}
+        />
+      )}
+
+      <aside className={clsx(
+        'fixed top-0 left-0 h-full bg-sidebar text-white z-40 transition-all duration-300 flex flex-col',
+        isOpen ? 'w-64' : 'w-0 lg:w-20',
+        !isOpen && 'overflow-hidden lg:overflow-visible'
+      )}>
+        <div className="flex items-center justify-between gap-3 px-4 py-5 border-b border-sidebar-hover">
+          <div className="flex items-center gap-3 flex-1 min-w-0">
+            <div className="w-10 h-10 bg-primary rounded-lg flex items-center justify-center flex-shrink-0">
+              <School size={24} className="text-white" />
+            </div>
+            {isOpen && (
+              <div className="overflow-hidden flex-1">
+                <h1 className="text-lg font-bold font-display truncate">JURNALKU</h1>
+                <p className="text-xs text-gray-400 truncate">SIMS/M</p>
+              </div>
+            )}
+          </div>
+          {isOpen && (
+            <button onClick={toggle} className="lg:hidden text-white hover:text-gray-300 flex-shrink-0">
+              <X size={20} />
+            </button>
+          )}
+        </div>
+
+        <nav className="flex-1 overflow-y-auto py-4 px-2">
+          {menuItems.map((item) => (
+            <div key={item.label} className="mb-1">
+              {item.children ? (
+                <>
+                  <button
+                    onClick={() => toggleSubmenu(item.label)}
+                    className={clsx(
+                      'w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors',
+                      'hover:bg-sidebar-hover text-gray-300 hover:text-white'
+                    )}
+                  >
+                    {item.icon}
+                    {isOpen && (
+                      <>
+                        <span className="flex-1 text-left">{item.label}</span>
+                        {expandedMenus.includes(item.label)
+                          ? <ChevronDown size={16} />
+                          : <ChevronRight size={16} />
+                        }
+                      </>
+                    )}
+                  </button>
+                  {isOpen && expandedMenus.includes(item.label) && (
+                    <div className="ml-4 mt-1 space-y-1">
+                      {item.children.map((child) => (
+                        <Link
+                          key={child.path}
+                          to={child.path}
+                          className={clsx(
+                            'block px-3 py-2 rounded-lg text-sm transition-colors',
+                            isActive(child.path)
+                              ? 'bg-primary text-white'
+                              : 'text-gray-400 hover:text-white hover:bg-sidebar-hover'
+                          )}
+                        >
+                          {child.label}
+                        </Link>
+                      ))}
+                    </div>
+                  )}
+                </>
+              ) : (
+                <Link
+                  to={item.path!}
+                  className={clsx(
+                    'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors',
+                    isActive(item.path)
+                      ? 'bg-primary text-white'
+                      : 'text-gray-300 hover:text-white hover:bg-sidebar-hover'
+                  )}
+                >
+                  {item.icon}
+                  {isOpen && <span>{item.label}</span>}
+                </Link>
+              )}
+            </div>
+          ))}
+        </nav>
+
+        <div className="border-t border-sidebar-hover p-4">
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 bg-primary-light rounded-full flex items-center justify-center flex-shrink-0">
+              <span className="text-xs font-bold">{user?.nama?.charAt(0) || 'U'}</span>
+            </div>
+            {isOpen && (
+              <div className="flex-1 overflow-hidden">
+                <p className="text-sm font-medium truncate">{user?.nama || 'User'}</p>
+                <p className="text-xs text-gray-400 capitalize">{user?.role || 'guest'}</p>
+              </div>
+            )}
+            {isOpen && (
+              <button onClick={logout} className="text-gray-400 hover:text-red-400">
+                <LogOut size={18} />
+              </button>
+            )}
+          </div>
+        </div>
+      </aside>
+    </>
+  )
+}

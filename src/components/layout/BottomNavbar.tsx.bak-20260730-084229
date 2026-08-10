@@ -1,0 +1,81 @@
+import { useLocation } from 'react-router-dom'
+import { useAuthStore } from '../../stores/authStore'
+import { clsx } from 'clsx'
+
+// Admin & Kepala: 6 routes (Dashboard, Siswa, GTK, Jurnal, Absensi, Pengaturan/Rapor)
+// Guru: 6 routes (Dashboard, Jurnal, Nilai, Jadwal, Absensi, Jurnal)
+// Siswa: 4 routes (Dashboard, Absensi, Jadwal, Ekskul)
+
+const adminKepalaRoutes = [
+  { path: '/admin', label: 'Dashboard', icon: '📊' },
+  { path: '/admin/siswa', label: 'Siswa', icon: '👥' },
+  { path: '/admin/gtk', label: 'GTK', icon: '👩‍🏫' },
+  { path: '/admin/jurnal', label: 'Jurnal', icon: '📝' },
+  { path: '/admin/absensi-siswa', label: 'Absensi', icon: '✅' },
+  { path: '/admin/settings', label: 'Pengaturan', icon: '⚙️' },
+]
+
+const guruRoutes = [
+  { path: '/guru', label: 'Dashboard', icon: '📊' },
+  { path: '/guru/jurnal', label: 'Jurnal', icon: '📝' },
+  { path: '/guru/penilaian-harian', label: 'Nilai', icon: '📝' },
+  { path: '/guru/jadwal', label: 'Jadwal', icon: '📅' },
+  { path: '/guru/absensi-siswa', label: 'Absensi', icon: '✅' },
+  { path: '/guru/jurnal', label: 'Jurnal', icon: '📓' },
+]
+
+const siswaRoutes = [
+  { path: '/siswa', label: 'Dashboard', icon: '📊' },
+  { path: '/siswa/absensi', label: 'Absensi', icon: '✅' },
+  { path: '/siswa/jadwal', label: 'Jadwal', icon: '📅' },
+  { path: '/siswa/ekskul', label: 'Ekskul', icon: '🏸' },
+]
+
+function getRoutes(role?: string) {
+  if (role === 'admin' || role === 'super_admin' || role === 'kepala') return adminKepalaRoutes
+  if (role === 'guru' || role === 'wali_kelas' || role === 'gtk') return guruRoutes
+  if (role === 'siswa' || role === 'wali_murid') return siswaRoutes
+  return []
+}
+
+export default function BottomNavbar() {
+  const location = useLocation()
+  const { user } = useAuthStore()
+  const routes = getRoutes(user?.role)
+
+  if (routes.length === 0) return null
+
+  return (
+    <nav 
+      className=fixed bottom-0 left-0 right-0 lg:hidden bg-white border-t border-gray-200 safe-bottom
+      style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
+      role=navigation
+      aria-label=Bottom navigation
+    >
+      <div className=grid grid-cols-6 gap-0 px-1 py-1.5>
+        {routes.map((route) => {
+          const isActive = location.pathname === route.path || 
+            (route.path !== '/admin' && route.path !== '/guru' && route.path !== '/siswa' && 
+             location.pathname.startsWith(route.path))
+          return (
+            <button
+              key={route.path}
+              onClick={() => window.location.href = route.path}
+              className={clsx(
+                'flex flex-col items-center gap-1 px-2 py-2 rounded-lg transition-colors',
+                isActive 
+                  ? 'bg-primary/10 text-primary' 
+                  : 'text-gray-500 active:bg-gray-100'
+              )}
+              aria-current={isActive ? 'page' : undefined}
+              aria-label={route.label}
+            >
+              <span className=text-xl leading-none>{route.icon}</span>
+              <span className=text-[10px] font-medium leading-tight text-center>{route.label}</span>
+            </button>
+          )
+        })}
+      </div>
+    </nav>
+  )
+}

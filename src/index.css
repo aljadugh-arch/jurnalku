@@ -1,0 +1,49 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+  --color-primary: #1e40af;
+  --color-primary-light: #3b82f6;
+  --color-primary-dark: #1e3a8a;
+  --color-secondary: #059669;
+  --color-secondary-light: #10b981;
+  --color-accent: #f59e0b;
+  --color-danger: #dc2626;
+  --color-warning: #f97316;
+  --color-success: #16a34a;
+  --color-sidebar: #1e293b;
+  --color-sidebar-hover: #334155;
+  --color-sidebar-active: #0f172a;
+  --font-sans: 'Inter', sans-serif;
+  --font-display: 'Outfit', sans-serif;
+}
+
+body {
+  font-family: var(--font-sans);
+  background-color: #f1f5f9;
+}
+
+html, body {
+  overflow-x: hidden;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--font-display);
+}
+
+/* Sidebar scrollbar: match sidebar bg so scroll track tak terlihat beda warna */
+aside nav {
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--color-sidebar) 60%, white) var(--color-sidebar);
+}
+aside nav::-webkit-scrollbar {
+  width: 6px;
+}
+aside nav::-webkit-scrollbar-track {
+  background: var(--color-sidebar);
+}
+aside nav::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--color-sidebar) 55%, white);
+  border-radius: 3px;
+}

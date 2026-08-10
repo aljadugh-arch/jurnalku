@@ -1,0 +1,11 @@
+node_modules/
+dist/
+*.db
+*.db-wal
+*.db-shm
+.env
+.env.*
+server/jurnalku*.db
+server/*.db
+.DS_Store
+*.log
