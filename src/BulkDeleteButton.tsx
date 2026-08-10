@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Trash2, AlertTriangle, X } from 'lucide-react'
 import toast from 'react-hot-toast'
-import api from '../services/api'
+import api from './services/api'
 
 interface BulkDeleteButtonProps {
   kategori: string       // 'siswa' | 'gtk' | 'mapel' | 'rombel' | 'jadwal' | ...
