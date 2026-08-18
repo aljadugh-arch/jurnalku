@@ -627,8 +627,11 @@ for (const col of [
   ['jadwal', 'template_id', 'TEXT'],
   ['jadwal', 'jenis_kegiatan', "TEXT DEFAULT 'mapel'"],
   ['jadwal', 'nama_kegiatan', "TEXT DEFAULT ''"],
+  ['users', 'tenant_id', "TEXT DEFAULT 'default'"],
   ['users', 'gtk_id', 'TEXT'],
   ['users', 'kode_guru', "TEXT DEFAULT ''"],
+  ['users', 'siswa_id', 'TEXT'],
+  ['users', 'must_change_password', 'INTEGER DEFAULT 0'],
   ['absensi_guru', 'keterangan', "TEXT DEFAULT ''"],
   // Absensi siswa: pisah masuk & pulang (Item 1)
   ['absensi_siswa', 'waktu_masuk', 'TEXT'],
@@ -649,6 +652,43 @@ for (const col of [
   ['settings', 'ceklok_pulang_selesai', "TEXT DEFAULT '16:00'"],
 ]) {
   try { db.prepare(`ALTER TABLE ${col[0]} ADD COLUMN ${col[1]} ${col[2]}`).run() } catch {}
+}
+
+function studentInitialPassword(siswa) {
+  const nisn = String(siswa?.nisn || '').trim()
+  if (nisn) return nisn
+  const tgl = String(siswa?.tanggal_lahir || '').replace(/\D/g, '')
+  if (tgl) return tgl
+  return String(siswa?.nis || '').trim()
+}
+
+function studentLocalEmail(tenantId, nis) {
+  const safeTenant = String(tenantId || 'default').replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 36) || 'default'
+  const safeNis = String(nis || '').replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 48)
+  return `siswa-${safeTenant}-${safeNis}@local.jurnalku`
+}
+
+function ensureStudentUser(siswa, tenantId, opts = {}) {
+  if (!siswa || !siswa.id || !siswa.nis) return null
+  const initial = studentInitialPassword(siswa)
+  if (!initial) return null
+
+  const byStudent = db.prepare('SELECT * FROM users WHERE siswa_id = ? AND tenant_id = ?').get(siswa.id, tenantId)
+  const byNis = db.prepare("SELECT * FROM users WHERE role = 'siswa' AND nis = ? AND tenant_id = ?").get(siswa.nis, tenantId)
+  const user = byStudent || byNis
+
+  if (user) {
+    const nextPassword = opts.resetPassword ? bcrypt.hashSync(initial, 10) : user.password
+    db.prepare('UPDATE users SET nama=?, nis=?, siswa_id=?, password=?, must_change_password=? WHERE id=? AND tenant_id=?')
+      .run(siswa.nama, siswa.nis, siswa.id, nextPassword, opts.resetPassword ? 1 : (user.must_change_password || 0), user.id, tenantId)
+    return db.prepare('SELECT * FROM users WHERE id = ? AND tenant_id = ?').get(user.id, tenantId)
+  }
+
+  const id = uuidv4()
+  const email = studentLocalEmail(tenantId, siswa.nis)
+  db.prepare('INSERT INTO users (id, nama, email, password, role, nis, siswa_id, tenant_id, must_change_password) VALUES (?,?,?,?,?,?,?,?,?)')
+    .run(id, siswa.nama, email, bcrypt.hashSync(initial, 10), 'siswa', siswa.nis, siswa.id, tenantId, 1)
+  return db.prepare('SELECT * FROM users WHERE id = ? AND tenant_id = ?').get(id, tenantId)
 }
 
 // Migrate jadwal.mapel_id to NULLABLE (for istirahat/kegiatan support)
@@ -913,7 +953,7 @@ const isEmail = (v) => typeof v === 'string' && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.tes
 const isStr = (v, min = 1, max = 200) => typeof v === 'string' && v.trim().length >= min && v.length <= max
 // Returns error string or null
 function vLogin({ email, password }) {
-  if (!isStr(email, 1, 120)) return 'Email/kode guru wajib diisi'
+  if (!isStr(email, 1, 120)) return 'Email/kode guru/NIS/NISN wajib diisi'
   if (!isStr(password, 1, 100)) return 'Password wajib diisi'
   return null
 }
@@ -991,10 +1031,15 @@ app.post('/api/auth/login', authLimiter, (req, res) => {
         || (g.email ? db.prepare('SELECT * FROM users WHERE lower(email) = ? AND tenant_id = ?').get(String(g.email).toLowerCase(), tenantId) : null)
     }
   }
-  // 3) Fallback users.kode_guru / users.nip langsung.
-  if (!user) user = db.prepare("SELECT * FROM users WHERE tenant_id = ? AND ((kode_guru != '' AND lower(kode_guru) = ?) OR nip = ?)").get(tenantId, identLower, ident)
+  // 3) NIS / NISN siswa -> auto-provision user siswa jika belum ada.
+  if (!user) {
+    const siswa = db.prepare("SELECT * FROM siswa WHERE tenant_id = ? AND status = 'aktif' AND (nis = ? OR nisn = ?)").get(tenantId, ident, ident)
+    if (siswa) user = ensureStudentUser(siswa, tenantId)
+  }
+  // 4) Fallback users.kode_guru / users.nip / users.nis langsung.
+  if (!user) user = db.prepare("SELECT * FROM users WHERE tenant_id = ? AND ((kode_guru != '' AND lower(kode_guru) = ?) OR nip = ? OR nis = ?)").get(tenantId, identLower, ident, ident)
   if (!user || !bcrypt.compareSync(password, user.password)) {
-    return res.status(401).json({ error: 'Email/kode guru atau password salah' })
+    return res.status(401).json({ error: 'Email/kode guru/NIS/NISN atau password salah' })
   }
   const token = jwt.sign({ id: user.id, role: user.role, nama: user.nama, email: user.email, tenant_id: user.tenant_id }, JWT_SECRET, { expiresIn: '24h' })
   res.json({ token, user: { id: user.id, nama: user.nama, email: user.email, role: user.role, nip: user.nip, nis: user.nis, avatar: user.avatar } })
@@ -1511,7 +1556,9 @@ app.post('/api/siswa', ADMIN, (req, res) => {
   try {
     db.prepare('INSERT INTO siswa (id, nis, nisn, nama, jenis_kelamin, tempat_lahir, tanggal_lahir, alamat, no_hp, nama_ortu, rombel_id, tenant_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)')
       .run(id, nis, nisn, nama, jenis_kelamin, tempat_lahir, tanggal_lahir, alamat, no_hp, nama_ortu, rombel_id, req.tenantId)
-    res.json({ id })
+    const siswa = db.prepare('SELECT * FROM siswa WHERE id = ? AND tenant_id = ?').get(id, req.tenantId)
+    ensureStudentUser(siswa, req.tenantId)
+    res.json({ id, akun_siswa: true })
   } catch (e) {
     if (e.code === 'SQLITE_CONSTRAINT_UNIQUE' || e.code === 'SQLITE_CONSTRAINT') return res.status(400).json({ error: 'NIS ' + nis + ' sudah dipakai siswa lain.' })
     throw e
@@ -1523,6 +1570,8 @@ app.put('/api/siswa/:id', ADMIN, (req, res) => {
   try {
     db.prepare('UPDATE siswa SET nis=?, nisn=?, nama=?, jenis_kelamin=?, tempat_lahir=?, tanggal_lahir=?, alamat=?, no_hp=?, nama_ortu=?, rombel_id=?, status=? WHERE id=? AND tenant_id=?')
       .run(nis, nisn, nama, jenis_kelamin, tempat_lahir, tanggal_lahir, alamat, no_hp, nama_ortu, rombel_id, status, req.params.id, req.tenantId)
+    const siswa = db.prepare('SELECT * FROM siswa WHERE id = ? AND tenant_id = ?').get(req.params.id, req.tenantId)
+    if (siswa && siswa.status === 'aktif') ensureStudentUser(siswa, req.tenantId)
     res.json({ success: true })
   } catch (e) {
     if (e.code === 'SQLITE_CONSTRAINT_UNIQUE' || e.code === 'SQLITE_CONSTRAINT') return res.status(400).json({ error: 'NIS ' + nis + ' sudah dipakai siswa lain.' })
@@ -1530,8 +1579,30 @@ app.put('/api/siswa/:id', ADMIN, (req, res) => {
   }
 })
 
+app.post('/api/siswa/generate-akun', ADMIN, (req, res) => {
+  const resetPassword = req.body?.reset_password === true
+  const siswaList = db.prepare("SELECT * FROM siswa WHERE tenant_id = ? AND status = 'aktif' ORDER BY nama").all(req.tenantId)
+  let dibuat = 0
+  let sinkron = 0
+  const gagal = []
+  const tx = db.transaction(() => {
+    for (const siswa of siswaList) {
+      try {
+        const existed = db.prepare('SELECT id FROM users WHERE (siswa_id = ? OR (role = ? AND nis = ?)) AND tenant_id = ?').get(siswa.id, 'siswa', siswa.nis, req.tenantId)
+        const user = ensureStudentUser(siswa, req.tenantId, { resetPassword })
+        if (user) existed ? sinkron++ : dibuat++
+      } catch (e) {
+        gagal.push({ nis: siswa.nis, nama: siswa.nama, error: e.message })
+      }
+    }
+  })
+  tx()
+  res.json({ success: true, total: siswaList.length, dibuat, sinkron, gagal })
+})
+
 app.delete('/api/siswa/:id', ADMIN, (req, res) => {
   try {
+    db.prepare('DELETE FROM users WHERE siswa_id = ? AND tenant_id = ? AND role = ?').run(req.params.id, req.tenantId, 'siswa')
     db.prepare('DELETE FROM siswa WHERE id = ? AND tenant_id=?').run(req.params.id, req.tenantId)
     res.json({ success: true })
   } catch (e) {
