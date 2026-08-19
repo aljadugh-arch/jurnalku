@@ -44,6 +44,7 @@ const adminMenuItems: MenuItem[] = [
       { label: 'Rekapitulasi', path: '/admin/rekap-absensi' },
       { label: 'Ekstrakurikuler', path: '/admin/ekskul' },
       { label: 'Absensi Ekskul', path: '/admin/absensi-ekskul' },
+      { label: 'Absensi Jamaah', path: '/admin/absensi-jamaah' },
       { label: 'Absensi Kokurikuler', path: '/admin/absensi-kokurikuler' },
       { label: 'Absensi Kegiatan', path: '/admin/absensi-kegiatan' },
     ]

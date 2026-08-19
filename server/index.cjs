@@ -2614,13 +2614,23 @@ app.post('/api/notif/cek-guru-ceklok', STAFF, (req, res) => {
 //       'yearly'   (param tahun=YYYY -> 12 bulan). tipe: 'siswa' | 'gtk'.
 function buildRekapRange(q) {
   const mode = (q.mode || 'monthly').toLowerCase()
+  if (mode === 'daily' || mode === 'harian') {
+    const date = q.tanggal || q.mulai || q.tanggal_mulai
+    if (!date) return { error: 'Parameter tanggal/mulai (YYYY-MM-DD) wajib untuk mode daily' }
+    const d = new Date(date + 'T00:00:00')
+    if (isNaN(d.getTime())) return { error: 'Format tanggal tidak valid' }
+    const iso = x => `${x.getFullYear()}-${String(x.getMonth()+1).padStart(2,'0')}-${String(x.getDate()).padStart(2,'0')}`
+    return { mode: 'daily', from: iso(d), to: iso(d), label: `Harian ${iso(d)}` }
+  }
   if (mode === 'weekly') {
     const start = q.mulai || q.tanggal_mulai
     if (!start) return { error: 'Parameter mulai (YYYY-MM-DD) wajib untuk mode weekly' }
     const d = new Date(start + 'T00:00:00')
     if (isNaN(d.getTime())) return { error: 'Format mulai tidak valid' }
-    const end = new Date(d.getTime() + 6 * 86400000)
-    const iso = x => x.toISOString().slice(0, 10)
+    const explicitEnd = q.selesai || q.tanggal_selesai || q.to
+    const end = explicitEnd ? new Date(explicitEnd + 'T00:00:00') : new Date(d.getTime() + 6 * 86400000)
+    if (isNaN(end.getTime())) return { error: 'Format selesai tidak valid' }
+    const iso = x => `${x.getFullYear()}-${String(x.getMonth()+1).padStart(2,'0')}-${String(x.getDate()).padStart(2,'0')}`
     return { mode, from: iso(d), to: iso(end), label: `Minggu ${iso(d)} s/d ${iso(end)}` }
   }
   if (mode === 'semester') {
@@ -2670,13 +2680,16 @@ app.get('/api/rekap-absensi', authMiddleware, (req, res) => {
     const summary = { hadir: detail.reduce((s,d) => s+d.hadir, 0), sakit: detail.reduce((s,d) => s+d.sakit, 0), izin: detail.reduce((s,d) => s+d.izin, 0), alpha: detail.reduce((s,d) => s+d.alpha, 0) }
     return res.json({ mode, from, to, label, detail, summary })
   }
-  const siswa = db.prepare("SELECT s.id, s.nama, s.nis, r.nama as rombel_nama FROM siswa s LEFT JOIN rombel r ON s.rombel_id = r.id WHERE s.tenant_id = ? ORDER BY r.nama, s.nama").all(req.tenantId)
+  const siswa = db.prepare("SELECT s.id, s.nama, s.nis, s.nisn, r.nama as rombel_nama FROM siswa s LEFT JOIN rombel r ON s.rombel_id = r.id WHERE s.tenant_id = ? ORDER BY r.nama, s.nama").all(req.tenantId)
   const detail = siswa.map(s => {
     const hadir = cnt('absensi_siswa', s.id, 'siswa_id', 'hadir')
     const sakit = cnt('absensi_siswa', s.id, 'siswa_id', 'sakit')
     const izin  = cnt('absensi_siswa', s.id, 'siswa_id', 'izin')
     const alpha = cnt('absensi_siswa', s.id, 'siswa_id', 'alpha')
-    return { ...s, hadir, sakit, izin, alpha, total: hadir + sakit + izin + alpha }
+    const byDateRows = db.prepare(`SELECT tanggal, status FROM absensi_siswa WHERE siswa_id=? AND tanggal BETWEEN ? AND ? AND tenant_id=? ORDER BY tanggal`).all(s.id, from, to, req.tenantId)
+    const per_tanggal = {}
+    byDateRows.forEach(r => { per_tanggal[r.tanggal] = (String(r.status || '').charAt(0) || '').toUpperCase() })
+    return { ...s, hadir, sakit, izin, alpha, total: hadir + sakit + izin + alpha, per_tanggal }
   })
   const summary = { hadir: detail.reduce((s,d) => s+d.hadir, 0), sakit: detail.reduce((s,d) => s+d.sakit, 0), izin: detail.reduce((s,d) => s+d.izin, 0), alpha: detail.reduce((s,d) => s+d.alpha, 0) }
   res.json({ mode, from, to, label, detail, summary })

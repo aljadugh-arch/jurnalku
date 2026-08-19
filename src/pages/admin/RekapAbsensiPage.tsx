@@ -21,7 +21,7 @@ export default function RekapAbsensiPage() {
   const loadRekap = async () => {
     try {
       const apiMode = mode === 'harian' ? 'daily' : mode === 'mingguan' ? 'weekly' : mode === 'bulanan' ? 'monthly' : 'semester'
-      const res = await api.get('/rekap-absensi', { params: { tipe: tab, mode: apiMode, mulai: from, tanggal_mulai: from, bulan, tahun_ajaran: new Date().getFullYear() + '/' + (new Date().getFullYear()+1), semester: 'ganjil' } })
+      const res = await api.get('/rekap-absensi', { params: { tipe: tab, mode: apiMode, mulai: from, tanggal_mulai: from, selesai: to, tanggal_selesai: to, bulan, tahun_ajaran: new Date().getFullYear() + '/' + (new Date().getFullYear()+1), semester: 'ganjil' } })
       if (tab === 'siswa') setRekapSiswa(res.data.detail)
       else setRekapGtk(res.data.detail)
       setSummary(res.data.summary)
@@ -63,12 +63,24 @@ export default function RekapAbsensiPage() {
     const printWindow = window.open('', '_blank')
     if (!printWindow) { toast.error('Popup blocked'); return }
     const who = tab === 'siswa' ? 'SISWA' : 'GTK'
+    const fmt = (x: string) => new Date(x + 'T00:00:00').toLocaleDateString('id-ID', { day: '2-digit', month: '2-digit', year: 'numeric' })
+    const dates = (() => {
+      const out: string[] = []
+      const a = mode === 'bulanan' || mode === 'semester' ? (data[0]?.from || '') : from
+      const b = mode === 'bulanan' ? `${bulan}-${String(new Date(Number(bulan.slice(0,4)), Number(bulan.slice(5,7)), 0).getDate()).padStart(2,'0')}` : mode === 'semester' ? (data[0]?.to || to) : to
+      const start = new Date((mode === 'bulanan' ? `${bulan}-01` : a) + 'T00:00:00')
+      const end = new Date(b + 'T00:00:00')
+      for (let d = new Date(start); d <= end; d.setDate(d.getDate()+1)) out.push(d.toISOString().slice(0,10))
+      return out
+    })()
+    const periodeText = mode === 'bulanan' ? `${fmt(`${bulan}-01`)} s/d ${fmt(dates[dates.length-1] || `${bulan}-01`)}` : `${fmt(from)} s/d ${fmt(to)}`
+    const dayHeaders = dates.map(d => `<th class="tgl">${Number(d.slice(8,10))}</th>`).join('')
     const rows = data.map((d: any, i: number) => {
-      const total = d.total || d.hadir + d.sakit + d.izin + d.alpha
-      const pct = total > 0 ? Math.round(d.hadir / total * 100) + '%' : '0%'
-      return `<tr><td>${i+1}</td><td class="nama">${escapeHtml(d.nama || '')}</td><td>${escapeHtml(d.nis||d.nip||'')}</td><td>${escapeHtml(d.rombel_nama||d.jabatan||'')}</td><td>${d.sakit}</td><td>${d.izin}</td><td>${d.alpha}</td><td>${pct}</td></tr>`
+      const map = d.per_tanggal || {}
+      const dayCells = dates.map(x => `<td>${escapeHtml(map[x] || '')}</td>`).join('')
+      return `<tr><td>${i+1}</td><td class="nama">${escapeHtml(d.nama || '')}</td><td>${escapeHtml(d.nisn || d.nis || d.nip || '')}</td>${dayCells}<td>${d.sakit || 0}</td><td>${d.izin || 0}</td><td>${d.alpha || 0}</td><td>${d.hadir || 0}</td></tr>`
     }).join('')
-    printWindow.document.write(`<!DOCTYPE html><html><head><title>Rekap Absensi</title><style>@page{size:landscape;margin:8mm}body{font-family:Arial,sans-serif;font-size:11px}h2,h3{text-align:center;margin:2px 0}.field{font-weight:bold;margin:10px 0}.hl{background:#ffeb3b;padding:2px 18px}table{border-collapse:collapse;width:100%;font-size:10px}th,td{border:1px solid #000;text-align:center;padding:3px}.nama{text-align:left;min-width:160px}.s{background:#22c55e}.i{background:#38bdf8}.a{background:#ef4444}.h{background:#d1d5db}</style></head><body><h2>REKAPITULASI ABSENSI ${who}</h2><h3>SEMESTER GANJIL TP. ${new Date().getFullYear()}/${new Date().getFullYear()+1}</h3><h3>MADRASAH TSANAWIYAH PLUS SUNAN DRAJAT 7 PALANG</h3><div class="field">PERIODE : <span class="hl">${mode.toUpperCase()} ${bulan}</span></div><table><thead><tr><th>NO</th><th>NAMA</th><th>${tab==='siswa'?'NIS':'NIP'}</th><th>${tab==='siswa'?'ROMBEL':'JABATAN'}</th><th class="s">SAKIT</th><th class="i">IZIN</th><th class="a">ALFA</th><th class="h">HADIR</th></tr></thead><tbody>${rows}</tbody></table><script>setTimeout(()=>window.print(),500)<\/script></body></html>`)
+    printWindow.document.write(`<!DOCTYPE html><html><head><title>Rekap Absensi</title><style>@page{size:landscape;margin:7mm}body{font-family:Arial,sans-serif;font-size:9px;color:#000}h2,h3{text-align:center;margin:1px 0}.meta{display:flex;gap:12px;margin:8px 0;font-weight:bold}.hl{background:#ffeb3b;padding:2px 14px}table{border-collapse:collapse;width:100%;font-size:8px}th,td{border:1px solid #000;text-align:center;padding:2px}.nama{text-align:left;min-width:170px}.tgl{width:18px}.total{background:#e5e7eb;font-weight:bold}.s{background:#22c55e}.i{background:#38bdf8}.a{background:#ef4444;color:#fff}.h{background:#d1d5db}.foot{margin-top:8px;font-size:8px;display:flex;justify-content:space-between}</style></head><body><h2>REKAPITULASI ABSENSI ${who}</h2><h3>SEMESTER GANJIL TP. ${new Date().getFullYear()}/${new Date().getFullYear()+1}</h3><h3>MADRASAH TSANAWIYAH PLUS SUNAN DRAJAT 7 PALANG</h3><div class="meta"><div>PERIODE: <span class="hl">${escapeHtml(periodeText)}</span></div><div>KELAS: <span class="hl">${tab==='siswa'?'SEMUA KELAS':'GTK'}</span></div></div><table><thead><tr><th rowspan="2">NO</th><th rowspan="2">NAMA LENGKAP</th><th rowspan="2">NISN/NIS</th><th colspan="${dates.length}">TANGGAL</th><th colspan="4" class="total">TOTAL</th></tr><tr>${dayHeaders}<th class="s">SAKIT</th><th class="i">IZIN</th><th class="a">ALFA</th><th class="h">HADIR</th></tr></thead><tbody>${rows}</tbody></table><div class="foot"><div>Kode: H=Hadir, S=Sakit, I=Izin, A=Alfa</div><div>Dicetak: ${new Date().toLocaleString('id-ID')}</div></div><script>setTimeout(()=>window.print(),500)<\/script></body></html>`)
     printWindow.document.close()
   }
 
