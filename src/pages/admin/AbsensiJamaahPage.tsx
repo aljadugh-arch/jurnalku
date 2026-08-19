@@ -1,7 +1,8 @@
 ﻿import { useEffect, useState } from 'react'
-import { GraduationCap, Save, RefreshCw, List, Edit3, CheckCircle, XCircle } from 'lucide-react'
+import { Download, FileSpreadsheet, GraduationCap, Save, RefreshCw, List, Edit3, CheckCircle, XCircle } from 'lucide-react'
 import toast from 'react-hot-toast'
 import api from '../../services/api'
+import * as XLSX from 'xlsx'
 
 interface Siswa { id: string; nama: string; nis: string; rombel_id: string; rombel_nama?: string }
 interface Rombel { id: string; nama: string }
@@ -59,6 +60,30 @@ export default function AbsensiJamaahPage() {
     }
   }
 
+  const exportExcel = async () => {
+    const rows = rekap.length ? rekap : (await api.get('/jamaah/rekap-manual', { params: { minimal_hadir: minimal } })).data.rows || []
+    const ws = XLSX.utils.aoa_to_sheet([
+      ['REKAP ABSENSI JAMAAH'],
+      ['Nama Sesi', nama, 'Periode', periode || '-'],
+      [],
+      ['No', 'Nama Lengkap', 'NIS', 'Rombel', 'Periode', 'Hadir', 'Minimal', 'Keterangan'],
+      ...rows.map((r: RekapRow, i: number) => [i+1, r.nama, r.nis, r.rombel_nama || '', r.periode, r.jumlah_hadir, r.minimal_hadir, r.hasil === 'lolos' ? 'Lolos' : 'Tidak Lolos'])
+    ])
+    ws['!cols'] = [{wch:5},{wch:28},{wch:16},{wch:14},{wch:24},{wch:10},{wch:10},{wch:16}]
+    const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, 'Rekap Jamaah')
+    XLSX.writeFile(wb, `Rekap_Absensi_Jamaah_${new Date().toISOString().slice(0,10)}.xlsx`)
+    toast.success('Excel rekap jamaah diunduh')
+  }
+
+  const exportPDF = async () => {
+    const rows = rekap.length ? rekap : (await api.get('/jamaah/rekap-manual', { params: { minimal_hadir: minimal } })).data.rows || []
+    const w = window.open('', '_blank')
+    if (!w) { toast.error('Popup blocked'); return }
+    const body = rows.map((r: RekapRow, i: number) => `<tr><td>${i+1}</td><td class="nama">${r.nama || ''}</td><td>${r.nis || ''}</td><td>${r.rombel_nama || ''}</td><td>${r.periode || ''}</td><td>${r.jumlah_hadir || 0}</td><td>${r.minimal_hadir || minimal}</td><td>${r.hasil === 'lolos' ? 'Lolos' : 'Tidak Lolos'}</td></tr>`).join('')
+    w.document.write(`<!doctype html><html><head><title>Rekap Jamaah</title><style>@page{size:landscape;margin:8mm}body{font-family:Arial,sans-serif;font-size:10px;color:#000}h2,h3{text-align:center;margin:2px}.meta{font-weight:bold;margin:10px 0}.hl{background:#ffeb3b;padding:2px 12px}table{width:100%;border-collapse:collapse}th,td{border:1px solid #000;padding:4px;text-align:center}.nama{text-align:left;min-width:180px}th{background:#e5e7eb}</style></head><body><h2>REKAPITULASI ABSENSI JAMAAH</h2><h3>MADRASAH TSANAWIYAH PLUS SUNAN DRAJAT 7 PALANG</h3><div class="meta">SESI: <span class="hl">${nama}</span> &nbsp; PERIODE: <span class="hl">${periode || '-'}</span></div><table><thead><tr><th>NO</th><th>NAMA LENGKAP</th><th>NIS</th><th>ROMBEL</th><th>PERIODE</th><th>HADIR</th><th>MIN</th><th>KETERANGAN</th></tr></thead><tbody>${body}</tbody></table><script>setTimeout(()=>window.print(),400)<\/script></body></html>`)
+    w.document.close()
+  }
+
   if (loading && siswa.length === 0) {
     return (
       <div className="flex items-center justify-center py-32">
@@ -83,26 +108,26 @@ export default function AbsensiJamaahPage() {
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 sm:gap-5">
           <div>
             <label className="block text-xs font-medium text-slate-500 mb-1.5">Nama Sesi</label>
-            <input value={nama} onChange={e => setNama(e.target.value)} className="input" placeholder="Shalat Jamaah" />
+            <input value={nama} onChange={e => setNama(e.target.value)} className="block w-full h-11 px-3 rounded-xl border border-slate-200 bg-white text-sm outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100" placeholder="Shalat Jamaah" />
           </div>
           <div className="lg:col-span-2">
             <label className="block text-xs font-medium text-slate-500 mb-1.5">Periode Rekap</label>
-            <input value={periode} onChange={e => setPeriode(e.target.value)} className="input" placeholder="Contoh: 1-7 Agustus 2026" />
+            <input value={periode} onChange={e => setPeriode(e.target.value)} className="block w-full h-11 px-3 rounded-xl border border-slate-200 bg-white text-sm outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100" placeholder="Contoh: 1-7 Agustus 2026" />
           </div>
           <div>
             <label className="block text-xs font-medium text-slate-500 mb-1.5">Minimal Hadir</label>
-            <input type="number" min={1} value={minimal} onChange={e => setMinimal(Number(e.target.value) || 1)} className="input" />
+            <input type="number" min={1} value={minimal} onChange={e => setMinimal(Number(e.target.value) || 1)} className="block w-full h-11 px-3 rounded-xl border border-slate-200 bg-white text-sm outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100" />
           </div>
           <div>
             <label className="block text-xs font-medium text-slate-500 mb-1.5">Filter Rombel</label>
-            <select value={filterRombel} onChange={e => setFilterRombel(e.target.value)} className="input">
+            <select value={filterRombel} onChange={e => setFilterRombel(e.target.value)} className="block w-full h-11 px-3 pr-9 rounded-xl border border-slate-200 bg-white text-sm outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100">
               <option value="">Semua Rombel</option>
               {rombels.map(r => <option key={r.id} value={r.id}>{r.nama}</option>)}
             </select>
           </div>
         </div>
 
-        <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-center gap-2.5 sm:gap-3 mt-5 pt-5 border-t border-slate-100">
+        <div className="grid grid-cols-2 sm:flex sm:flex-row sm:flex-wrap sm:items-center gap-2.5 sm:gap-3 mt-5 pt-5 border-t border-slate-100">
           <button onClick={() => setTab('input')} className={`w-full sm:w-auto inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium ${tab === 'input' ? 'btn-primary' : 'btn-secondary'}`}>
             <Edit3 size={16} /> Input Data
           </button>
@@ -188,7 +213,7 @@ export default function AbsensiJamaahPage() {
               <h2 className="font-semibold text-slate-800 leading-none">Rekap Kehadiran Jamaah</h2>
               <span className="text-xs px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">{rekap.length} data</span>
             </div>
-            <button onClick={loadRekap} className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium btn-secondary"><RefreshCw size={14} /> Refresh</button>
+            <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto"><button onClick={exportExcel} className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium bg-emerald-600 text-white"><FileSpreadsheet size={14} /> Excel</button><button onClick={exportPDF} className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium bg-red-600 text-white"><Download size={14} /> PDF</button><button onClick={loadRekap} className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium btn-secondary"><RefreshCw size={14} /> Refresh</button></div>
           </div>
           <div className="max-h-[calc(100dvh-18rem)] min-h-[260px] overflow-auto p-3 sm:p-4">
             <table className="table-modern min-w-[760px] border-separate border-spacing-y-2">
