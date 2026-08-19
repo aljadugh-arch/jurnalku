@@ -129,7 +129,7 @@ export default function BottomNavigation() {
   const settings = useSettingsStore(s => s.settings)
   const location = useLocation()
   const [open, setOpen] = useState(false)
-  // Demo tenant (demo.jurnal.cc.cd): ceklok hanya untuk guru, sembunyikan dari admin/kepala.
+  // Demo tenant (demo.jurnalmadrasah.web.id): ceklok hanya untuk guru, sembunyikan dari admin/kepala.
   const isDemo = typeof window !== 'undefined' && window.location.hostname.startsWith('demo.')
   const items = useMemo(() => roleItems(role, isDemo), [role, isDemo])
   const primary = items.slice(0, 4)

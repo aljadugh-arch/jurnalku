@@ -1035,14 +1035,41 @@ app.post('/api/auth/demo', (req, res) => {
   const role = String(req.body?.role || 'admin')
   const allowed = ['admin','kepala','guru','wali_kelas','bendahara','siswa']
   if (!allowed.includes(role)) return res.status(400).json({ error: 'Role demo tidak tersedia' })
+  const demoTenant = () => {
+    let t = db.prepare('SELECT id FROM tenants WHERE slug=? OR id=? LIMIT 1').get('demo','default')
+    if (t) return t.id
+    const id = 'default'
+    db.prepare('INSERT INTO tenants (id, slug, nama, email) VALUES (?,?,?,?)').run(id, 'demo', 'Demo Jurnal Madrasah', 'demo@jurnalmadrasah.web.id')
+    try { db.prepare('INSERT INTO settings (id, nama_lembaga, tenant_id) VALUES (?,?,?)').run('main_default', 'Demo Jurnal Madrasah', id) } catch {}
+    return id
+  }
+  const makeDemo = (wantRole) => {
+    const tenantId = demoTenant()
+    const actualRole = wantRole === 'wali_kelas' ? 'guru' : wantRole
+    let user = db.prepare('SELECT * FROM users WHERE tenant_id=? AND role=? ORDER BY created_at LIMIT 1').get(tenantId, actualRole)
+    if (user) return user
+    const id = uuidv4()
+    const pass = bcrypt.hashSync(uuidv4(), 10)
+    const nama = 'Demo ' + actualRole.replace('_',' ')
+    const email = `demo-${actualRole}@jurnalmadrasah.web.id`
+    let gtkId = null, siswaId = null, nis = null
+    if (['guru','kepala','bendahara'].includes(actualRole)) {
+      gtkId = uuidv4()
+      try { db.prepare("INSERT INTO gtk (id,nama,jenis_kelamin,email,jabatan,status_kepegawaian,tenant_id) VALUES (?,?, 'L', ?, ?, 'Tetap', ?)").run(gtkId, nama, email, actualRole, tenantId) } catch { gtkId = null }
+    }
+    if (actualRole === 'siswa') {
+      let rombel = db.prepare('SELECT id FROM rombel WHERE tenant_id=? LIMIT 1').get(tenantId)
+      if (!rombel) { const rid = uuidv4(); db.prepare("INSERT INTO rombel (id,nama,tingkat,tahun_ajaran,kapasitas,tenant_id) VALUES (?,?,?,?,?,?)").run(rid,'Demo A','VII','2026/2027',36,tenantId); rombel = { id: rid } }
+      siswaId = uuidv4(); nis = 'DEMO001'
+      try { db.prepare("INSERT INTO siswa (id,nis,nisn,nama,jenis_kelamin,rombel_id,status,tenant_id) VALUES (?,?,?,?,?,?, 'aktif', ?)").run(siswaId, nis, 'DEMO001', nama, 'L', rombel.id, tenantId) } catch { const st = db.prepare('SELECT * FROM siswa WHERE tenant_id=? LIMIT 1').get(tenantId); siswaId = st?.id; nis = st?.nis }
+    }
+    db.prepare('INSERT INTO users (id,nama,email,password,role,tenant_id,gtk_id,siswa_id,nis,must_change_password) VALUES (?,?,?,?,?,?,?,?,?,0)').run(id,nama,email,pass,actualRole,tenantId,gtkId,siswaId,nis)
+    return db.prepare('SELECT * FROM users WHERE id=?').get(id)
+  }
   let tenantId = req.tenantId || 'default'
   let user = db.prepare('SELECT * FROM users WHERE tenant_id=? AND role=? ORDER BY created_at LIMIT 1').get(tenantId, role)
   if (!user && role === 'wali_kelas') user = db.prepare("SELECT * FROM users WHERE tenant_id=? AND role='guru' ORDER BY created_at LIMIT 1").get(tenantId)
-  if (!user && role === 'kepala') user = db.prepare("SELECT * FROM users WHERE tenant_id=? AND role IN ('kepala','admin') ORDER BY role='kepala' DESC, created_at LIMIT 1").get(tenantId)
-  if (!user) user = db.prepare('SELECT * FROM users WHERE role=? ORDER BY created_at LIMIT 1').get(role)
-  if (!user && role === 'wali_kelas') user = db.prepare("SELECT * FROM users WHERE role='guru' ORDER BY created_at LIMIT 1").get()
-  if (!user && role === 'kepala') user = db.prepare("SELECT * FROM users WHERE role IN ('kepala','admin') ORDER BY role='kepala' DESC, created_at LIMIT 1").get()
-  if (!user) return res.status(404).json({ error: 'Akun demo role ini belum tersedia' })
+  if (!user) user = makeDemo(role)
   const token = jwt.sign({ id: user.id, email: user.email, nama: user.nama, role: user.role, tenant_id: user.tenant_id, gtk_id: user.gtk_id, siswa_id: user.siswa_id, nis: user.nis }, JWT_SECRET, { expiresIn: '8h' })
   res.json({ token, user: { id: user.id, email: user.email, nama: user.nama, role: user.role, tenant_id: user.tenant_id, avatar: user.avatar || null } })
 })
@@ -1132,7 +1159,7 @@ app.post('/api/auth/register', (req, res) => {
   const token = jwt.sign({ id, role: 'admin', nama, email, tenant_id: tenantId }, JWT_SECRET, { expiresIn: '24h' })
   const appUrl = domainVal
     ? `https://${domainVal}`
-    : `https://${slug}.jurnal.cc.cd`
+    : `https://${slug}.jurnalmadrasah.web.id`
   res.json({
     success: true,
     message: domainVal

@@ -20,7 +20,7 @@ const sections: Section[] = [
         h: 'Daftar akun lembaga',
         body: [
           'Buka halaman /register, isi nama lembaga, email, dan password admin.',
-          'Setelah submit, sistem otomatis membuat sub-domain lembaga (contoh: namalembaga.jurnal.cc.cd) dan akun Admin Lembaga (operator) pertama.',
+          'Setelah submit, sistem otomatis membuat sub-domain lembaga (contoh: namalembaga.jurnalmadrasah.web.id) dan akun Admin Lembaga (operator) pertama.',
           'Login pakai email + password yang didaftarkan tadi.',
         ],
       },

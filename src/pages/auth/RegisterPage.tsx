@@ -119,7 +119,7 @@ export default function RegisterPage() {
                     Subdomain
                   </span>
                 </div>
-                <span className="text-xs text-gray-400 leading-tight">*.jurnal.cc.cd</span>
+                <span className="text-xs text-gray-400 leading-tight">*.jurnalmadrasah.web.id</span>
                 <span className="text-xs text-gray-400 leading-tight">Gratis, langsung aktif</span>
               </button>
 
@@ -158,11 +158,11 @@ export default function RegisterPage() {
                       placeholder="nama-sekolah"
                       className="flex-1 px-3 py-2 text-sm outline-none"
                     />
-                    <span className="px-3 py-2 bg-gray-50 text-gray-400 text-sm border-l whitespace-nowrap">.jurnal.cc.cd</span>
+                    <span className="px-3 py-2 bg-gray-50 text-gray-400 text-sm border-l whitespace-nowrap">.jurnalmadrasah.web.id</span>
                   </div>
                   {form.slug && (
                     <p className="text-xs text-primary mt-1">
-                      Akses: https://{form.slug}.jurnal.cc.cd
+                      Akses: https://{form.slug}.jurnalmadrasah.web.id
                     </p>
                   )}
                 </div>

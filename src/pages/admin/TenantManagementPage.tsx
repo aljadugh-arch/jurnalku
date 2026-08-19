@@ -104,7 +104,7 @@ export default function TenantManagementPage() {
           <h3 className="font-semibold text-green-800">Lembaga Berhasil Dibuat</h3>
           <div className="mt-2 text-sm text-green-700 space-y-1">
             <p>Nama: <strong>{created.nama}</strong></p>
-            <p>URL: <strong>https://{created.slug}.jurnal.cc.cd</strong></p>
+            <p>URL: <strong>https://{created.slug}.jurnalmadrasah.web.id</strong></p>
             <p>Email Admin: <strong>{created.admin_email}</strong></p>
             <p>Password: <strong>{created.admin_password}</strong></p>
           </div>
@@ -126,7 +126,7 @@ export default function TenantManagementPage() {
               <div className="flex items-center">
                 <input type="text" required value={form.slug} onChange={e => setForm({...form, slug: e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '')})}
                   className="w-full px-3 py-2 border rounded-l-lg focus:ring-2 focus:ring-primary/20 focus:border-primary" placeholder="sdit-alfatih" />
-                <span className="px-3 py-2 bg-gray-100 border border-l-0 rounded-r-lg text-sm text-gray-500">.jurnal.cc.cd</span>
+                <span className="px-3 py-2 bg-gray-100 border border-l-0 rounded-r-lg text-sm text-gray-500">.jurnalmadrasah.web.id</span>
               </div>
             </div>
             <div>
@@ -180,8 +180,8 @@ export default function TenantManagementPage() {
                   <div className="text-xs text-gray-500">{t.email}</div>
                 </td>
                 <td className="px-4 py-3">
-                  <a href={`https://${t.slug}.jurnal.cc.cd`} target="_blank" rel="noreferrer" className="text-primary text-sm hover:underline">
-                    {t.slug}.jurnal.cc.cd
+                  <a href={`https://${t.slug}.jurnalmadrasah.web.id`} target="_blank" rel="noreferrer" className="text-primary text-sm hover:underline">
+                    {t.slug}.jurnalmadrasah.web.id
                   </a>
                 </td>
                 <td className="px-4 py-3 text-sm text-gray-600">

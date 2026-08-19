@@ -41,7 +41,7 @@ export default function DomainSetupPage() {
         <div className="text-center py-12">
           <Globe size={48} className="mx-auto text-gray-300 mb-4" />
           <h2 className="text-lg font-bold text-gray-800 mb-2">Belum Ada Domain Custom</h2>
-          <p className="text-gray-500 text-sm">Anda menggunakan subdomain <b>{info?.slug || '...'}.jurnal.cc.cd</b></p>
+          <p className="text-gray-500 text-sm">Anda menggunakan subdomain <b>{info?.slug || '...'}.jurnalmadrasah.web.id</b></p>
           <p className="text-gray-400 text-xs mt-1">Untuk menggunakan domain sendiri, hubungi admin.</p>
         </div>
       </div>
