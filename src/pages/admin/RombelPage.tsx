@@ -181,13 +181,13 @@ export default function RombelPage() {
             <div className="flex gap-1 mt-3 pt-3 border-t border-gray-50" onClick={e => e.stopPropagation()}>
               <button
                 onClick={() => openEdit(r)}
-                className="flex items-center gap-1 px-2 py-1 text-xs text-blue-600 hover:bg-blue-50 rounded-lg"
+                className="flex items-center gap-1 px-2 py-1 text-xs text-blue-600 bg-blue-50 sm:bg-transparent hover:bg-blue-50 rounded-lg"
               >
                 <Pencil size={13} /> Edit
               </button>
               <button
                 onClick={() => handleDelete(r.id, r.nama)}
-                className="flex items-center gap-1 px-2 py-1 text-xs text-red-500 hover:bg-red-50 rounded-lg"
+                className="flex items-center gap-1 px-2 py-1 text-xs text-red-500 bg-red-50 sm:bg-transparent hover:bg-red-50 rounded-lg"
               >
                 <Trash2 size={13} /> Hapus
               </button>
@@ -244,24 +244,24 @@ export default function RombelPage() {
                   <p className="text-sm font-medium text-gray-800 truncate">{s.nama}</p>
                   <p className="text-xs text-gray-400">{s.nis || 'NIS belum diisi'}</p>
                 </div>
-                <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                <div className="flex items-center gap-1 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
                   <button
                     onClick={() => { setShowEditSiswa(s); setEditSiswaForm({ nama: s.nama, nis: s.nis || '', nisn: s.nisn || '' }) }}
-                    className="p-1.5 text-blue-500 hover:bg-blue-50 rounded-lg"
+                    className="p-1.5 text-blue-500 bg-blue-50 sm:bg-transparent hover:bg-blue-50 rounded-lg"
                     title="Edit data siswa"
                   >
                     <Pencil size={14} />
                   </button>
                   <button
                     onClick={() => { setShowPindah(s); setPindahTo('') }}
-                    className="p-1.5 text-amber-500 hover:bg-amber-50 rounded-lg"
+                    className="p-1.5 text-amber-500 bg-amber-50 sm:bg-transparent hover:bg-amber-50 rounded-lg"
                     title="Pindah rombel"
                   >
                     <ArrowRightLeft size={14} />
                   </button>
                   <button
                     onClick={() => handleKeluarkan(s)}
-                    className="p-1.5 text-red-500 hover:bg-red-50 rounded-lg"
+                    className="p-1.5 text-red-500 bg-red-50 sm:bg-transparent hover:bg-red-50 rounded-lg"
                     title="Keluarkan dari rombel"
                   >
                     <Trash2 size={14} />

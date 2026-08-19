@@ -40,10 +40,11 @@ function roleItems(role?: string, hideStaffCeklok?: boolean): NavItem[] {
     return [
       { label: 'Home', path: '/guru', icon: <Home size={iconSize} /> },
       { label: 'Ceklok', path: '/guru/absensi-guru', icon: <MapPin size={iconSize} /> },
-      { label: 'Rekap', path: '/guru/jadwal', icon: <BarChart3 size={iconSize} /> },
-      { label: 'Jurnal', path: '/guru/jurnal', icon: <ClipboardList size={iconSize} /> },
+      { label: 'Jadwal', path: '/guru/jadwal', icon: <Calendar size={iconSize} /> },
       { label: 'Absensi', path: '/guru/absensi-siswa', icon: <UserCheck size={iconSize} /> },
+      { label: 'Jurnal', path: '/guru/jurnal', icon: <ClipboardList size={iconSize} /> },
       { label: 'Nilai', path: '/guru/penilaian-harian', icon: <BookOpen size={iconSize} /> },
+      { label: 'Tugas', path: '/guru#tugas', icon: <ClipboardCheck size={iconSize} /> },
       { label: 'Catatan', path: '/guru/catatan-kepribadian', icon: <FileText size={iconSize} /> },
       { label: 'Modul', path: '/guru/modul-ajar', icon: <FileText size={iconSize} /> },
       { label: 'Rombel', path: '/guru/rombel', icon: <GraduationCap size={iconSize} /> },
@@ -53,20 +54,22 @@ function roleItems(role?: string, hideStaffCeklok?: boolean): NavItem[] {
   if (role === 'siswa') {
     return [
       { label: 'Home', path: '/siswa', icon: <Home size={iconSize} /> },
-      { label: 'Absensi', path: '/siswa/absensi', icon: <UserCheck size={iconSize} /> },
-      { label: 'Bayar', path: '/siswa', icon: <CreditCard size={iconSize} /> },
-      { label: 'Tugas', path: '/siswa/jadwal', icon: <ClipboardCheck size={iconSize} /> },
-      { label: 'Nilai', path: '/siswa', icon: <BookOpen size={iconSize} /> },
-      { label: 'Jadwal', path: '/siswa/jadwal', icon: <Calendar size={iconSize} /> },
-      { label: 'Ekskul', path: '/siswa/ekskul', icon: <ListChecks size={iconSize} /> },
+      { label: 'Hadir', path: '/siswa#kehadiran', icon: <UserCheck size={iconSize} /> },
+      { label: 'Tagihan', path: '/siswa#tagihan', icon: <CreditCard size={iconSize} /> },
+      { label: 'Tabungan', path: '/siswa#tabungan', icon: <CreditCard size={iconSize} /> },
+      { label: 'Nilai', path: '/siswa#nilai', icon: <BookOpen size={iconSize} /> },
+      { label: 'Jadwal', path: '/siswa#jadwal', icon: <Calendar size={iconSize} /> },
+      { label: 'Tugas', path: '/siswa#tugas', icon: <ClipboardCheck size={iconSize} /> },
     ]
   }
 
   if (role === 'bendahara') {
     return [
-      { label: 'Laporan', path: '/admin/bendahara', icon: <BarChart3 size={iconSize} /> },
+      { label: 'Home', path: '/admin', icon: <Home size={iconSize} /> },
+      { label: 'Ceklok', path: '/admin/ceklok', icon: <MapPin size={iconSize} /> },
       { label: 'Tagihan', path: '/admin/tagihan', icon: <DollarSign size={iconSize} /> },
       { label: 'Tabungan', path: '/admin/tabungan', icon: <CreditCard size={iconSize} /> },
+      { label: 'Laporan', path: '/admin/bendahara', icon: <BarChart3 size={iconSize} /> },
     ]
   }
 
@@ -74,8 +77,9 @@ function roleItems(role?: string, hideStaffCeklok?: boolean): NavItem[] {
     return [
       { label: 'Home', path: '/admin', icon: <Home size={iconSize} /> },
       ...(hideStaffCeklok ? [] : [ceklokStaff]),
-      { label: 'Presensi', path: '/admin/rekap-absensi', icon: <UserCheck size={iconSize} /> },
-      { label: 'KBM', path: '/admin/jurnal', icon: <ClipboardList size={iconSize} /> },
+      { label: 'Kalender', path: '/admin/kalender-kbm', icon: <Calendar size={iconSize} /> },
+      { label: 'Presensi', path: '/admin/absensi-siswa', icon: <UserCheck size={iconSize} /> },
+      { label: 'Rekap', path: '/admin/rekap-absensi', icon: <ClipboardList size={iconSize} /> },
       { label: 'Keuangan', path: '/admin/tagihan', icon: <DollarSign size={iconSize} /> },
       { label: 'Supervisi', path: '/admin/supervisi', icon: <ShieldCheck size={iconSize} /> },
       { label: 'Siswa', path: '/admin/siswa', icon: <GraduationCap size={iconSize} /> },
@@ -85,7 +89,9 @@ function roleItems(role?: string, hideStaffCeklok?: boolean): NavItem[] {
   }
 
   return [
-    { label: 'Rekap', path: '/admin', icon: <BarChart3 size={iconSize} /> },
+    { label: 'Home', path: '/admin', icon: <Home size={iconSize} /> },
+    { label: 'Kalender', path: '/admin/kalender-kbm', icon: <Calendar size={iconSize} /> },
+    { label: 'Presensi', path: '/admin/absensi-siswa', icon: <UserCheck size={iconSize} /> },
     ...(hideStaffCeklok ? [] : [ceklokStaff]),
     { label: 'Siswa', path: '/admin/siswa', icon: <GraduationCap size={iconSize} /> },
     { label: 'GTK', path: '/admin/gtk', icon: <Users size={iconSize} /> },
@@ -106,7 +112,8 @@ function roleItems(role?: string, hideStaffCeklok?: boolean): NavItem[] {
     { label: 'Tabungan', path: '/admin/tabungan', icon: <CreditCard size={iconSize} /> },
     { label: 'Ekskul', path: '/admin/ekskul', icon: <ListChecks size={iconSize} /> },
     { label: 'Broadcast', path: '/admin/broadcast', icon: <FileText size={iconSize} /> },
-    { label: 'WA', path: '/admin/wa-gateway', icon: <Settings size={iconSize} /> },
+    { label: 'Notif WA', path: '/admin/notif-settings', icon: <Settings size={iconSize} /> },
+    { label: 'WA Gateway', path: '/admin/wa-gateway', icon: <Settings size={iconSize} /> },
     { label: 'Pengguna', path: '/admin/users', icon: <ShieldCheck size={iconSize} /> },
     { label: 'Setting', path: '/admin/settings', icon: <Settings size={iconSize} /> },
   ]

@@ -259,6 +259,18 @@ db.exec(`
     created_at TEXT DEFAULT (datetime('now'))
   );
 
+  CREATE TABLE IF NOT EXISTS tugas_siswa (
+    id TEXT PRIMARY KEY,
+    guru_id TEXT NOT NULL,
+    mapel_id TEXT,
+    rombel_id TEXT NOT NULL,
+    judul TEXT NOT NULL,
+    deskripsi TEXT DEFAULT '',
+    deadline TEXT,
+    tenant_id TEXT NOT NULL,
+    created_at TEXT DEFAULT (datetime('now'))
+  );
+
   CREATE TABLE IF NOT EXISTS penilaian_harian (
     id TEXT PRIMARY KEY,
     jurnal_id TEXT,
@@ -823,6 +835,12 @@ try { db.prepare("UPDATE wa_gateway_config SET tenant_id='default' WHERE tenant_
 try { db.prepare("UPDATE broadcast_log SET tenant_id='default' WHERE tenant_id IS NULL OR tenant_id=''").run() } catch {}
 try { db.exec('ALTER TABLE rombel_jam_pulang ADD COLUMN aktif INTEGER NOT NULL DEFAULT 1 CHECK (aktif IN (0,1))') } catch (e) { if (!String(e.message).includes('duplicate column')) throw e }
 try { db.prepare("UPDATE broadcast_detail SET tenant_id='default' WHERE tenant_id IS NULL OR tenant_id=''").run() } catch {}
+
+try {
+  db.prepare(`UPDATE users SET siswa_id=(SELECT s.id FROM siswa s WHERE s.tenant_id=users.tenant_id AND s.nis=users.nis LIMIT 1)
+    WHERE role='siswa' AND (siswa_id IS NULL OR siswa_id='') AND nis IS NOT NULL AND nis<>''`).run()
+} catch {}
+
 // Ensure a WA config row exists per tenant (lazy: create on demand in getWaConfig)
 
 // Tenant detection middleware (API routes only)
@@ -842,7 +860,7 @@ function authMiddleware(req, res, next) {
     // - /api/auth/me              (cek sesi)
     // - /api/auth/change-password (proses ganti)
     // - /api/auth/logout          (logout)
-    const allowList = ['/api/auth/me', '/api/auth/change-password', '/api/auth/logout']
+    const allowList = ['/api/auth/me', '/api/auth/change-password', '/api/auth/logout', '/api/siswa/dashboard', '/api/siswa/portal']
     if (!allowList.includes(req.path)) {
       try {
         const row = db.prepare('SELECT must_change_password FROM users WHERE id = ?').get(req.user.id)
@@ -1012,10 +1030,27 @@ function resolveGtkForUser(userId, tenantId) {
   return gtk
 }
 
+
+app.post('/api/auth/demo', (req, res) => {
+  const role = String(req.body?.role || 'admin')
+  const allowed = ['admin','kepala','guru','wali_kelas','bendahara','siswa']
+  if (!allowed.includes(role)) return res.status(400).json({ error: 'Role demo tidak tersedia' })
+  let tenantId = req.tenantId || 'default'
+  let user = db.prepare('SELECT * FROM users WHERE tenant_id=? AND role=? ORDER BY created_at LIMIT 1').get(tenantId, role)
+  if (!user && role === 'wali_kelas') user = db.prepare("SELECT * FROM users WHERE tenant_id=? AND role='guru' ORDER BY created_at LIMIT 1").get(tenantId)
+  if (!user && role === 'kepala') user = db.prepare("SELECT * FROM users WHERE tenant_id=? AND role IN ('kepala','admin') ORDER BY role='kepala' DESC, created_at LIMIT 1").get(tenantId)
+  if (!user) user = db.prepare('SELECT * FROM users WHERE role=? ORDER BY created_at LIMIT 1').get(role)
+  if (!user && role === 'wali_kelas') user = db.prepare("SELECT * FROM users WHERE role='guru' ORDER BY created_at LIMIT 1").get()
+  if (!user && role === 'kepala') user = db.prepare("SELECT * FROM users WHERE role IN ('kepala','admin') ORDER BY role='kepala' DESC, created_at LIMIT 1").get()
+  if (!user) return res.status(404).json({ error: 'Akun demo role ini belum tersedia' })
+  const token = jwt.sign({ id: user.id, email: user.email, nama: user.nama, role: user.role, tenant_id: user.tenant_id, gtk_id: user.gtk_id, siswa_id: user.siswa_id, nis: user.nis }, JWT_SECRET, { expiresIn: '8h' })
+  res.json({ token, user: { id: user.id, email: user.email, nama: user.nama, role: user.role, tenant_id: user.tenant_id, avatar: user.avatar || null } })
+})
+
 app.post('/api/auth/login', authLimiter, (req, res) => {
   const { email, password } = req.body
   const vErr = vLogin(req.body); if (vErr) return res.status(400).json({ error: vErr })
-  const tenantId = req.tenantId || 'default'
+  let tenantId = req.tenantId || 'default'
   const ident = String(email).trim()
   const identLower = ident.toLowerCase()
   // 1) Email langsung (per tenant, lalu super_admin, lalu global email).
@@ -1033,8 +1068,9 @@ app.post('/api/auth/login', authLimiter, (req, res) => {
   }
   // 3) NIS / NISN siswa -> auto-provision user siswa jika belum ada.
   if (!user) {
-    const siswa = db.prepare("SELECT * FROM siswa WHERE tenant_id = ? AND status = 'aktif' AND (nis = ? OR nisn = ?)").get(tenantId, ident, ident)
-    if (siswa) user = ensureStudentUser(siswa, tenantId)
+    let siswa = db.prepare("SELECT * FROM siswa WHERE tenant_id = ? AND status = 'aktif' AND (nis = ? OR nisn = ?)").get(tenantId, ident, ident)
+    if (!siswa) siswa = db.prepare("SELECT * FROM siswa WHERE status = 'aktif' AND (nis = ? OR nisn = ?) ORDER BY tenant_id LIMIT 1").get(ident, ident)
+    if (siswa) { tenantId = siswa.tenant_id || tenantId; user = ensureStudentUser(siswa, tenantId) }
   }
   // 4) Fallback users.kode_guru / users.nip / users.nis langsung.
   if (!user) user = db.prepare("SELECT * FROM users WHERE tenant_id = ? AND ((kode_guru != '' AND lower(kode_guru) = ?) OR nip = ? OR nis = ?)").get(tenantId, identLower, ident, ident)
@@ -1541,12 +1577,16 @@ app.post('/api/settings/reset-data', ADMIN, (req, res) => {
 // ==================== SISWA ====================
 app.get('/api/siswa', authMiddleware, (req, res) => {
   const { search, rombel_id, status } = req.query
-  let sql = 'SELECT * FROM siswa WHERE 1=1 AND tenant_id=?'
+  let sql = `SELECT s.*, r.nama rombel_nama FROM siswa s LEFT JOIN rombel r ON r.id=s.rombel_id AND r.tenant_id=s.tenant_id WHERE 1=1 AND s.tenant_id=?`
   const params = [req.tenantId]
-  if (search) { sql += ' AND (nama LIKE ? OR nis LIKE ?)'; params.push(`%${search}%`, `%${search}%`) }
-  if (rombel_id) { sql += ' AND rombel_id = ?'; params.push(rombel_id) }
-  if (status) { sql += ' AND status = ?'; params.push(status) }
-  sql += ' ORDER BY nama'
+  if (['guru','wali_kelas'].includes(req.user.role)) {
+    const gtk = resolveGtkForUser(req.user.id, req.tenantId)
+    if (gtk) { sql += ` AND (r.wali_kelas_id=? OR s.rombel_id IN (SELECT rombel_id FROM pengajar WHERE gtk_id=? AND tenant_id=? UNION SELECT rombel_id FROM jadwal WHERE gtk_id=? AND tenant_id=?))`; params.push(gtk.id, gtk.id, req.tenantId, gtk.id, req.tenantId) }
+  }
+  if (search) { sql += ' AND (s.nama LIKE ? OR s.nis LIKE ? OR s.nisn LIKE ? OR r.nama LIKE ?)'; params.push(`%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`) }
+  if (rombel_id) { sql += ' AND s.rombel_id = ?'; params.push(rombel_id) }
+  if (status) { sql += ' AND s.status = ?'; params.push(status) }
+  sql += ' ORDER BY s.nama'
   res.json(db.prepare(sql).all(...params))
 })
 
@@ -1918,6 +1958,7 @@ app.post('/api/absensi-ekskul/bulk', STAFF, (req, res) => {
     if (!gtk || !db.prepare('SELECT 1 FROM ekskul WHERE id=? AND pembina_id=? AND tenant_id=?').get(ekskul_id, gtk.id, req.tenantId)) return res.status(403).json({ error: 'Bukan pembina ekskul ini' })
   }
   if (!data || !Array.isArray(data)) return res.status(400).json({ error: 'Data harus array' })
+  try { assertKbmActive(req, tanggal) } catch (e) { return res.status(400).json({ error: e.message }) }
   let count = 0
   for (const d of data) {
     const exists = db.prepare('SELECT id FROM absensi_ekskul WHERE siswa_id = ? AND ekskul_id = ? AND tanggal = ? AND tenant_id = ?').get(d.siswa_id, ekskul_id, tanggal, req.tenantId)
@@ -1994,6 +2035,22 @@ app.get('/api/absensi-kegiatan/rekap', authMiddleware, (req, res) => {
   res.json({ kegiatan_id, mulai, selesai, minimal_hadir: min, rows })
 })
 
+app.post('/api/absensi-kegiatan/bulk-range', STAFF, (req, res) => {
+  const { kegiatan_id, mulai, selesai, data } = req.body
+  const dates = dateRange(mulai, selesai)
+  if (!kegiatan_id || !dates.length || !Array.isArray(data)) return res.status(400).json({ error: 'kegiatan_id, rentang, data wajib' })
+  const owns = db.prepare('SELECT id FROM kegiatan_khusus WHERE id = ? AND tenant_id = ?').get(kegiatan_id, req.tenantId)
+  if (!owns) return res.status(404).json({ error: 'Kegiatan tidak ditemukan' })
+  let count=0
+  for (const tanggal of dates) for (const d of data) {
+    const exists = db.prepare('SELECT id FROM absensi_kegiatan WHERE siswa_id=? AND kegiatan_id=? AND tanggal=? AND tenant_id=?').get(d.siswa_id,kegiatan_id,tanggal,req.tenantId)
+    if (exists) db.prepare('UPDATE absensi_kegiatan SET status=?, keterangan=? WHERE id=? AND tenant_id=?').run(d.status||'hadir', d.keterangan||'', exists.id, req.tenantId)
+    else db.prepare('INSERT INTO absensi_kegiatan (id,siswa_id,kegiatan_id,tanggal,status,keterangan,tenant_id) VALUES (?,?,?,?,?,?,?)').run(uuidv4(), d.siswa_id,kegiatan_id,tanggal,d.status||'hadir',d.keterangan||'',req.tenantId)
+    count++
+  }
+  res.json({ count, dates: dates.length })
+})
+
 app.post('/api/absensi-kegiatan/bulk', STAFF, (req, res) => {
   const { kegiatan_id, tanggal, data } = req.body
   if (!data || !Array.isArray(data)) return res.status(400).json({ error: 'Data harus array' })
@@ -2040,7 +2097,8 @@ app.get('/api/guru/dashboard', authMiddleware, (req, res) => {
   const mapelDiampu = db.prepare(`SELECT DISTINCT m.id, m.nama, m.kode, m.kelompok FROM pengajar p JOIN mapel m ON m.id=p.mapel_id AND m.tenant_id=p.tenant_id WHERE p.gtk_id=? AND p.tenant_id=? ORDER BY m.kelompok, m.nama`).all(gtkId, req.tenantId)
   const ekskulDiampu = db.prepare('SELECT id,nama,hari,jam_mulai,jam_selesai FROM ekskul WHERE pembina_id=? AND tenant_id=? ORDER BY nama').all(gtkId, req.tenantId)
   
-  res.json({ jadwal_hari_ini: jadwal, mapel_diampu: mapelDiampu, ekskul_diampu: ekskulDiampu, rekap_jurnal: { total: totalJurnal }, rombel_count: rombelCount, wali_rombel: waliRombel, gtk: gtk })
+  const tugas = db.prepare(`SELECT t.*, m.nama mapel_nama, r.nama rombel_nama FROM tugas_siswa t LEFT JOIN mapel m ON m.id=t.mapel_id AND m.tenant_id=t.tenant_id LEFT JOIN rombel r ON r.id=t.rombel_id AND r.tenant_id=t.tenant_id WHERE t.guru_id=? AND t.tenant_id=? ORDER BY t.created_at DESC LIMIT 20`).all(gtkId, req.tenantId)
+  res.json({ jadwal_hari_ini: jadwal, mapel_diampu: mapelDiampu, ekskul_diampu: ekskulDiampu, tugas, rekap_jurnal: { total: totalJurnal }, rombel_count: rombelCount, wali_rombel: waliRombel, gtk: gtk })
 })
 
 
@@ -2067,13 +2125,48 @@ app.get('/api/guru/wali-kelas', authMiddleware, (req, res) => {
   res.json({ gtk, rombels, siswa })
 })
 
+
+app.get('/api/guru/tugas', authMiddleware, (req, res) => {
+  const gtk = resolveGtkForUser(req.user.id, req.tenantId)
+  if (!gtk) return res.json([])
+  res.json(db.prepare(`SELECT t.*, m.nama mapel_nama, r.nama rombel_nama FROM tugas_siswa t LEFT JOIN mapel m ON m.id=t.mapel_id AND m.tenant_id=t.tenant_id LEFT JOIN rombel r ON r.id=t.rombel_id AND r.tenant_id=t.tenant_id WHERE t.guru_id=? AND t.tenant_id=? ORDER BY t.created_at DESC LIMIT 50`).all(gtk.id, req.tenantId))
+})
+app.post('/api/guru/tugas', authMiddleware, (req, res) => {
+  const gtk = resolveGtkForUser(req.user.id, req.tenantId)
+  if (!gtk) return res.status(400).json({ error: 'Akun guru belum terhubung GTK' })
+  const { mapel_id, rombel_id, judul, deskripsi, deadline } = req.body || {}
+  if (!rombel_id || !judul) return res.status(400).json({ error: 'Rombel dan judul wajib' })
+  const allowed = db.prepare(`SELECT 1 FROM jadwal WHERE gtk_id=? AND rombel_id=? AND tenant_id=? UNION SELECT 1 FROM pengajar WHERE gtk_id=? AND rombel_id=? AND tenant_id=?`).get(gtk.id, rombel_id, req.tenantId, gtk.id, rombel_id, req.tenantId)
+  if (!allowed) return res.status(403).json({ error: 'Rombel bukan kelas yang diampu' })
+  if (mapel_id) {
+    const okMapel = db.prepare(`SELECT 1 FROM jadwal WHERE gtk_id=? AND rombel_id=? AND mapel_id=? AND tenant_id=? UNION SELECT 1 FROM pengajar WHERE gtk_id=? AND rombel_id=? AND mapel_id=? AND tenant_id=?`).get(gtk.id, rombel_id, mapel_id, req.tenantId, gtk.id, rombel_id, mapel_id, req.tenantId)
+    if (!okMapel) return res.status(403).json({ error: 'Mapel bukan yang diampu di rombel ini' })
+  }
+  const id = uuidv4()
+  db.prepare('INSERT INTO tugas_siswa (id,guru_id,mapel_id,rombel_id,judul,deskripsi,deadline,tenant_id) VALUES (?,?,?,?,?,?,?,?)').run(id, gtk.id, mapel_id || null, rombel_id, judul.trim(), deskripsi || '', deadline || null, req.tenantId)
+  res.json({ id })
+})
+app.delete('/api/guru/tugas/:id', authMiddleware, (req, res) => {
+  const gtk = resolveGtkForUser(req.user.id, req.tenantId)
+  if (!gtk) return res.status(400).json({ error: 'Akun guru belum terhubung GTK' })
+  db.prepare('DELETE FROM tugas_siswa WHERE id=? AND guru_id=? AND tenant_id=?').run(req.params.id, gtk.id, req.tenantId)
+  res.json({ success: true })
+})
+app.get('/api/siswa/tugas', authMiddleware, (req, res) => {
+  const sid = selectLinkedStudent(req)
+  if (!sid) return res.json([])
+  const siswa = db.prepare('SELECT rombel_id FROM siswa WHERE id=? AND tenant_id=?').get(sid, req.tenantId)
+  if (!siswa?.rombel_id) return res.json([])
+  res.json(db.prepare(`SELECT t.*, m.nama mapel_nama, g.nama guru_nama FROM tugas_siswa t LEFT JOIN mapel m ON m.id=t.mapel_id AND m.tenant_id=t.tenant_id LEFT JOIN gtk g ON g.id=t.guru_id AND g.tenant_id=t.tenant_id WHERE t.rombel_id=? AND t.tenant_id=? ORDER BY COALESCE(t.deadline,t.created_at) DESC LIMIT 30`).all(siswa.rombel_id, req.tenantId))
+})
+
 // ==================== GURU ABSENSI (CEKLOK) ====================
 app.get('/api/guru/absensi-saya', authMiddleware, (req, res) => {
   const gtk = resolveGtkForUser(req.user.id, req.tenantId)
   if (!gtk) return res.json({ today: null, history: [] })
   const today = todayJakarta()
-  const todayRecord = db.prepare('SELECT * FROM absensi_guru WHERE gtk_id = ? AND tanggal = ?').get(gtk.id, today)
-  const history = db.prepare('SELECT * FROM absensi_guru WHERE gtk_id = ? ORDER BY tanggal DESC LIMIT 30').all(gtk.id)
+  const todayRecord = db.prepare('SELECT * FROM absensi_guru WHERE gtk_id = ? AND tanggal = ? AND tenant_id = ?').get(gtk.id, today, req.tenantId)
+  const history = db.prepare('SELECT * FROM absensi_guru WHERE gtk_id = ? AND tenant_id = ? ORDER BY tanggal DESC LIMIT 30').all(gtk.id, req.tenantId)
   res.json({ today: todayRecord || null, history, gtk })
 })
 
@@ -2362,25 +2455,49 @@ app.get('/api/siswa/portal', authMiddleware, (req, res) => {
 // ==================== SISWA DASHBOARD ====================
 app.get('/api/siswa/dashboard', authMiddleware, (req, res) => {
   if (!['siswa', 'wali_murid'].includes(req.user.role)) return res.status(403).json({ error: 'Akses ditolak' })
-  const linked = db.prepare('SELECT student_id FROM user_students WHERE tenant_id=? AND user_id=? ORDER BY student_id').all(req.tenantId, req.user.id).map(x => x.student_id)
+  let linked = db.prepare('SELECT student_id FROM user_students WHERE tenant_id=? AND user_id=? ORDER BY student_id').all(req.tenantId, req.user.id).map(x => x.student_id)
+  if (!linked.length && req.user.role === 'siswa' && req.user.nis) {
+    const row = db.prepare('SELECT id FROM siswa WHERE tenant_id=? AND (nis=? OR nisn=?)').get(req.tenantId, req.user.nis, req.user.nis)
+    if (row) linked = [row.id]
+  }
+  if (!linked.length && req.user.role === 'siswa') {
+    const userRow = db.prepare('SELECT nis,siswa_id FROM users WHERE id=? AND tenant_id=?').get(req.user.id, req.tenantId)
+    if (userRow?.siswa_id) linked = [userRow.siswa_id]
+    else if (userRow?.nis) {
+      const row = db.prepare('SELECT id FROM siswa WHERE tenant_id=? AND (nis=? OR nisn=?)').get(req.tenantId, userRow.nis, userRow.nis)
+      if (row) linked = [row.id]
+    }
+  }
   let selected = req.query.student_id
   if (!selected && req.user.role === 'siswa') selected = linked[0]
   if (!selected && req.user.role === 'wali_murid' && linked.length === 1) selected = linked[0]
-  if (!selected) return res.json({ children: linked.map(id => db.prepare('SELECT id,nama,nis,foto,rombel_id FROM siswa WHERE id=? AND tenant_id=?').get(id, req.tenantId)).filter(Boolean), siswa: null, jadwal_hari_ini: [], rekap: { hadir: 0, sakit: 0, izin: 0, alpha: 0 } })
+  const children = linked.map(id => db.prepare('SELECT id,nama,nis,foto,rombel_id FROM siswa WHERE id=? AND tenant_id=?').get(id, req.tenantId)).filter(Boolean)
+  if (!selected) return res.json({ children, siswa: null, jadwal_hari_ini: [], rekap: { hadir: 0, sakit: 0, izin: 0, alpha: 0 }, absensi_detail: [], tagihan_detail: [], nilai_detail: [], tabungan_detail: [], tagihan: { total: 0, belum_bayar: 0, lunas: 0 }, tabungan: { saldo: 0, setor: 0, tarik: 0 } })
   if (!linked.includes(String(selected))) return res.status(403).json({ error: 'Bukan siswa/anak tertaut' })
   const siswa = db.prepare('SELECT * FROM siswa WHERE id=? AND tenant_id=?').get(selected, req.tenantId)
   if (!siswa) return res.status(404).json({ error: 'Siswa tidak ditemukan' })
-  
   const days = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu']
   const today = days[new Date().getDay()].toLowerCase()
   const jadwal = db.prepare(`SELECT j.*, m.nama as mapel_nama, g.nama as guru_nama FROM jadwal j LEFT JOIN mapel m ON j.mapel_id = m.id AND m.tenant_id=j.tenant_id LEFT JOIN gtk g ON j.gtk_id = g.id AND g.tenant_id=j.tenant_id WHERE j.tenant_id=? AND j.rombel_id = ? AND lower(j.hari) = ? ORDER BY j.jam_mulai`).all(req.tenantId, siswa.rombel_id, today)
-  
   const bulan = todayJakarta().slice(0, 7) + '%'
   const count = status => db.prepare('SELECT COUNT(*) as c FROM absensi_siswa WHERE tenant_id=? AND siswa_id=? AND tanggal LIKE ? AND status=?').get(req.tenantId, siswa.id, bulan, status).c
   const [hadir, sakit, izin, alpha] = ['hadir','sakit','izin','alpha'].map(count)
-  
-  const children = linked.map(id => db.prepare('SELECT id,nama,nis,foto,rombel_id FROM siswa WHERE id=? AND tenant_id=?').get(id, req.tenantId)).filter(Boolean)
-  res.json({ children, siswa, jadwal_hari_ini: jadwal, rekap: { hadir, sakit, izin, alpha } })
+  const absensi_detail = db.prepare('SELECT tanggal,status,waktu_absen,keterangan FROM absensi_siswa WHERE siswa_id=? AND tenant_id=? ORDER BY tanggal DESC LIMIT 20').all(siswa.id, req.tenantId)
+  const kegiatan_detail = db.prepare(`SELECT a.tanggal,a.status,a.keterangan,k.nama kegiatan_nama,k.jenis FROM absensi_kegiatan a LEFT JOIN kegiatan_khusus k ON k.id=a.kegiatan_id AND k.tenant_id=a.tenant_id WHERE a.siswa_id=? AND a.tenant_id=? AND k.id IS NOT NULL ORDER BY a.tanggal DESC LIMIT 20`).all(siswa.id, req.tenantId)
+  const jamaah_detail = db.prepare(`SELECT a.tanggal,a.status,a.keterangan,j.nama sesi_nama FROM absensi_kegiatan a LEFT JOIN jamaah_sesi j ON j.id=a.kegiatan_id AND j.tenant_id=a.tenant_id WHERE a.siswa_id=? AND a.tenant_id=? AND j.id IS NOT NULL ORDER BY a.tanggal DESC LIMIT 20`).all(siswa.id, req.tenantId)
+  const ekskul_detail = db.prepare(`SELECT a.tanggal,a.status,a.keterangan,e.nama ekskul_nama FROM absensi_ekskul a LEFT JOIN ekskul e ON e.id=a.ekskul_id AND e.tenant_id=a.tenant_id WHERE a.siswa_id=? AND a.tenant_id=? ORDER BY a.tanggal DESC LIMIT 20`).all(siswa.id, req.tenantId)
+  const tagihan_detail = db.prepare(`SELECT t.id,t.bulan,t.tahun,t.nominal,t.status,t.tanggal_bayar,t.keterangan,j.nama as jenis_nama FROM tagihan t LEFT JOIN jenis_tagihan j ON j.id=t.jenis_tagihan_id AND j.tenant_id=t.tenant_id WHERE t.siswa_id=? AND t.tenant_id=? ORDER BY t.tahun DESC,t.bulan DESC LIMIT 20`).all(siswa.id, req.tenantId)
+  const nilai_detail = db.prepare(`SELECT p.tanggal,p.sikap,p.keaktifan,p.pengetahuan,p.catatan,m.nama as mapel_nama FROM penilaian_harian p LEFT JOIN mapel m ON m.id=p.mapel_id AND m.tenant_id=p.tenant_id WHERE p.siswa_id=? AND p.tenant_id=? ORDER BY p.tanggal DESC LIMIT 20`).all(siswa.id, req.tenantId)
+  const tabungan_detail = db.prepare('SELECT tanggal,tipe,nominal,saldo_akhir,keterangan FROM tabungan WHERE siswa_id=? AND tenant_id=? ORDER BY created_at DESC LIMIT 20').all(siswa.id, req.tenantId)
+  const rekapKategori = rows => rows.reduce((a,r)=>{ const k=(r.status||'lain').toLowerCase(); a[k]=(a[k]||0)+1; return a }, {})
+  const tagihanAll = db.prepare('SELECT nominal,status FROM tagihan WHERE siswa_id=? AND tenant_id=?').all(siswa.id, req.tenantId)
+  const tabunganAll = db.prepare('SELECT tipe,nominal,saldo_akhir FROM tabungan WHERE siswa_id=? AND tenant_id=? ORDER BY created_at DESC').all(siswa.id, req.tenantId)
+  const nilaiRapor = db.prepare(`SELECT r.*,m.nama mapel_nama FROM rapor r LEFT JOIN mapel m ON m.id=r.mapel_id AND m.tenant_id=r.tenant_id WHERE r.siswa_id=? AND r.tenant_id=? ORDER BY r.updated_at DESC LIMIT 20`).all(siswa.id, req.tenantId)
+  const nilaiAll = nilai_detail.length ? nilai_detail : nilaiRapor.map(r => ({ tanggal: r.updated_at, mapel_nama: r.mapel_nama, pengetahuan: r.nilai_pengetahuan, keaktifan: r.nilai_keterampilan, sikap: r.nilai_sikap, catatan: r.deskripsi }))
+  const tagihan = { total: tagihanAll.reduce((n,t)=>n+Number(t.nominal||0),0), belum_bayar: tagihanAll.filter(t=>!['lunas','sudah_bayar'].includes(t.status)).reduce((n,t)=>n+Number(t.nominal||0),0), lunas: tagihanAll.filter(t=>['lunas','sudah_bayar'].includes(t.status)).reduce((n,t)=>n+Number(t.nominal||0),0) }
+  const tabungan = { saldo: tabunganAll[0]?.saldo_akhir || 0, setor: tabunganAll.filter(t=>t.tipe==='setor').reduce((n,t)=>n+Number(t.nominal||0),0), tarik: tabunganAll.filter(t=>t.tipe==='tarik').reduce((n,t)=>n+Number(t.nominal||0),0) }
+  const tugas = siswa?.rombel_id ? db.prepare(`SELECT t.*, m.nama mapel_nama, g.nama guru_nama FROM tugas_siswa t LEFT JOIN mapel m ON m.id=t.mapel_id AND m.tenant_id=t.tenant_id LEFT JOIN gtk g ON g.id=t.guru_id AND g.tenant_id=t.tenant_id WHERE t.rombel_id=? AND t.tenant_id=? ORDER BY COALESCE(t.deadline,t.created_at) DESC LIMIT 30`).all(siswa.rombel_id, req.tenantId) : []
+  res.json({ children, siswa, jadwal_hari_ini: jadwal, tugas, rekap: { hadir, sakit, izin, alpha }, rekap_lengkap: { kbm: rekapKategori(absensi_detail), kegiatan: rekapKategori(kegiatan_detail), jamaah: rekapKategori(jamaah_detail), ekskul: rekapKategori(ekskul_detail) }, absensi_detail, kegiatan_detail, jamaah_detail, ekskul_detail, tagihan_detail, nilai_detail: nilaiAll, tabungan_detail, tagihan, tabungan })
 })
 
 // ==================== SISWA JADWAL ====================
@@ -2393,6 +2510,22 @@ app.get('/api/siswa/jadwal', authMiddleware, (req, res) => {
 })
 
 // ==================== SISWA ABSENSI ====================
+app.get('/api/rekap-absensi-siswa/rombel', authMiddleware, (req, res) => {
+  const { rombel_id, bulan } = req.query
+  if (!rombel_id) return res.status(400).json({ error: 'rombel_id wajib' })
+  const ym = String(bulan || todayJakarta().slice(0, 7))
+  const siswaRows = db.prepare(`SELECT s.*, r.nama as rombel_nama FROM siswa s LEFT JOIN rombel r ON r.id=s.rombel_id AND r.tenant_id=s.tenant_id WHERE s.rombel_id=? AND s.tenant_id=? ORDER BY s.nama`).all(rombel_id, req.tenantId)
+  const abs = db.prepare(`SELECT siswa_id, tanggal, status FROM absensi_siswa WHERE rombel_id=? AND tenant_id=? AND tanggal LIKE ?`).all(rombel_id, req.tenantId, ym + '%')
+  const by = {}
+  for (const a of abs) (by[a.siswa_id] ||= {})[Number(a.tanggal.slice(8, 10))] = a.status
+  const rows = siswaRows.map(s => {
+    const hari = by[s.id] || {}
+    const c = st => Object.values(hari).filter(x => x === st).length
+    return { ...s, hari, sakit: c('sakit'), izin: c('izin'), alpha: c('alpha'), hadir: c('hadir') }
+  })
+  res.json({ bulan: ym, rombel: siswaRows[0]?.rombel_nama || '', rows })
+})
+
 app.get('/api/siswa/absensi', authMiddleware, (req, res) => {
   const user = db.prepare('SELECT * FROM users WHERE id = ?').get(req.user.id)
   const siswa = user?.nis ? db.prepare('SELECT * FROM siswa WHERE nis = ?').get(user.nis) : null
@@ -2445,6 +2578,22 @@ app.put('/api/notif-settings', ADMIN, (req, res) => {
   db.prepare("UPDATE notif_settings SET absensi_siswa_ke_wali=?, guru_belum_ceklok=?, batas_ceklok_guru=?, template_absensi_wali=?, template_guru_ceklok=?, notif_jadwal_guru=?, template_jadwal_guru=? WHERE tenant_id=?")
     .run(absensi_siswa_ke_wali ? 1 : 0, guru_belum_ceklok ? 1 : 0, batas_ceklok_guru || '07:30', template_absensi_wali || '', template_guru_ceklok || '', notif_jadwal_guru ? 1 : 0, template_jadwal_guru || '', req.tenantId)
   res.json({ success: true })
+})
+
+app.get('/api/notif-whitelist', ADMIN, (req, res) => {
+  res.json(db.prepare('SELECT * FROM wa_notif_whitelist WHERE tenant_id=? ORDER BY created_at DESC').all(req.tenantId))
+})
+app.post('/api/notif-whitelist', ADMIN, (req, res) => {
+  const { target_type, target_id, phone, reason } = req.body
+  db.prepare('INSERT INTO wa_notif_whitelist(id,tenant_id,target_type,target_id,phone,reason,aktif) VALUES(?,?,?,?,?,?,1)').run(uuidv4(), req.tenantId, target_type || 'phone', target_id || '', waQueue.normalizePhone(phone || ''), reason || '')
+  res.json({ success: true })
+})
+app.delete('/api/notif-whitelist/:id', ADMIN, (req, res) => {
+  db.prepare('DELETE FROM wa_notif_whitelist WHERE id=? AND tenant_id=?').run(req.params.id, req.tenantId)
+  res.json({ success: true })
+})
+app.post('/api/notif/jadwal-guru', STAFF, (req, res) => {
+  res.json({ success: true, ...waQueue.queueDueSchedules(db, { tenantId: req.tenantId, date: todayJakarta(), time: timeJakarta() }) })
 })
 
 // ==================== NOTIFIKASI WA OTOMATIS ====================
@@ -2533,6 +2682,24 @@ app.get('/api/rekap-absensi', authMiddleware, (req, res) => {
   res.json({ mode, from, to, label, detail, summary })
 })
 
+
+function isHolidayDate(tanggal) {
+  const d = new Date(String(tanggal) + 'T00:00:00+07:00')
+  const day = d.getDay()
+  return day === 5 || day === 0
+}
+function assertKbmActive(req, tanggal) {
+  if (isHolidayDate(tanggal)) throw new Error('Hari Jumat/Minggu libur: absensi nonaktif')
+  const row = db.prepare("SELECT id FROM kalender_kbm WHERE tenant_id=? AND tanggal=? AND jenis='kbm_aktif' LIMIT 1").get(req.tenantId, tanggal)
+  if (!row) throw new Error('KBM belum diaktifkan di Kalender KBM untuk tanggal ini')
+}
+function dateRange(start, end) {
+  const out=[], a=new Date(String(start)+'T00:00:00+07:00'), b=new Date(String(end)+'T00:00:00+07:00')
+  if (isNaN(a) || isNaN(b) || a>b) return out
+  for (let d=new Date(a); d<=b; d.setDate(d.getDate()+1)) out.push(d.toISOString().slice(0,10))
+  return out
+}
+
 // ==================== KALENDER KBM ====================
 app.get('/api/kalender-kbm', authMiddleware, (req, res) => {
   const { year, month } = req.query
@@ -2542,6 +2709,12 @@ app.get('/api/kalender-kbm', authMiddleware, (req, res) => {
   } else {
     res.json(db.prepare("SELECT * FROM kalender_kbm WHERE tenant_id=? ORDER BY tanggal DESC LIMIT 100").all(req.tenantId))
   }
+})
+
+app.get('/api/kalender-kbm/status', authMiddleware, (req, res) => {
+  const tanggal = req.query.tanggal || todayJakarta()
+  const aktif = !!db.prepare("SELECT id FROM kalender_kbm WHERE tenant_id=? AND tanggal=? AND jenis='kbm_aktif' LIMIT 1").get(req.tenantId, tanggal)
+  res.json({ tanggal, aktif, libur: isHolidayDate(tanggal) })
 })
 
 app.post('/api/kalender-kbm', ADMIN, (req, res) => {
@@ -3219,6 +3392,24 @@ app.post('/api/absensi-siswa/bulk', STAFF, (req, res) => {
   res.json({ count, jenis: isPulang ? 'pulang' : 'masuk' })
 })
 
+app.post('/api/absensi-siswa/bulk-range', STAFF, (req, res) => {
+  const { mulai, selesai, rombel_id, status, jenis } = req.body
+  const dates = dateRange(mulai, selesai).filter(d => !isHolidayDate(d))
+  if (!rombel_id || !dates.length) return res.status(400).json({ error: 'Rombel dan rentang tanggal wajib valid' })
+  const siswa = db.prepare("SELECT id FROM siswa WHERE rombel_id=? AND status='aktif' AND tenant_id=? ORDER BY nama").all(rombel_id, req.tenantId)
+  let count = 0
+  for (const tanggal of dates) {
+    try { assertKbmActive(req, tanggal) } catch { continue }
+    for (const x of siswa) {
+      const exists = db.prepare('SELECT id FROM absensi_siswa WHERE siswa_id=? AND tanggal=? AND tenant_id=?').get(x.id, tanggal, req.tenantId)
+      if (exists) db.prepare('UPDATE absensi_siswa SET status=?, metode=? WHERE id=? AND tenant_id=?').run(status || 'hadir', 'batch-range', exists.id, req.tenantId)
+      else db.prepare('INSERT INTO absensi_siswa (id,siswa_id,rombel_id,tanggal,status,metode,tenant_id) VALUES (?,?,?,?,?,?,?)').run(uuidv4(), x.id, rombel_id, tanggal, status || 'hadir', 'batch-range', req.tenantId)
+      count++
+    }
+  }
+  res.json({ count, dates: dates.length, jenis: jenis || 'masuk' })
+})
+
 // QR permanen per siswa = siswa.id (UUID, tidak pernah berubah). Scan -> tandai hadir hari ini.
 function normalizeQrToken(raw) {
   let token = String(raw || '').trim()
@@ -3237,6 +3428,7 @@ app.post('/api/absensi-siswa/qr-scan', STAFF, (req, res) => {
   if (!siswa) siswa = db.prepare('SELECT * FROM siswa WHERE (nis = ? OR nisn = ?) AND tenant_id = ?').get(token, token, req.tenantId)
   if (!siswa) return res.status(404).json({ error: 'QR tidak dikenali / siswa tidak ditemukan' })
   const tanggal = todayJakarta()
+  try { assertKbmActive(req, tanggal) } catch (e) { return res.status(400).json({ error: e.message }) }
   const waktu = timeJakarta()
   // Batas rombel/hari paling spesifik; settings lama menjadi fallback.
   const cfg = db.prepare('SELECT sesi_pulang_mulai FROM settings WHERE tenant_id = ? ORDER BY updated_at DESC LIMIT 1').get(req.tenantId) || {}
@@ -3289,6 +3481,30 @@ app.post('/api/absensi-guru', STAFF, (req, res) => {
   }
   db.prepare('INSERT INTO absensi_guru (id, gtk_id, tanggal, status, waktu_masuk, waktu_pulang, latitude, longitude, foto_selfie, tenant_id) VALUES (?,?,?,?,?,?,?,?,?,?)').run(id, gtk_id, tanggal, status, waktu_masuk||null, waktu_pulang||null, latitude||null, longitude||null, foto_selfie||null, req.tenantId)
   res.json({ id })
+})
+
+app.get('/api/absensi-guru/jadwal-harian', STAFF, (req, res) => {
+  const tanggal = req.query.tanggal || todayJakarta()
+  if (isHolidayDate(tanggal)) return res.json({ tanggal, libur: true, rows: [] })
+  const d = new Date(tanggal + 'T00:00:00+07:00')
+  const hari = HARI_ID[isNaN(d.getTime()) ? new Date().getDay() : d.getDay()]
+  const rows = db.prepare(`SELECT g.id,g.nama,g.nip,MIN(j.jam_mulai) waktu_masuk,MAX(j.jam_selesai) waktu_pulang,COUNT(j.id) jam
+    FROM gtk g JOIN jadwal j ON j.gtk_id=g.id AND j.tenant_id=g.tenant_id
+    WHERE g.tenant_id=? AND lower(j.hari)=? AND j.jenis_kegiatan='mapel' GROUP BY g.id ORDER BY g.nama`).all(req.tenantId, hari)
+  res.json({ tanggal, hari, libur: false, rows })
+})
+app.post('/api/absensi-guru/batch-jadwal', STAFF, (req, res) => {
+  const { tanggal, data } = req.body
+  try { assertKbmActive(req, tanggal) } catch (e) { return res.status(400).json({ error: e.message }) }
+  if (!Array.isArray(data)) return res.status(400).json({ error: 'Data harus array' })
+  let count=0
+  for (const d of data) {
+    const exists = db.prepare('SELECT id FROM absensi_guru WHERE gtk_id=? AND tanggal=? AND tenant_id=?').get(d.gtk_id, tanggal, req.tenantId)
+    if (exists) db.prepare('UPDATE absensi_guru SET status=?, waktu_masuk=?, waktu_pulang=?, keterangan=? WHERE id=? AND tenant_id=?').run(d.status||'hadir', d.waktu_masuk||null, d.waktu_pulang||null, d.keterangan||'', exists.id, req.tenantId)
+    else db.prepare('INSERT INTO absensi_guru (id,gtk_id,tanggal,status,waktu_masuk,waktu_pulang,keterangan,tenant_id) VALUES (?,?,?,?,?,?,?,?)').run(uuidv4(), d.gtk_id, tanggal, d.status||'hadir', d.waktu_masuk||null, d.waktu_pulang||null, d.keterangan||'', req.tenantId)
+    count++
+  }
+  res.json({ count })
 })
 
 // ==================== JURNAL MENGAJAR ====================
@@ -3387,6 +3603,13 @@ for (const [name, definition] of [
   ['media_url', 'TEXT DEFAULT ""'], ['media_type', 'TEXT DEFAULT ""'], ['link_url', 'TEXT DEFAULT ""'],
   ['lokasi', 'TEXT DEFAULT ""'], ['sticker', 'TEXT DEFAULT ""'], ['emoticon', 'TEXT DEFAULT ""']
 ]) if (!db.prepare('PRAGMA table_info(posting)').all().some(c => c.name === name)) db.exec(`ALTER TABLE posting ADD COLUMN ${name} ${definition}`)
+
+app.get('/api/notifications', authMiddleware, (req, res) => {
+  const role = req.user.role || ''
+  const rows = db.prepare(`SELECT id, judul, isi, kategori, penulis_nama, created_at FROM posting WHERE tenant_id=? AND (kategori IN ('pengumuman','info','berita') OR kategori IS NULL) ORDER BY created_at DESC LIMIT 20`).all(req.tenantId)
+  res.json(rows.map(r => ({ ...r, role })))
+})
+
 app.get('/api/posting', authMiddleware, (req, res) => {
   res.json(db.prepare('SELECT * FROM posting WHERE tenant_id=? ORDER BY created_at DESC').all(req.tenantId))
 })
@@ -3737,7 +3960,8 @@ app.put('/api/wa-gateway/config', ADMIN, (req, res) => {
 app.post('/api/wa-gateway/test', ADMIN, async (req, res) => {
   const { phone, message } = req.body
   const result = waQueue.enqueue(db, { tenantId: req.tenantId, phone, message: message || 'Test pesan dari JURNALKU', key: `test:${uuidv4()}` })
-  res.json(result)
+  // Baileys path is queued first, sent by worker shortly after. UI needs queued=true as success, not failure.
+  res.json({ ...result, success: !!result.queued, status: result.queued ? 'queued' : 'failed', message: result.queued ? 'Pesan masuk antrean dan akan dikirim Baileys' : (result.reason || 'Gagal antre') })
 })
 
 app.get('/api/wa-gateway/status', ADMIN, (req, res) => {

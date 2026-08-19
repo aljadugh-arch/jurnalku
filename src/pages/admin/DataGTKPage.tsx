@@ -174,9 +174,10 @@ export default function DataGTKPage() {
         ))}
       </div>
 
-      {/* Detail panel */}
+      {/* Detail popup */}
       {selected && (
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100">
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-xl border border-gray-100 w-full max-w-3xl max-h-[90vh] overflow-y-auto">
           <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
             <div className="flex items-center gap-3">
               <div className="w-12 h-12 rounded-full overflow-hidden border flex-shrink-0 bg-gray-100">
@@ -224,6 +225,7 @@ export default function DataGTKPage() {
             <button onClick={() => handleDelete(selected.id, selected.nama)} className="flex items-center gap-1.5 px-3 py-2 bg-red-50 text-red-600 rounded-lg text-sm hover:bg-red-100">
               <Trash2 size={14} /> Hapus
             </button>
+          </div>
           </div>
         </div>
       )}

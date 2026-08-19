@@ -8,7 +8,8 @@ function setupWA(db) {
     message_id TEXT, last_error TEXT, created_at TEXT NOT NULL DEFAULT (datetime('now')),
     UNIQUE(tenant_id,idempotency_key));
     CREATE INDEX IF NOT EXISTS idx_wa_queue_due ON wa_queue(status,available_at,tenant_id);
-    CREATE TABLE IF NOT EXISTS wa_sessions(tenant_id TEXT PRIMARY KEY,status TEXT NOT NULL DEFAULT 'disconnected',qr TEXT,last_error TEXT,phone TEXT,requested_action TEXT,updated_at TEXT NOT NULL DEFAULT (datetime('now')))`)
+    CREATE TABLE IF NOT EXISTS wa_sessions(tenant_id TEXT PRIMARY KEY,status TEXT NOT NULL DEFAULT 'disconnected',qr TEXT,last_error TEXT,phone TEXT,requested_action TEXT,updated_at TEXT NOT NULL DEFAULT (datetime('now')));
+    CREATE TABLE IF NOT EXISTS wa_notif_whitelist(id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL, target_type TEXT NOT NULL, target_id TEXT, phone TEXT, reason TEXT, aktif INTEGER DEFAULT 1, created_at TEXT DEFAULT (datetime('now')))`)
   if(!db.prepare("PRAGMA table_info(wa_sessions)").all().some(c=>c.name==='requested_action')) db.exec('ALTER TABLE wa_sessions ADD COLUMN requested_action TEXT')
 }
 function normalizePhone(value) {
@@ -16,8 +17,14 @@ function normalizePhone(value) {
   if(p.startsWith('0')) p='62'+p.slice(1); else if(p.startsWith('8')) p='62'+p
   return /^62[1-9]\d{7,13}$/.test(p)?p:''
 }
-function enqueue(db,{tenantId,phone,message,key}) {
+function isWhitelisted(db, tenantId, phone, targetType='', targetId='') {
   const normalized=normalizePhone(phone)
+  if(!normalized)return false
+  return !!db.prepare(`SELECT id FROM wa_notif_whitelist WHERE tenant_id=? AND aktif=1 AND (phone=? OR (target_type=? AND target_id=?)) LIMIT 1`).get(tenantId, normalized, targetType, targetId)
+}
+function enqueue(db,{tenantId,phone,message,key,targetType='',targetId=''}) {
+  const normalized=normalizePhone(phone)
+  if(isWhitelisted(db, tenantId, normalized, targetType, targetId)) return {queued:false,reason:'whitelisted'}
   if(!tenantId||!normalized||!String(message||'').trim()) return {queued:false,reason:'invalid'}
   const id=crypto.randomUUID()
   const r=db.prepare(`INSERT OR IGNORE INTO wa_queue(id,tenant_id,phone,message,idempotency_key) VALUES(?,?,?,?,?)`).run(id,tenantId,normalized,String(message),key||id)
@@ -43,7 +50,7 @@ function queueWaliAttendance(db,{tenantId,studentId,date,session,status}) {
   if(!normalizePhone(phone))return {queued:false,reason:'missing_phone'}
   const school=db.prepare('SELECT nama_lembaga FROM settings WHERE tenant_id=?').get(tenantId)
   const message=render(conf.template_absensi_wali,{nama_ortu:s.nama_ortu||user?.nama||'Bapak/Ibu',nama:s.nama,status,tanggal:date,lembaga:school?.nama_lembaga||'Sekolah'})
-  return enqueue(db,{tenantId,phone,message,key:`wali:${studentId}:${date}:${session}:${status}`})
+  return enqueue(db,{tenantId,phone,message,key:`wali:${studentId}:${date}:${session}:${status}`,targetType:'siswa',targetId:studentId})
 }
 function queueDueTeachers(db,{tenantId,date,time}) {
   const conf=db.prepare('SELECT * FROM notif_settings WHERE tenant_id=?').get(tenantId)
@@ -53,7 +60,7 @@ function queueDueTeachers(db,{tenantId,date,time}) {
   for(const g of db.prepare("SELECT * FROM gtk WHERE tenant_id=? AND status='aktif' AND NOT EXISTS(SELECT 1 FROM absensi_guru a WHERE a.tenant_id=? AND a.gtk_id=gtk.id AND a.tanggal=?)").all(tenantId,tenantId,date)){
     if(!normalizePhone(g.no_hp)){out.missing++;continue}
     const message=render(conf.template_guru_ceklok,{nama:g.nama,tanggal:date,lembaga:school?.nama_lembaga||'Sekolah'})
-    const r=enqueue(db,{tenantId,phone:g.no_hp,message,key:`guru-belum-ceklok:${g.id}:${date}`}); r.queued?out.queued++:out.skipped++
+    const r=enqueue(db,{tenantId,phone:g.no_hp,message,key:`guru-belum-ceklok:${g.id}:${date}`,targetType:'gtk',targetId:g.id}); r.queued?out.queued++:out.skipped++
   } return out
 }
 function queueDueSchedules(db,{tenantId,date,time}) {
@@ -64,16 +71,16 @@ function queueDueSchedules(db,{tenantId,date,time}) {
   const active=db.prepare('SELECT 1 FROM tahun_ajaran WHERE tenant_id=? AND aktif=1 AND (? BETWEEN tanggal_mulai AND tanggal_selesai) LIMIT 1').get(tenantId,date)
   if(!active)return out
   const school=db.prepare('SELECT nama_lembaga FROM settings WHERE tenant_id=?').get(tenantId)
-  const rows=db.prepare(`SELECT j.id,j.jam_mulai,j.jam_selesai,g.nama nama_guru,g.no_hp,m.nama mapel,r.nama rombel
+  const rows=db.prepare(`SELECT j.id,j.gtk_id,j.jam_mulai,j.jam_selesai,g.nama nama_guru,g.no_hp,m.nama mapel,r.nama rombel
     FROM jadwal j JOIN gtk g ON g.id=j.gtk_id AND g.tenant_id=j.tenant_id AND g.status='aktif'
     JOIN mapel m ON m.id=j.mapel_id AND m.tenant_id=j.tenant_id JOIN rombel r ON r.id=j.rombel_id AND r.tenant_id=j.tenant_id
-    WHERE j.tenant_id=? AND j.hari=? AND substr(j.jam_mulai,1,5)=?`).all(tenantId,day,time)
+    WHERE j.tenant_id=? AND j.hari=? AND time(j.jam_mulai) BETWEEN time(?, '+5 minutes') AND time(?, '+5 minutes')`).all(tenantId,day,time,time)
   for(const x of rows){
     if(!normalizePhone(x.no_hp)){out.missing++;continue}
     const message=render(conf.template_jadwal_guru,{...x,tanggal:date,lembaga:school?.nama_lembaga||'Sekolah'})
-    const r=enqueue(db,{tenantId,phone:x.no_hp,message,key:`jadwal-guru:${x.id}:${date}:${x.jam_mulai}`})
+    const r=enqueue(db,{tenantId,phone:x.no_hp,message,key:`jadwal-guru:${x.id}:${date}:${x.jam_mulai}`,targetType:'gtk',targetId:x.gtk_id})
     r.queued?out.queued++:out.skipped++
   }
   return out
 }
-module.exports={setupWA,normalizePhone,enqueue,claimNext,render,queueWaliAttendance,queueDueTeachers,queueDueSchedules}
+module.exports={setupWA,normalizePhone,enqueue,claimNext,render,queueWaliAttendance,queueDueTeachers,queueDueSchedules,isWhitelisted}

@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react'
-import { Calendar, ClipboardList, BookOpen, QrCode, MapPin, Users, PenLine, ChevronRight, CheckCircle2, Clock } from 'lucide-react'
+import { Calendar, ClipboardCheck, ClipboardList, BookOpen, QrCode, MapPin, Users, PenLine, ChevronRight, CheckCircle2, Clock } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import api from '../../services/api'
+import toast from 'react-hot-toast'
 import { Card, StatCard, Badge, Avatar } from '../../components/ui'
 
 function greetingByHour() {
@@ -27,11 +28,12 @@ function toMinutes(t: string) {
 }
 
 export default function GuruDashboard() {
-  const [data, setData] = useState<any>({ jadwal_hari_ini: [], rekap_jurnal: { draft: 0, submitted: 0, approved: 0, total: 0 }, rombel_count: 0, gtk: null })
+  const [data, setData] = useState<any>({ jadwal_hari_ini: [], rekap_jurnal: { draft: 0, submitted: 0, approved: 0, total: 0 }, rombel_count: 0, gtk: null, tugas: [] })
+  const [tugasForm, setTugasForm] = useState({ judul: '', deskripsi: '', deadline: '', rombel_id: '', mapel_id: '' })
   const navigate = useNavigate()
 
   useEffect(() => {
-    api.get('/guru/dashboard').then(res => setData(res.data)).catch(() => {})
+    api.get('/guru/dashboard').then(res => { setData(res.data); const j=res.data.jadwal_hari_ini?.[0]; if (j) setTugasForm(f => ({ ...f, rombel_id: j.rombel_id || '', mapel_id: j.mapel_id || '' })) }).catch(() => {})
   }, [])
 
   const rekap = data.rekap_jurnal || {}
@@ -87,10 +89,10 @@ export default function GuruDashboard() {
 
       {/* Quick Stats */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <StatCard label="Jadwal Hari Ini" value={data.jadwal_hari_ini.length + ' JP'} icon={<Calendar size={18} />} gradient="from-blue-500 to-indigo-600" />
-        <StatCard label="Jurnal Disetujui" value={approved} icon={<CheckCircle2 size={18} />} gradient="from-green-500 to-emerald-600" sub={persenApproved + '% selesai'} />
-        <StatCard label="Jurnal Pending" value={pending} icon={<ClipboardList size={18} />} gradient="from-orange-500 to-amber-600" />
-        <StatCard label="Rombel Diampu" value={data.rombel_count} icon={<Users size={18} />} gradient="from-purple-500 to-fuchsia-600" />
+        <button onClick={() => navigate('/guru/jadwal')} className="text-left active:scale-95 transition"><StatCard label="Jadwal Hari Ini" value={data.jadwal_hari_ini.length + ' JP'} icon={<Calendar size={18} />} gradient="from-blue-500 to-indigo-600" /></button>
+        <button onClick={() => navigate('/guru/jurnal')} className="text-left active:scale-95 transition"><StatCard label="Jurnal Disetujui" value={approved} icon={<CheckCircle2 size={18} />} gradient="from-green-500 to-emerald-600" sub={persenApproved + '% selesai'} /></button>
+        <button onClick={() => navigate('/guru/jurnal')} className="text-left active:scale-95 transition"><StatCard label="Jurnal Pending" value={pending} icon={<ClipboardList size={18} />} gradient="from-orange-500 to-amber-600" /></button>
+        <button onClick={() => navigate('/guru/rombel')} className="text-left active:scale-95 transition"><StatCard label="Rombel Diampu" value={data.rombel_count} icon={<Users size={18} />} gradient="from-purple-500 to-fuchsia-600" /></button>
       </div>
 
       {/* Rekap Jurnal + progress */}
@@ -155,6 +157,28 @@ export default function GuruDashboard() {
               </button>
             )
           })}
+        </div>
+      </Card>
+
+
+      <div id="tugas"></div><Card title="Penugasan Siswa" icon={<ClipboardCheck size={18} className="text-primary" />}>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
+          <input value={tugasForm.judul} onChange={e => setTugasForm({...tugasForm, judul: e.target.value})} placeholder="Judul tugas" className="px-3 py-2 border rounded-lg text-sm" />
+          <input type="datetime-local" value={tugasForm.deadline} onChange={e => setTugasForm({...tugasForm, deadline: e.target.value})} className="px-3 py-2 border rounded-lg text-sm" />
+          <select value={tugasForm.rombel_id} onChange={e => setTugasForm({...tugasForm, rombel_id: e.target.value})} className="px-3 py-2 border rounded-lg text-sm">
+            <option value="">Pilih rombel</option>
+            {data.jadwal_hari_ini.map((j: any) => <option key={j.rombel_id + j.mapel_id} value={j.rombel_id}>{j.rombel_nama}</option>)}
+          </select>
+          <select value={tugasForm.mapel_id} onChange={e => setTugasForm({...tugasForm, mapel_id: e.target.value})} className="px-3 py-2 border rounded-lg text-sm">
+            <option value="">Pilih mapel</option>
+            {data.jadwal_hari_ini.map((j: any) => <option key={j.mapel_id + j.rombel_id} value={j.mapel_id}>{j.mapel_nama}</option>)}
+          </select>
+          <textarea value={tugasForm.deskripsi} onChange={e => setTugasForm({...tugasForm, deskripsi: e.target.value})} placeholder="Instruksi tugas" className="md:col-span-2 px-3 py-2 border rounded-lg text-sm" rows={3} />
+        </div>
+        <button onClick={async () => { try { await api.post('/guru/tugas', tugasForm); const r = await api.get('/guru/dashboard'); setData(r.data); setTugasForm({...tugasForm, judul: '', deskripsi: ''}); toast.success('Tugas dikirim') } catch (err: any) { toast.error(err.response?.data?.error || 'Gagal kirim tugas') } }} className="px-4 py-2 bg-primary text-white rounded-lg text-sm">Kirim Tugas</button>
+        <div className="mt-4 space-y-2">
+          {(data.tugas || []).slice(0,5).map((t: any) => <div key={t.id} className="rounded-xl border border-gray-100 p-3"><div className="flex items-start justify-between gap-2"><div><p className="font-semibold text-gray-800">{t.judul}</p><p className="text-xs text-gray-500">{t.mapel_nama || '-'} · {t.rombel_nama || '-'} · {t.deadline || '-'}</p></div><button onClick={async () => { await api.delete('/guru/tugas/' + t.id); const r=await api.get('/guru/dashboard'); setData(r.data) }} className="text-xs text-red-600 hover:underline">Hapus</button></div></div>)}
+          {(data.tugas || []).length === 0 && <p className="text-gray-400 text-sm text-center py-4">Belum ada tugas</p>}
         </div>
       </Card>
 

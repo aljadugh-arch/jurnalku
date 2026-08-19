@@ -42,6 +42,22 @@ export default function AbsensiGuruPage() {
     setForm(prev => ({ ...prev, [gtkId]: { ...prev[gtkId], [field]: value } }))
   }
 
+  const loadJadwalHarian = async () => {
+    try {
+      const r = await api.get('/absensi-guru/jadwal-harian', { params: { tanggal } })
+      const map: Record<string, any> = {}
+      for (const g of r.data.rows || []) map[g.id] = { status: 'hadir', waktu_masuk: g.waktu_masuk || '', waktu_pulang: g.waktu_pulang || '' }
+      setForm(prev => ({ ...prev, ...map }))
+      toast.success(`${(r.data.rows || []).length} GTK dari jadwal dimuat`)
+    } catch (err: any) { toast.error(err.response?.data?.error || 'Gagal muat jadwal') }
+  }
+
+  const handleBatchJadwal = async () => {
+    const data = Object.entries(form).filter(([, f]: any) => f.status).map(([gtk_id, f]: any) => ({ gtk_id, ...f }))
+    try { const r = await api.post('/absensi-guru/batch-jadwal', { tanggal, data }); toast.success(`${r.data.count} absensi GTK tersimpan`); loadData() }
+    catch (err: any) { toast.error(err.response?.data?.error || 'Gagal batch') }
+  }
+
   const handleSave = async () => {
     setLoading(true)
     try {
@@ -71,9 +87,10 @@ export default function AbsensiGuruPage() {
           <h1 className="text-2xl font-bold text-gray-800 font-display">Absensi Guru/GTK</h1>
           <p className="text-gray-500 text-sm mt-1">GPS + Selfie untuk kehadiran guru</p>
         </div>
-        <button onClick={handleSave} disabled={loading} className="flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-lg text-sm hover:bg-primary-dark disabled:opacity-50">
+        <div className="flex gap-2 flex-wrap"><button onClick={loadJadwalHarian} className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg text-sm">Muat Jadwal Hari Ini</button><button onClick={handleBatchJadwal} className="px-4 py-2 bg-green-600 text-white rounded-lg text-sm">Simpan Batch Jadwal</button><button onClick={handleSave} disabled={loading} className="flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-lg text-sm hover:bg-primary-dark disabled:opacity-50">
           <Save size={16} /> {loading ? 'Menyimpan...' : 'Simpan Absensi'}
         </button>
+        </div>
       </div>
 
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">

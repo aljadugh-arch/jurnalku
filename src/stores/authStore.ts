@@ -15,19 +15,6 @@ interface AuthState {
   updateUser: (partial: Partial<User>) => void
 }
 
-// Akun demo hanya untuk lingkungan development.
-// Di production bundle, blok ini di-dead-code-eliminate oleh Vite
-// sehingga tidak ada kredensial yang bocor ke browser user.
-const demoAccounts: Record<string, { email: string; password: string }> = import.meta.env.DEV
-  ? {
-      admin: { email: 'admin@jurnalku.id', password: 'admin123' },
-      kepala: { email: 'kepala@jurnalku.id', password: 'admin123' },
-      guru: { email: 'budi@jurnalku.id', password: 'admin123' },
-      siswa: { email: 'ahmad@jurnalku.id', password: 'admin123' },
-      wali_kelas: { email: 'siti@jurnalku.id', password: 'admin123' },
-    }
-  : {}
-
 export const useAuthStore = create<AuthState>((set) => ({
   user: null,
   token: localStorage.getItem('jurnalku_token'),
@@ -43,13 +30,7 @@ export const useAuthStore = create<AuthState>((set) => ({
     await useSettingsStore.getState().loadSettings()
   },
   loginDemo: async (role) => {
-    const creds = demoAccounts[role]
-    if (!creds) {
-      // Di production demoAccounts kosong — login demo tidak tersedia
-      console.warn('loginDemo: akun demo tidak tersedia di mode production')
-      return
-    }
-    const res = await api.post('/auth/login', creds)
+    const res = await api.post('/auth/demo', { role })
     localStorage.setItem('jurnalku_token', res.data.token)
     set({ user: res.data.user, token: res.data.token, isAuthenticated: true })
     await useSettingsStore.getState().loadSettings()

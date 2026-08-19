@@ -9,15 +9,19 @@ import * as XLSX from 'xlsx'
 export default function RekapAbsensiPage() {
   const [tab, setTab] = useState<'siswa' | 'gtk'>('siswa')
   const [bulan, setBulan] = useState(() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}` })
+  const [mode, setMode] = useState<'harian' | 'mingguan' | 'bulanan' | 'semester'>('bulanan')
+  const [from, setFrom] = useState(() => new Date().toISOString().split('T')[0])
+  const [to, setTo] = useState(() => new Date().toISOString().split('T')[0])
   const [rekapSiswa, setRekapSiswa] = useState<any[]>([])
   const [rekapGtk, setRekapGtk] = useState<any[]>([])
   const [summary, setSummary] = useState<any>({ hadir: 0, sakit: 0, izin: 0, alpha: 0 })
 
-  useEffect(() => { loadRekap() }, [bulan, tab])
+  useEffect(() => { loadRekap() }, [bulan, tab, mode, from, to])
 
   const loadRekap = async () => {
     try {
-      const res = await api.get('/rekap-absensi', { params: { bulan, tipe: tab } })
+      const apiMode = mode === 'harian' ? 'daily' : mode === 'mingguan' ? 'weekly' : mode === 'bulanan' ? 'monthly' : 'semester'
+      const res = await api.get('/rekap-absensi', { params: { tipe: tab, mode: apiMode, mulai: from, tanggal_mulai: from, bulan, tahun_ajaran: new Date().getFullYear() + '/' + (new Date().getFullYear()+1), semester: 'ganjil' } })
       if (tab === 'siswa') setRekapSiswa(res.data.detail)
       else setRekapGtk(res.data.detail)
       setSummary(res.data.summary)
@@ -58,13 +62,13 @@ export default function RekapAbsensiPage() {
   const exportPDF = () => {
     const printWindow = window.open('', '_blank')
     if (!printWindow) { toast.error('Popup blocked'); return }
-    const header = tab === 'siswa'
-      ? '<th>No</th><th>Nama</th><th>NIS</th><th>Rombel</th><th>Hadir</th><th>Sakit</th><th>Izin</th><th>Alpha</th><th>%</th>'
-      : '<th>No</th><th>Nama</th><th>NIP</th><th>Jabatan</th><th>Hadir</th><th>Sakit</th><th>Izin</th><th>Alpha</th><th>%</th>'
-    const rows = data.map((d: any, i: number) =>
-      `<tr><td>${i+1}</td><td>${d.nama}</td><td>${d.nis||d.nip||''}</td><td>${d.rombel_nama||d.jabatan||''}</td><td>${d.hadir}</td><td>${d.sakit}</td><td>${d.izin}</td><td>${d.alpha}</td><td>${d.total>0?Math.round(d.hadir/d.total*100):'0'}%</td></tr>`
-    ).join('')
-    printWindow.document.write(`<!DOCTYPE html><html><head><title>Rekap Absensi</title><style>body{font-family:Arial,sans-serif;padding:20px;font-size:12px}table{border-collapse:collapse;width:100%}th,td{border:1px solid #ddd;padding:6px;text-align:center}th{background:#f3f4f6}@media print{body{padding:0}}</style></head><body><h2 style="text-align:center">Rekapitulasi Absensi ${tab === 'siswa' ? 'Siswa' : 'GTK'}</h2><h3 style="text-align:center">Periode: ${bulan}</h3><p>Total: Hadir ${summary.hadir} | Sakit ${summary.sakit} | Izin ${summary.izin} | Alpha ${summary.alpha}</p><table><thead><tr>${header}</tr></thead><tbody>${rows}</tbody></table><script>setTimeout(()=>window.print(),500)<\/script></body></html>`)
+    const who = tab === 'siswa' ? 'SISWA' : 'GTK'
+    const rows = data.map((d: any, i: number) => {
+      const total = d.total || d.hadir + d.sakit + d.izin + d.alpha
+      const pct = total > 0 ? Math.round(d.hadir / total * 100) + '%' : '0%'
+      return `<tr><td>${i+1}</td><td class="nama">${escapeHtml(d.nama || '')}</td><td>${escapeHtml(d.nis||d.nip||'')}</td><td>${escapeHtml(d.rombel_nama||d.jabatan||'')}</td><td>${d.sakit}</td><td>${d.izin}</td><td>${d.alpha}</td><td>${pct}</td></tr>`
+    }).join('')
+    printWindow.document.write(`<!DOCTYPE html><html><head><title>Rekap Absensi</title><style>@page{size:landscape;margin:8mm}body{font-family:Arial,sans-serif;font-size:11px}h2,h3{text-align:center;margin:2px 0}.field{font-weight:bold;margin:10px 0}.hl{background:#ffeb3b;padding:2px 18px}table{border-collapse:collapse;width:100%;font-size:10px}th,td{border:1px solid #000;text-align:center;padding:3px}.nama{text-align:left;min-width:160px}.s{background:#22c55e}.i{background:#38bdf8}.a{background:#ef4444}.h{background:#d1d5db}</style></head><body><h2>REKAPITULASI ABSENSI ${who}</h2><h3>SEMESTER GANJIL TP. ${new Date().getFullYear()}/${new Date().getFullYear()+1}</h3><h3>MADRASAH TSANAWIYAH PLUS SUNAN DRAJAT 7 PALANG</h3><div class="field">PERIODE : <span class="hl">${mode.toUpperCase()} ${bulan}</span></div><table><thead><tr><th>NO</th><th>NAMA</th><th>${tab==='siswa'?'NIS':'NIP'}</th><th>${tab==='siswa'?'ROMBEL':'JABATAN'}</th><th class="s">SAKIT</th><th class="i">IZIN</th><th class="a">ALFA</th><th class="h">HADIR</th></tr></thead><tbody>${rows}</tbody></table><script>setTimeout(()=>window.print(),500)<\/script></body></html>`)
     printWindow.document.close()
   }
 
@@ -95,7 +99,7 @@ export default function RekapAbsensiPage() {
             <Users size={16} /> GTK
           </button>
         </div>
-        <input type="month" value={bulan} onChange={e => setBulan(e.target.value)} className="px-3 py-2 border rounded-lg text-sm" />
+        <select value={mode} onChange={e => setMode(e.target.value as any)} className="px-3 py-2 border rounded-lg text-sm"><option value="harian">Harian</option><option value="mingguan">Mingguan</option><option value="bulanan">Bulanan</option><option value="semester">Semester</option></select><input type="month" value={bulan} onChange={e => setBulan(e.target.value)} className="px-3 py-2 border rounded-lg text-sm" />{mode !== 'bulanan' && mode !== 'semester' && <><input type="date" value={from} onChange={e => setFrom(e.target.value)} className="px-3 py-2 border rounded-lg text-sm" /><input type="date" value={to} onChange={e => setTo(e.target.value)} className="px-3 py-2 border rounded-lg text-sm" /></>}
       </div>
 
       {/* Summary Cards */}

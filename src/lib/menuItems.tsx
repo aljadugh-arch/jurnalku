@@ -2,7 +2,7 @@ import {
   LayoutDashboard, Users, GraduationCap, BookOpen, Calendar,
   ClipboardList, UserCheck, QrCode, MapPin,
   Layers, Activity, Globe, Sparkles, DollarSign, Settings, MessageSquare,
-  FileText, ClipboardCheck, ScrollText, School
+  FileText, ClipboardCheck, ScrollText, School, Wallet, Receipt
 } from 'lucide-react'
 
 export interface MenuItem {
@@ -72,6 +72,7 @@ export const guruMenuItems: MenuItem[] = [
   { label: 'Penilaian Harian', icon: <BookOpen size={20} />, path: '/guru/penilaian-harian' },
   { label: 'Catatan Kepribadian', icon: <ScrollText size={20} />, path: '/guru/catatan-kepribadian' },
   { label: 'Jadwal Saya', icon: <Calendar size={20} />, path: '/guru/jadwal' },
+  { label: 'Penugasan', icon: <ClipboardCheck size={20} />, path: '/guru#tugas' },
   { label: 'Absensi Siswa', icon: <QrCode size={20} />, path: '/guru/absensi-siswa' },
   { label: 'Absensi Saya', icon: <MapPin size={20} />, path: '/guru/absensi-guru' },
   { label: 'Modul Ajar', icon: <Sparkles size={20} />, path: '/guru/modul-ajar' },
@@ -151,6 +152,14 @@ const adminPrimaryGrid: FlatMenu[] = [
 
 export function primaryGridForRole(role?: string): FlatMenu[] {
   if (role === 'admin' || role === 'kepala' || role === 'super_admin' || role === 'operator') return adminPrimaryGrid
+  if (role === 'siswa') return [
+    { label: 'Kehadiran', path: '/siswa#kehadiran', icon: <UserCheck size={20} /> },
+    { label: 'Tabungan', path: '/siswa#tabungan', icon: <Wallet size={20} /> },
+    { label: 'Tagihan', path: '/siswa#tagihan', icon: <Receipt size={20} /> },
+    { label: 'Nilai', path: '/siswa#nilai', icon: <BookOpen size={20} /> },
+    { label: 'Jadwal Hari Ini', path: '/siswa#jadwal', icon: <Calendar size={20} /> },
+    { label: 'Tugas', path: '/siswa#tugas', icon: <ClipboardCheck size={20} /> },
+  ]
   return flattenMenu(menuForRole(role))
     .filter(item => !['/admin', '/guru', '/siswa'].includes(item.path))
     .slice(0, 7)

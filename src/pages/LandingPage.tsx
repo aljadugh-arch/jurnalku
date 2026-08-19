@@ -65,7 +65,7 @@ export default function LandingPage() {
             <Link to="/register" className="inline-flex items-center gap-2 px-8 py-4 bg-primary text-white rounded-xl font-bold text-lg hover:bg-primary-dark shadow-2xl shadow-primary/40 transition-all hover:scale-105">
               Mulai Gratis Sekarang <ArrowRight size={20} />
             </Link>
-            <Link to="/login" className="inline-flex items-center gap-2 px-8 py-4 border-2 border-gray-300 text-gray-700 rounded-xl font-semibold hover:bg-gray-50 transition-all">
+            <Link to="/login#demo" className="inline-flex items-center gap-2 px-8 py-4 border-2 border-gray-300 text-gray-700 rounded-xl font-semibold hover:bg-gray-50 transition-all">
               Lihat Demo
             </Link>
           </div>

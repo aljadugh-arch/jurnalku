@@ -13,12 +13,25 @@ export default function LoginPage() {
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const navigate = useNavigate()
-  const { loginWithCredentials } = useAuthStore()
+  const { loginWithCredentials, loginDemo } = useAuthStore()
 
   const getRedirectPath = (role: string) => {
     if (['admin', 'super_admin', 'kepala', 'bendahara', 'operator', 'tata_usaha', 'tu'].includes(role)) return '/admin'
     if (role === 'guru' || role === 'wali_kelas') return '/guru'
     return '/siswa'
+  }
+
+
+  const handleDemo = async (role: string) => {
+    setError('')
+    setLoading(true)
+    try {
+      await loginDemo(role)
+      const user = useAuthStore.getState().user
+      navigate(getRedirectPath(user?.role || role))
+    } catch (err: any) {
+      setError(err.response?.data?.error || 'Akun demo belum tersedia')
+    } finally { setLoading(false) }
   }
 
   const handleLogin = async (e: React.FormEvent) => {
@@ -163,6 +176,18 @@ export default function LoginPage() {
                 )}
               </button>
             </form>
+
+
+            <div className="mt-5 rounded-2xl border border-blue-100 bg-blue-50 p-3">
+              <p className="text-sm font-bold text-gray-800 mb-2">Akun demo</p>
+              <div className="grid grid-cols-2 gap-2">
+                {['admin','kepala','guru','bendahara','siswa'].map(role => (
+                  <button key={role} type="button" onClick={() => handleDemo(role)} className="rounded-xl bg-white px-3 py-2 text-xs font-semibold text-primary border border-blue-100 hover:bg-blue-100 capitalize">
+                    Demo {role.replace('_',' ')}
+                  </button>
+                ))}
+              </div>
+            </div>
 
             {/* Register link */}
             <div className="mt-6 text-center">

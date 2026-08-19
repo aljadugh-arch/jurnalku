@@ -1,9 +1,8 @@
 import { useState, useEffect } from 'react'
-import { Calendar, CheckCircle, BookOpen, Activity, ChevronRight, Clock, ClipboardCheck } from 'lucide-react'
-import { useNavigate } from 'react-router-dom'
+import { Calendar, CheckCircle, BookOpen, Activity, ChevronRight, Clock, ClipboardCheck, Wallet, Receipt } from 'lucide-react'
+import { useLocation, useNavigate } from 'react-router-dom'
 import api from '../../services/api'
 import { Card, StatCard, Badge, Avatar } from '../../components/ui'
-import MobileMenuGrid from '../../components/MobileMenuGrid'
 
 function greetingByHour() {
   const h = new Date().getHours()
@@ -18,6 +17,8 @@ function nowMinutes() {
   return d.getHours() * 60 + d.getMinutes()
 }
 
+const fmt = (n: number) => 'Rp ' + Number(n || 0).toLocaleString('id-ID')
+
 function toMinutes(t: string) {
   if (!t) return -1
   const parts = String(t).split(':')
@@ -30,10 +31,21 @@ function toMinutes(t: string) {
 export default function SiswaDashboard() {
   const [data, setData] = useState<any>({ siswa: null, jadwal_hari_ini: [], rekap: { hadir: 0, sakit: 0, izin: 0, alpha: 0 } })
   const navigate = useNavigate()
+  const location = useLocation()
 
   useEffect(() => {
     api.get('/siswa/dashboard').then(res => setData(res.data)).catch(() => {})
   }, [])
+
+  useEffect(() => {
+    if (!location.hash) return
+    setTimeout(() => document.getElementById(location.hash.slice(1))?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 80)
+  }, [location.hash])
+
+  const goSection = (id: string) => {
+    history.replaceState(null, '', '#'+id)
+    document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }
 
   const totalAbsensi = data.rekap.hadir + data.rekap.sakit + data.rekap.izin + data.rekap.alpha
   const persenHadir = totalAbsensi > 0 ? Math.round((data.rekap.hadir / totalAbsensi) * 100) : 0
@@ -88,8 +100,23 @@ export default function SiswaDashboard() {
         <StatCard label="Alpha" value={data.rekap.alpha} icon={<Activity size={18} />} gradient="from-red-500 to-rose-600" onClick={() => navigate('/siswa/absensi')} />
       </div>
 
-      {/* Menu layanan mobile/tablet: di bawah stat cards */}
-      <MobileMenuGrid />
+
+      <div className="lg:hidden grid grid-cols-3 gap-3">
+        {[
+          ['Kehadiran', '#kehadiran', <Activity size={18} />],
+          ['Tabungan', '#tabungan', <Wallet size={18} />],
+          ['Tagihan', '#tagihan', <Receipt size={18} />],
+          ['Nilai', '#nilai', <BookOpen size={18} />],
+          ['Jadwal', '#jadwal', <Calendar size={18} />],
+          ['Tugas', '#tugas', <ClipboardCheck size={18} />],
+        ].map(([label, hash, icon]: any) => (
+          <button key={label} type="button" onClick={() => goSection(String(hash).slice(1))} className="rounded-2xl bg-white border border-gray-100 p-3 text-center shadow-sm active:scale-95 transition">
+            <span className="mx-auto mb-2 flex h-10 w-10 items-center justify-center rounded-xl bg-primary text-white">{icon}</span>
+            <span className="text-xs font-semibold text-gray-700">{label}</span>
+          </button>
+        ))}
+      </div>
+
 
       {/* Persentase Kehadiran */}
       <Card title="Kehadiran Bulan Ini" icon={<CheckCircle size={18} className="text-primary" />}>
@@ -102,8 +129,80 @@ export default function SiswaDashboard() {
         </div>
       </Card>
 
+
+      <div id="kehadiran"></div><Card title="Rekap Kehadiran Lengkap" icon={<Activity size={18} className="text-primary" />}>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+          {[
+            ['KBM', data.absensi_detail || [], 'tanggal', 'status'],
+            ['Kegiatan', data.kegiatan_detail || [], 'tanggal', 'status'],
+            ['Jamaah', data.jamaah_detail || [], 'tanggal', 'status'],
+            ['Ekstrakurikuler', data.ekskul_detail || [], 'tanggal', 'status'],
+          ].map(([label, rows]: any) => (
+            <div key={label} className="rounded-xl border border-gray-100 p-3">
+              <div className="flex justify-between mb-2"><b>{label}</b><span className="text-gray-400">{rows.length} data</span></div>
+              {rows.slice(0,4).map((r: any, i: number) => <div key={i} className="flex justify-between py-1 border-t border-gray-50"><span>{r.tanggal}</span><span className="capitalize">{r.status || '-'}</span></div>)}
+              {rows.length === 0 && <p className="text-gray-400">Belum ada data</p>}
+            </div>
+          ))}
+        </div>
+      </Card>
+
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+        <section id="tagihan" className="scroll-mt-24 min-w-0"><Card title="Tagihan" icon={<Receipt size={18} className="text-primary" />}>
+          <div className="text-xs text-gray-500 mb-3">Belum bayar {fmt(data.tagihan?.belum_bayar)} · Lunas {fmt(data.tagihan?.lunas)}</div>
+          <div className="space-y-2">
+            {(data.tagihan_detail || []).length === 0 && <p className="text-gray-400 text-sm text-center py-4">Belum ada tagihan</p>}
+            {(data.tagihan_detail || []).slice(0, 5).map((t: any) => (
+              <div key={t.id} className="grid grid-cols-[1fr_auto] items-center gap-3 rounded-xl border border-gray-100 p-3">
+                <div className="min-w-0"><p className="font-medium text-sm text-gray-800 truncate">{t.jenis_nama || 'Tagihan'}</p><p className="text-xs text-gray-400 truncate">{t.bulan || '-'} {t.tahun || ''}</p></div>
+                <div className="text-right shrink-0"><p className="text-sm font-semibold text-gray-800 whitespace-nowrap">{fmt(t.nominal)}</p><Badge tone={t.status === 'lunas' ? 'green' : 'red'}>{t.status === 'lunas' ? 'Lunas' : 'Belum'}</Badge></div>
+              </div>
+            ))}
+          </div>
+        </Card></section>
+        <section id="tabungan" className="scroll-mt-24 min-w-0"><Card title="Tabungan" icon={<Wallet size={18} className="text-primary" />}>
+          <div className="text-lg font-bold text-primary mb-3">Saldo {fmt(data.tabungan?.saldo)}</div>
+          <div className="space-y-2">
+            {(data.tabungan_detail || []).length === 0 && <p className="text-gray-400 text-sm text-center py-4">Belum ada mutasi tabungan</p>}
+            {(data.tabungan_detail || []).slice(0, 5).map((t: any, i: number) => (
+              <div key={i} className="grid grid-cols-[1fr_auto] items-center gap-3 rounded-xl border border-gray-100 p-3">
+                <div className="min-w-0"><p className={"text-sm font-medium whitespace-nowrap " + (t.tipe === 'setor' ? 'text-green-700' : 'text-red-700')}>{t.tipe === 'setor' ? '+' : '-'} {fmt(t.nominal)}</p><p className="text-xs text-gray-400 truncate">{t.tanggal} {t.keterangan ? '· ' + t.keterangan : ''}</p></div>
+                <p className="text-xs text-gray-500 whitespace-nowrap">{fmt(t.saldo_akhir)}</p>
+              </div>
+            ))}
+          </div>
+        </Card></section>
+      </div>
+
+      <div id="nilai" className="scroll-mt-24"></div><Card title="Nilai Terbaru" icon={<BookOpen size={18} className="text-primary" />}>
+        <div className="space-y-2">
+          {(data.nilai_detail || []).length === 0 && <p className="text-gray-400 text-sm text-center py-4">Belum ada nilai</p>}
+          {(data.nilai_detail || []).slice(0, 6).map((n: any, i: number) => (
+            <div key={i} className="grid grid-cols-4 gap-2 rounded-xl border border-gray-100 p-3 text-sm">
+              <div className="col-span-1 font-medium text-gray-800 truncate">{n.mapel_nama || '-'}</div>
+              <div className="text-center">P: <b>{n.pengetahuan ?? '-'}</b></div>
+              <div className="text-center">K: <b>{n.keaktifan ?? '-'}</b></div>
+              <div className="text-center">S: <b>{n.sikap ?? '-'}</b></div>
+            </div>
+          ))}
+        </div>
+      </Card>
+
+      <div id="tugas"></div><Card title="Tugas dari Guru" icon={<ClipboardCheck size={18} className="text-primary" />}>
+        <div className="space-y-2">
+          {(data.tugas || []).length === 0 && <p className="text-gray-400 text-sm text-center py-6">Belum ada tugas</p>}
+          {(data.tugas || []).slice(0, 6).map((t: any) => (
+            <div key={t.id} className="rounded-xl border border-gray-100 p-3">
+              <p className="font-semibold text-gray-800">{t.judul}</p>
+              <p className="text-xs text-gray-500">{t.mapel_nama || '-'} · {t.guru_nama || '-'} · Deadline {t.deadline || '-'}</p>
+              {t.deskripsi && <p className="text-sm text-gray-600 mt-2">{t.deskripsi}</p>}
+            </div>
+          ))}
+        </div>
+      </Card>
+
       {/* Jadwal Hari Ini */}
-      <Card title="Jadwal Hari Ini" icon={<Calendar size={18} className="text-primary" />}>
+      <div id="jadwal"></div><Card title="Jadwal Hari Ini" icon={<Calendar size={18} className="text-primary" />}>
         <div className="space-y-2">
           {data.jadwal_hari_ini.length === 0 && (
             <p className="text-gray-400 text-sm text-center py-6">Tidak ada jadwal hari ini</p>

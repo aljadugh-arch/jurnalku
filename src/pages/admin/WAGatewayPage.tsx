@@ -10,8 +10,9 @@ export default function WAGatewayPage() {
   const [testPhone, setTestPhone] = useState('')
   const [testMsg, setTestMsg] = useState('Test pesan dari JURNALKU 🎓')
   const [testResult, setTestResult] = useState<any>(null)
+  const [waStatus, setWaStatus] = useState<any>(null)
 
-  useEffect(() => { loadConfig() }, [])
+  useEffect(() => { loadConfig(); loadStatus() }, [])
 
   const loadConfig = async () => {
     try {
@@ -20,6 +21,11 @@ export default function WAGatewayPage() {
     } catch { toast.error('Gagal load konfigurasi') }
     finally { setLoading(false) }
   }
+
+  const loadStatus = async () => { try { const r = await api.get('/wa-gateway/status'); setWaStatus(r.data) } catch {} }
+  const connect = async () => { try { await api.post('/wa-gateway/connect'); toast.success('Connect diminta'); setTimeout(loadStatus, 1000) } catch { toast.error('Gagal connect') } }
+  const disconnect = async () => { try { await api.post('/wa-gateway/logout'); toast.success('Disconnect diminta'); setTimeout(loadStatus, 1000) } catch { toast.error('Gagal disconnect') } }
+  const openQr = async () => { try { const r = await api.get('/wa-gateway/qr-image'); if (!r.data.image) return toast.error('QR belum tersedia'); const w=window.open('','_blank'); w?.document.write(`<img src="${r.data.image}" style="width:280px"><p>Status: ${r.data.status}</p>`) } catch { toast.error('QR belum tersedia') } }
 
   const handleSave = async () => {
     setSaving(true)
@@ -36,8 +42,8 @@ export default function WAGatewayPage() {
     try {
       const res = await api.post('/wa-gateway/test', { phone: testPhone, message: testMsg })
       setTestResult(res.data)
-      if (res.data.success) toast.success('Pesan terkirim!')
-      else toast.error(res.data.error || 'Gagal kirim')
+      if (res.data.success || res.data.queued) toast.success(res.data.message || 'Pesan masuk antrean kirim')
+      else toast.error(res.data.error || res.data.reason || 'Gagal kirim')
     } catch { toast.error('Gagal test') }
   }
 
@@ -58,6 +64,19 @@ export default function WAGatewayPage() {
           <p className="text-sm text-gray-500">Provider: <strong className="capitalize">{config.provider || '-'}</strong></p>
         </div>
       </div>
+
+      {config.provider === 'baileys' && (
+        <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100 space-y-3">
+          <h2 className="text-lg font-bold text-gray-800">Device Baileys</h2>
+          <p className="text-sm text-gray-500">Status: <b>{waStatus?.status || 'disconnected'}</b> {waStatus?.phone ? `· ${waStatus.phone}` : ''}</p>
+          <div className="flex gap-2 flex-wrap">
+            <button onClick={connect} className="px-4 py-2 bg-green-600 text-white rounded-lg text-sm">Connect Device</button>
+            <button onClick={disconnect} className="px-4 py-2 bg-red-600 text-white rounded-lg text-sm">Disconnect Device</button>
+            <button onClick={openQr} className="px-4 py-2 bg-primary text-white rounded-lg text-sm">Scan QR</button>
+            <button onClick={loadStatus} className="px-4 py-2 bg-gray-100 rounded-lg text-sm">Refresh Status</button>
+          </div>
+        </div>
+      )}
 
       {/* Config Form */}
       <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100 space-y-5">

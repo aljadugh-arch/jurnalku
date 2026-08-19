@@ -20,6 +20,7 @@ function shade(hex: string, percent: number): string {
 
 export function applyTheme(s: ThemeSettings) {
   if (!s) return
+  document.documentElement.classList.toggle('dark', s.theme === 'dark')
   const root = document.documentElement.style
   if (s.primary_color) {
     root.setProperty('--color-primary', s.primary_color)

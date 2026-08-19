@@ -3,7 +3,7 @@ import { Search, Plus, X } from 'lucide-react'
 import toast from 'react-hot-toast'
 import api from '../../services/api'
 
-interface SaldoSiswa { id: string; nis: string; nama: string; saldo: number }
+interface SaldoSiswa { id: string; nis: string; nisn?: string; nama: string; saldo: number; rombel_nama?: string }
 interface Mutasi { id: string; tanggal: string; tipe: string; nominal: number; saldo_akhir: number; keterangan: string }
 
 export default function TabunganPage() {
@@ -24,13 +24,14 @@ export default function TabunganPage() {
   useEffect(() => { fetchSaldo() }, [])
 
   const filtered = saldoList.filter(s =>
-    s.nama.toLowerCase().includes(search.toLowerCase()) || s.nis.includes(search)
+    s.nama.toLowerCase().includes(search.toLowerCase()) || (s.nis || '').includes(search) || (s.nisn || '').includes(search)
   )
 
   const totalSaldo = saldoList.reduce((t, s) => t + s.saldo, 0)
 
   const handleSelectSiswa = async (siswa: SaldoSiswa) => {
     setSelectedSiswa(siswa)
+    setTrxForm(prev => ({ ...prev, siswa_id: siswa.id }))
     try { const res = await api.get('/tabungan', { params: { siswa_id: siswa.id } }); setMutasi(res.data) }
     catch { setMutasi([]) }
   }
@@ -77,7 +78,7 @@ export default function TabunganPage() {
               <div key={s.id} onClick={() => handleSelectSiswa(s)} className={'px-4 py-3 flex items-center justify-between cursor-pointer hover:bg-gray-50 ' + (selectedSiswa?.id === s.id ? 'bg-primary/5' : '')}>
                 <div>
                   <p className="text-sm font-medium text-gray-800">{s.nama}</p>
-                  <p className="text-xs text-gray-400">{s.nis}</p>
+                  <p className="text-xs text-gray-400">{s.nis || '-'} {s.rombel_nama ? '• ' + s.rombel_nama : ''}</p>
                 </div>
                 <p className={'text-sm font-bold ' + (s.saldo > 0 ? 'text-green-600' : 'text-gray-400')}>{fmt(s.saldo)}</p>
               </div>
@@ -114,7 +115,7 @@ export default function TabunganPage() {
               <div><label className="block text-xs font-medium text-gray-600 mb-1">Siswa *</label>
                 <select value={trxForm.siswa_id} onChange={e => setTrxForm({...trxForm, siswa_id: e.target.value})} className="w-full px-3 py-2 border rounded-lg text-sm">
                   <option value="">-- Pilih Siswa --</option>
-                  {saldoList.map(s => <option key={s.id} value={s.id}>{s.nama} ({s.nis})</option>)}
+                  {filtered.map(s => <option key={s.id} value={s.id}>{s.nama} ({s.nis || '-'}) {s.rombel_nama ? '- ' + s.rombel_nama : ''}</option>)}
                 </select>
               </div>
               <div className="grid grid-cols-2 gap-3">

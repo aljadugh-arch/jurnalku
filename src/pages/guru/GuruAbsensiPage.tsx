@@ -18,7 +18,7 @@ export default function GuruAbsensiPage() {
       const res = await api.get('/guru/absensi-saya')
       setTodayRecord(res.data.today)
       setHistory(res.data.history)
-    } catch {}
+    } catch (err: any) { toast.error(err.response?.data?.error || 'Gagal memuat data ceklok') }
   }
 
   const getLocation = (): Promise<{lat: number, lng: number, acc: number}> => {

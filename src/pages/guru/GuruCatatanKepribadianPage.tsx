@@ -24,6 +24,7 @@ interface Siswa {
 export default function CatatanKepribadianGuru() {
   const [data, setData] = useState<CatatanKepribadian[]>([])
   const [siswaList, setSiswaList] = useState<Siswa[]>([])
+  const [siswaSearch, setSiswaSearch] = useState('')
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [showForm, setShowForm] = useState(false)
@@ -46,16 +47,17 @@ export default function CatatanKepribadianGuru() {
     }
   }
 
-  const fetchSiswa = async () => {
+  const fetchSiswa = async (q = '') => {
     try {
-      const res = await api.get('/siswa')
+      const res = await api.get('/siswa', { params: q ? { search: q } : {} })
       setSiswaList(res.data)
-    } catch {}
+    } catch { toast.error('Gagal memuat daftar siswa') }
   }
 
   useEffect(() => { fetchData() }, [])
 
   const handleOpenForm = () => {
+    setSiswaSearch('')
     fetchSiswa()
     setShowForm(true)
   }
@@ -185,6 +187,7 @@ export default function CatatanKepribadianGuru() {
             <div className="space-y-3">
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1">Siswa *</label>
+                <div className="relative mb-2"><Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" /><input value={siswaSearch} onChange={e => { setSiswaSearch(e.target.value); fetchSiswa(e.target.value) }} placeholder="Cari nama / NIS / rombel..." className="w-full pl-9 pr-3 py-2 border border-gray-300 rounded-lg text-sm" /></div>
                 <select
                   value={form.siswa_id}
                   onChange={e => setForm({ ...form, siswa_id: e.target.value })}
@@ -192,7 +195,7 @@ export default function CatatanKepribadianGuru() {
                 >
                   <option value="">-- Pilih Siswa --</option>
                   {siswaList.map(s => (
-                    <option key={s.id} value={s.id}>{s.nama} ({s.nis})</option>
+                    <option key={s.id} value={s.id}>{s.nama} ({s.nis}) {s.rombel_nama ? '· ' + s.rombel_nama : ''}</option>
                   ))}
                 </select>
               </div>

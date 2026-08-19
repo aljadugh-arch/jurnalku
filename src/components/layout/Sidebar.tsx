@@ -81,6 +81,7 @@ const guruMenuItems: MenuItem[] = [
   { label: 'Penilaian Harian', icon: <BookOpen size={20} />, path: '/guru/penilaian-harian' },
   { label: 'Catatan Kepribadian', icon: <NotebookPen size={20} />, path: '/guru/catatan-kepribadian' },
   { label: 'Jadwal Saya', icon: <Calendar size={20} />, path: '/guru/jadwal' },
+  { label: 'Penugasan', icon: <ClipboardCheck size={20} />, path: '/guru#tugas' },
   { label: 'Absensi Siswa', icon: <QrCode size={20} />, path: '/guru/absensi-siswa' },
   { label: 'Absensi Ekskul/Peminatan', icon: <UserCheck size={20} />, path: '/guru/absensi-ekskul' },
   { label: 'Absensi Saya', icon: <MapPin size={20} />, path: '/guru/absensi-guru' },
@@ -90,10 +91,12 @@ const guruMenuItems: MenuItem[] = [
 
 const siswaMenuItems: MenuItem[] = [
   { label: 'Dashboard', icon: <LayoutDashboard size={20} />, path: '/siswa' },
-  { label: 'Posting', icon: <Newspaper size={20} />, path: '/siswa/posting' },
-  { label: 'Absensi Saya', icon: <QrCode size={20} />, path: '/siswa/absensi' },
-  { label: 'Jadwal', icon: <Calendar size={20} />, path: '/siswa/jadwal' },
-  { label: 'Ekskul', icon: <Activity size={20} />, path: '/siswa/ekskul' },
+  { label: 'Rekap Kehadiran', icon: <UserCheck size={20} />, path: '/siswa#kehadiran' },
+  { label: 'Tagihan & Pembayaran', icon: <DollarSign size={20} />, path: '/siswa#tagihan' },
+  { label: 'Tabungan', icon: <PiggyBank size={20} />, path: '/siswa#tabungan' },
+  { label: 'Nilai', icon: <BookOpen size={20} />, path: '/siswa#nilai' },
+  { label: 'Jadwal Hari Ini', icon: <Calendar size={20} />, path: '/siswa#jadwal' },
+  { label: 'Tugas', icon: <ClipboardCheck size={20} />, path: '/siswa#tugas' },
 ]
 
 // Kepala Madrasah/Sekolah = pimpinan. Sesuai live bundle (Sc).
@@ -169,7 +172,7 @@ export default function Sidebar() {
   return (
     <>
       {/* Mobile backdrop overlay */}
-      {isOpen && (
+      {false && isOpen && (
         <div
           className="fixed inset-0 bg-black/50 z-30 lg:hidden"
           onClick={close}
@@ -179,7 +182,7 @@ export default function Sidebar() {
       {/* Sidebar */}
       <aside
         className={clsx(
-          'fixed left-0 top-0 h-full z-40 transition-all duration-300 flex flex-col',
+          'fixed left-0 top-0 h-full z-40 transition-all duration-300 hidden lg:flex flex-col',
           'bg-sidebar text-sidebar-foreground',
           'w-64',
           isOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
