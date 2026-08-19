@@ -8,6 +8,7 @@ import type { User } from '../../types'
 const CREATABLE = [
   { value: 'kepala', label: 'Kepala Madrasah / Sekolah (read-only)' },
   { value: 'admin', label: 'Admin Lembaga / Operator (akses penuh)' },
+  { value: 'bendahara', label: 'Bendahara' },
   { value: 'guru', label: 'Guru' },
   { value: 'wali_kelas', label: 'Wali Kelas' },
 ]

@@ -70,6 +70,12 @@ import DomainSetupPage from './pages/admin/DomainSetupPage'
 import ErkamPage from './pages/admin/ErkamPage'
 import SuperadminDashboard from './pages/admin/SuperadminDashboard'
 
+function AdminIndexRoute() {
+  const { user } = useAuthStore()
+  if (user?.role === 'bendahara') return <BendaharaDashboard />
+  return <AdminDashboard />
+}
+
 function ProtectedRoute({ children, allowedRoles }: { children: ReactNode, allowedRoles?: string[] }) {
   const { isAuthenticated, user } = useAuthStore()
   if (!isAuthenticated) return <Navigate to="/login" replace />
@@ -103,7 +109,7 @@ export default function App() {
             <DashboardLayout />
           </ProtectedRoute>
         }>
-          <Route index element={<AdminDashboard />} />
+          <Route index element={<AdminIndexRoute />} />
           <Route path="siswa" element={<DataSiswaPage />} />
           <Route path="gtk" element={<DataGTKPage />} />
           <Route path="mapel" element={<MapelPage />} />
