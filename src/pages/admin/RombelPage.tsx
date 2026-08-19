@@ -197,9 +197,10 @@ export default function RombelPage() {
         ))}
       </div>
 
-      {/* Panel detail siswa */}
+      {/* Popup detail siswa */}
       {selectedRombel && (
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100">
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 w-full max-w-3xl max-h-[90vh] overflow-auto">
           {/* Panel header */}
           <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
             <div>
@@ -208,11 +209,12 @@ export default function RombelPage() {
                 Wali Kelas: {selectedRombel.wali_kelas_nama || '-'} · {siswas.length} siswa
               </p>
             </div>
-            <button onClick={closeDetail} className="p-1.5 hover:bg-gray-100 rounded-lg text-gray-400">
+            <div className="flex items-center gap-2"><button onClick={() => openEdit(selectedRombel)} className="px-3 py-1.5 text-xs rounded-lg bg-blue-50 text-blue-600"><Pencil size={13} className="inline mr-1" />Edit</button><button onClick={() => handleDelete(selectedRombel.id, selectedRombel.nama)} className="px-3 py-1.5 text-xs rounded-lg bg-red-50 text-red-600"><Trash2 size={13} className="inline mr-1" />Hapus</button><button onClick={closeDetail} className="p-1.5 hover:bg-gray-100 rounded-lg text-gray-400">
               <X size={18} />
-            </button>
+            </button></div>
           </div>
 
+          <div className="px-5 py-3 border-b border-gray-50 flex justify-end"><button onClick={openCreate} className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-primary text-white text-sm"><Plus size={14}/>Tambah Rombel</button></div>
           {/* Search siswa */}
           <div className="px-5 py-3 border-b border-gray-50">
             <div className="relative">
@@ -261,15 +263,16 @@ export default function RombelPage() {
                   </button>
                   <button
                     onClick={() => handleKeluarkan(s)}
-                    className="p-1.5 text-red-500 bg-red-50 sm:bg-transparent hover:bg-red-50 rounded-lg"
+                    className="inline-flex items-center gap-1 px-2 py-1.5 text-red-500 bg-red-50 sm:bg-transparent hover:bg-red-50 rounded-lg text-xs"
                     title="Keluarkan dari rombel"
                   >
-                    <Trash2 size={14} />
+                    <Trash2 size={14} /> <span>Keluarkan</span>
                   </button>
                 </div>
               </div>
             ))}
           </div>
+        </div>
         </div>
       )}
 
