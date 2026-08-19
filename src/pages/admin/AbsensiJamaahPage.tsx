@@ -1,5 +1,5 @@
 ﻿import { useEffect, useState } from 'react'
-import { GraduationCap, Save, RefreshCw, List, Edit3, Filter, CheckCircle, XCircle } from 'lucide-react'
+import { GraduationCap, Save, RefreshCw, List, Edit3, CheckCircle, XCircle } from 'lucide-react'
 import toast from 'react-hot-toast'
 import api from '../../services/api'
 
@@ -73,14 +73,14 @@ export default function AbsensiJamaahPage() {
   return (
     <div className="space-y-6 animate-fade-in">
       {/* Header */}
-      <div>
-        <h1 className="text-2xl font-bold text-slate-800">Absensi Jamaah Sholat</h1>
-        <p className="text-slate-500 text-sm mt-1">Input jumlah kehadiran per siswa. Siswa dinyatakan lolos jika kehadiran ≥ batas minimal.</p>
+      <div className="bg-gradient-to-r from-indigo-600 to-sky-500 text-white rounded-3xl p-5 sm:p-6 shadow-sm">
+        <h1 className="text-2xl font-bold">Absensi Jamaah Sholat</h1>
+        <p className="text-indigo-50 text-sm mt-1 max-w-2xl">Input jumlah kehadiran per siswa. Siswa dinyatakan lolos jika kehadiran ≥ batas minimal.</p>
       </div>
 
       {/* Config Card */}
-      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+      <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-4 sm:p-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 sm:gap-5">
           <div>
             <label className="block text-xs font-medium text-slate-500 mb-1.5">Nama Sesi</label>
             <input value={nama} onChange={e => setNama(e.target.value)} className="input" placeholder="Shalat Jamaah" />
@@ -102,22 +102,22 @@ export default function AbsensiJamaahPage() {
           </div>
         </div>
 
-        <div className="flex flex-wrap items-center gap-3 mt-5 pt-5 border-t border-slate-100">
-          <button onClick={() => setTab('input')} className={`btn ${tab === 'input' ? 'btn-primary' : 'btn-secondary'}`}>
+        <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-center gap-2.5 sm:gap-3 mt-5 pt-5 border-t border-slate-100">
+          <button onClick={() => setTab('input')} className={`btn justify-center ${tab === 'input' ? 'btn-primary' : 'btn-secondary'}`}>
             <Edit3 size={16} /> Input Data
           </button>
-          <button onClick={loadRekap} className={`btn ${tab === 'rekap' ? 'btn-primary' : 'btn-secondary'}`}>
+          <button onClick={loadRekap} className={`btn justify-center ${tab === 'rekap' ? 'btn-primary' : 'btn-secondary'}`}>
             <List size={16} /> Lihat Rekap
           </button>
-          <div className="flex-1" />
-          <button onClick={() => setAll(minimal)} className="btn btn-secondary text-sm">
+          <div className="hidden sm:block flex-1" />
+          <button onClick={() => setAll(minimal)} className="btn btn-secondary text-sm justify-center">
             Semua = Minimal ({minimal})
           </button>
-          <button onClick={() => setAll(0)} className="btn btn-secondary text-sm">
+          <button onClick={() => setAll(0)} className="btn btn-secondary text-sm justify-center">
             Reset (0)
           </button>
           {tab === 'input' && (
-            <button onClick={save} disabled={saving} className="btn btn-success">
+            <button onClick={save} disabled={saving} className="btn btn-success justify-center">
               <Save size={16} /> {saving ? 'Menyimpan...' : 'Simpan Rekap'}
             </button>
           )}
@@ -126,22 +126,22 @@ export default function AbsensiJamaahPage() {
 
       {/* Input Table */}
       {tab === 'input' && (
-        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-          <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
+        <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
+          <div className="px-4 sm:px-6 py-4 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
             <div className="flex items-center gap-2">
               <GraduationCap size={18} className="text-slate-400" />
               <h2 className="font-semibold text-slate-800">Daftar Siswa</h2>
               <span className="text-xs px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">{filtered.length} siswa</span>
             </div>
           </div>
-          <div className="max-h-[480px] overflow-auto">
-            <table className="table-modern">
+          <div className="max-h-[520px] overflow-auto p-3 sm:p-4">
+            <table className="table-modern min-w-[720px] border-separate border-spacing-y-2">
               <thead>
                 <tr>
-                  <th style={{width: 40}}>#</th>
-                  <th>Siswa</th>
-                  <th style={{width: 90}} className="text-center">Hadir</th>
-                  <th style={{width: 110}} className="text-center">Keterangan</th>
+                  <th style={{width: 56}} className="text-center">No</th>
+                  <th className="pl-4">Nama Siswa</th>
+                  <th style={{width: 120}} className="text-center">Hadir</th>
+                  <th style={{width: 140}} className="text-center">Keterangan</th>
                 </tr>
               </thead>
               <tbody>
@@ -150,9 +150,9 @@ export default function AbsensiJamaahPage() {
                   const lulus = jml >= minimal
                   return (
                     <tr key={s.id}>
-                      <td className="text-slate-400">{i + 1}</td>
-                      <td>
-                        <div className="font-medium text-slate-800">{s.nama}</div>
+                      <td className="text-center text-slate-500 font-medium">{i + 1}</td>
+                      <td className="pl-4">
+                        <div className="font-semibold text-slate-800 leading-tight">{s.nama}</div>
                         <div className="text-xs text-slate-400">{s.nis} • {s.rombel_nama || '-'}</div>
                       </td>
                       <td className="text-center">
@@ -161,7 +161,7 @@ export default function AbsensiJamaahPage() {
                           min={0}
                           value={jml}
                           onChange={e => setKehadiran({ ...kehadiran, [s.id]: Number(e.target.value) || 0 })}
-                          className="w-16 px-2 py-1.5 text-center border border-slate-200 rounded-lg text-sm focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 outline-none"
+                          className="w-20 px-3 py-2 text-center border border-slate-200 rounded-xl text-sm font-semibold focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 outline-none"
                         />
                       </td>
                       <td className="text-center">
@@ -181,21 +181,21 @@ export default function AbsensiJamaahPage() {
 
       {/* Rekap Table */}
       {tab === 'rekap' && (
-        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-          <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
+        <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
+          <div className="px-4 sm:px-6 py-4 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
             <div className="flex items-center gap-2">
               <List size={18} className="text-slate-400" />
               <h2 className="font-semibold text-slate-800">Rekap Kehadiran Jamaah</h2>
               <span className="text-xs px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">{rekap.length} data</span>
             </div>
-            <button onClick={loadRekap} className="btn btn-secondary text-sm"><RefreshCw size={14} /> Refresh</button>
+            <button onClick={loadRekap} className="btn btn-secondary text-sm justify-center"><RefreshCw size={14} /> Refresh</button>
           </div>
-          <div className="max-h-[480px] overflow-auto">
-            <table className="table-modern">
+          <div className="max-h-[520px] overflow-auto p-3 sm:p-4">
+            <table className="table-modern min-w-[720px] border-separate border-spacing-y-2">
               <thead>
                 <tr>
-                  <th style={{width: 40}}>#</th>
-                  <th>Siswa</th>
+                  <th style={{width: 56}} className="text-center">No</th>
+                  <th className="pl-4">Nama Siswa</th>
                   <th className="text-center">Periode</th>
                   <th className="text-center" style={{width: 70}}>Hadir</th>
                   <th className="text-center" style={{width: 60}}>Min</th>
@@ -205,15 +205,15 @@ export default function AbsensiJamaahPage() {
               <tbody>
                 {rekap.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="text-center py-12 text-slate-400">
+                    <td colSpan={6} className="text-center py-14 text-slate-400">
                       Belum ada data rekap
                     </td>
                   </tr>
                 ) : rekap.map((r, i) => (
                   <tr key={r.id || i}>
-                    <td className="text-slate-400">{i + 1}</td>
-                    <td>
-                      <div className="font-medium text-slate-800">{r.nama}</div>
+                    <td className="text-center text-slate-500 font-medium">{i + 1}</td>
+                    <td className="pl-4">
+                      <div className="font-semibold text-slate-800 leading-tight">{r.nama}</div>
                       <div className="text-xs text-slate-400">{r.nis} • {r.rombel_nama || '-'}</div>
                     </td>
                     <td className="text-center text-sm text-slate-600">{r.periode}</td>
