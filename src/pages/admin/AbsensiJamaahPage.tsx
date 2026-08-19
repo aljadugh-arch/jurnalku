@@ -71,7 +71,7 @@ export default function AbsensiJamaahPage() {
   }
 
   return (
-    <div className="space-y-6 animate-fade-in">
+    <div className="space-y-6 animate-fade-in pb-28 lg:pb-6">
       {/* Header */}
       <div className="bg-gradient-to-r from-indigo-600 to-sky-500 text-white rounded-3xl p-5 sm:p-6 shadow-sm">
         <h1 className="text-2xl font-bold">Absensi Jamaah Sholat</h1>
@@ -103,21 +103,21 @@ export default function AbsensiJamaahPage() {
         </div>
 
         <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-center gap-2.5 sm:gap-3 mt-5 pt-5 border-t border-slate-100">
-          <button onClick={() => setTab('input')} className={`btn justify-center ${tab === 'input' ? 'btn-primary' : 'btn-secondary'}`}>
+          <button onClick={() => setTab('input')} className={`w-full sm:w-auto inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium ${tab === 'input' ? 'btn-primary' : 'btn-secondary'}`}>
             <Edit3 size={16} /> Input Data
           </button>
-          <button onClick={loadRekap} className={`btn justify-center ${tab === 'rekap' ? 'btn-primary' : 'btn-secondary'}`}>
+          <button onClick={loadRekap} className={`w-full sm:w-auto inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium ${tab === 'rekap' ? 'btn-primary' : 'btn-secondary'}`}>
             <List size={16} /> Lihat Rekap
           </button>
           <div className="hidden sm:block flex-1" />
-          <button onClick={() => setAll(minimal)} className="btn btn-secondary text-sm justify-center">
+          <button onClick={() => setAll(minimal)} className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium btn-secondary">
             Semua = Minimal ({minimal})
           </button>
-          <button onClick={() => setAll(0)} className="btn btn-secondary text-sm justify-center">
+          <button onClick={() => setAll(0)} className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium btn-secondary">
             Reset (0)
           </button>
           {tab === 'input' && (
-            <button onClick={save} disabled={saving} className="btn btn-success justify-center">
+            <button onClick={save} disabled={saving} className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium btn-success">
               <Save size={16} /> {saving ? 'Menyimpan...' : 'Simpan Rekap'}
             </button>
           )}
@@ -130,12 +130,12 @@ export default function AbsensiJamaahPage() {
           <div className="px-4 sm:px-6 py-4 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
             <div className="flex items-center gap-2">
               <GraduationCap size={18} className="text-slate-400" />
-              <h2 className="font-semibold text-slate-800">Daftar Siswa</h2>
+              <h2 className="font-semibold text-slate-800 leading-none">Daftar Siswa</h2>
               <span className="text-xs px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">{filtered.length} siswa</span>
             </div>
           </div>
-          <div className="max-h-[520px] overflow-auto p-3 sm:p-4">
-            <table className="table-modern min-w-[720px] border-separate border-spacing-y-2">
+          <div className="max-h-[calc(100dvh-18rem)] min-h-[260px] overflow-auto p-3 sm:p-4">
+            <table className="table-modern min-w-[760px] border-separate border-spacing-y-2">
               <thead>
                 <tr>
                   <th style={{width: 56}} className="text-center">No</th>
@@ -185,13 +185,13 @@ export default function AbsensiJamaahPage() {
           <div className="px-4 sm:px-6 py-4 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
             <div className="flex items-center gap-2">
               <List size={18} className="text-slate-400" />
-              <h2 className="font-semibold text-slate-800">Rekap Kehadiran Jamaah</h2>
+              <h2 className="font-semibold text-slate-800 leading-none">Rekap Kehadiran Jamaah</h2>
               <span className="text-xs px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">{rekap.length} data</span>
             </div>
-            <button onClick={loadRekap} className="btn btn-secondary text-sm justify-center"><RefreshCw size={14} /> Refresh</button>
+            <button onClick={loadRekap} className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium btn-secondary"><RefreshCw size={14} /> Refresh</button>
           </div>
-          <div className="max-h-[520px] overflow-auto p-3 sm:p-4">
-            <table className="table-modern min-w-[720px] border-separate border-spacing-y-2">
+          <div className="max-h-[calc(100dvh-18rem)] min-h-[260px] overflow-auto p-3 sm:p-4">
+            <table className="table-modern min-w-[760px] border-separate border-spacing-y-2">
               <thead>
                 <tr>
                   <th style={{width: 56}} className="text-center">No</th>
