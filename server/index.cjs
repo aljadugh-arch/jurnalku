@@ -860,7 +860,7 @@ function authMiddleware(req, res, next) {
     // - /api/auth/me              (cek sesi)
     // - /api/auth/change-password (proses ganti)
     // - /api/auth/logout          (logout)
-    const allowList = ['/api/auth/me', '/api/auth/change-password', '/api/auth/logout', '/api/siswa/dashboard', '/api/siswa/portal']
+    const allowList = ['/api/auth/me', '/api/auth/change-password', '/api/auth/logout', '/api/siswa/dashboard', '/api/siswa/portal', '/api/siswa/absensi', '/api/siswa/ekskul', '/api/siswa/penilaian', '/api/siswa/tugas', '/api/settings']
     if (!allowList.includes(req.path)) {
       try {
         const row = db.prepare('SELECT must_change_password FROM users WHERE id = ?').get(req.user.id)
@@ -1104,8 +1104,8 @@ app.post('/api/auth/login', authLimiter, (req, res) => {
   if (!user || !bcrypt.compareSync(password, user.password)) {
     return res.status(401).json({ error: 'Email/kode guru/NIS/NISN atau password salah' })
   }
-  const token = jwt.sign({ id: user.id, role: user.role, nama: user.nama, email: user.email, tenant_id: user.tenant_id }, JWT_SECRET, { expiresIn: '24h' })
-  res.json({ token, user: { id: user.id, nama: user.nama, email: user.email, role: user.role, nip: user.nip, nis: user.nis, avatar: user.avatar } })
+  const token = jwt.sign({ id: user.id, role: user.role, nama: user.nama, email: user.email, tenant_id: user.tenant_id, gtk_id: user.gtk_id || null, siswa_id: user.siswa_id || null, nis: user.nis || null }, JWT_SECRET, { expiresIn: '24h' })
+  res.json({ token, user: { id: user.id, nama: user.nama, email: user.email, role: user.role, nip: user.nip, nis: user.nis, siswa_id: user.siswa_id, gtk_id: user.gtk_id, avatar: user.avatar } })
 })
 
 app.get('/api/auth/me', authMiddleware, (req, res) => {
