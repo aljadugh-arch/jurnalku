@@ -861,7 +861,7 @@ function authMiddleware(req, res, next) {
     // - /api/auth/change-password (proses ganti)
     // - /api/auth/logout          (logout)
     const allowList = ['/api/auth/me', '/api/auth/change-password', '/api/auth/logout', '/api/siswa/dashboard', '/api/siswa/portal', '/api/siswa/absensi', '/api/siswa/ekskul', '/api/siswa/penilaian', '/api/siswa/tugas', '/api/settings']
-    if (!allowList.includes(req.path)) {
+    if (!allowList.includes(req.path) && !req.path.startsWith('/api/siswa/') && !req.path.startsWith('/api/settings')) {
       try {
         const row = db.prepare('SELECT must_change_password FROM users WHERE id = ?').get(req.user.id)
         if (row && row.must_change_password === 1) {
@@ -2551,9 +2551,12 @@ app.get('/api/siswa/dashboard', authMiddleware, (req, res) => {
   const tagihan = { total: tagihanAll.reduce((n,t)=>n+Number(t.nominal||0),0), belum_bayar: tagihanAll.filter(t=>!['lunas','sudah_bayar'].includes(t.status)).reduce((n,t)=>n+Number(t.nominal||0),0), lunas: tagihanAll.filter(t=>['lunas','sudah_bayar'].includes(t.status)).reduce((n,t)=>n+Number(t.nominal||0),0) }
   const tabungan = { saldo: tabunganAll[0]?.saldo_akhir || 0, setor: tabunganAll.filter(t=>t.tipe==='setor').reduce((n,t)=>n+Number(t.nominal||0),0), tarik: tabunganAll.filter(t=>t.tipe==='tarik').reduce((n,t)=>n+Number(t.nominal||0),0) }
   const tugas = siswa?.rombel_id ? db.prepare(`SELECT t.*, m.nama mapel_nama, g.nama guru_nama FROM tugas_siswa t LEFT JOIN mapel m ON m.id=t.mapel_id AND m.tenant_id=t.tenant_id LEFT JOIN gtk g ON g.id=t.guru_id AND g.tenant_id=t.tenant_id WHERE t.rombel_id=? AND t.tenant_id=? ORDER BY COALESCE(t.deadline,t.created_at) DESC LIMIT 30`).all(siswa.rombel_id, req.tenantId) : []
-  const catatan_kepribadian = siswa?.id ? db.prepare('SELECT tahun_ajaran,semester,catatan_umum,catatan_akademik,catatan_sosial,catatan_spiritual,saran FROM catatan_kepribadian WHERE siswa_id=? AND tenant_id=? ORDER BY tahun_ajaran DESC,semester DESC LIMIT 4').all(siswa.id, req.tenantId) : []
-  const kokurikuler_detail = siswa?.id ? db.prepare(`SELECT a.tanggal,a.status,a.keterangan,k.nama kegiatan_nama,k.jenis FROM absensi_kegiatan a JOIN kegiatan_khusus k ON k.id=a.kegiatan_id AND k.tenant_id=a.tenant_id WHERE a.siswa_id=? AND a.tenant_id=? AND k.jenis='kokurikuler' ORDER BY a.tanggal DESC LIMIT 20`).all(siswa.id, req.tenantId) : []
-  const kegiatan_lain_detail = siswa?.id ? db.prepare(`SELECT a.tanggal,a.status,a.keterangan,k.nama kegiatan_nama,k.jenis FROM absensi_kegiatan a JOIN kegiatan_khusus k ON k.id=a.kegiatan_id AND k.tenant_id=a.tenant_id WHERE a.siswa_id=? AND a.tenant_id=? AND k.jenis NOT IN ('kokurikuler') ORDER BY a.tanggal DESC LIMIT 20`).all(siswa.id, req.tenantId) : []
+  let catatan_kepribadian = [], kokurikuler_detail = [], kegiatan_lain_detail = []
+  if (siswa?.id) {
+    try { catatan_kepribadian = db.prepare('SELECT tahun_ajaran,semester,COALESCE(catatan_umum,catatan_wali_kelas,\'\') catatan_umum,COALESCE(catatan_akademik,\'\') catatan_akademik,COALESCE(catatan_sosial,sikap_sosial,\'\') catatan_sosial,COALESCE(catatan_spiritual,sikap_spiritual,\'\') catatan_spiritual,saran FROM catatan_kepribadian WHERE siswa_id=? AND tenant_id=? ORDER BY tahun_ajaran DESC,semester DESC LIMIT 4').all(siswa.id, req.tenantId) } catch { catatan_kepribadian = [] }
+    try { kokurikuler_detail = db.prepare(`SELECT a.tanggal,a.status,a.keterangan,k.nama kegiatan_nama,k.jenis FROM absensi_kegiatan a LEFT JOIN kegiatan_khusus k ON k.id=a.kegiatan_id AND k.tenant_id=a.tenant_id WHERE a.siswa_id=? AND a.tenant_id=? AND k.jenis='kokurikuler' ORDER BY a.tanggal DESC LIMIT 20`).all(siswa.id, req.tenantId) } catch { kokurikuler_detail = [] }
+    try { kegiatan_lain_detail = db.prepare(`SELECT a.tanggal,a.status,a.keterangan,k.nama kegiatan_nama,k.jenis FROM absensi_kegiatan a LEFT JOIN kegiatan_khusus k ON k.id=a.kegiatan_id AND k.tenant_id=a.tenant_id WHERE a.siswa_id=? AND a.tenant_id=? AND (k.jenis IS NULL OR k.jenis NOT IN ('kokurikuler')) ORDER BY a.tanggal DESC LIMIT 20`).all(siswa.id, req.tenantId) } catch { kegiatan_lain_detail = [] }
+  }
   res.json({ children, siswa, jadwal_hari_ini: jadwal, tugas, rekap: { hadir, sakit, izin, alpha }, rekap_lengkap: { kbm: rekapKategori(absensi_detail), kegiatan: rekapKategori(kegiatan_detail), jamaah: rekapKategori(jamaah_detail), ekskul: rekapKategori(ekskul_detail), kokurikuler: rekapKategori(kokurikuler_detail), kegiatan_lain: rekapKategori(kegiatan_lain_detail) }, absensi_detail, kegiatan_detail, jamaah_detail, ekskul_detail, kokurikuler_detail, kegiatan_lain_detail, tagihan_detail, nilai_detail: nilaiAll, tabungan_detail, tagihan, tabungan, catatan_kepribadian })
 })
 
