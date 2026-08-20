@@ -20,10 +20,20 @@ export const useThemeStore = create<ThemeState>()(
   )
 )
 
-// Apply on first load
+// Apply on first load — prefer settings store (server theme) then local toggle
 export function applyTheme() {
-  const raw = localStorage.getItem('jurnalku_theme')
+  // 1. server settings theme takes priority
   try {
+    const raw = localStorage.getItem('jurnalku_settings')
+    const theme = JSON.parse(raw || '{}')?.state?.settings?.theme
+    if (theme === 'light' || theme === 'dark') {
+      document.documentElement.classList.toggle('dark', theme === 'dark')
+      return
+    }
+  } catch {}
+  // 2. fallback to local toggle
+  try {
+    const raw = localStorage.getItem('jurnalku_theme')
     const dark = JSON.parse(raw || '{}')?.state?.dark
     document.documentElement.classList.toggle('dark', !!dark)
   } catch {}

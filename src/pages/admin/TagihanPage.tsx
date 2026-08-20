@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { escapeHtml } from '../../utils/escapeHtml'
-import { Search, X } from 'lucide-react'
+import { Search, X, Pencil, Trash2 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import api from '../../services/api'
 import ResponsiveTable from '../../components/ui/ResponsiveTable'
@@ -9,7 +9,7 @@ import FinanceExcelPanel from '../../components/FinanceExcelPanel'
 interface Tagihan {
   id: string; siswa_id: string; siswa_nama: string; nis: string
   jenis_nama: string; jenis_tagihan_id: string; bulan: string; tahun: string
-  nominal: number; status: string; tanggal_bayar: string; metode_bayar: string
+  nominal: number; status: string; tanggal_bayar: string; metode_bayar: string; keterangan?: string
 }
 
 interface Siswa { id: string; nama: string; nis: string; rombel_id?: string; rombel_nama?: string }
@@ -195,6 +195,25 @@ export default function TagihanPage() {
     w.document.close()
   }
 
+
+  const handleEditTagihan = async (t: Tagihan) => {
+    const nominal = prompt('Nominal baru:', String(t.nominal))
+    if (!nominal || isNaN(Number(nominal))) return
+    const ket = prompt('Keterangan:', t.keterangan || '') || ''
+    try {
+      await api.put('/tagihan/' + t.id, { nominal: Number(nominal), keterangan: ket })
+      toast.success('Tagihan diperbarui'); fetchData()
+    } catch (e: any) { toast.error(e.response?.data?.error || 'Gagal') }
+  }
+
+  const handleDeleteTagihan = async (t: Tagihan) => {
+    if (!confirm('Hapus tagihan ' + t.jenis_nama + ' untuk ' + t.siswa_nama + '?')) return
+    try {
+      await api.delete('/tagihan/' + t.id)
+      toast.success('Tagihan dihapus'); fetchData()
+    } catch (e: any) { toast.error(e.response?.data?.error || 'Gagal') }
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
@@ -260,6 +279,8 @@ export default function TagihanPage() {
             empty="Belum ada tagihan. Klik 'Generate Tagihan' untuk membuat."
             actions={(t) => (
               <div className="flex gap-2">
+                <button onClick={() => handleEditTagihan(t)} className="px-2 py-1 text-xs rounded-lg bg-blue-50 text-blue-600 hover:bg-blue-100"><Pencil size={12} className="inline" /></button>
+                <button onClick={() => handleDeleteTagihan(t)} className="px-2 py-1 text-xs rounded-lg bg-red-50 text-red-600 hover:bg-red-100"><Trash2 size={12} className="inline" /></button>
                 {t.status !== 'lunas' && <button onClick={() => handleBayar(t.id)} className="px-3 py-1 bg-green-600 text-white rounded text-xs hover:bg-green-700">Bayar</button>}
                 {t.status === 'lunas' && <button onClick={() => handleKuitansi(t)} className="px-3 py-1 bg-blue-600 text-white rounded text-xs hover:bg-blue-700">Kuitansi</button>}
               </div>

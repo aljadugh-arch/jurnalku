@@ -2190,7 +2190,24 @@ app.get('/api/siswa/tugas', authMiddleware, (req, res) => {
 // ==================== GURU ABSENSI (CEKLOK) ====================
 app.get('/api/guru/absensi-saya', authMiddleware, (req, res) => {
   const gtk = resolveGtkForUser(req.user.id, req.tenantId)
-  if (!gtk) return res.json({ today: null, history: [] })
+  if (!gtk) {
+    // Buat GTK dummy untuk admin/kepala supaya bisa ceklok
+    const ADMIN_ROLES = ['admin','super_admin','kepala','bendahara','operator','tata_usaha','tu']
+    if (ADMIN_ROLES.includes(req.user.role)) {
+      const gid = uuidv4()
+      const nm = req.user.nama || req.user.email || 'Admin'
+      try { db.prepare("INSERT INTO gtk (id,nama,jenis_kelamin,email,jabatan,status_kepegawaian,tenant_id) VALUES (?,?,'L',?,'Admin','Tetap',?)").run(gid,nm,req.user.email||'',req.tenantId) } catch {}
+      try { db.prepare('UPDATE users SET gtk_id=? WHERE id=?').run(gid, req.user.id) } catch {}
+      const gtk2 = db.prepare('SELECT * FROM gtk WHERE id=?').get(gid)
+      if (gtk2) {
+        const today2 = todayJakarta()
+        const todayRecord2 = db.prepare('SELECT * FROM absensi_guru WHERE gtk_id=? AND tanggal=? AND tenant_id=?').get(gtk2.id, today2, req.tenantId)
+        const history2 = db.prepare('SELECT * FROM absensi_guru WHERE gtk_id=? AND tenant_id=? ORDER BY tanggal DESC LIMIT 30').all(gtk2.id, req.tenantId)
+        return res.json({ today: todayRecord2 || null, history: history2, gtk: gtk2 })
+      }
+    }
+    return res.json({ today: null, history: [] })
+  }
   const today = todayJakarta()
   const todayRecord = db.prepare('SELECT * FROM absensi_guru WHERE gtk_id = ? AND tanggal = ? AND tenant_id = ?').get(gtk.id, today, req.tenantId)
   const history = db.prepare('SELECT * FROM absensi_guru WHERE gtk_id = ? AND tenant_id = ? ORDER BY tanggal DESC LIMIT 30').all(gtk.id, req.tenantId)
@@ -2199,7 +2216,17 @@ app.get('/api/guru/absensi-saya', authMiddleware, (req, res) => {
 
 app.post('/api/guru/ceklok', STAFF, (req, res) => {
   const gtk = resolveGtkForUser(req.user.id, req.tenantId)
-  if (!gtk) return res.status(400).json({ error: 'Akun Anda belum terhubung ke data GTK. Minta admin buatkan akun dari menu Data GTK (Buat Akun Guru).' })
+  if (!gtk) {
+    const ADMIN_ROLES2 = ['admin','super_admin','kepala','bendahara','operator','tata_usaha','tu']
+    if (ADMIN_ROLES2.includes(req.user.role)) {
+      const gid2 = uuidv4()
+      const nm2 = req.user.nama || req.user.email || 'Admin'
+      try { db.prepare("INSERT INTO gtk (id,nama,jenis_kelamin,email,jabatan,status_kepegawaian,tenant_id) VALUES (?,?,'L',?,'Admin','Tetap',?)").run(gid2,nm2,req.user.email||'',req.tenantId) } catch {}
+      try { db.prepare('UPDATE users SET gtk_id=? WHERE id=?').run(gid2, req.user.id) } catch {}
+      gtk = db.prepare('SELECT * FROM gtk WHERE id=?').get(gid2)
+    }
+    if (!gtk) return res.status(400).json({ error: 'Akun Anda belum terhubung ke data GTK. Minta admin buatkan akun dari menu Data GTK (Buat Akun Guru).' })
+  }
   const { type, latitude, longitude } = req.body
   // Selalu baca baris canonical. Tenant lama bisa punya baris settings duplikat tanpa koordinat.
   const geo = db.prepare('SELECT geo_latitude, geo_longitude, geo_radius FROM settings WHERE id = ?').get('main_' + req.tenantId)
@@ -2524,7 +2551,10 @@ app.get('/api/siswa/dashboard', authMiddleware, (req, res) => {
   const tagihan = { total: tagihanAll.reduce((n,t)=>n+Number(t.nominal||0),0), belum_bayar: tagihanAll.filter(t=>!['lunas','sudah_bayar'].includes(t.status)).reduce((n,t)=>n+Number(t.nominal||0),0), lunas: tagihanAll.filter(t=>['lunas','sudah_bayar'].includes(t.status)).reduce((n,t)=>n+Number(t.nominal||0),0) }
   const tabungan = { saldo: tabunganAll[0]?.saldo_akhir || 0, setor: tabunganAll.filter(t=>t.tipe==='setor').reduce((n,t)=>n+Number(t.nominal||0),0), tarik: tabunganAll.filter(t=>t.tipe==='tarik').reduce((n,t)=>n+Number(t.nominal||0),0) }
   const tugas = siswa?.rombel_id ? db.prepare(`SELECT t.*, m.nama mapel_nama, g.nama guru_nama FROM tugas_siswa t LEFT JOIN mapel m ON m.id=t.mapel_id AND m.tenant_id=t.tenant_id LEFT JOIN gtk g ON g.id=t.guru_id AND g.tenant_id=t.tenant_id WHERE t.rombel_id=? AND t.tenant_id=? ORDER BY COALESCE(t.deadline,t.created_at) DESC LIMIT 30`).all(siswa.rombel_id, req.tenantId) : []
-  res.json({ children, siswa, jadwal_hari_ini: jadwal, tugas, rekap: { hadir, sakit, izin, alpha }, rekap_lengkap: { kbm: rekapKategori(absensi_detail), kegiatan: rekapKategori(kegiatan_detail), jamaah: rekapKategori(jamaah_detail), ekskul: rekapKategori(ekskul_detail) }, absensi_detail, kegiatan_detail, jamaah_detail, ekskul_detail, tagihan_detail, nilai_detail: nilaiAll, tabungan_detail, tagihan, tabungan })
+  const catatan_kepribadian = siswa?.id ? db.prepare('SELECT tahun_ajaran,semester,catatan_umum,catatan_akademik,catatan_sosial,catatan_spiritual,saran FROM catatan_kepribadian WHERE siswa_id=? AND tenant_id=? ORDER BY tahun_ajaran DESC,semester DESC LIMIT 4').all(siswa.id, req.tenantId) : []
+  const kokurikuler_detail = siswa?.id ? db.prepare(`SELECT a.tanggal,a.status,a.keterangan,k.nama kegiatan_nama,k.jenis FROM absensi_kegiatan a JOIN kegiatan_khusus k ON k.id=a.kegiatan_id AND k.tenant_id=a.tenant_id WHERE a.siswa_id=? AND a.tenant_id=? AND k.jenis='kokurikuler' ORDER BY a.tanggal DESC LIMIT 20`).all(siswa.id, req.tenantId) : []
+  const kegiatan_lain_detail = siswa?.id ? db.prepare(`SELECT a.tanggal,a.status,a.keterangan,k.nama kegiatan_nama,k.jenis FROM absensi_kegiatan a JOIN kegiatan_khusus k ON k.id=a.kegiatan_id AND k.tenant_id=a.tenant_id WHERE a.siswa_id=? AND a.tenant_id=? AND k.jenis NOT IN ('kokurikuler') ORDER BY a.tanggal DESC LIMIT 20`).all(siswa.id, req.tenantId) : []
+  res.json({ children, siswa, jadwal_hari_ini: jadwal, tugas, rekap: { hadir, sakit, izin, alpha }, rekap_lengkap: { kbm: rekapKategori(absensi_detail), kegiatan: rekapKategori(kegiatan_detail), jamaah: rekapKategori(jamaah_detail), ekskul: rekapKategori(ekskul_detail), kokurikuler: rekapKategori(kokurikuler_detail), kegiatan_lain: rekapKategori(kegiatan_lain_detail) }, absensi_detail, kegiatan_detail, jamaah_detail, ekskul_detail, kokurikuler_detail, kegiatan_lain_detail, tagihan_detail, nilai_detail: nilaiAll, tabungan_detail, tagihan, tabungan, catatan_kepribadian })
 })
 
 // ==================== SISWA JADWAL ====================

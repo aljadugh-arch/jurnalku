@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Search, Plus, X } from 'lucide-react'
+import { Search, Plus, X, Pencil, Trash2 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import api from '../../services/api'
 
@@ -49,6 +49,27 @@ export default function TabunganPage() {
 
   const fmt = (n: number) => 'Rp ' + n.toLocaleString('id-ID')
 
+
+  const handleEditMutasi = async (m: Mutasi) => {
+    const nominal = prompt('Nominal baru:', String(m.nominal))
+    if (!nominal || isNaN(Number(nominal))) return
+    const ket = prompt('Keterangan:', m.keterangan || '') || ''
+    try {
+      await api.put('/tabungan/' + m.id, { nominal: Number(nominal), keterangan: ket })
+      toast.success('Mutasi diperbarui')
+      if (selectedSiswa) handleSelectSiswa(selectedSiswa); fetchSaldo()
+    } catch (e: any) { toast.error(e.response?.data?.error || 'Gagal') }
+  }
+
+  const handleDeleteMutasi = async (m: Mutasi) => {
+    if (!confirm('Hapus mutasi ini?')) return
+    try {
+      await api.delete('/tabungan/' + m.id)
+      toast.success('Mutasi dihapus')
+      if (selectedSiswa) handleSelectSiswa(selectedSiswa); fetchSaldo()
+    } catch (e: any) { toast.error(e.response?.data?.error || 'Gagal') }
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
@@ -95,6 +116,10 @@ export default function TabunganPage() {
               <div key={m.id} className="px-4 py-3 flex items-center justify-between">
                 <div>
                   <p className={'text-sm font-medium ' + (m.tipe === 'setor' ? 'text-green-700' : 'text-red-700')}>{m.tipe === 'setor' ? '+' : '-'} {fmt(m.nominal)}</p>
+                  <div className="flex items-center gap-1 mt-1">
+                    <button onClick={() => handleEditMutasi(m)} className="p-1 rounded bg-blue-50 text-blue-600 hover:bg-blue-100"><Pencil size={11}/></button>
+                    <button onClick={() => handleDeleteMutasi(m)} className="p-1 rounded bg-red-50 text-red-600 hover:bg-red-100"><Trash2 size={11}/></button>
+                  </div>
                   <p className="text-xs text-gray-400">{m.tanggal} {m.keterangan ? '• ' + m.keterangan : ''}</p>
                 </div>
                 <p className="text-xs text-gray-500">Saldo: {fmt(m.saldo_akhir)}</p>

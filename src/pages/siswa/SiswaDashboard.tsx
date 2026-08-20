@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Calendar, CheckCircle, BookOpen, Activity, ChevronRight, Clock, ClipboardCheck, Wallet, Receipt } from 'lucide-react'
+import { Calendar, CheckCircle, BookOpen, Activity, ChevronRight, Clock, ClipboardCheck, Wallet, Receipt, NotebookPen, Users } from 'lucide-react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import api from '../../services/api'
 import { Card, StatCard, Badge, Avatar } from '../../components/ui'
@@ -109,6 +109,7 @@ export default function SiswaDashboard() {
           ['Nilai', '#nilai', <BookOpen size={18} />],
           ['Jadwal', '#jadwal', <Calendar size={18} />],
           ['Tugas', '#tugas', <ClipboardCheck size={18} />],
+          ['Catatan', '#catatan', <NotebookPen size={18} />],
         ].map(([label, hash, icon]: any) => (
           <button key={label} type="button" onClick={() => goSection(String(hash).slice(1))} className="rounded-2xl bg-white border border-gray-100 p-3 text-center shadow-sm active:scale-95 transition">
             <span className="mx-auto mb-2 flex h-10 w-10 items-center justify-center rounded-xl bg-primary text-white">{icon}</span>
@@ -133,11 +134,13 @@ export default function SiswaDashboard() {
       <div id="kehadiran"></div><Card title="Rekap Kehadiran Lengkap" icon={<Activity size={18} className="text-primary" />}>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
           {[
-            ['KBM', data.absensi_detail || [], 'tanggal', 'status'],
-            ['Kegiatan', data.kegiatan_detail || [], 'tanggal', 'status'],
-            ['Jamaah', data.jamaah_detail || [], 'tanggal', 'status'],
-            ['Ekstrakurikuler', data.ekskul_detail || [], 'tanggal', 'status'],
-          ].map(([label, rows]: any) => (
+            ['KBM', data.absensi_detail || []],
+            ['Jamaah', data.jamaah_detail || []],
+            ['Ekstrakurikuler', data.ekskul_detail || []],
+            ['Kokurikuler', data.kokurikuler_detail || []],
+            ['Kegiatan', data.kegiatan_detail || []],
+            ['Kegiatan Lain', data.kegiatan_lain_detail || []],
+          ].filter(([,rows]: any) => rows.length > 0 || ['KBM','Jamaah'].includes(String(''))).map(([label, rows]: any) => (
             <div key={label} className="rounded-xl border border-gray-100 p-3">
               <div className="flex justify-between mb-2"><b>{label}</b><span className="text-gray-400">{rows.length} data</span></div>
               {rows.slice(0,4).map((r: any, i: number) => <div key={i} className="flex justify-between py-1 border-t border-gray-50"><span>{r.tanggal}</span><span className="capitalize">{r.status || '-'}</span></div>)}
@@ -200,6 +203,24 @@ export default function SiswaDashboard() {
           ))}
         </div>
       </Card>
+
+      {/* Catatan Kepribadian */}
+      {(data.catatan_kepribadian || []).length > 0 && (
+        <div id="catatan"><Card title="Catatan Kepribadian" icon={<NotebookPen size={18} className="text-primary" />}>
+          <div className="space-y-3">
+            {(data.catatan_kepribadian || []).map((c: any, i: number) => (
+              <div key={i} className="rounded-xl border border-gray-100 p-3 space-y-1">
+                <p className="text-xs font-semibold text-gray-500">{c.tahun_ajaran} — Semester {c.semester}</p>
+                {c.catatan_umum && <p className="text-sm text-gray-700"><b>Umum:</b> {c.catatan_umum}</p>}
+                {c.catatan_akademik && <p className="text-sm text-gray-700"><b>Akademik:</b> {c.catatan_akademik}</p>}
+                {c.catatan_sosial && <p className="text-sm text-gray-700"><b>Sosial:</b> {c.catatan_sosial}</p>}
+                {c.catatan_spiritual && <p className="text-sm text-gray-700"><b>Spiritual:</b> {c.catatan_spiritual}</p>}
+                {c.saran && <p className="text-sm text-primary"><b>Saran:</b> {c.saran}</p>}
+              </div>
+            ))}
+          </div>
+        </Card></div>
+      )}
 
       {/* Jadwal Hari Ini */}
       <div id="jadwal"></div><Card title="Jadwal Hari Ini" icon={<Calendar size={18} className="text-primary" />}>
