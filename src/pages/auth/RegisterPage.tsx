@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { School, Eye, EyeOff, Globe, Link2 } from 'lucide-react'
 import toast from 'react-hot-toast'
@@ -9,6 +9,11 @@ import { useSettingsStore } from '../../stores/settingsStore'
 type DomainMode = 'subdomain' | 'custom'
 
 export default function RegisterPage() {
+  const SUBDOMAIN_BASE = useMemo(() => {
+    const host = window.location.hostname
+    if (host === 'jurnalmadrasah.web.id' || host.endsWith('.jurnalmadrasah.web.id')) return 'jurnalmadrasah.web.id'
+    return 'jurnal.cc.cd'
+  }, [])
   const navigate = useNavigate()
   const login = useAuthStore(s => s.login)
   const [domainMode, setDomainMode] = useState<DomainMode>('subdomain')
@@ -119,7 +124,7 @@ export default function RegisterPage() {
                     Subdomain
                   </span>
                 </div>
-                <span className="text-xs text-gray-400 leading-tight">*.jurnalmadrasah.web.id</span>
+                <span className="text-xs text-gray-400 leading-tight">{`*.${SUBDOMAIN_BASE}`}</span>
                 <span className="text-xs text-gray-400 leading-tight">Gratis, langsung aktif</span>
               </button>
 
@@ -158,11 +163,11 @@ export default function RegisterPage() {
                       placeholder="nama-sekolah"
                       className="flex-1 px-3 py-2 text-sm outline-none"
                     />
-                    <span className="px-3 py-2 bg-gray-50 text-gray-400 text-sm border-l whitespace-nowrap">.jurnalmadrasah.web.id</span>
+                    <span className="px-3 py-2 bg-gray-50 text-gray-400 text-sm border-l whitespace-nowrap">{`.${SUBDOMAIN_BASE}`}</span>
                   </div>
                   {form.slug && (
                     <p className="text-xs text-primary mt-1">
-                      Akses: https://{form.slug}.jurnalmadrasah.web.id
+                      Akses: {`https://${form.slug}.${SUBDOMAIN_BASE}`}
                     </p>
                   )}
                 </div>

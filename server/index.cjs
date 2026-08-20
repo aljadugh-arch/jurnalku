@@ -1157,9 +1157,12 @@ app.post('/api/auth/register', (req, res) => {
 
   // Auto-login: return token + user so FE can go straight to dashboard.
   const token = jwt.sign({ id, role: 'admin', nama, email, tenant_id: tenantId }, JWT_SECRET, { expiresIn: '24h' })
+  const reqHost = (req.headers['host'] || req.headers['x-forwarded-host'] || '').split(':')[0]
+  const subdomainBase = reqHost === 'jurnalmadrasah.web.id' || reqHost.endsWith('.jurnalmadrasah.web.id')
+    ? 'jurnalmadrasah.web.id' : 'jurnal.cc.cd'
   const appUrl = domainVal
     ? `https://${domainVal}`
-    : `https://${slug}.jurnalmadrasah.web.id`
+    : `https://${slug}.${subdomainBase}`
   res.json({
     success: true,
     message: domainVal
