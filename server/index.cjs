@@ -674,6 +674,11 @@ function studentInitialPassword(siswa) {
   return String(siswa?.nis || '').trim()
 }
 
+function studentActiveIdentifier(siswa) {
+  const nisn = String(siswa?.nisn || '').trim()
+  return nisn || String(siswa?.nis || '').trim()
+}
+
 function studentLocalEmail(tenantId, nis) {
   const safeTenant = String(tenantId || 'default').replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 36) || 'default'
   const safeNis = String(nis || '').replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 48)
@@ -2203,6 +2208,56 @@ app.get('/api/siswa/tugas', authMiddleware, (req, res) => {
 })
 
 // ==================== GURU ABSENSI (CEKLOK) ====================
+app.get('/api/ceklok/admin', STAFF, (req, res) => {
+  const tanggal = String(req.query.tanggal || todayJakarta()).trim()
+  const status = String(req.query.status || '').trim()
+  const staffRoles = ['guru', 'wali_kelas', 'kepala', 'admin', 'bendahara', 'operator', 'tata_usaha', 'tu']
+  const staffGtkIds = db.prepare(`SELECT DISTINCT gtk_id FROM users WHERE tenant_id=? AND gtk_id IS NOT NULL AND role IN (${staffRoles.map(() => '?').join(',')})`).all(req.tenantId, ...staffRoles).map(row => row.gtk_id)
+  const gtkRows = db.prepare("SELECT id, nama, nip FROM gtk WHERE tenant_id=? AND status_kepegawaian!='Nonaktif' ORDER BY nama").all(req.tenantId)
+  const visibleGtk = staffGtkIds.length ? gtkRows.filter(row => staffGtkIds.includes(row.id)) : gtkRows
+  const attendance = db.prepare('SELECT * FROM absensi_guru WHERE tanggal=? AND tenant_id=?').all(tanggal, req.tenantId)
+  const byGtk = new Map(attendance.map(row => [row.gtk_id, row]))
+  let records = visibleGtk.map(gtk => {
+    const row = byGtk.get(gtk.id)
+    return {
+      id: row?.id || `missing-${gtk.id}`,
+      guru_id: gtk.id,
+      guru_nama: gtk.nama,
+      nip: gtk.nip || '',
+      tanggal,
+      jam_masuk: row?.waktu_masuk || null,
+      jam_keluar: row?.waktu_pulang || null,
+      status: row?.status || 'tidak_hadir',
+      latitude_masuk: row?.latitude ?? null,
+      longitude_masuk: row?.longitude ?? null,
+      jarak_masuk: row?.jarak ?? null,
+      keterangan: row?.keterangan || ''
+    }
+  })
+  if (status) records = records.filter(row => row.status === status)
+  const summary = {
+    hadir: records.filter(row => row.status === 'hadir').length,
+    terlambat: records.filter(row => row.status === 'terlambat').length,
+    tidak_hadir: records.filter(row => row.status === 'tidak_hadir').length,
+    total_guru: visibleGtk.length
+  }
+  res.json({ records, summary })
+})
+
+app.get('/api/siswa/qr-identifiers', STAFF, (req, res) => {
+  const rombelId = String(req.query.rombel_id || '').trim()
+  let sql = "SELECT id, nis, nisn, nama, rombel_id FROM siswa WHERE tenant_id=? AND status='aktif'"
+  const params = [req.tenantId]
+  if (rombelId) { sql += ' AND rombel_id=?'; params.push(rombelId) }
+  sql += ' ORDER BY nama'
+  const data = db.prepare(sql).all(...params).map(siswa => ({
+    ...siswa,
+    identifier: studentActiveIdentifier(siswa),
+    identifier_type: String(siswa.nisn || '').trim() ? 'NISN' : 'NIS'
+  }))
+  res.json(data)
+})
+
 app.get('/api/guru/absensi-saya', authMiddleware, (req, res) => {
   const gtk = resolveGtkForUser(req.user.id, req.tenantId)
   if (!gtk) {

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { MapPin, Clock, CheckCircle, XCircle, Search } from 'lucide-react'
+import { MapPin, Clock, CheckCircle, XCircle, Search, UserCheck } from 'lucide-react'
 import toast from 'react-hot-toast'
 import api from '../../services/api'
 
@@ -25,6 +25,10 @@ interface Summary {
   total_guru: number
 }
 
+interface PersonalCeklok {
+  today: { waktu_masuk?: string | null; waktu_pulang?: string | null; status?: string } | null
+}
+
 export default function CekLokAdminPage() {
   const today = new Date().toISOString().split('T')[0]
   const [records, setRecords] = useState<CeklokRecord[]>([])
@@ -33,6 +37,9 @@ export default function CekLokAdminPage() {
   const [tanggal, setTanggal] = useState(today)
   const [search, setSearch] = useState('')
   const [filterStatus, setFilterStatus] = useState('')
+  const [personal, setPersonal] = useState<PersonalCeklok>({ today: null })
+  const [personalLoading, setPersonalLoading] = useState(true)
+  const [ceklokLoading, setCeklokLoading] = useState(false)
 
   const fetchData = async () => {
     setLoading(true)
@@ -50,6 +57,39 @@ export default function CekLokAdminPage() {
   }
 
   useEffect(() => { fetchData() }, [tanggal, filterStatus])
+
+  const fetchPersonal = async () => {
+    setPersonalLoading(true)
+    try {
+      const res = await api.get('/guru/absensi-saya')
+      setPersonal({ today: res.data.today || null })
+    } catch {
+      toast.error('Gagal memuat ceklok saya')
+    } finally {
+      setPersonalLoading(false)
+    }
+  }
+
+  useEffect(() => { fetchPersonal() }, [])
+
+  const handleCeklok = (type: 'masuk' | 'pulang') => {
+    if (!navigator.geolocation) return toast.error('Perangkat tidak mendukung lokasi')
+    setCeklokLoading(true)
+    navigator.geolocation.getCurrentPosition(async pos => {
+      try {
+        await api.post('/guru/ceklok', { type, latitude: pos.coords.latitude, longitude: pos.coords.longitude })
+        toast.success(`Ceklok ${type} berhasil`)
+        await Promise.all([fetchPersonal(), fetchData()])
+      } catch (err: any) {
+        toast.error(err.response?.data?.error || `Gagal ceklok ${type}`)
+      } finally {
+        setCeklokLoading(false)
+      }
+    }, err => {
+      toast.error(err.code === 1 ? 'Izin lokasi ditolak' : 'Lokasi tidak dapat dibaca')
+      setCeklokLoading(false)
+    }, { enableHighAccuracy: true, timeout: 15000 })
+  }
 
   const filtered = records.filter(r =>
     r.guru_nama?.toLowerCase().includes(search.toLowerCase()) ||
@@ -76,7 +116,25 @@ export default function CekLokAdminPage() {
       {/* Header */}
       <div>
         <h1 className="text-2xl font-bold text-gray-800 font-display">Ceklok Guru</h1>
-        <p className="text-gray-500 text-sm mt-1">Pantau kehadiran guru berbasis geolokasi</p>
+        <p className="text-gray-500 text-sm mt-1">Ceklok saya dan pantau kehadiran GTK berbasis geolokasi</p>
+      </div>
+
+      <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+          <div className="flex items-start gap-3">
+            <div className="w-10 h-10 rounded-lg flex items-center justify-center bg-blue-100 text-blue-600 shrink-0"><UserCheck size={20} /></div>
+            <div>
+              <h2 className="font-semibold text-gray-800">Ceklok / Absensi Saya</h2>
+              {personalLoading ? <p className="text-sm text-gray-400 mt-1">Memuat...</p> : (
+                <p className="text-sm text-gray-500 mt-1">Masuk: <b>{personal.today?.waktu_masuk || '-'}</b> · Pulang: <b>{personal.today?.waktu_pulang || '-'}</b></p>
+              )}
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-2 w-full md:w-auto">
+            <button type="button" disabled={ceklokLoading || !!personal.today?.waktu_masuk} onClick={() => handleCeklok('masuk')} className="px-4 py-2.5 rounded-lg bg-green-600 text-white text-sm font-medium disabled:opacity-50">Ceklok Masuk</button>
+            <button type="button" disabled={ceklokLoading || !!personal.today?.waktu_pulang} onClick={() => handleCeklok('pulang')} className="px-4 py-2.5 rounded-lg bg-blue-600 text-white text-sm font-medium disabled:opacity-50">Ceklok Pulang</button>
+          </div>
+        </div>
       </div>
 
       {/* Stat cards */}

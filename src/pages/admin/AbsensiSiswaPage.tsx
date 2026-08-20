@@ -3,6 +3,7 @@ import { QrCode, CheckCircle, XCircle, AlertCircle, Clock, Save } from 'lucide-r
 import toast from 'react-hot-toast'
 import api from '../../services/api'
 import { Html5Qrcode } from 'html5-qrcode'
+import { QRCodeSVG } from 'qrcode.react'
 
 const statusColors: Record<string, string> = {
   hadir: 'bg-green-100 text-green-700',
@@ -25,6 +26,8 @@ export default function AbsensiSiswaPage() {
   const [qrOpen, setQrOpen] = useState(false)
   const [lastQr, setLastQr] = useState('')
   const [scanBusy, setScanBusy] = useState(false)
+  const [qrIdentifiers, setQrIdentifiers] = useState<any[]>([])
+  const [showQr, setShowQr] = useState(false)
   const qrRef = useRef<Html5Qrcode | null>(null)
 
   useEffect(() => {
@@ -37,6 +40,13 @@ export default function AbsensiSiswaPage() {
   useEffect(() => {
     if (selectedRombel) loadData()
   }, [selectedRombel, tanggal, sesi])
+
+  useEffect(() => {
+    if (!selectedRombel) return setQrIdentifiers([])
+    api.get('/siswa/qr-identifiers', { params: { rombel_id: selectedRombel } })
+      .then(res => setQrIdentifiers(res.data))
+      .catch(() => setQrIdentifiers([]))
+  }, [selectedRombel])
 
   const loadData = async () => {
     const [siswaRes, absensiRes] = await Promise.all([
@@ -136,9 +146,12 @@ export default function AbsensiSiswaPage() {
           <h1 className="text-2xl font-bold text-gray-800 font-display">Absensi Siswa</h1>
           <p className="text-gray-500 text-sm mt-1">QR Code & Manual oleh Wali Kelas</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <button onClick={startQrCamera} className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg text-sm hover:bg-purple-700">
             <QrCode size={16} /> Scan Kamera
+          </button>
+          <button onClick={() => setShowQr(true)} className="flex items-center gap-2 px-4 py-2 bg-white border border-purple-300 text-purple-700 rounded-lg text-sm hover:bg-purple-50">
+            <QrCode size={16} /> Lihat QR Siswa
           </button>
           <button onClick={handleSave} disabled={loading} className="flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-lg text-sm hover:bg-primary-dark disabled:opacity-50">
             <Save size={16} /> {loading ? 'Menyimpan...' : 'Simpan Absensi'}
@@ -190,6 +203,12 @@ export default function AbsensiSiswaPage() {
       </div>
 
       {qrOpen && <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4"><div className="bg-white rounded-2xl p-4 w-full max-w-sm"><p className="text-sm text-gray-600 mb-3">Kamera tetap terbuka. Arahkan ke QR KTS siswa berikutnya.</p><div id="qr-reader"></div><p className="text-xs text-gray-400 mt-2">Terakhir: {qrToken || '-'}</p><button onClick={stopQrCamera} className="mt-3 w-full px-4 py-2 bg-gray-800 text-white rounded-lg text-sm">Tutup</button></div></div>}
+
+      {showQr && <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-3"><div className="bg-white rounded-2xl p-4 sm:p-6 w-full max-w-3xl max-h-[90vh] overflow-auto">
+        <div className="flex items-center justify-between gap-3 mb-4"><div><h2 className="font-bold text-gray-800">QR Siswa</h2><p className="text-xs text-gray-500">QR dan login memakai NISN bila tersedia; jika kosong memakai NIS.</p></div><button onClick={() => setShowQr(false)} className="px-3 py-2 bg-gray-100 rounded-lg text-sm">Tutup</button></div>
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">{qrIdentifiers.map(s => <div key={s.id} className="border rounded-xl p-3 text-center"><QRCodeSVG value={s.identifier} size={112} level="M" className="mx-auto max-w-full h-auto"/><p className="font-medium text-sm text-gray-800 mt-2 truncate">{s.nama}</p><p className="text-xs text-gray-500">{s.identifier_type}: {s.identifier}</p></div>)}</div>
+        {qrIdentifiers.length === 0 && <p className="py-8 text-center text-sm text-gray-400">Belum ada siswa pada rombel ini.</p>}
+      </div></div>}
 
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
         <div className="overflow-x-auto -mx-2 px-2">
