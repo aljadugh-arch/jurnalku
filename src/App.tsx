@@ -44,11 +44,11 @@ import BeasiswaPage from './pages/admin/BeasiswaPage'
 import CashlessPage from './pages/admin/CashlessPage'
 import BackupRestorePage from './pages/admin/BackupRestorePage'
 import CekLokAdminPage from './pages/admin/CekLokAdminPage'
+import GuruAbsensiPage from './pages/guru/GuruAbsensiPage'
 import BendaharaDashboard from './pages/admin/BendaharaDashboard'
 import EkskulPage from './pages/admin/EkskulPage'
 import GuruDashboard from './pages/guru/GuruDashboard'
 import GuruJurnalPage from './pages/guru/GuruJurnalPage'
-import GuruAbsensiPage from './pages/guru/GuruAbsensiPage'
 import GuruAbsensiSiswaPage from './pages/guru/GuruAbsensiSiswaPage'
 import GuruJadwalPage from './pages/guru/GuruJadwalPage'
 import GuruModulAjarPage from './pages/guru/GuruModulAjarPage'
@@ -151,6 +151,7 @@ export default function App() {
           <Route path="cashless" element={<CashlessPage />} />
           <Route path="backup-restore" element={<BackupRestorePage />} />
           <Route path="ceklok" element={<CekLokAdminPage />} />
+          <Route path="absensi-saya" element={<GuruAbsensiPage />} />
           <Route path="bendahara" element={<BendaharaDashboard />} />
           <Route path="ekskul" element={<EkskulPage />} />
           {/* Routes baru dari GitHub */}

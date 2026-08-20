@@ -178,6 +178,7 @@ export default function LoginPage() {
             </form>
 
 
+            {['jurnal.cc.cd','jurnalmadrasah.web.id'].includes(window.location.hostname) && (
             <div className="mt-5 rounded-2xl border border-blue-100 bg-blue-50 p-3">
               <p className="text-sm font-bold text-gray-800 mb-2">Akun demo</p>
               <div className="grid grid-cols-2 gap-2">
@@ -188,6 +189,7 @@ export default function LoginPage() {
                 ))}
               </div>
             </div>
+            )}
 
             {/* Register link */}
             <div className="mt-6 text-center">

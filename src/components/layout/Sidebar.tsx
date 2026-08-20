@@ -50,6 +50,7 @@ const adminMenuItems: MenuItem[] = [
     ]
   },
   { label: 'Ceklok Saya', icon: <MapPin size={20} />, path: '/admin/ceklok' },
+  { label: 'Absensi Saya', icon: <MapPin size={20} />, path: '/admin/absensi-saya' },
   { label: 'Jurnal Mengajar', icon: <ClipboardList size={20} />, path: '/admin/jurnal' },
   { label: 'Rapor Siswa', icon: <FileText size={20} />, path: '/admin/rapor' },
   { label: 'Catatan Kepribadian', icon: <NotebookPen size={20} />, path: '/admin/catatan-kepribadian' },
@@ -105,6 +106,7 @@ const kepalaMenuItems: MenuItem[] = [
   { label: 'Dashboard', icon: <LayoutDashboard size={20} />, path: '/admin' },
   { label: 'Posting', icon: <Newspaper size={20} />, path: '/admin/posting' },
   { label: 'Ceklok Saya', icon: <MapPin size={20} />, path: '/admin/ceklok' },
+  { label: 'Absensi Saya', icon: <MapPin size={20} />, path: '/admin/absensi-saya' },
   { label: 'Data Siswa', icon: <GraduationCap size={20} />, path: '/admin/siswa' },
   { label: 'Data GTK', icon: <Users size={20} />, path: '/admin/gtk' },
   { label: 'Rapor Siswa', icon: <FileText size={20} />, path: '/admin/rapor' },

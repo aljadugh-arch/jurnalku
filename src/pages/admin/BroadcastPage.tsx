@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Send, MessageSquare, Users, GraduationCap, UserCheck, Clock, CheckCircle, XCircle, Eye } from 'lucide-react'
+import { Send, MessageSquare, Users, GraduationCap, UserCheck, Clock, CheckCircle, XCircle, Eye, Phone, Plus, Trash2 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import api from '../../services/api'
 
@@ -13,7 +13,7 @@ const templates = [
 ]
 
 export default function BroadcastPage() {
-  const [tab, setTab] = useState<'kirim' | 'riwayat'>('kirim')
+  const [tab, setTab] = useState<'kirim' | 'riwayat' | 'whitelist'>('kirim')
   const [kategori, setKategori] = useState('semua_siswa')
   const [template, setTemplate] = useState(templates[0])
   const [pesan, setPesan] = useState(templates[0].pesan)
@@ -22,10 +22,28 @@ export default function BroadcastPage() {
   const [history, setHistory] = useState<any[]>([])
   const [sending, setSending] = useState(false)
   const [detail, setDetail] = useState<any>(null)
+  const [whitelist, setWhitelist] = useState<any[]>([])
+  const [wForm, setWForm] = useState({ phone: '', reason: '' })
+
+  const loadWhitelist = async () => {
+    try { setWhitelist((await api.get('/notif-whitelist')).data) } catch {}
+  }
+  const addWhitelist = async () => {
+    if (!wForm.phone.trim()) { toast.error('Nomor HP wajib diisi'); return }
+    try {
+      await api.post('/notif-whitelist', { phone: wForm.phone, reason: wForm.reason })
+      toast.success('Ditambahkan ke whitelist'); setWForm({ phone: '', reason: '' }); loadWhitelist()
+    } catch (e: any) { toast.error(e.response?.data?.error || 'Gagal') }
+  }
+  const removeWhitelist = async (id: string) => {
+    if (!confirm('Hapus dari whitelist?')) return
+    try { await api.delete('/notif-whitelist/' + id); toast.success('Dihapus'); loadWhitelist() } catch {}
+  }
 
   useEffect(() => {
     api.get('/rombel').then(res => setRombels(res.data))
     loadHistory()
+    loadWhitelist()
   }, [])
 
   const loadHistory = async () => {
@@ -206,6 +224,30 @@ export default function BroadcastPage() {
               </div>
             </div>
           )}
+        </div>
+      )}
+      {tab === 'whitelist' && (
+        <div className="space-y-4">
+          <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
+            <h3 className="font-semibold text-gray-700 mb-3 flex items-center gap-2"><Phone size={16}/> Tambah Nomor Whitelist</h3>
+            <div className="flex flex-col sm:flex-row gap-3">
+              <input value={wForm.phone} onChange={e => setWForm({...wForm, phone: e.target.value})} placeholder="08xxxxxxxxxx" className="flex-1 px-3 py-2 border rounded-lg text-sm" />
+              <input value={wForm.reason} onChange={e => setWForm({...wForm, reason: e.target.value})} placeholder="Keterangan (opsional)" className="flex-1 px-3 py-2 border rounded-lg text-sm" />
+              <button onClick={addWhitelist} className="inline-flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-lg text-sm"><Plus size={14}/>Tambah</button>
+            </div>
+          </div>
+          <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+            <div className="px-4 py-3 bg-gray-50 border-b"><h3 className="font-medium text-gray-700">Daftar Whitelist ({whitelist.length} nomor)</h3></div>
+            <div className="divide-y divide-gray-100 max-h-96 overflow-y-auto">
+              {whitelist.length === 0 && <p className="px-4 py-8 text-center text-gray-400 text-sm">Belum ada nomor whitelist</p>}
+              {whitelist.map((w: any) => (
+                <div key={w.id} className="flex items-center justify-between px-4 py-3">
+                  <div><p className="text-sm font-medium text-gray-800">{w.phone}</p>{w.reason && <p className="text-xs text-gray-400">{w.reason}</p>}</div>
+                  <button onClick={() => removeWhitelist(w.id)} className="p-1.5 rounded-lg text-red-500 hover:bg-red-50"><Trash2 size={15}/></button>
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
       )}
     </div>
