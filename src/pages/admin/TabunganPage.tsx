@@ -14,6 +14,8 @@ export default function TabunganPage() {
   const [mutasi, setMutasi] = useState<Mutasi[]>([])
   const [showTrx, setShowTrx] = useState(false)
   const [trxForm, setTrxForm] = useState({ siswa_id: '', tipe: 'setor', nominal: 0, keterangan: '' })
+  const [editMutasi, setEditMutasi] = useState<Mutasi | null>(null)
+  const [editForm, setEditForm] = useState({ nominal: 0, tipe: 'setor', keterangan: '' })
 
   const fetchSaldo = async () => {
     try { const res = await api.get('/tabungan/saldo'); setSaldoList(res.data) }
@@ -36,39 +38,47 @@ export default function TabunganPage() {
     catch { setMutasi([]) }
   }
 
+  const reload = () => {
+    fetchSaldo()
+    if (selectedSiswa) handleSelectSiswa(selectedSiswa)
+  }
+
   const handleTrx = async () => {
     if (!trxForm.siswa_id || trxForm.nominal <= 0) { toast.error('Pilih siswa dan nominal > 0'); return }
     try {
       await api.post('/tabungan', trxForm)
       toast.success(trxForm.tipe === 'setor' ? 'Setoran berhasil' : 'Penarikan berhasil')
       setShowTrx(false); setTrxForm({ siswa_id: '', tipe: 'setor', nominal: 0, keterangan: '' })
-      fetchSaldo()
-      if (selectedSiswa && selectedSiswa.id === trxForm.siswa_id) handleSelectSiswa(selectedSiswa)
+      reload()
     } catch (err: any) { toast.error(err.response?.data?.error || 'Gagal') }
   }
 
-  const fmt = (n: number) => 'Rp ' + n.toLocaleString('id-ID')
+  const openEdit = (m: Mutasi) => {
+    setEditMutasi(m)
+    setEditForm({ nominal: m.nominal, tipe: m.tipe, keterangan: m.keterangan || '' })
+  }
 
-
-  const handleEditMutasi = async (m: Mutasi) => {
-    const nominal = prompt('Nominal baru:', String(m.nominal))
-    if (!nominal || isNaN(Number(nominal))) return
-    const ket = prompt('Keterangan:', m.keterangan || '') || ''
+  const handleSaveEdit = async () => {
+    if (!editMutasi) return
+    if (!editForm.nominal || editForm.nominal <= 0) { toast.error('Nominal harus > 0'); return }
     try {
-      await api.put('/tabungan/' + m.id, { nominal: Number(nominal), keterangan: ket })
+      await api.put('/tabungan/' + editMutasi.id, { nominal: Number(editForm.nominal), tipe: editForm.tipe, keterangan: editForm.keterangan })
       toast.success('Mutasi diperbarui')
-      if (selectedSiswa) handleSelectSiswa(selectedSiswa); fetchSaldo()
+      setEditMutasi(null)
+      reload()
     } catch (e: any) { toast.error(e.response?.data?.error || 'Gagal') }
   }
 
   const handleDeleteMutasi = async (m: Mutasi) => {
-    if (!confirm('Hapus mutasi ini?')) return
+    if (!confirm('Hapus mutasi ini? Saldo akan dihitung ulang.')) return
     try {
       await api.delete('/tabungan/' + m.id)
       toast.success('Mutasi dihapus')
-      if (selectedSiswa) handleSelectSiswa(selectedSiswa); fetchSaldo()
+      reload()
     } catch (e: any) { toast.error(e.response?.data?.error || 'Gagal') }
   }
+
+  const fmt = (n: number) => 'Rp ' + Number(n||0).toLocaleString('id-ID')
 
   return (
     <div className="space-y-6">
@@ -113,22 +123,56 @@ export default function TabunganPage() {
             {!selectedSiswa ? <p className="px-4 py-8 text-center text-gray-400">Pilih siswa untuk melihat mutasi</p> :
             mutasi.length === 0 ? <p className="px-4 py-8 text-center text-gray-400">Belum ada transaksi</p> :
             mutasi.map(m => (
-              <div key={m.id} className="px-4 py-3 flex items-center justify-between">
-                <div>
+              <div key={m.id} className="px-4 py-3 flex items-center justify-between gap-3">
+                <div className="flex-1 min-w-0">
                   <p className={'text-sm font-medium ' + (m.tipe === 'setor' ? 'text-green-700' : 'text-red-700')}>{m.tipe === 'setor' ? '+' : '-'} {fmt(m.nominal)}</p>
-                  <div className="flex items-center gap-1 mt-1">
-                    <button onClick={() => handleEditMutasi(m)} className="p-1 rounded bg-blue-50 text-blue-600 hover:bg-blue-100"><Pencil size={11}/></button>
-                    <button onClick={() => handleDeleteMutasi(m)} className="p-1 rounded bg-red-50 text-red-600 hover:bg-red-100"><Trash2 size={11}/></button>
-                  </div>
-                  <p className="text-xs text-gray-400">{m.tanggal} {m.keterangan ? '• ' + m.keterangan : ''}</p>
+                  <p className="text-xs text-gray-400">{m.tanggal}{m.keterangan ? ' · ' + m.keterangan : ''}</p>
                 </div>
-                <p className="text-xs text-gray-500">Saldo: {fmt(m.saldo_akhir)}</p>
+                <div className="flex items-center gap-1 shrink-0">
+                  <p className="text-xs text-gray-500 mr-2">{fmt(m.saldo_akhir)}</p>
+                  <button onClick={() => openEdit(m)} className="p-1.5 rounded bg-blue-50 text-blue-600 hover:bg-blue-100" title="Edit"><Pencil size={13}/></button>
+                  <button onClick={() => handleDeleteMutasi(m)} className="p-1.5 rounded bg-red-50 text-red-600 hover:bg-red-100" title="Hapus"><Trash2 size={13}/></button>
+                </div>
               </div>
             ))}
           </div>
         </div>
       </div>
 
+      {/* Modal Edit Mutasi */}
+      {editMutasi && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl w-full max-w-sm p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-bold text-gray-800">Edit Mutasi Tabungan</h2>
+              <button onClick={() => setEditMutasi(null)} className="p-1 hover:bg-gray-100 rounded-lg"><X size={20} /></button>
+            </div>
+            <div className="space-y-3">
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Jenis Transaksi</label>
+                <select value={editForm.tipe} onChange={e => setEditForm({...editForm, tipe: e.target.value})} className="w-full px-3 py-2 border rounded-lg text-sm">
+                  <option value="setor">Setor</option>
+                  <option value="tarik">Tarik</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Nominal *</label>
+                <input type="number" value={editForm.nominal} onChange={e => setEditForm({...editForm, nominal: Number(e.target.value)})} className="w-full px-3 py-2 border rounded-lg text-sm" min={1} />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Keterangan</label>
+                <input value={editForm.keterangan} onChange={e => setEditForm({...editForm, keterangan: e.target.value})} className="w-full px-3 py-2 border rounded-lg text-sm" placeholder="Opsional" />
+              </div>
+            </div>
+            <div className="flex gap-3 mt-6">
+              <button onClick={() => setEditMutasi(null)} className="flex-1 px-4 py-2 border rounded-lg text-sm">Batal</button>
+              <button onClick={handleSaveEdit} className="flex-1 px-4 py-2 bg-primary text-white rounded-lg text-sm">Simpan</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Transaksi Baru */}
       {showTrx && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl w-full max-w-md p-6">
@@ -137,21 +181,32 @@ export default function TabunganPage() {
               <button onClick={() => setShowTrx(false)} className="p-1 hover:bg-gray-100 rounded-lg"><X size={20} /></button>
             </div>
             <div className="space-y-3">
-              <div><label className="block text-xs font-medium text-gray-600 mb-1">Siswa *</label>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Siswa</label>
                 <select value={trxForm.siswa_id} onChange={e => setTrxForm({...trxForm, siswa_id: e.target.value})} className="w-full px-3 py-2 border rounded-lg text-sm">
                   <option value="">-- Pilih Siswa --</option>
-                  {filtered.map(s => <option key={s.id} value={s.id}>{s.nama} ({s.nis || '-'}) {s.rombel_nama ? '- ' + s.rombel_nama : ''}</option>)}
+                  {saldoList.map(s => <option key={s.id} value={s.id}>{s.nama} ({s.nis})</option>)}
                 </select>
               </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div><label className="block text-xs font-medium text-gray-600 mb-1">Tipe</label><select value={trxForm.tipe} onChange={e => setTrxForm({...trxForm, tipe: e.target.value})} className="w-full px-3 py-2 border rounded-lg text-sm"><option value="setor">Setor</option><option value="tarik">Tarik</option></select></div>
-                <div><label className="block text-xs font-medium text-gray-600 mb-1">Nominal *</label><input type="number" value={trxForm.nominal || ''} onChange={e => setTrxForm({...trxForm, nominal: +e.target.value})} className="w-full px-3 py-2 border rounded-lg text-sm" /></div>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Jenis</label>
+                <select value={trxForm.tipe} onChange={e => setTrxForm({...trxForm, tipe: e.target.value})} className="w-full px-3 py-2 border rounded-lg text-sm">
+                  <option value="setor">Setor</option>
+                  <option value="tarik">Tarik</option>
+                </select>
               </div>
-              <div><label className="block text-xs font-medium text-gray-600 mb-1">Keterangan</label><input value={trxForm.keterangan} onChange={e => setTrxForm({...trxForm, keterangan: e.target.value})} placeholder="Opsional" className="w-full px-3 py-2 border rounded-lg text-sm" /></div>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Nominal</label>
+                <input type="number" value={trxForm.nominal || ''} onChange={e => setTrxForm({...trxForm, nominal: Number(e.target.value)})} placeholder="0" className="w-full px-3 py-2 border rounded-lg text-sm" />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Keterangan</label>
+                <input value={trxForm.keterangan} onChange={e => setTrxForm({...trxForm, keterangan: e.target.value})} placeholder="Opsional" className="w-full px-3 py-2 border rounded-lg text-sm" />
+              </div>
             </div>
             <div className="flex gap-3 mt-6">
               <button onClick={() => setShowTrx(false)} className="flex-1 px-4 py-2 border rounded-lg text-sm">Batal</button>
-              <button onClick={handleTrx} className="flex-1 px-4 py-2 bg-primary text-white rounded-lg text-sm hover:bg-primary-dark">Simpan</button>
+              <button onClick={handleTrx} className="flex-1 px-4 py-2 bg-primary text-white rounded-lg text-sm">Simpan</button>
             </div>
           </div>
         </div>

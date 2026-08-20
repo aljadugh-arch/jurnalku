@@ -3365,15 +3365,33 @@ app.put('/api/tagihan/:id', BENDAHARA, (req, res) => {
 
 app.put('/api/tabungan/:id', BENDAHARA, (req, res) => {
   const { tanggal, tipe, nominal, keterangan } = req.body
-  const row = db.prepare('SELECT siswa_id FROM tabungan WHERE id=? AND tenant_id=?').get(req.params.id, req.tenantId)
+  const row = db.prepare('SELECT * FROM tabungan WHERE id=? AND tenant_id=?').get(req.params.id, req.tenantId)
   if (!row) return res.status(404).json({ error: 'Transaksi tabungan tidak ditemukan' })
+  if (nominal !== undefined && (isNaN(Number(nominal)) || Number(nominal) <= 0)) return res.status(400).json({ error: 'Nominal harus lebih dari 0' })
   db.prepare('UPDATE tabungan SET tanggal=COALESCE(?,tanggal), tipe=COALESCE(?,tipe), nominal=COALESCE(?,nominal), keterangan=COALESCE(?,keterangan) WHERE id=? AND tenant_id=?')
-    .run(tanggal || null, tipe || null, nominal ?? null, keterangan ?? null, req.params.id, req.tenantId)
-  res.json({ success: true })
+    .run(tanggal || null, tipe || null, nominal != null ? Number(nominal) : null, keterangan ?? null, req.params.id, req.tenantId)
+  // Recalculate saldo_akhir untuk semua mutasi siswa ini (chronological)
+  const allMutasi = db.prepare("SELECT id,tipe,nominal FROM tabungan WHERE siswa_id=? AND tenant_id=? ORDER BY created_at ASC, id ASC").all(row.siswa_id, req.tenantId)
+  let saldo = 0
+  const upd = db.prepare('UPDATE tabungan SET saldo_akhir=? WHERE id=?')
+  db.transaction(() => {
+    for (const m of allMutasi) {
+      saldo += m.tipe === 'setor' ? Number(m.nominal) : -Number(m.nominal)
+      upd.run(saldo, m.id)
+    }
+  })()
+  res.json({ success: true, saldo_akhir: saldo })
 })
 
 app.delete('/api/tabungan/:id', BENDAHARA, (req, res) => {
+  const row = db.prepare('SELECT siswa_id FROM tabungan WHERE id=? AND tenant_id=?').get(req.params.id, req.tenantId)
+  if (!row) return res.status(404).json({ error: 'Mutasi tidak ditemukan' })
   db.prepare('DELETE FROM tabungan WHERE id=? AND tenant_id=?').run(req.params.id, req.tenantId)
+  // Recalculate saldo setelah hapus
+  const remaining = db.prepare("SELECT id,tipe,nominal FROM tabungan WHERE siswa_id=? AND tenant_id=? ORDER BY created_at ASC, id ASC").all(row.siswa_id, req.tenantId)
+  let saldo = 0
+  const upd = db.prepare('UPDATE tabungan SET saldo_akhir=? WHERE id=?')
+  db.transaction(() => { for (const m of remaining) { saldo += m.tipe === 'setor' ? Number(m.nominal) : -Number(m.nominal); upd.run(saldo, m.id) } })()
   res.json({ success: true })
 })
 
