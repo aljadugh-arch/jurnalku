@@ -4229,6 +4229,28 @@ app.use((err, req, res, next) => {
 
 // Start server
 app.listen(PORT, () => {
+
+// ==================== WA AUTO SCHEDULER ====================
+// Jalankan notif otomatis setiap 1 menit untuk semua tenant aktif
+setInterval(async () => {
+  try {
+    const date = todayJakarta()
+    const time = timeJakarta()
+    const day = ['Minggu','Senin','Selasa','Rabu','Kamis','Jumat','Sabtu'][new Date().getDay()]
+    // Skip Sabtu(6) dan Minggu(0) untuk notif jadwal
+    const isWeekend = [0,6].includes(new Date().getDay())
+    const tenants = db.prepare("SELECT id FROM tenants WHERE aktif=1 OR aktif IS NULL").all()
+    for (const t of tenants) {
+      try {
+        // Notif guru belum ceklok
+        waQueue.queueDueTeachers(db, { tenantId: t.id, date, time })
+        // Notif jadwal guru (hanya hari kerja)
+        if (!isWeekend) waQueue.queueDueSchedules(db, { tenantId: t.id, date, time })
+      } catch {}
+    }
+  } catch {}
+}, 60 * 1000) // setiap 1 menit
+
   console.log(`JURNALKU API Server running on http://localhost:${PORT}`)
 })
 

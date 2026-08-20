@@ -10,10 +10,22 @@ export default function GuruJurnalPage() {
   const [rombels, setRombels] = useState<any[]>([])
   const [form, setForm] = useState({ mapel_id: '', rombel_id: '', tanggal: new Date().toISOString().split('T')[0], jam_ke: 1, materi: '', kegiatan: '', catatan: '' })
 
+  const [jadwalHariIni, setJadwalHariIni] = useState<any[]>([])
+
   useEffect(() => {
     loadData()
-    Promise.all([api.get('/mapel'), api.get('/rombel')]).then(([m, r]) => {
-      setMapels(m.data); setRombels(r.data)
+    // Load jadwal hari ini guru + mapel/rombel yang diampu
+    Promise.all([
+      api.get('/jurnal/jadwal-hari-ini'),
+      api.get('/guru/pengajar-saya').catch(() => ({ data: { mapel: [], rombel: [] } })),
+    ]).then(([j, p]) => {
+      const jadwal = j.data.jadwal || []
+      setJadwalHariIni(jadwal)
+      // mapel & rombel dari pengajar, fallback ke semua
+      const mapelList = p.data.mapel?.length ? p.data.mapel : jadwal.map((x: any) => ({ id: x.mapel_id, nama: x.mapel_nama })).filter((x: any, i: number, a: any[]) => a.findIndex((y: any) => y.id === x.id) === i)
+      const rombelList = p.data.rombel?.length ? p.data.rombel : jadwal.map((x: any) => ({ id: x.rombel_id, nama: x.rombel_nama })).filter((x: any, i: number, a: any[]) => a.findIndex((y: any) => y.id === x.id) === i)
+      setMapels(mapelList)
+      setRombels(rombelList)
     })
   }, [])
 
@@ -76,6 +88,23 @@ export default function GuruJurnalPage() {
           <p className="text-xl font-bold text-red-800">{data.filter(d => d.status === 'rejected').length}</p>
         </div>
       </div>
+
+      {/* Jadwal hari ini — shortcut buat jurnal */}
+      {jadwalHariIni.length > 0 && (
+        <div className="bg-blue-50 rounded-xl border border-blue-100 p-4">
+          <p className="text-xs font-semibold text-blue-700 mb-2">Jadwal Hari Ini — Klik untuk buat jurnal</p>
+          <div className="flex flex-wrap gap-2">
+            {jadwalHariIni.map((j: any) => (
+              <button key={j.jadwal_id} onClick={() => {
+                setForm(f => ({ ...f, mapel_id: j.mapel_id, rombel_id: j.rombel_id }))
+                setShowForm(true)
+              }} className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border border-blue-200 text-blue-800 rounded-lg text-xs hover:bg-blue-100">
+                <Clock size={12}/> {j.jam_mulai} · {j.mapel_nama} · {j.rombel_nama}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* List */}
       <div className="space-y-3">
