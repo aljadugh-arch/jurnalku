@@ -1317,14 +1317,24 @@ app.post('/api/users', ADMIN, (req, res) => {
       .run(id, nama.trim(), email.trim(), bcrypt.hashSync(password, 10), role, req.tenantId)
     replaceUserLinks(req.tenantId, id, links)
   })()
-  // Auto-sync admin ke GTK untuk ceklok
-  if (role === 'admin') {
-    const existing = db.prepare('SELECT id FROM gtk WHERE nama = ? AND tenant_id = ?').get(nama.trim(), req.tenantId)
-    if (!existing) {
+  // Auto-link GTK untuk semua role staf (guru, kepala, wali_kelas, bendahara, admin)
+  const STAFF_ROLES = ['guru', 'wali_kelas', 'kepala', 'admin', 'bendahara', 'operator', 'tata_usaha', 'tu']
+  if (STAFF_ROLES.includes(role)) {
+    // 1. Cari GTK by nama persis
+    let gtk = db.prepare('SELECT id FROM gtk WHERE lower(nama)=lower(?) AND tenant_id=?').get(nama.trim(), req.tenantId)
+    // 2. Cari by email
+    if (!gtk && email) gtk = db.prepare("SELECT id FROM gtk WHERE lower(email)=lower(?) AND email!='' AND tenant_id=?").get(email.trim(), req.tenantId)
+    if (gtk) {
+      db.prepare('UPDATE users SET gtk_id=? WHERE id=?').run(gtk.id, id)
+      db.prepare("UPDATE gtk SET email=? WHERE id=? AND (email IS NULL OR email='')").run(email.trim(), gtk.id)
+    } else if (['admin', 'kepala', 'operator', 'tata_usaha', 'tu'].includes(role)) {
+      // Buat GTK baru untuk staf non-guru jika belum ada
       const gtkId = uuidv4()
-      db.prepare('INSERT INTO gtk (id, nama, jabatan, email, tenant_id) VALUES (?,?,?,?,?)').run(gtkId, nama.trim(), 'Admin', email.trim(), req.tenantId)
-      db.prepare('UPDATE users SET gtk_id = ? WHERE id = ?').run(gtkId, id)
+      const jabatan = role === 'kepala' ? 'Kepala' : role === 'admin' ? 'Admin' : 'Operator'
+      db.prepare("INSERT INTO gtk (id, nama, jabatan, email, jenis_kelamin, status_kepegawaian, tenant_id) VALUES (?,?,?,?,'L','Tetap',?)").run(gtkId, nama.trim(), jabatan, email.trim(), req.tenantId)
+      db.prepare('UPDATE users SET gtk_id=? WHERE id=?').run(gtkId, id)
     }
+    // else: guru tidak ada di data GTK → biarkan, admin harus tambah dari Data GTK dulu
   }
   res.json({ id, nama, email, role })
 })
@@ -1345,15 +1355,17 @@ app.put('/api/users/:id', ADMIN, (req, res) => {
     if (password) db.prepare('UPDATE users SET password = ? WHERE id = ? AND tenant_id=?').run(bcrypt.hashSync(password, 10), req.params.id, req.tenantId)
     replaceUserLinks(req.tenantId, req.params.id, links)
   })()
-  // Auto-sync admin ke GTK untuk ceklok
-  if (role === 'admin' || target.role === 'admin') {
-    const finalNama = nama || target.nama
-    const finalEmail = email || target.email
-    const existing = db.prepare('SELECT id FROM gtk WHERE nama = ? AND tenant_id = ?').get(finalNama, req.tenantId)
-    if (!existing) {
-      const gtkId = uuidv4()
-      db.prepare('INSERT INTO gtk (id, nama, jabatan, email, tenant_id) VALUES (?,?,?,?,?)').run(gtkId, finalNama, 'Admin', finalEmail, req.tenantId)
-      db.prepare('UPDATE users SET gtk_id = ? WHERE id = ?').run(gtkId, req.params.id)
+  // Auto-link GTK saat update user
+  const finalNama = nama || target.nama
+  const finalEmail = email || target.email
+  const finalRole2 = role || target.role
+  const STAFF_ROLES2 = ['guru', 'wali_kelas', 'kepala', 'admin', 'bendahara', 'operator', 'tata_usaha', 'tu']
+  if (STAFF_ROLES2.includes(finalRole2) && !target.gtk_id) {
+    let gtk2 = db.prepare('SELECT id FROM gtk WHERE lower(nama)=lower(?) AND tenant_id=?').get(finalNama, req.tenantId)
+    if (!gtk2 && finalEmail) gtk2 = db.prepare("SELECT id FROM gtk WHERE lower(email)=lower(?) AND email!='' AND tenant_id=?").get(finalEmail, req.tenantId)
+    if (gtk2) {
+      db.prepare('UPDATE users SET gtk_id=? WHERE id=? AND tenant_id=?').run(gtk2.id, req.params.id, req.tenantId)
+      db.prepare("UPDATE gtk SET email=? WHERE id=? AND (email IS NULL OR email='')").run(finalEmail, gtk2.id)
     }
   }
   res.json({ success: true })
