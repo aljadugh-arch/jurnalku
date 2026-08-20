@@ -2584,10 +2584,16 @@ app.get('/api/rekap-absensi-siswa/rombel', authMiddleware, (req, res) => {
 })
 
 app.get('/api/siswa/absensi', authMiddleware, (req, res) => {
-  const user = db.prepare('SELECT * FROM users WHERE id = ?').get(req.user.id)
-  const siswa = user?.nis ? db.prepare('SELECT * FROM siswa WHERE nis = ?').get(user.nis) : null
-  if (!siswa) return res.json([])
-  res.json(db.prepare('SELECT * FROM absensi_siswa WHERE siswa_id = ? ORDER BY tanggal DESC LIMIT 60').all(siswa.id))
+  // resolve siswa from user account (scoped to tenant)
+  let siswaId = req.user.siswa_id || null
+  if (!siswaId && req.user.nis) {
+    const s = db.prepare('SELECT id FROM siswa WHERE nis=? AND tenant_id=?').get(req.user.nis, req.tenantId)
+      || db.prepare('SELECT id FROM siswa WHERE nisn=? AND tenant_id=?').get(req.user.nis, req.tenantId)
+      || db.prepare('SELECT id FROM siswa WHERE nis=?').get(req.user.nis)
+    siswaId = s?.id || null
+  }
+  if (!siswaId) return res.json([])
+  res.json(db.prepare('SELECT * FROM absensi_siswa WHERE siswa_id=? AND tenant_id=? ORDER BY tanggal DESC LIMIT 90').all(siswaId, req.tenantId))
 })
 
 // ==================== SISWA EKSKUL ====================

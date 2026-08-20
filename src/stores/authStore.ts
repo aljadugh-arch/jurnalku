@@ -37,6 +37,9 @@ export const useAuthStore = create<AuthState>((set) => ({
   },
   logout: () => {
     localStorage.removeItem('jurnalku_token')
+    // Reset dark theme to light so next user starts fresh
+    localStorage.removeItem('jurnalku_theme')
+    document.documentElement.classList.remove('dark')
     set({ user: null, token: null, isAuthenticated: false })
   },
   checkAuth: async () => {

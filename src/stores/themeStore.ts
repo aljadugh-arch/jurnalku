@@ -31,10 +31,13 @@ export function applyTheme() {
       return
     }
   } catch {}
-  // 2. fallback to local toggle
+  // 2. fallback to local toggle — but only if explicitly set true, default to light
   try {
     const raw = localStorage.getItem('jurnalku_theme')
-    const dark = JSON.parse(raw || '{}')?.state?.dark
-    document.documentElement.classList.toggle('dark', !!dark)
-  } catch {}
+    const parsed = JSON.parse(raw || 'null')
+    const dark = parsed?.state?.dark
+    document.documentElement.classList.toggle('dark', dark === true)
+  } catch {
+    document.documentElement.classList.remove('dark')
+  }
 }

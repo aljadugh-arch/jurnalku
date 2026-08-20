@@ -205,9 +205,9 @@ export default function SiswaDashboard() {
       </Card>
 
       {/* Catatan Kepribadian */}
-      {(data.catatan_kepribadian || []).length > 0 && (
-        <div id="catatan"><Card title="Catatan Kepribadian" icon={<NotebookPen size={18} className="text-primary" />}>
+      <div id="catatan"><Card title="Catatan Kepribadian" icon={<NotebookPen size={18} className="text-primary" />}>
           <div className="space-y-3">
+            {(data.catatan_kepribadian || []).length === 0 && <p className="text-gray-400 text-sm text-center py-4">Belum ada catatan kepribadian dari guru</p>}
             {(data.catatan_kepribadian || []).map((c: any, i: number) => (
               <div key={i} className="rounded-xl border border-gray-100 p-3 space-y-1">
                 <p className="text-xs font-semibold text-gray-500">{c.tahun_ajaran} — Semester {c.semester}</p>
@@ -220,7 +220,6 @@ export default function SiswaDashboard() {
             ))}
           </div>
         </Card></div>
-      )}
 
       {/* Jadwal Hari Ini */}
       <div id="jadwal"></div><Card title="Jadwal Hari Ini" icon={<Calendar size={18} className="text-primary" />}>
