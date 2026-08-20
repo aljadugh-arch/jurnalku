@@ -111,6 +111,8 @@ export default function TagihanPage() {
   const [rombels, setRombels] = useState<any[]>([])
   const [jenisTagihan, setJenisTagihan] = useState<any[]>([])
   const [genForm, setGenForm] = useState({ jenis_nama: '', rombel_id: '', siswa_id: '', bulan: '', tahun: '2026', nominal: '' })
+  const [editTagihan, setEditTagihan] = useState<Tagihan | null>(null)
+  const [editTagihanForm, setEditTagihanForm] = useState({ nominal: 0, keterangan: '' })
 
   const fetchData = async () => {
     try {
@@ -196,13 +198,17 @@ export default function TagihanPage() {
   }
 
 
-  const handleEditTagihan = async (t: Tagihan) => {
-    const nominal = prompt('Nominal baru:', String(t.nominal))
-    if (!nominal || isNaN(Number(nominal))) return
-    const ket = prompt('Keterangan:', t.keterangan || '') || ''
+  const handleEditTagihan = (t: Tagihan) => {
+    setEditTagihan(t)
+    setEditTagihanForm({ nominal: t.nominal, keterangan: t.keterangan || '' })
+  }
+
+  const handleSaveEditTagihan = async () => {
+    if (!editTagihan) return
+    if (!editTagihanForm.nominal || editTagihanForm.nominal <= 0) { toast.error('Nominal harus > 0'); return }
     try {
-      await api.put('/tagihan/' + t.id, { nominal: Number(nominal), keterangan: ket })
-      toast.success('Tagihan diperbarui'); fetchData()
+      await api.put('/tagihan/' + editTagihan.id, { nominal: Number(editTagihanForm.nominal), keterangan: editTagihanForm.keterangan })
+      toast.success('Tagihan diperbarui'); setEditTagihan(null); fetchData()
     } catch (e: any) { toast.error(e.response?.data?.error || 'Gagal') }
   }
 
@@ -341,6 +347,32 @@ export default function TagihanPage() {
             <div className="flex gap-3 mt-6">
               <button onClick={() => setShowGenerate(false)} className="flex-1 px-4 py-2 border rounded-lg text-sm">Batal</button>
               <button onClick={handleGenerate} className="flex-1 px-4 py-2 bg-primary text-white rounded-lg text-sm hover:bg-primary-dark">Generate</button>
+            </div>
+          </div>
+        </div>
+      )}\n
+      {/* Modal Edit Tagihan */}
+      {editTagihan && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl w-full max-w-sm p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-bold text-gray-800">Edit Tagihan</h2>
+              <button onClick={() => setEditTagihan(null)} className="p-1 hover:bg-gray-100 rounded-lg"><X size={20} /></button>
+            </div>
+            <div className="text-sm text-gray-500 mb-3">{editTagihan.siswa_nama} — {editTagihan.jenis_nama}</div>
+            <div className="space-y-3">
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Nominal *</label>
+                <input type="number" value={editTagihanForm.nominal} onChange={e => setEditTagihanForm({...editTagihanForm, nominal: Number(e.target.value)})} className="w-full px-3 py-2 border rounded-lg text-sm" min={1} />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Keterangan</label>
+                <input value={editTagihanForm.keterangan} onChange={e => setEditTagihanForm({...editTagihanForm, keterangan: e.target.value})} className="w-full px-3 py-2 border rounded-lg text-sm" placeholder="Opsional" />
+              </div>
+            </div>
+            <div className="flex gap-3 mt-6">
+              <button onClick={() => setEditTagihan(null)} className="flex-1 px-4 py-2 border rounded-lg text-sm">Batal</button>
+              <button onClick={handleSaveEditTagihan} className="flex-1 px-4 py-2 bg-primary text-white rounded-lg text-sm">Simpan</button>
             </div>
           </div>
         </div>

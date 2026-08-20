@@ -52,7 +52,7 @@ export default function TenantManagementPage() {
   }
 
   const setCustomDomain = async (id: string) => {
-    const domain = prompt('Masukkan custom domain (contoh: jurnal.sekolahku.sch.id):')
+    const domain = window.prompt('Masukkan custom domain (contoh: jurnal.sekolahku.sch.id):')
     if (!domain) return
     try {
       await api.put(`/tenants/${id}/domain`, { domain_custom: domain })
