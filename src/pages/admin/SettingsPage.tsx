@@ -7,6 +7,7 @@ import { useSettingsStore } from '../../stores/settingsStore'
 import { JENJANG_OPTIONS } from '../../lib/jenjang'
 import MapPicker from '../../components/MapPicker'
 import JamPulangSiswa from '../../components/JamPulangSiswa'
+import FeatureSettings from '../../components/FeatureSettings'
 
 const HARI_OPTIONS = [
   { value: 'senin', label: 'Senin' }, { value: 'selasa', label: 'Selasa' }, { value: 'rabu', label: 'Rabu' },
@@ -501,6 +502,8 @@ export default function SettingsPage() {
           </div>
         </div>
       </div>
+
+      <FeatureSettings />
 
       <JamPulangSiswa />
 

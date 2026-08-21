@@ -124,11 +124,6 @@ function tenantMiddleware(db) {
       return res.status(404).json({ error: 'Lembaga tidak ditemukan' })
     }
 
-    // Check expiry
-    if (tenant.expired_at && new Date(tenant.expired_at) < new Date()) {
-      return res.status(403).json({ error: 'Langganan lembaga sudah expired', tenant: tenant.slug })
-    }
-
     req.tenant = tenant
     req.tenantId = tenant.id
     next()
@@ -157,7 +152,7 @@ function registerTenantRoutes(app, db, authMiddleware, uuidv4, SUPER) {
   // Create new tenant
   app.post('/api/tenants', authMiddleware, (req, res) => {
     if (req.user.role !== 'super_admin') return res.status(403).json({ error: 'Forbidden' })
-    const { slug, nama, domain_custom, email, telepon, alamat, plan, max_siswa, max_gtk } = req.body
+    const { slug, nama, domain_custom, email, telepon, alamat, max_siswa, max_gtk } = req.body
     if (!slug || !nama) return res.status(400).json({ error: 'slug dan nama wajib' })
 
     // Validate slug format
@@ -170,9 +165,9 @@ function registerTenantRoutes(app, db, authMiddleware, uuidv4, SUPER) {
     if (exists) return res.status(409).json({ error: 'Slug sudah digunakan' })
 
     const id = uuidv4()
-    db.prepare(`INSERT INTO tenants (id, slug, nama, domain_custom, email, telepon, alamat, plan, max_siswa, max_gtk) 
-      VALUES (?,?,?,?,?,?,?,?,?,?)`)
-      .run(id, slug, nama, domain_custom || null, email || null, telepon || null, alamat || null, plan || 'free', max_siswa || 100, max_gtk || 20)
+    db.prepare(`INSERT INTO tenants (id, slug, nama, domain_custom, email, telepon, alamat, plan, max_siswa, max_gtk, trial_ends_at)
+      VALUES (?,?,?,?,?,?,?,?,?,?,datetime('now','+1 month'))`)
+      .run(id, slug, nama, domain_custom || null, email || null, telepon || null, alamat || null, 'trial', max_siswa || 100, max_gtk || 20)
 
     // Create default admin user for tenant.
     // Catatan: must_change_password=1 agar user dipaksa ganti password

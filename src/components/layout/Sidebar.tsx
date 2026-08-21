@@ -12,6 +12,8 @@ import {
 } from 'lucide-react'
 import { clsx } from 'clsx'
 import { roleLabel } from '../../lib/roles'
+import { useSubscriptionStore } from '../../stores/subscriptionStore'
+import { pathEnabled } from '../../lib/featureAccess'
 
 interface MenuItem {
   label: string
@@ -145,6 +147,7 @@ export default function Sidebar() {
   const { isOpen, toggle, close } = useSidebarStore()
   const { user, logout } = useAuthStore()
   const settings = useSettingsStore(s => s.settings)
+  const features = useSubscriptionStore(s => s.subscription?.features)
   const location = useLocation()
   const [expandedMenus, setExpandedMenus] = useState<string[]>([])
 
@@ -161,6 +164,8 @@ export default function Sidebar() {
               ? guruMenuItems
               : siswaMenuItems
   ).filter(item => item.path !== '/admin/tenants' || user?.role === 'super_admin')
+    .map(item => ({ ...item, children: item.children?.filter(child => pathEnabled(child.path, features)) }))
+    .filter(item => item.path ? pathEnabled(item.path, features) : !!item.children?.length)
 
   const handleNav = () => {
     if (typeof window !== 'undefined' && window.innerWidth < 1024) close()

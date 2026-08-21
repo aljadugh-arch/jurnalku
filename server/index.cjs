@@ -24,6 +24,7 @@ const { isDriveFolderUrl } = require('./library-config.cjs')
 const { getLateDashboard } = require('./dashboard-late.cjs')
 const { registerRoutes: registerBackupRestoreRoutes } = require('./backup-restore.cjs')
 const { registerFinanceExcelRoutes } = require('./finance-excel.cjs')
+const { FEATURE_KEYS, addMonthsIso, accessForTenant, featureForPath, normalizeFeatureSelection, generateUnlockCode, hashUnlockCode, setupSubscriptionTables } = require('./subscription.cjs')
 
 const app = express()
 const PORT = process.env.PORT || 3001
@@ -547,6 +548,7 @@ if (!existTA) {
 }
 
 setupTenantTables(db)
+setupSubscriptionTables(db)
 
 // Migrasi: kolom UNIQUE global (nip/nis/kode) peninggalan pra-multi-tenant bikin
 // import/edit gagal begitu ada NIP/NIS kosong kedua atau kode sama antar-sekolah.
@@ -851,6 +853,29 @@ try {
 // Tenant detection middleware (API routes only)
 app.use(tenantMiddleware(db))
 
+function getTenantAccess(tenantId) {
+  const tenant = db.prepare('SELECT * FROM tenants WHERE id=?').get(tenantId || 'default')
+  return accessForTenant(tenant || { id: tenantId || 'default', plan: 'trial' })
+}
+
+function isSubscriptionBypass(req) {
+  return req.path.startsWith('/api/auth') || req.path === '/api/health' || req.path === '/api/settings' || req.path === '/api/subscription/status' || req.path === '/api/subscription/unlock' || req.path === '/api/tenant/info' || req.path.startsWith('/api/tenants')
+}
+
+function enforceTenantAccess(req, res, next) {
+  if (!req.path.startsWith('/api') || isSubscriptionBypass(req)) return next()
+  const token = req.headers.authorization?.split(' ')[1]
+  if (token) { try { const decoded = jwt.verify(token, JWT_SECRET); if (decoded.tenant_id) req.tenantId = decoded.tenant_id } catch {} }
+  const access = getTenantAccess(req.tenantId)
+  req.tenantAccess = access
+  if (access.locked) return res.status(402).json({ error: 'Masa percobaan/langganan sudah berakhir. Masukkan kunci unlock untuk melanjutkan.', code: 'SUBSCRIPTION_LOCKED', subscription: access })
+  const feature = featureForPath(req.path)
+  if (feature && access.features[feature] === false) return res.status(403).json({ error: 'Fitur ini dinonaktifkan untuk lembaga ini', code: 'FEATURE_DISABLED', feature })
+  next()
+}
+
+app.use(enforceTenantAccess)
+
 // Auth middleware
 function authMiddleware(req, res, next) {
   const token = req.headers.authorization?.split(' ')[1]
@@ -906,6 +931,52 @@ const SUPER = requireRole('super_admin')
 const STAFF = requireRole('admin', 'super_admin', 'guru', 'wali_kelas', 'operator', 'tata_usaha', 'tu', 'kepala')
 const BENDAHARA = requireRole('bendahara', 'admin', 'super_admin', 'operator')
 const DASHBOARD_ROLES = requireRole('admin', 'super_admin', 'kepala', 'operator', 'bendahara', 'tata_usaha', 'tu')
+
+app.get('/api/subscription/status', authMiddleware, (req, res) => {
+  const tenantId = req.user.role === 'super_admin' && req.query.tenant_id ? String(req.query.tenant_id) : req.tenantId
+  const tenant = db.prepare('SELECT id,nama,slug,plan,trial_ends_at,subscription_ends_at,features_json FROM tenants WHERE id=?').get(tenantId)
+  if (!tenant) return res.status(404).json({ error: 'Lembaga tidak ditemukan' })
+  res.json({ ...accessForTenant(tenant), tenant_id: tenant.id, tenant_name: tenant.nama, prices: { lite: 50000, pro: 80000 }, feature_keys: FEATURE_KEYS })
+})
+
+app.put('/api/subscription/features', ADMIN, (req, res) => {
+  if (req.user.role === 'super_admin' && req.body.tenant_id && req.body.tenant_id !== req.tenantId) return res.status(400).json({ error: 'Gunakan domain lembaga untuk mengatur fitur tenant' })
+  const tenant = db.prepare('SELECT * FROM tenants WHERE id=?').get(req.tenantId)
+  if (!tenant) return res.status(404).json({ error: 'Lembaga tidak ditemukan' })
+  const features = normalizeFeatureSelection(req.body.features, ['lite','pro'].includes(tenant.plan) ? tenant.plan : 'trial')
+  db.prepare('UPDATE tenants SET features_json=? WHERE id=?').run(JSON.stringify(features), tenant.id)
+  res.json({ success: true, ...accessForTenant({ ...tenant, features_json: JSON.stringify(features) }) })
+})
+
+app.post('/api/subscription/unlock', ADMIN, (req, res) => {
+  const code = String(req.body.code || '').trim().toUpperCase()
+  if (!code) return res.status(400).json({ error: 'Kunci unlock wajib diisi' })
+  const key = db.prepare('SELECT * FROM subscription_unlock_keys WHERE code_hash=?').get(hashUnlockCode(code))
+  if (!key || key.used_at) return res.status(400).json({ error: 'Kunci unlock tidak valid atau sudah digunakan' })
+  if (key.tenant_id !== req.tenantId) return res.status(403).json({ error: 'Kunci ini bukan untuk lembaga Anda' })
+  const tenant = db.prepare('SELECT * FROM tenants WHERE id=?').get(req.tenantId)
+  const currentEnd = tenant.subscription_ends_at && new Date(tenant.subscription_ends_at) > new Date() ? tenant.subscription_ends_at : new Date().toISOString()
+  const newEnd = addMonthsIso(currentEnd, key.months)
+  const apply = db.transaction(() => {
+    const features = normalizeFeatureSelection(JSON.parse(tenant.features_json || '{}'), key.plan)
+    db.prepare('UPDATE tenants SET plan=?,subscription_ends_at=?,features_json=?,expired_at=NULL,aktif=1 WHERE id=?').run(key.plan, newEnd, JSON.stringify(features), tenant.id)
+    db.prepare("UPDATE subscription_unlock_keys SET used_at=datetime('now'),used_by=? WHERE id=? AND used_at IS NULL").run(req.user.id, key.id)
+  })
+  apply()
+  res.json({ success: true, ...getTenantAccess(req.tenantId) })
+})
+
+app.post('/api/tenants/:id/unlock-keys', SUPER, (req, res) => {
+  const plan = String(req.body.plan || '')
+  const months = Number(req.body.months || 1)
+  if (!['lite','pro'].includes(plan) || !Number.isInteger(months) || months < 1 || months > 24) return res.status(400).json({ error: 'Paket atau durasi tidak valid' })
+  if (!db.prepare('SELECT 1 FROM tenants WHERE id=?').get(req.params.id)) return res.status(404).json({ error: 'Lembaga tidak ditemukan' })
+  let code, hash
+  do { code = generateUnlockCode(); hash = hashUnlockCode(code) } while (db.prepare('SELECT 1 FROM subscription_unlock_keys WHERE code_hash=?').get(hash))
+  db.prepare('INSERT INTO subscription_unlock_keys(id,code_hash,tenant_id,plan,months,created_by) VALUES(?,?,?,?,?,?)').run(uuidv4(), hash, req.params.id, plan, months, req.user.id)
+  res.status(201).json({ code, plan, months, tenant_id: req.params.id, note: 'Kunci hanya ditampilkan sekali. Simpan dan kirim kepada admin lembaga.' })
+})
+
 const backupUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024, files: 1 } })
 registerBackupRestoreRoutes(app, db, { ADMIN, upload: backupUpload, dbPath: path.join(__dirname, 'jurnalku.db') })
 registerFinanceExcelRoutes(app, db, { authorize: requireRole('bendahara', 'admin', 'super_admin', 'operator'), upload: multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024, files: 1 } }) })
@@ -1148,7 +1219,7 @@ app.post('/api/auth/register', (req, res) => {
     domainStatus = 'pending' // menunggu DNS resolve + provisioning
   }
 
-  db.prepare('INSERT INTO tenants (id, slug, nama, email, domain_custom, domain_status) VALUES (?,?,?,?,?,?)')
+  db.prepare("INSERT INTO tenants (id, slug, nama, email, domain_custom, domain_status, plan, trial_ends_at) VALUES (?,?,?,?,?,?,'trial',datetime('now','+1 month'))")
     .run(tenantId, slug, nama_lembaga || nama, email, domainVal, domainStatus)
 
   // Create admin user for the tenant

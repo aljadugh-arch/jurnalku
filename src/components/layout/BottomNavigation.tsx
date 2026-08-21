@@ -3,6 +3,8 @@ import { Link, useLocation } from 'react-router-dom'
 import { clsx } from 'clsx'
 import { useAuthStore } from '../../stores/authStore'
 import { useSettingsStore } from '../../stores/settingsStore'
+import { useSubscriptionStore } from '../../stores/subscriptionStore'
+import { pathEnabled } from '../../lib/featureAccess'
 import {
   BarChart3,
   BookOpen,
@@ -34,8 +36,8 @@ type NavItem = {
 const iconSize = 21
 
 function roleItems(role?: string, hideStaffCeklok?: boolean): NavItem[] {
-  const ceklok: NavItem = { label: 'Ceklok', path: '/guru/absensi-guru', icon: <MapPin size={iconSize} /> }
   const ceklokStaff: NavItem = { label: 'Ceklok', path: '/admin/ceklok', icon: <MapPin size={iconSize} /> }
+  const absensiSaya: NavItem = { label: 'Absensi Saya', path: '/admin/absensi-saya', icon: <UserCheck size={iconSize} /> }
   if (role === 'guru' || role === 'wali_kelas') {
     return [
       { label: 'Home', path: '/guru', icon: <Home size={iconSize} /> },
@@ -76,8 +78,9 @@ function roleItems(role?: string, hideStaffCeklok?: boolean): NavItem[] {
   if (role === 'kepala') {
     return [
       { label: 'Home', path: '/admin', icon: <Home size={iconSize} /> },
-      ...(hideStaffCeklok ? [] : [ceklokStaff]),
+      ...(hideStaffCeklok ? [] : [absensiSaya]),
       { label: 'Kalender', path: '/admin/kalender-kbm', icon: <Calendar size={iconSize} /> },
+      ...(hideStaffCeklok ? [] : [ceklokStaff]),
       { label: 'Presensi', path: '/admin/absensi-siswa', icon: <UserCheck size={iconSize} /> },
       { label: 'Rekap', path: '/admin/rekap-absensi', icon: <ClipboardList size={iconSize} /> },
       { label: 'Keuangan', path: '/admin/tagihan', icon: <DollarSign size={iconSize} /> },
@@ -127,11 +130,12 @@ function isActive(current: string, path: string) {
 export default function BottomNavigation() {
   const role = useAuthStore(s => s.user?.role)
   const settings = useSettingsStore(s => s.settings)
+  const features = useSubscriptionStore(s => s.subscription?.features)
   const location = useLocation()
   const [open, setOpen] = useState(false)
   // Demo tenant (demo.jurnalmadrasah.web.id): ceklok hanya untuk guru, sembunyikan dari admin/kepala.
   const isDemo = typeof window !== 'undefined' && window.location.hostname.startsWith('demo.')
-  const items = useMemo(() => roleItems(role, isDemo), [role, isDemo])
+  const items = useMemo(() => roleItems(role, isDemo).filter(item => pathEnabled(item.path, features)), [role, isDemo, features])
   const primary = items.slice(0, 4)
   const more = items.slice(4)
   const activeMore = more.some(item => isActive(location.pathname, item.path))

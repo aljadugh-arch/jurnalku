@@ -69,9 +69,12 @@ import PanduanPage from './pages/PanduanPage'
 import DomainSetupPage from './pages/admin/DomainSetupPage'
 import ErkamPage from './pages/admin/ErkamPage'
 import SuperadminDashboard from './pages/admin/SuperadminDashboard'
+import SubscriptionGate from './components/SubscriptionGate'
+import { useSubscriptionStore } from './stores/subscriptionStore'
 
 function AdminIndexRoute() {
   const { user } = useAuthStore()
+  if (user?.role === 'super_admin') return <SuperadminDashboard />
   if (user?.role === 'bendahara') return <BendaharaDashboard />
   return <AdminDashboard />
 }
@@ -90,8 +93,10 @@ function ProtectedRoute({ children, allowedRoles }: { children: ReactNode, allow
 export default function App() {
   const { checkAuth, isAuthenticated } = useAuthStore()
   const { loadSettings } = useSettingsStore()
+  const { load: loadSubscription } = useSubscriptionStore()
   useEffect(() => { checkAuth() }, [])
   useEffect(() => { loadSettings() }, [])
+  useEffect(() => { if (isAuthenticated) loadSubscription() }, [isAuthenticated])
 
   return (
     <BrowserRouter>
@@ -106,7 +111,9 @@ export default function App() {
         {/* Admin Routes */}
         <Route path="/admin" element={
           <ProtectedRoute allowedRoles={['admin', 'super_admin', 'kepala', 'bendahara', 'operator', 'tata_usaha', 'tu']}>
-            <DashboardLayout />
+            <SubscriptionGate>
+              <DashboardLayout />
+            </SubscriptionGate>
           </ProtectedRoute>
         }>
           <Route index element={<AdminIndexRoute />} />
@@ -165,7 +172,9 @@ export default function App() {
         {/* Guru Routes */}
         <Route path="/guru" element={
           <ProtectedRoute allowedRoles={['guru', 'wali_kelas']}>
-            <DashboardLayout />
+            <SubscriptionGate>
+              <DashboardLayout />
+            </SubscriptionGate>
           </ProtectedRoute>
         }>
           <Route index element={<GuruDashboard />} />
@@ -187,7 +196,9 @@ export default function App() {
         {/* Siswa Routes */}
         <Route path="/siswa" element={
           <ProtectedRoute allowedRoles={['siswa']}>
-            <DashboardLayout />
+            <SubscriptionGate>
+              <DashboardLayout />
+            </SubscriptionGate>
           </ProtectedRoute>
         }>
           <Route index element={<SiswaDashboard />} />

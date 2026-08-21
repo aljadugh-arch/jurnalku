@@ -190,8 +190,8 @@ export default function AbsensiSiswaPage() {
         </select>
         </div>
         <div className="flex flex-col lg:flex-row gap-3">
-          <div id="qr-file-reader" className="hidden"></div><button onClick={startQrCamera} className="px-4 py-2 bg-purple-600 text-white rounded-lg text-sm">Scan Kamera</button>
-          <label className="px-4 py-2 bg-gray-100 rounded-lg text-sm cursor-pointer">Scan Foto<input type="file" accept="image/*" className="hidden" onChange={e => scanQrImage(e.target.files?.[0])} /></label>
+          <div id="qr-file-reader" className="hidden"></div><button onClick={startQrCamera} className="w-full lg:w-auto px-4 py-2 bg-purple-600 text-white rounded-lg text-sm text-center">Scan Kamera</button>
+          <label className="flex w-full lg:w-auto items-center justify-center px-4 py-2 bg-gray-100 rounded-lg text-sm text-center cursor-pointer">Scan Foto<input type="file" accept="image/*" className="hidden" onChange={e => scanQrImage(e.target.files?.[0])} /></label>
           {['hadir','sakit','izin','alpha'].map(st => <button key={st} onClick={() => setAll(st)} className="px-3 py-2 bg-gray-100 rounded-lg text-sm capitalize">Semua {st}</button>)}
         </div>
         <div className="flex flex-col lg:flex-row gap-3">

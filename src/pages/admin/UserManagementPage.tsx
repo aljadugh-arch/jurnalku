@@ -70,17 +70,17 @@ export default function UserManagementPage() {
   }
 
   return (
-    <div className="space-y-6">
-      <div>
+    <div className="min-w-0 space-y-6">
+      <div className="min-w-0">
         <h1 className="text-2xl font-bold text-gray-800 font-display">Manajemen Pengguna</h1>
-        <div className="flex gap-2 mt-2">
+        <div className="flex flex-wrap gap-2 mt-2">
           <button onClick={exportUsers} className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-gray-100 text-gray-700 text-xs hover:bg-gray-200"><Download size={13}/>Ekspor TXT</button>
           <button onClick={copyWA} className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-green-50 text-green-700 text-xs hover:bg-green-100"><Copy size={13}/>Salin WA</button>
         </div>
         <p className="text-gray-500 text-sm mt-1">Kelola akun & role: Kepala Madrasah (pimpinan, read-only) dan Admin/Operator (akses penuh)</p>
       </div>
 
-      <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
+      <div className="min-w-0 bg-white rounded-xl p-4 sm:p-6 shadow-sm border border-gray-100">
         <h2 className="font-semibold text-gray-700 mb-4 flex items-center gap-2"><UserPlus size={18} /> Tambah Pengguna</h2>
         <div className="grid md:grid-cols-2 gap-3 mb-4 p-3 bg-gray-50 rounded-xl">
           <div>
@@ -114,27 +114,15 @@ export default function UserManagementPage() {
       </div>
 
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-        <table className="w-full text-sm">
-          <thead className="bg-gray-50 text-gray-500 text-left">
-            <tr><th className="px-4 py-3">Nama</th><th className="px-4 py-3">Email</th><th className="px-4 py-3">Role</th><th className="px-4 py-3 w-16"></th></tr>
-          </thead>
-          <tbody className="divide-y">
-            {users.map(u => (
-              <tr key={u.id}>
-                <td className="px-4 py-3 font-medium text-gray-800">{u.nama}</td>
-                <td className="px-4 py-3 text-gray-600">{u.email}</td>
-                <td className="px-4 py-3">
-                  <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs bg-primary/10 text-primary">
-                    <Shield size={12} /> {roleLabel(u.role)}
-                  </span>
-                </td>
-                <td className="px-4 py-3">
-                  <button onClick={() => remove(u)} className="text-gray-400 hover:text-red-500"><Trash2 size={16} /></button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        <div className="sm:hidden divide-y">
+          {users.map(u => <div key={u.id} className="p-4 flex items-start gap-3"><div className="min-w-0 flex-1"><p className="font-medium text-gray-800 break-words">{u.nama}</p><p className="mt-1 text-sm text-gray-600 break-all">{u.email}</p><span className="mt-2 inline-flex max-w-full items-center gap-1 px-2 py-1 rounded-full text-xs bg-primary/10 text-primary"><Shield size={12} className="shrink-0"/><span className="break-words">{roleLabel(u.role)}</span></span></div><button aria-label={`Hapus ${u.nama}`} onClick={() => remove(u)} className="shrink-0 p-2 text-gray-400 hover:text-red-500"><Trash2 size={16}/></button></div>)}
+        </div>
+        <div className="hidden sm:block overflow-x-auto">
+          <table className="w-full min-w-[640px] text-sm">
+            <thead className="bg-gray-50 text-gray-500 text-left"><tr><th className="px-4 py-3">Nama</th><th className="px-4 py-3">Email</th><th className="px-4 py-3">Role</th><th className="px-4 py-3 w-16"></th></tr></thead>
+            <tbody className="divide-y">{users.map(u => <tr key={u.id}><td className="px-4 py-3 font-medium text-gray-800 break-words">{u.nama}</td><td className="px-4 py-3 text-gray-600 break-all">{u.email}</td><td className="px-4 py-3"><span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs bg-primary/10 text-primary"><Shield size={12}/>{roleLabel(u.role)}</span></td><td className="px-4 py-3"><button aria-label={`Hapus ${u.nama}`} onClick={() => remove(u)} className="text-gray-400 hover:text-red-500"><Trash2 size={16}/></button></td></tr>)}</tbody>
+          </table>
+        </div>
       </div>
     </div>
   )

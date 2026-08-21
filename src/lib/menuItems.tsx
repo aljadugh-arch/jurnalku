@@ -41,7 +41,8 @@ export const adminMenuItems: MenuItem[] = [
       { label: 'Absensi Kegiatan', path: '/admin/absensi-kegiatan' },
     ]
   },
-  { label: 'Ceklok Saya', icon: <MapPin size={20} />, path: '/admin/ceklok' },
+  { label: 'Ceklok & Rekap', icon: <MapPin size={20} />, path: '/admin/ceklok' },
+  { label: 'Absensi Saya', icon: <UserCheck size={20} />, path: '/admin/absensi-saya' },
   { label: 'Jurnal Mengajar', icon: <ClipboardList size={20} />, path: '/admin/jurnal' },
   { label: 'Rapor Siswa', icon: <FileText size={20} />, path: '/admin/rapor' },
   { label: 'Catatan Kepribadian', icon: <ScrollText size={20} />, path: '/admin/catatan-kepribadian' },
@@ -90,7 +91,8 @@ export const siswaMenuItems: MenuItem[] = [
 // Kepala Madrasah/Sekolah = pimpinan, tetap punya ceklok sendiri karena masuk kategori GTK.
 export const kepalaMenuItems: MenuItem[] = [
   { label: 'Dashboard', icon: <LayoutDashboard size={20} />, path: '/admin' },
-  { label: 'Ceklok Saya', icon: <MapPin size={20} />, path: '/admin/ceklok' },
+  { label: 'Ceklok & Rekap', icon: <MapPin size={20} />, path: '/admin/ceklok' },
+  { label: 'Absensi Saya', icon: <UserCheck size={20} />, path: '/admin/absensi-saya' },
   { label: 'Data Siswa', icon: <GraduationCap size={20} />, path: '/admin/siswa' },
   { label: 'Data GTK', icon: <Users size={20} />, path: '/admin/gtk' },
   { label: 'Rapor Siswa', icon: <FileText size={20} />, path: '/admin/rapor' },
