@@ -6,13 +6,18 @@ interface ThemeState {
   toggle: () => void
 }
 
+function setDarkClass(dark: boolean) {
+  document.documentElement.classList.toggle('dark', dark)
+  document.documentElement.style.colorScheme = dark ? 'dark' : 'light'
+}
+
 export const useThemeStore = create<ThemeState>()(
   persist(
     (set) => ({
       dark: false,
       toggle: () => set(s => {
         const next = !s.dark
-        document.documentElement.classList.toggle('dark', next)
+        setDarkClass(next)
         return { dark: next }
       }),
     }),
@@ -27,7 +32,7 @@ export function applyTheme() {
     const raw = localStorage.getItem('jurnalku_settings')
     const theme = JSON.parse(raw || '{}')?.state?.settings?.theme
     if (theme === 'light' || theme === 'dark') {
-      document.documentElement.classList.toggle('dark', theme === 'dark')
+      setDarkClass(theme === 'dark')
       return
     }
   } catch {}
@@ -36,8 +41,8 @@ export function applyTheme() {
     const raw = localStorage.getItem('jurnalku_theme')
     const parsed = JSON.parse(raw || 'null')
     const dark = parsed?.state?.dark
-    document.documentElement.classList.toggle('dark', dark === true)
+    setDarkClass(dark === true)
   } catch {
-    document.documentElement.classList.remove('dark')
+    setDarkClass(false)
   }
 }

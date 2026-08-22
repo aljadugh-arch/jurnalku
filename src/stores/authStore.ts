@@ -37,9 +37,13 @@ export const useAuthStore = create<AuthState>((set) => ({
   },
   logout: () => {
     localStorage.removeItem('jurnalku_token')
-    // Reset dark theme to light so next user starts fresh
+    // Clear tenant-scoped preferences so a previous tenant/user cannot
+    // leave the next session stuck in its theme or settings.
     localStorage.removeItem('jurnalku_theme')
+    localStorage.removeItem('jurnalku_settings')
     document.documentElement.classList.remove('dark')
+    document.documentElement.style.colorScheme = 'light'
+    useSettingsStore.setState({ settings: {} })
     set({ user: null, token: null, isAuthenticated: false })
   },
   checkAuth: async () => {

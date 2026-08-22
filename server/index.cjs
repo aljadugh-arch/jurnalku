@@ -2903,13 +2903,18 @@ app.get('/api/rekap-absensi', authMiddleware, (req, res) => {
 })
 
 
-function isHolidayDate(tanggal) {
-  const d = new Date(String(tanggal) + 'T00:00:00+07:00')
-  const day = d.getDay()
-  return day === 5 || day === 0
+const { dayNameForDate, isHoliday } = require('./holiday-rules.cjs')
+
+function isHolidayDate(tanggal, tenantId) {
+  if (tenantId) {
+    const settings = db.prepare('SELECT hari_libur FROM settings WHERE tenant_id=?').get(tenantId)
+    const events = db.prepare("SELECT jenis FROM kalender_kbm WHERE tenant_id=? AND tanggal=? AND jenis='libur'").all(tenantId, tanggal)
+    return isHoliday({ date: tanggal, holidayDays: settings?.hari_libur, calendarEvents: events })
+  }
+  return ['jumat', 'minggu'].includes(dayNameForDate(tanggal))
 }
 function assertKbmActive(req, tanggal) {
-  if (isHolidayDate(tanggal)) throw new Error('Hari Jumat/Minggu libur: absensi nonaktif')
+  if (isHolidayDate(tanggal, req.tenantId)) throw new Error('Hari libur: absensi nonaktif')
   const row = db.prepare("SELECT id FROM kalender_kbm WHERE tenant_id=? AND tanggal=? AND jenis='kbm_aktif' LIMIT 1").get(req.tenantId, tanggal)
   if (!row) throw new Error('KBM belum diaktifkan di Kalender KBM untuk tanggal ini')
 }
@@ -2934,7 +2939,7 @@ app.get('/api/kalender-kbm', authMiddleware, (req, res) => {
 app.get('/api/kalender-kbm/status', authMiddleware, (req, res) => {
   const tanggal = req.query.tanggal || todayJakarta()
   const aktif = !!db.prepare("SELECT id FROM kalender_kbm WHERE tenant_id=? AND tanggal=? AND jenis='kbm_aktif' LIMIT 1").get(req.tenantId, tanggal)
-  res.json({ tanggal, aktif, libur: isHolidayDate(tanggal) })
+  res.json({ tanggal, aktif: !isHolidayDate(tanggal, req.tenantId) && aktif, libur: isHolidayDate(tanggal, req.tenantId) })
 })
 
 app.post('/api/kalender-kbm', ADMIN, (req, res) => {
@@ -3632,7 +3637,7 @@ app.post('/api/absensi-siswa/bulk', STAFF, (req, res) => {
 
 app.post('/api/absensi-siswa/bulk-range', STAFF, (req, res) => {
   const { mulai, selesai, rombel_id, status, jenis } = req.body
-  const dates = dateRange(mulai, selesai).filter(d => !isHolidayDate(d))
+  const dates = dateRange(mulai, selesai).filter(d => !isHolidayDate(d, req.tenantId))
   if (!rombel_id || !dates.length) return res.status(400).json({ error: 'Rombel dan rentang tanggal wajib valid' })
   const siswa = db.prepare("SELECT id FROM siswa WHERE rombel_id=? AND status='aktif' AND tenant_id=? ORDER BY nama").all(rombel_id, req.tenantId)
   let count = 0
@@ -3723,7 +3728,7 @@ app.post('/api/absensi-guru', STAFF, (req, res) => {
 
 app.get('/api/absensi-guru/jadwal-harian', STAFF, (req, res) => {
   const tanggal = req.query.tanggal || todayJakarta()
-  if (isHolidayDate(tanggal)) return res.json({ tanggal, libur: true, rows: [] })
+  if (isHolidayDate(tanggal, req.tenantId)) return res.json({ tanggal, libur: true, rows: [] })
   const d = new Date(tanggal + 'T00:00:00+07:00')
   const hari = HARI_ID[isNaN(d.getTime()) ? new Date().getDay() : d.getDay()]
   const rows = db.prepare(`SELECT g.id,g.nama,g.nip,MIN(j.jam_mulai) waktu_masuk,MAX(j.jam_selesai) waktu_pulang,COUNT(j.id) jam
@@ -4362,16 +4367,13 @@ setInterval(async () => {
   try {
     const date = todayJakarta()
     const time = timeJakarta()
-    const day = ['Minggu','Senin','Selasa','Rabu','Kamis','Jumat','Sabtu'][new Date().getDay()]
-    // Skip Sabtu(6) dan Minggu(0) untuk notif jadwal
-    const isWeekend = [0,6].includes(new Date().getDay())
     const tenants = db.prepare("SELECT id FROM tenants WHERE aktif=1 OR aktif IS NULL").all()
     for (const t of tenants) {
       try {
         // Notif guru belum ceklok
         waQueue.queueDueTeachers(db, { tenantId: t.id, date, time })
         // Notif jadwal guru (hanya hari kerja)
-        if (!isWeekend) waQueue.queueDueSchedules(db, { tenantId: t.id, date, time })
+        waQueue.queueDueSchedules(db, { tenantId: t.id, date, time })
       } catch {}
     }
   } catch {}

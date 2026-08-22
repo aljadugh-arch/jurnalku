@@ -1,4 +1,5 @@
 const crypto = require('crypto')
+const { isHoliday } = require('./holiday-rules.cjs')
 
 function setupWA(db) {
   db.exec(`CREATE TABLE IF NOT EXISTS wa_queue(
@@ -31,7 +32,7 @@ function enqueue(db,{tenantId,phone,message,key,targetType='',targetId=''}) {
   return {queued:r.changes===1,id:r.changes?id:db.prepare('SELECT id FROM wa_queue WHERE tenant_id=? AND idempotency_key=?').get(tenantId,key)?.id,reason:r.changes?'queued':'duplicate'}
 }
 function claimNext(db,tenantId) {
-  return db.transaction(()=>{
+  return db.transaction(()=> {
     const row=db.prepare("SELECT * FROM wa_queue WHERE tenant_id=? AND status IN ('pending','failed') AND attempts<5 AND available_at<=datetime('now') ORDER BY created_at LIMIT 1").get(tenantId)
     if(!row)return null
     const r=db.prepare("UPDATE wa_queue SET status='processing',claimed_at=datetime('now'),attempts=attempts+1 WHERE id=? AND tenant_id=? AND status IN ('pending','failed')").run(row.id,tenantId)
@@ -39,7 +40,16 @@ function claimNext(db,tenantId) {
   })()
 }
 function render(template,data){return String(template||'').replace(/\{(\w+)\}/g,(_,k)=>data[k]??'')}
+function tenantHolidayState(db, tenantId, date) {
+  const settings = db.prepare('SELECT hari_libur FROM settings WHERE tenant_id=?').get(tenantId)
+  const events = db.prepare("SELECT jenis FROM kalender_kbm WHERE tenant_id=? AND tanggal=? AND jenis='libur'").all(tenantId, date)
+  return { holidayDays: settings?.hari_libur || [], calendarEvents: events }
+}
+function shouldSuppress(db, tenantId, date) {
+  return isHoliday({ date, ...tenantHolidayState(db, tenantId, date) })
+}
 function queueWaliAttendance(db,{tenantId,studentId,date,session,status}) {
+  if (shouldSuppress(db, tenantId, date)) return {queued:false,reason:'holiday'}
   const conf=db.prepare('SELECT * FROM notif_settings WHERE tenant_id=?').get(tenantId)
   if(!conf?.absensi_siswa_ke_wali)return {queued:false,reason:'disabled'}
   const s=db.prepare('SELECT * FROM siswa WHERE id=? AND tenant_id=?').get(studentId,tenantId)
@@ -53,8 +63,9 @@ function queueWaliAttendance(db,{tenantId,studentId,date,session,status}) {
   return enqueue(db,{tenantId,phone,message,key:`wali:${studentId}:${date}:${session}:${status}`,targetType:'siswa',targetId:studentId})
 }
 function queueDueTeachers(db,{tenantId,date,time}) {
-  const conf=db.prepare('SELECT * FROM notif_settings WHERE tenant_id=?').get(tenantId)
   const out={queued:0,skipped:0,missing:0}
+  if (shouldSuppress(db, tenantId, date)) return {...out, reason:'holiday'}
+  const conf=db.prepare('SELECT * FROM notif_settings WHERE tenant_id=?').get(tenantId)
   if(!conf?.guru_belum_ceklok||time<conf.batas_ceklok_guru)return out
   const school=db.prepare('SELECT nama_lembaga FROM settings WHERE tenant_id=?').get(tenantId)
   for(const g of db.prepare("SELECT * FROM gtk WHERE tenant_id=? AND status='aktif' AND NOT EXISTS(SELECT 1 FROM absensi_guru a WHERE a.tenant_id=? AND a.gtk_id=gtk.id AND a.tanggal=?)").all(tenantId,tenantId,date)){
@@ -65,6 +76,7 @@ function queueDueTeachers(db,{tenantId,date,time}) {
 }
 function queueDueSchedules(db,{tenantId,date,time}) {
   const out={queued:0,skipped:0,missing:0}
+  if (shouldSuppress(db, tenantId, date)) return {...out, reason:'holiday'}
   const conf=db.prepare('SELECT * FROM notif_settings WHERE tenant_id=?').get(tenantId)
   if(!conf?.notif_jadwal_guru)return out
   const day=['Minggu','Senin','Selasa','Rabu','Kamis','Jumat','Sabtu'][new Date(`${date}T12:00:00Z`).getUTCDay()]
@@ -83,4 +95,4 @@ function queueDueSchedules(db,{tenantId,date,time}) {
   }
   return out
 }
-module.exports={setupWA,normalizePhone,enqueue,claimNext,render,queueWaliAttendance,queueDueTeachers,queueDueSchedules,isWhitelisted}
+module.exports={setupWA,normalizePhone,enqueue,claimNext,render,queueWaliAttendance,queueDueTeachers,queueDueSchedules,isWhitelisted,shouldSuppress}
