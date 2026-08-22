@@ -71,7 +71,9 @@ function queueDueTeachers(db,{tenantId,date,time}) {
   for(const g of db.prepare("SELECT * FROM gtk WHERE tenant_id=? AND status='aktif' AND NOT EXISTS(SELECT 1 FROM absensi_guru a WHERE a.tenant_id=? AND a.gtk_id=gtk.id AND a.tanggal=?)").all(tenantId,tenantId,date)){
     if(!normalizePhone(g.no_hp)){out.missing++;continue}
     const message=render(conf.template_guru_ceklok,{nama:g.nama,tanggal:date,lembaga:school?.nama_lembaga||'Sekolah'})
-    const r=enqueue(db,{tenantId,phone:g.no_hp,message,key:`guru-belum-ceklok:${g.id}:${date}`,targetType:'gtk',targetId:g.id}); r.queued?out.queued++:out.skipped++
+    const r=enqueue(db,{tenantId,phone:g.no_hp,message,key:`guru-belum-ceklok:${g.id}:${date}`,targetType:'gtk',targetId:g.id})
+    if (r.queued) out.queued++
+    else out.skipped++
   } return out
 }
 function queueDueSchedules(db,{tenantId,date,time}) {
@@ -91,7 +93,8 @@ function queueDueSchedules(db,{tenantId,date,time}) {
     if(!normalizePhone(x.no_hp)){out.missing++;continue}
     const message=render(conf.template_jadwal_guru,{...x,tanggal:date,lembaga:school?.nama_lembaga||'Sekolah'})
     const r=enqueue(db,{tenantId,phone:x.no_hp,message,key:`jadwal-guru:${x.id}:${date}:${x.jam_mulai}`,targetType:'gtk',targetId:x.gtk_id})
-    r.queued?out.queued++:out.skipped++
+    if (r.queued) out.queued++
+    else out.skipped++
   }
   return out
 }
