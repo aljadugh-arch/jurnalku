@@ -18,7 +18,7 @@ const { intervalTumpangTindih } = require('./jadwal-time-rules.cjs')
 const { bulkAssignGuru } = require('./jadwal-guru-repair.cjs')
 const { detectJadwalConflicts } = require('./jadwal-conflicts.cjs')
 const { importJadwalRows } = require('./jadwal-import.cjs')
-const { setupPortalCashless, registerPortalRoutes, selectPenilaianStudentId } = require('./portal-cashless.cjs')
+const { setupPortalCashless, registerPortalRoutes, registerKantinRoutes } = require('./portal-cashless.cjs')
 const waQueue = require('./wa-queue.cjs')
 const { isDriveFolderUrl } = require('./library-config.cjs')
 const { getLateDashboard } = require('./dashboard-late.cjs')
@@ -257,8 +257,37 @@ db.exec(`
     id TEXT PRIMARY KEY, judul TEXT NOT NULL, isi TEXT NOT NULL,
     kategori TEXT DEFAULT 'berita', penulis_id TEXT NOT NULL,
     penulis_nama TEXT NOT NULL, tenant_id TEXT NOT NULL,
+    media TEXT DEFAULT '[]',
+    activity_type TEXT DEFAULT '',
+    location_lat REAL,
+    location_lng REAL,
+    location_name TEXT DEFAULT '',
+    poll_data TEXT DEFAULT '[]',
+    tags TEXT DEFAULT '[]',
+    likes_count INTEGER DEFAULT 0,
+    comments_count INTEGER DEFAULT 0,
+    shares_count INTEGER DEFAULT 0,
     created_at TEXT DEFAULT (datetime('now'))
   );
+
+  CREATE TABLE IF NOT EXISTS posting_likes (
+    id TEXT PRIMARY KEY,
+    posting_id TEXT NOT NULL,
+    user_id TEXT NOT NULL,
+    created_at TEXT DEFAULT (datetime('now')),
+    UNIQUE(posting_id, user_id)
+  );
+  CREATE INDEX IF NOT EXISTS idx_posting_likes_posting ON posting_likes(posting_id);
+  CREATE INDEX IF NOT EXISTS idx_posting_likes_user ON posting_likes(user_id);
+
+  CREATE TABLE IF NOT EXISTS posting_shares (
+    id TEXT PRIMARY KEY,
+    posting_id TEXT NOT NULL,
+    user_id TEXT NOT NULL,
+    created_at TEXT DEFAULT (datetime('now'))
+  );
+  CREATE INDEX IF NOT EXISTS idx_posting_shares_posting ON posting_shares(posting_id);
+  CREATE INDEX IF NOT EXISTS idx_posting_shares_user ON posting_shares(user_id);
 
   CREATE TABLE IF NOT EXISTS tugas_siswa (
     id TEXT PRIMARY KEY,
@@ -456,6 +485,64 @@ db.exec(`
     created_at TEXT DEFAULT (datetime('now')),
     FOREIGN KEY (siswa_id) REFERENCES siswa(id)
   );
+
+  -- ==================== E-KANTIN & CASHLESS EXTENSIONS ====================
+  CREATE TABLE IF NOT EXISTS kantin_menu (
+    id TEXT PRIMARY KEY,
+    tenant_id TEXT NOT NULL,
+    kategori TEXT NOT NULL, -- makanan, minuman, snack, dll
+    nama TEXT NOT NULL,
+    deskripsi TEXT,
+    harga INTEGER NOT NULL CHECK(harga > 0),
+    stok INTEGER DEFAULT 0 CHECK(stok >= 0),
+    foto TEXT,
+    aktif INTEGER DEFAULT 1,
+    urut INTEGER DEFAULT 0,
+    created_at TEXT DEFAULT (datetime('now'))
+  );
+  CREATE INDEX IF NOT EXISTS idx_kantin_menu_tenant ON kantin_menu(tenant_id);
+  CREATE INDEX IF NOT EXISTS idx_kantin_menu_aktif ON kantin_menu(aktif);
+
+  CREATE TABLE IF NOT EXISTS kantin_orders (
+    id TEXT PRIMARY KEY,
+    tenant_id TEXT NOT NULL,
+    student_id TEXT NOT NULL,
+    items TEXT NOT NULL, -- JSON array: [{menu_id, nama, harga, qty, subtotal}]
+    total INTEGER NOT NULL CHECK(total > 0),
+    status TEXT DEFAULT 'pending', -- pending, paid, preparing, ready, completed, cancelled
+    payment_method TEXT, -- cashless, cash, manual
+    paid_at TEXT,
+    created_at TEXT DEFAULT (datetime('now')),
+    completed_at TEXT,
+    FOREIGN KEY (student_id) REFERENCES siswa(id)
+  );
+  CREATE INDEX IF NOT EXISTS idx_kantin_orders_tenant ON kantin_orders(tenant_id);
+  CREATE INDEX IF NOT EXISTS idx_kantin_orders_student ON kantin_orders(student_id);
+  CREATE INDEX IF NOT EXISTS idx_kantin_orders_status ON kantin_orders(status);
+  CREATE INDEX IF NOT EXISTS idx_kantin_orders_created ON kantin_orders(created_at);
+
+  -- Bank transfer provider config (extend cashless_provider_config)
+  -- provider: 'bank_transfer', config_json: {va_prefix, bank_code, admin_fee, manual_verify: true}
+
+  CREATE TABLE IF NOT EXISTS cashless_topup_manual (
+    id TEXT PRIMARY KEY,
+    tenant_id TEXT NOT NULL,
+    student_id TEXT NOT NULL,
+    amount INTEGER NOT NULL CHECK(amount > 0),
+    bukti_transfer TEXT, -- path to uploaded file
+    bank_dari TEXT, -- nama bank pengirim
+    no_rek_dari TEXT,
+    atas_nama TEXT,
+    status TEXT DEFAULT 'pending', -- pending, verified, rejected
+    verified_by TEXT,
+    verified_at TEXT,
+    catatan TEXT,
+    created_at TEXT DEFAULT (datetime('now')),
+    FOREIGN KEY (student_id) REFERENCES siswa(id)
+  );
+  CREATE INDEX IF NOT EXISTS idx_cashless_topup_manual_tenant ON cashless_topup_manual(tenant_id);
+  CREATE INDEX IF NOT EXISTS idx_cashless_topup_manual_student ON cashless_topup_manual(student_id);
+  CREATE INDEX IF NOT EXISTS idx_cashless_topup_manual_status ON cashless_topup_manual(status);
 
   CREATE TABLE IF NOT EXISTS modul_ajar (
     id TEXT PRIMARY KEY,
@@ -663,8 +750,9 @@ for (const col of [
   ['settings', 'ceklok_masuk_mulai', "TEXT DEFAULT '06:00'"],
   ['settings', 'ceklok_masuk_selesai', "TEXT DEFAULT '07:30'"],
   ['settings', 'ceklok_pulang_mulai', "TEXT DEFAULT '13:00'"],
-  ['settings', 'ceklok_pulang_selesai', "TEXT DEFAULT '16:00'"],
-]) {
+    ['settings', 'ceklok_pulang_selesai', "TEXT DEFAULT '16:00'"],
+    ['tenants', 'foundation_id', 'TEXT']
+  ]) {
   try { db.prepare(`ALTER TABLE ${col[0]} ADD COLUMN ${col[1]} ${col[2]}`).run() } catch {}
 }
 
@@ -981,6 +1069,7 @@ const backupUpload = multer({ storage: multer.memoryStorage(), limits: { fileSiz
 registerBackupRestoreRoutes(app, db, { ADMIN, upload: backupUpload, dbPath: path.join(__dirname, 'jurnalku.db') })
 registerFinanceExcelRoutes(app, db, { authorize: requireRole('bendahara', 'admin', 'super_admin', 'operator'), upload: multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024, files: 1 } }) })
 registerPortalRoutes(app, db, { auth: authMiddleware, requireRole, uuid: uuidv4, bcrypt })
+registerKantinRoutes(app, db, { requireRole, uuid: uuidv4, bcrypt })
 const BEASISWA_ROLES = requireRole('admin', 'super_admin', 'bendahara')
 const BEASISWA_SELECT = `SELECT b.*, s.nama siswa_nama, s.nis siswa_nis
   FROM beasiswa b JOIN siswa s ON s.id=b.siswa_id AND s.tenant_id=b.tenant_id`
@@ -3843,8 +3932,22 @@ app.delete('/api/jurnal/:id', STAFF, (req, res) => {
 // ==================== POSTING ====================
 
 for (const [name, definition] of [
-  ['media_url', 'TEXT DEFAULT ""'], ['media_type', 'TEXT DEFAULT ""'], ['link_url', 'TEXT DEFAULT ""'],
-  ['lokasi', 'TEXT DEFAULT ""'], ['sticker', 'TEXT DEFAULT ""'], ['emoticon', 'TEXT DEFAULT ""']
+  ['media', 'TEXT DEFAULT \'[]\''],
+  ['activity_type', 'TEXT DEFAULT \'\''],
+  ['location_lat', 'REAL'],
+  ['location_lng', 'REAL'],
+  ['location_name', 'TEXT DEFAULT \'\''],
+  ['poll_data', 'TEXT DEFAULT \'[]\''],
+  ['tags', 'TEXT DEFAULT \'[]\''],
+  ['likes_count', 'INTEGER DEFAULT 0'],
+  ['comments_count', 'INTEGER DEFAULT 0'],
+  ['shares_count', 'INTEGER DEFAULT 0'],
+  ['media_url', 'TEXT DEFAULT \'\''],
+  ['media_type', 'TEXT DEFAULT \'\''],
+  ['link_url', 'TEXT DEFAULT \'\''],
+  ['lokasi', 'TEXT DEFAULT \'\''],
+  ['sticker', 'TEXT DEFAULT \'\''],
+  ['emoticon', 'TEXT DEFAULT \'\'']
 ]) if (!db.prepare('PRAGMA table_info(posting)').all().some(c => c.name === name)) db.exec(`ALTER TABLE posting ADD COLUMN ${name} ${definition}`)
 
 app.get('/api/notifications', authMiddleware, (req, res) => {
@@ -3854,15 +3957,24 @@ app.get('/api/notifications', authMiddleware, (req, res) => {
 })
 
 app.get('/api/posting', authMiddleware, (req, res) => {
-  res.json(db.prepare('SELECT * FROM posting WHERE tenant_id=? ORDER BY created_at DESC').all(req.tenantId))
+  const rows = db.prepare('SELECT * FROM posting WHERE tenant_id=? ORDER BY created_at DESC').all(req.tenantId)
+  const likedIds = new Set(db.prepare('SELECT posting_id FROM posting_likes WHERE user_id=?').all(req.user.id).map(r => r.posting_id))
+  const jp = (v, d) => { try { const p = JSON.parse(v); return Array.isArray(p) ? p : d } catch { return d } }
+  res.json(rows.map(p => ({
+    ...p,
+    media: jp(p.media, []),
+    poll_data: jp(p.poll_data, []),
+    tags: jp(p.tags, []),
+    user_liked: likedIds.has(p.id)
+  })))
 })
 
 app.post('/api/posting', STAFF, (req, res) => {
-  const { judul, isi, kategori, media_url, media_type, link_url, lokasi, sticker, emoticon } = req.body
+  const { judul, isi, kategori, media, activity_type, location_lat, location_lng, location_name, poll_data, tags } = req.body
   if (!judul?.trim() || !isi?.trim()) return res.status(400).json({ error: 'Judul dan isi wajib diisi.' })
   const id = uuidv4()
-  db.prepare('INSERT INTO posting (id, tenant_id, author_user_id, konten, judul, isi, kategori, penulis_id, penulis_nama, media_url, media_type, link_url, lokasi, sticker, emoticon) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
-    .run(id, req.tenantId, req.user.id, isi.trim(), judul.trim(), isi.trim(), kategori || 'berita', req.user.id, req.user.nama || req.user.username || '', media_url || '', media_type || '', link_url || '', lokasi || '', sticker || '', emoticon || '')
+  db.prepare(`INSERT INTO posting (id, tenant_id, author_user_id, konten, judul, isi, kategori, penulis_id, penulis_nama, media, activity_type, location_lat, location_lng, location_name, poll_data, tags) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
+    .run(id, req.tenantId, req.user.id, isi.trim(), judul.trim(), isi.trim(), kategori || 'berita', req.user.id, req.user.nama || req.user.username || '', JSON.stringify(media || []), activity_type || '', location_lat || null, location_lng || null, location_name || '', JSON.stringify(poll_data || []), JSON.stringify(tags || []))
   res.json({ id })
 })
 
@@ -3878,6 +3990,39 @@ app.delete('/api/posting/:id', STAFF, (req, res) => {
   if (!row) return res.status(404).json({ error: 'Posting tidak ditemukan.' })
   if (!['admin','super_admin'].includes(req.user.role) && row.penulis_id !== req.user.id) return res.status(403).json({ error: 'Tidak boleh menghapus posting pengguna lain.' })
   db.prepare('DELETE FROM posting WHERE id=? AND tenant_id=?').run(req.params.id, req.tenantId)
+  res.json({ success: true })
+})
+
+app.put('/api/posting/:id', STAFF, (req, res) => {
+  const row = db.prepare('SELECT penulis_id FROM posting WHERE id=? AND tenant_id=?').get(req.params.id, req.tenantId)
+  if (!row) return res.status(404).json({ error: 'Posting tidak ditemukan.' })
+  if (!['admin','super_admin'].includes(req.user.role) && row.penulis_id !== req.user.id) return res.status(403).json({ error: 'Tidak boleh mengedit posting pengguna lain.' })
+  const { judul, isi, kategori, media, activity_type, location_lat, location_lng, location_name, poll_data, tags } = req.body
+  if (!judul?.trim() || !isi?.trim()) return res.status(400).json({ error: 'Judul dan isi wajib diisi.' })
+  db.prepare(`UPDATE posting SET judul=?, isi=?, konten=?, kategori=?, media=?, activity_type=?, location_lat=?, location_lng=?, location_name=?, poll_data=?, tags=? WHERE id=? AND tenant_id=?`)
+    .run(judul.trim(), isi.trim(), isi.trim(), kategori || 'berita', JSON.stringify(media || []), activity_type || '', location_lat || null, location_lng || null, location_name || '', JSON.stringify(poll_data || []), JSON.stringify(tags || []), req.params.id, req.tenantId)
+  res.json({ success: true })
+})
+
+app.post('/api/posting/:id/like', authMiddleware, (req, res) => {
+  const row = db.prepare('SELECT likes_count FROM posting WHERE id=? AND tenant_id=?').get(req.params.id, req.tenantId)
+  if (!row) return res.status(404).json({ error: 'Posting tidak ditemukan.' })
+  const liked = db.prepare('SELECT 1 FROM posting_likes WHERE posting_id=? AND user_id=?').get(req.params.id, req.user.id)
+  if (liked) {
+    db.prepare('DELETE FROM posting_likes WHERE posting_id=? AND user_id=?').run(req.params.id, req.user.id)
+    db.prepare('UPDATE posting SET likes_count = likes_count - 1 WHERE id=? AND tenant_id=?').run(req.params.id, req.tenantId)
+  } else {
+    db.prepare('INSERT INTO posting_likes (id, posting_id, user_id, created_at) VALUES (?,?,?,datetime(\'now\'))').run(uuidv4(), req.params.id, req.user.id)
+    db.prepare('UPDATE posting SET likes_count = likes_count + 1 WHERE id=? AND tenant_id=?').run(req.params.id, req.tenantId)
+  }
+  res.json({ success: true })
+})
+
+app.post('/api/posting/:id/share', authMiddleware, (req, res) => {
+  const row = db.prepare('SELECT shares_count FROM posting WHERE id=? AND tenant_id=?').get(req.params.id, req.tenantId)
+  if (!row) return res.status(404).json({ error: 'Posting tidak ditemukan.' })
+  db.prepare('INSERT INTO posting_shares (id, posting_id, user_id, created_at) VALUES (?,?,?,datetime(\'now\'))').run(uuidv4(), req.params.id, req.user.id)
+  db.prepare('UPDATE posting SET shares_count = shares_count + 1 WHERE id=? AND tenant_id=?').run(req.params.id, req.tenantId)
   res.json({ success: true })
 })
 

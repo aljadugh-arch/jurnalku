@@ -18,6 +18,16 @@ const BASE_DOMAIN = process.env.BASE_DOMAIN || 'jurnal.cc.cd'
  */
 function setupTenantTables(db) {
   db.exec(`
+    CREATE TABLE IF NOT EXISTS foundations (
+      id TEXT PRIMARY KEY,
+      nama TEXT NOT NULL,
+      alamat TEXT,
+      telepon TEXT,
+      email TEXT,
+      logo TEXT,
+      created_at TEXT DEFAULT (datetime('now'))
+    );
+
     CREATE TABLE IF NOT EXISTS tenants (
       id TEXT PRIMARY KEY,
       slug TEXT UNIQUE NOT NULL,
@@ -34,11 +44,13 @@ function setupTenantTables(db) {
       max_gtk INTEGER DEFAULT 20,
       aktif INTEGER DEFAULT 1,
       created_at TEXT DEFAULT (datetime('now')),
-      expired_at TEXT
+      expired_at TEXT,
+      foundation_id TEXT
     );
 
     CREATE INDEX IF NOT EXISTS idx_tenants_slug ON tenants(slug);
     CREATE INDEX IF NOT EXISTS idx_tenants_domain ON tenants(domain_custom);
+    CREATE INDEX IF NOT EXISTS idx_tenants_foundation ON tenants(foundation_id);
   `)
 
   // Ensure domain_status column exists (domain provisioning tracking)
@@ -265,6 +277,167 @@ function registerTenantRoutes(app, db, authMiddleware, uuidv4, SUPER) {
     }
 
     res.json(tenant || { slug: 'default', nama: 'JURNALKU', logo: null, plan: 'free' })
+  })
+
+  // ==================== FOUNDATION ROUTES (Cross-tenant sharing) ====================
+
+  // List all foundations (super_admin only)
+  app.get('/api/foundations', authMiddleware, (req, res) => {
+    if (req.user.role !== 'super_admin') return res.status(403).json({ error: 'Forbidden' })
+    const foundations = db.prepare('SELECT * FROM foundations ORDER BY created_at DESC').all()
+    res.json(foundations)
+  })
+
+  // Create foundation (super_admin only)
+  app.post('/api/foundations', authMiddleware, (req, res) => {
+    if (req.user.role !== 'super_admin') return res.status(403).json({ error: 'Forbidden' })
+    const { nama, alamat, telepon, email, logo } = req.body
+    if (!nama) return res.status(400).json({ error: 'Nama yayasan wajib diisi' })
+    const id = uuidv4()
+    db.prepare('INSERT INTO foundations (id, nama, alamat, telepon, email, logo) VALUES (?,?,?,?,?,?)')
+      .run(id, nama, alamat || null, telepon || null, email || null, logo || null)
+    res.json({ id, nama, alamat, telepon, email, logo })
+  })
+
+  // Update foundation (super_admin only)
+  app.put('/api/foundations/:id', authMiddleware, (req, res) => {
+    if (req.user.role !== 'super_admin') return res.status(403).json({ error: 'Forbidden' })
+    const { nama, alamat, telepon, email, logo } = req.body
+    db.prepare('UPDATE foundations SET nama=?, alamat=?, telepon=?, email=?, logo=? WHERE id=?')
+      .run(nama, alamat || null, telepon || null, email || null, logo || null, req.params.id)
+    res.json({ success: true })
+  })
+
+  // Delete foundation (super_admin only)
+  app.delete('/api/foundations/:id', authMiddleware, (req, res) => {
+    if (req.user.role !== 'super_admin') return res.status(403).json({ error: 'Forbidden' })
+    db.prepare('DELETE FROM foundations WHERE id = ?').run(req.params.id)
+    res.json({ success: true })
+  })
+
+  // Get tenants in a foundation (admin/super_admin of any tenant in that foundation)
+  app.get('/api/foundations/:id/tenants', authMiddleware, (req, res) => {
+    const foundationId = req.params.id
+    const userFoundationId = db.prepare('SELECT foundation_id FROM tenants WHERE id = ?').get(req.tenantId)?.foundation_id
+    if (req.user.role !== 'super_admin' && userFoundationId !== foundationId) {
+      return res.status(403).json({ error: 'Forbidden' })
+    }
+    const tenants = db.prepare('SELECT id, slug, nama, domain_custom, aktif FROM tenants WHERE foundation_id = ? AND aktif = 1').all(foundationId)
+    res.json(tenants)
+  })
+
+  // Cross-tenant: Get students from other tenants in same foundation (admin+)
+  app.get('/api/foundation/students', authMiddleware, (req, res) => {
+    const userFoundationId = db.prepare('SELECT foundation_id FROM tenants WHERE id = ?').get(req.tenantId)?.foundation_id
+    if (!userFoundationId) return res.status(403).json({ error: 'Tenant tidak tergabung dalam yayasan' })
+    if (!['admin', 'super_admin', 'operator', 'kepala'].includes(req.user.role)) return res.status(403).json({ error: 'Forbidden' })
+
+    const { search, limit = 100, offset = 0, tenant_id } = req.query
+    let targetTenants = db.prepare('SELECT id FROM tenants WHERE foundation_id = ? AND aktif = 1').all(userFoundationId).map(t => t.id)
+    if (tenant_id) {
+      if (!targetTenants.includes(tenant_id)) return res.status(403).json({ error: 'Tenant tidak dalam yayasan yang sama' })
+      targetTenants = [tenant_id]
+    }
+
+    let sql = `SELECT s.*, t.nama as tenant_nama, t.slug as tenant_slug FROM siswa s JOIN tenants t ON s.tenant_id = t.id WHERE s.tenant_id IN (${targetTenants.map(() => '?').join(',')})`
+    const params = [...targetTenants]
+    if (search) {
+      sql += ' AND (s.nama LIKE ? OR s.nis LIKE ? OR s.nisn LIKE ?)'
+      const q = `%${search}%`
+      params.push(q, q, q)
+    }
+    sql += ' ORDER BY s.nama LIMIT ? OFFSET ?'
+    params.push(Number(limit), Number(offset))
+
+    const students = db.prepare(sql).all(...params)
+    res.json(students)
+  })
+
+  // Cross-tenant: Get GTK from other tenants in same foundation (admin+)
+  app.get('/api/foundation/gtk', authMiddleware, (req, res) => {
+    const userFoundationId = db.prepare('SELECT foundation_id FROM tenants WHERE id = ?').get(req.tenantId)?.foundation_id
+    if (!userFoundationId) return res.status(403).json({ error: 'Tenant tidak tergabung dalam yayasan' })
+    if (!['admin', 'super_admin', 'operator', 'kepala'].includes(req.user.role)) return res.status(403).json({ error: 'Forbidden' })
+
+    const { search, limit = 100, offset = 0, tenant_id } = req.query
+    let targetTenants = db.prepare('SELECT id FROM tenants WHERE foundation_id = ? AND aktif = 1').all(userFoundationId).map(t => t.id)
+    if (tenant_id) {
+      if (!targetTenants.includes(tenant_id)) return res.status(403).json({ error: 'Tenant tidak dalam yayasan yang sama' })
+      targetTenants = [tenant_id]
+    }
+
+    let sql = `SELECT g.*, t.nama as tenant_nama, t.slug as tenant_slug FROM gtk g JOIN tenants t ON g.tenant_id = t.id WHERE g.tenant_id IN (${targetTenants.map(() => '?').join(',')})`
+    const params = [...targetTenants]
+    if (search) {
+      sql += ' AND (g.nama LIKE ? OR g.nip LIKE ?)'
+      const q = `%${search}%`
+      params.push(q, q)
+    }
+    sql += ' ORDER BY g.nama LIMIT ? OFFSET ?'
+    params.push(Number(limit), Number(offset))
+
+    const gtk = db.prepare(sql).all(...params)
+    res.json(gtk)
+  })
+
+  // Cross-tenant: Get absensi rekap from other tenants in same foundation (admin+)
+  app.get('/api/foundation/absensi', authMiddleware, (req, res) => {
+    const userFoundationId = db.prepare('SELECT foundation_id FROM tenants WHERE id = ?').get(req.tenantId)?.foundation_id
+    if (!userFoundationId) return res.status(403).json({ error: 'Tenant tidak tergabung dalam yayasan' })
+    if (!['admin', 'super_admin', 'operator', 'kepala'].includes(req.user.role)) return res.status(403).json({ error: 'Forbidden' })
+
+    const { tanggal, tenant_id } = req.query
+    if (!tanggal) return res.status(400).json({ error: 'Parameter tanggal wajib' })
+
+    let targetTenants = db.prepare('SELECT id FROM tenants WHERE foundation_id = ? AND aktif = 1').all(userFoundationId).map(t => t.id)
+    if (tenant_id) {
+      if (!targetTenants.includes(tenant_id)) return res.status(403).json({ error: 'Tenant tidak dalam yayasan yang sama' })
+      targetTenants = [tenant_id]
+    }
+
+    const placeholders = targetTenants.map(() => '?').join(',')
+    const absensi = db.prepare(`
+      SELECT a.*, s.nama as siswa_nama, s.nis, r.nama as rombel_nama, t.nama as tenant_nama, t.slug as tenant_slug
+      FROM absensi_siswa a
+      JOIN siswa s ON a.siswa_id = s.id
+      JOIN rombel r ON s.rombel_id = r.id
+      JOIN tenants t ON a.tenant_id = t.id
+      WHERE a.tenant_id IN (${placeholders}) AND a.tanggal = ?
+      ORDER BY t.nama, r.nama, s.nama
+    `).all(...targetTenants, tanggal)
+    res.json(absensi)
+  })
+
+  // Cross-tenant: Get nilai from other tenants in same foundation (admin+)
+  app.get('/api/foundation/nilai', authMiddleware, (req, res) => {
+    const userFoundationId = db.prepare('SELECT foundation_id FROM tenants WHERE id = ?').get(req.tenantId)?.foundation_id
+    if (!userFoundationId) return res.status(403).json({ error: 'Tenant tidak tergabung dalam yayasan' })
+    if (!['admin', 'super_admin', 'operator', 'kepala', 'guru', 'wali_kelas'].includes(req.user.role)) return res.status(403).json({ error: 'Forbidden' })
+
+    const { semester, tahun_ajaran, mapel_id, tenant_id } = req.query
+    let targetTenants = db.prepare('SELECT id FROM tenants WHERE foundation_id = ? AND aktif = 1').all(userFoundationId).map(t => t.id)
+    if (tenant_id) {
+      if (!targetTenants.includes(tenant_id)) return res.status(403).json({ error: 'Tenant tidak dalam yayasan yang sama' })
+      targetTenants = [tenant_id]
+    }
+
+    const placeholders = targetTenants.map(() => '?').join(',')
+    let sql = `
+      SELECT n.*, s.nama as siswa_nama, s.nis, m.nama as mapel_nama, t.nama as tenant_nama, t.slug as tenant_slug
+      FROM rapor n
+      JOIN siswa s ON n.siswa_id = s.id
+      JOIN mapel m ON n.mapel_id = m.id
+      JOIN tenants t ON n.tenant_id = t.id
+      WHERE n.tenant_id IN (${placeholders})
+    `
+    const params = [...targetTenants]
+    if (semester) { sql += ' AND n.semester = ?'; params.push(semester) }
+    if (tahun_ajaran) { sql += ' AND n.tahun_ajaran = ?'; params.push(tahun_ajaran) }
+    if (mapel_id) { sql += ' AND n.mapel_id = ?'; params.push(mapel_id) }
+    sql += ' ORDER BY t.nama, s.nama, m.nama'
+
+    const nilai = db.prepare(sql).all(...params)
+    res.json(nilai)
   })
 }
 

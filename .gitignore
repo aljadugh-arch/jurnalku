@@ -9,3 +9,7 @@ server/jurnalku*.db
 server/*.db
 .DS_Store
 *.log
+# Local historical snapshots and deployment backups (not application source)
+backups/
+dist.*/
+server.pre-*/

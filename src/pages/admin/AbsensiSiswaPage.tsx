@@ -4,6 +4,7 @@ import toast from 'react-hot-toast'
 import api from '../../services/api'
 import { Html5Qrcode } from 'html5-qrcode'
 import { QRCodeSVG } from 'qrcode.react'
+import FoundationTenantPicker from '../../components/FoundationTenantPicker'
 
 const statusColors: Record<string, string> = {
   hadir: 'bg-green-100 text-green-700',
@@ -28,6 +29,7 @@ export default function AbsensiSiswaPage() {
   const [scanBusy, setScanBusy] = useState(false)
   const [qrIdentifiers, setQrIdentifiers] = useState<any[]>([])
   const [showQr, setShowQr] = useState(false)
+  const [foundationTenantId, setFoundationTenantId] = useState<string | null>(null)
   const qrRef = useRef<Html5Qrcode | null>(null)
 
   useEffect(() => {
@@ -39,7 +41,7 @@ export default function AbsensiSiswaPage() {
 
   useEffect(() => {
     if (selectedRombel) loadData()
-  }, [selectedRombel, tanggal, sesi])
+  }, [selectedRombel, tanggal, sesi, foundationTenantId])
 
   useEffect(() => {
     if (!selectedRombel) return setQrIdentifiers([])
@@ -49,15 +51,21 @@ export default function AbsensiSiswaPage() {
   }, [selectedRombel])
 
   const loadData = async () => {
-    const [siswaRes, absensiRes] = await Promise.all([
-      api.get('/siswa', { params: { rombel_id: selectedRombel } }),
-      api.get('/absensi-siswa', { params: { tanggal, rombel_id: selectedRombel } })
-    ])
-    setSiswaList(siswaRes.data)
-    setExisting(absensiRes.data)
-    const map: Record<string, string> = {}
-    for (const a of absensiRes.data) { map[a.siswa_id] = sesi === 'pulang' ? (a.status_pulang || a.status || 'hadir') : a.status }
-    setAbsensi(map)
+    try {
+      const params: any = { tanggal, rombel_id: selectedRombel }
+      if (foundationTenantId && foundationTenantId !== 'all') {
+        params.tenant_id = foundationTenantId
+      }
+      const [siswaRes, absensiRes] = await Promise.all([
+        api.get(foundationTenantId ? '/foundation/students' : '/siswa', { params: { rombel_id: selectedRombel, ...params } }),
+        api.get('/absensi-siswa', { params })
+      ])
+      setSiswaList(siswaRes.data)
+      setExisting(absensiRes.data)
+      const map: Record<string, string> = {}
+      for (const a of absensiRes.data) { map[a.siswa_id] = sesi === 'pulang' ? (a.status_pulang || a.status || 'hadir') : a.status }
+      setAbsensi(map)
+    } catch { toast.error('Gagal memuat data absensi') }
   }
 
   const setStatus = (siswaId: string, status: string) => {
@@ -158,6 +166,14 @@ export default function AbsensiSiswaPage() {
           </button>
         </div>
       </div>
+
+      {/* Foundation Tenant Picker (Cross-tenant data) */}
+      <FoundationTenantPicker
+        selectedTenantId={foundationTenantId}
+        onSelectTenant={setFoundationTenantId}
+        placeholder="Data lokal (lembaga ini)"
+        allOptionLabel="Semua lembaga yayasan (gabungan)"
+      />
 
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
         <div className="bg-green-50 border border-green-100 rounded-xl p-4 text-center">

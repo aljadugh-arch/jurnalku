@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import api from '../../services/api'
 import { FileText, Zap, Download, RefreshCw, Send } from 'lucide-react'
+import FoundationTenantPicker from '../../components/FoundationTenantPicker'
 
 export default function RaporPage() {
   const [rombelList, setRombelList] = useState<any[]>([])
@@ -13,20 +14,34 @@ export default function RaporPage() {
   const [jenis, setJenis] = useState('tengah')
   const [loading, setLoading] = useState(false)
   const [msg, setMsg] = useState('')
+  const [foundationTenantId, setFoundationTenantId] = useState<string | null>(null)
 
-  useEffect(() => { loadRombel() }, [])
-  useEffect(() => { if (selectedRombel) loadSiswa() }, [selectedRombel])
-  useEffect(() => { if (selectedSiswa) loadRapor() }, [selectedSiswa, tahunAjaran, semester, jenis])
+  useEffect(() => { loadRombel() }, [foundationTenantId])
+  useEffect(() => { if (selectedRombel) loadSiswa() }, [selectedRombel, foundationTenantId])
+  useEffect(() => { if (selectedSiswa) loadRapor() }, [selectedSiswa, tahunAjaran, semester, jenis, foundationTenantId])
 
   const loadRombel = async () => {
-    try { const { data } = await api.get('/rombel'); setRombelList(data) } catch (e) { console.error(e) }
+    try {
+      const params: any = {}
+      if (foundationTenantId && foundationTenantId !== 'all') params.tenant_id = foundationTenantId
+      const { data } = await api.get(foundationTenantId ? '/foundation/students' : '/rombel', { params })
+      setRombelList(data)
+    } catch (e) { console.error(e) }
   }
   const loadSiswa = async () => {
-    try { const { data } = await api.get(`/siswa?rombel_id=${selectedRombel}`); setSiswaList(data); setSelectedSiswa('') } catch (e) { console.error(e) }
+    try {
+      const params: any = { rombel_id: selectedRombel }
+      if (foundationTenantId && foundationTenantId !== 'all') params.tenant_id = foundationTenantId
+      const { data } = await api.get(foundationTenantId ? '/foundation/students' : `/siswa`, { params })
+      setSiswaList(data)
+      setSelectedSiswa('')
+    } catch (e) { console.error(e) }
   }
   const loadRapor = async () => {
     try {
-      const { data } = await api.get(`/rapor?siswa_id=${selectedSiswa}&tahun_ajaran=${tahunAjaran}&semester=${semester}&jenis=${jenis}`)
+      const params: any = { siswa_id: selectedSiswa, tahun_ajaran: tahunAjaran, semester, jenis }
+      if (foundationTenantId && foundationTenantId !== 'all') params.tenant_id = foundationTenantId
+      const { data } = await api.get('/foundation/nilai', { params })
       setRapor(data)
     } catch (e) { console.error(e) }
   }
@@ -82,6 +97,14 @@ export default function RaporPage() {
       </div>
 
       {msg && <div className={`p-4 rounded-lg border print:hidden ${msg.startsWith('✓') ? 'bg-green-50 border-green-200 text-green-700' : 'bg-red-50 border-red-200 text-red-700'}`}>{msg}</div>}
+
+      {/* Foundation Tenant Picker (Cross-tenant data) */}
+      <FoundationTenantPicker
+        selectedTenantId={foundationTenantId}
+        onSelectTenant={setFoundationTenantId}
+        placeholder="Data lokal (lembaga ini)"
+        allOptionLabel="Semua lembaga yayasan (gabungan)"
+      />
 
       <div className="bg-white rounded-xl shadow-sm border p-6 print:hidden">
         <div className="grid grid-cols-1 md:grid-cols-5 gap-4">

@@ -3,6 +3,7 @@ import { Search, Plus, Edit, Trash2, Download, Upload, X, Camera, ChevronRight }
 import toast from 'react-hot-toast'
 import api from '../../services/api'
 import ImportExcel from '../../components/ImportExcel'
+import FoundationTenantPicker from '../../components/FoundationTenantPicker'
 
 interface Siswa {
   id: string
@@ -45,14 +46,20 @@ export default function DataSiswaPage() {
   const [rombels, setRombels] = useState<{ id: string; nama: string }[]>([])
   const [showImport, setShowImport] = useState(false)
   const [uploadingFoto, setUploadingFoto] = useState(false)
+  const [foundationTenantId, setFoundationTenantId] = useState<string | null>(null)
+  const [showFoundationPicker, setShowFoundationPicker] = useState(false)
 
   // Detail panel
   const [selectedSiswa, setSelectedSiswa] = useState<Siswa | null>(null)
 
   const fetchData = async () => {
     try {
+      const params: any = { search }
+      if (foundationTenantId && foundationTenantId !== 'all') {
+        params.tenant_id = foundationTenantId
+      }
       const [res, rombelRes] = await Promise.all([
-        api.get('/siswa', { params: { search } }),
+        api.get(foundationTenantId ? '/foundation/students' : '/siswa', { params }),
         api.get('/rombel')
       ])
       setData(res.data)
@@ -64,7 +71,7 @@ export default function DataSiswaPage() {
     }
   }
 
-  useEffect(() => { fetchData() }, [search])
+  useEffect(() => { fetchData() }, [search, foundationTenantId])
 
   // Sync selected panel when data refreshes
   useEffect(() => {
@@ -175,6 +182,13 @@ export default function DataSiswaPage() {
           </button>
         </div>
       </div>
+      {/* Foundation Tenant Picker (Cross-tenant data) */}
+      <FoundationTenantPicker
+        selectedTenantId={foundationTenantId}
+        onSelectTenant={setFoundationTenantId}
+        placeholder="Data lokal (lembaga ini)"
+        allOptionLabel="Semua lembaga yayasan (gabungan)"
+      />
 
       {/* Search */}
       <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
@@ -400,16 +414,19 @@ export default function DataSiswaPage() {
           templateName="master-siswa-v2.xls"
           headerRow={0}
           columnMap={{ 'Nama': 'nama', 'NAMA': 'nama', 'NIS': 'nis', 'NISN': 'nisn', 'JK': 'jenis_kelamin', 'Jenis Kelamin': 'jenis_kelamin', 'Tempat Lahir': 'tempat_lahir', 'Tanggal Lahir': 'tanggal_lahir', 'Alamat': 'alamat', 'No HP': 'no_hp', 'Nama Ortu': 'nama_ortu' }}
+          foundationTenantId={foundationTenantId}
+          apiEndpoint={foundationTenantId ? 'foundation/students' : 'siswa'}
           onImport={async (rows) => {
             for (const row of rows) {
               if (!row.nama) continue
               const jk = (row.jenis_kelamin || 'L').toString().charAt(0).toUpperCase()
-              await api.post('/siswa', {
+              await api.post(foundationTenantId ? '/foundation/students' : '/siswa', {
                 nis: String(row.nis || ''), nisn: String(row.nisn || ''), nama: row.nama,
                 jenis_kelamin: jk, tempat_lahir: row.tempat_lahir || '',
                 tanggal_lahir: row.tanggal_lahir || '', alamat: row.alamat || '',
                 no_hp: String(row.no_hp || ''), nama_ortu: row.nama_ortu || '',
-                rombel_id: '', status: 'aktif'
+                rombel_id: '', status: 'aktif',
+                tenant_id: foundationTenantId && foundationTenantId !== 'all' ? foundationTenantId : undefined
               })
             }
             fetchData()

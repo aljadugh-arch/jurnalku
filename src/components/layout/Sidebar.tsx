@@ -63,6 +63,7 @@ const adminMenuItems: MenuItem[] = [
     children: [
       { label: 'Tagihan & Pembayaran', path: '/admin/tagihan' },
       { label: 'Tabungan Siswa', path: '/admin/tabungan' },
+      { label: 'E-Kantin & Cashless', path: '/admin/kantin-menu' },
     ]
   },
   {
@@ -76,6 +77,17 @@ const adminMenuItems: MenuItem[] = [
   { label: 'Pengaturan', icon: <Settings size={20} />, path: '/admin/settings' },
   { label: 'Manajemen Pengguna', icon: <UserCheck size={20} />, path: '/admin/users' },
   { label: 'Manajemen Lembaga', icon: <Globe size={20} />, path: '/admin/tenants' },
+  {
+    label: 'E-Kantin & Cashless',
+    icon: <DollarSign size={20} />,
+    children: [
+      { label: 'Menu Kantin', path: '/admin/kantin-menu' },
+      { label: 'Order Kantin', path: '/admin/kantin-orders' },
+      { label: 'Verifikasi Topup Manual', path: '/admin/cashless-topup' },
+      { label: 'Konfigurasi Bank Transfer', path: '/admin/cashless-bank-config' },
+      { label: 'Kasir QR Scanner', path: '/admin/kantin-scanner' },
+    ]
+  },
 ]
 
 const guruMenuItems: MenuItem[] = [
@@ -130,6 +142,7 @@ const kepalaMenuItems: MenuItem[] = [
     children: [
       { label: 'Tagihan & Pembayaran', path: '/admin/tagihan' },
       { label: 'Tabungan Siswa', path: '/admin/tabungan' },
+      { label: 'E-Kantin & Cashless', path: '/admin/kantin-menu' },
     ]
   },
 ]
@@ -236,8 +249,7 @@ export default function Sidebar() {
                         <span className="flex-1 text-left">{item.label}</span>
                         {expandedMenus.includes(item.label)
                           ? <ChevronDown size={16} />
-                          : <ChevronRight size={16} />
-                        }
+                          : <ChevronRight size={16} />}
                       </>
                     )}
                   </button>

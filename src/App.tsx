@@ -63,6 +63,7 @@ import SiswaJadwalPage from './pages/siswa/SiswaJadwalPage'
 import SiswaEkskulPage from './pages/siswa/SiswaEkskulPage'
 import SiswaPostingPage from './pages/siswa/SiswaPostingPage'
 import SiswaNilaiPage from './pages/siswa/SiswaNilaiPage'
+import SiswaKantinPage from './pages/siswa/SiswaKantinPage'
 import ChangePasswordPage from './pages/ChangePasswordPage'
 import ProfilePage from './pages/ProfilePage'
 import PanduanPage from './pages/PanduanPage'
@@ -71,6 +72,11 @@ import ErkamPage from './pages/admin/ErkamPage'
 import SuperadminDashboard from './pages/admin/SuperadminDashboard'
 import SubscriptionGate from './components/SubscriptionGate'
 import { useSubscriptionStore } from './stores/subscriptionStore'
+import KantinMenuPage from './pages/admin/KantinMenuPage'
+import KantinOrdersPage from './pages/admin/KantinOrdersPage'
+import CashlessTopupPage from './pages/admin/CashlessTopupPage'
+import CashlessBankConfigPage from './pages/admin/CashlessBankConfigPage'
+import KantinScannerPage from './pages/admin/KantinScannerPage'
 
 function AdminIndexRoute() {
   const { user } = useAuthStore()
@@ -161,6 +167,12 @@ export default function App() {
           <Route path="absensi-saya" element={<GuruAbsensiPage />} />
           <Route path="bendahara" element={<BendaharaDashboard />} />
           <Route path="ekskul" element={<EkskulPage />} />
+          {/* E-Kantin & Cashless Routes */}
+          <Route path="kantin-menu" element={<KantinMenuPage />} />
+          <Route path="kantin-orders" element={<KantinOrdersPage />} />
+          <Route path="cashless-topup" element={<CashlessTopupPage />} />
+          <Route path="cashless-bank-config" element={<CashlessBankConfigPage />} />
+          <Route path="kantin-scanner" element={<KantinScannerPage />} />
           {/* Routes baru dari GitHub */}
           <Route path="domain-setup" element={<DomainSetupPage />} />
           <Route path="erkam" element={<ErkamPage />} />
@@ -210,6 +222,7 @@ export default function App() {
           {/* Halaman baru sesuai live */}
           <Route path="posting" element={<SiswaPostingPage />} />
           <Route path="nilai" element={<SiswaNilaiPage />} />
+          <Route path="kantin" element={<SiswaKantinPage />} />
         </Route>
 
         <Route path="*" element={<Navigate to="/login" replace />} />

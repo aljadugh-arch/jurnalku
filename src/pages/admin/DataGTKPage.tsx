@@ -3,6 +3,7 @@ import { Search, Plus, Edit, Trash2, Download, Upload, X, Camera, ChevronRight }
 import toast from 'react-hot-toast'
 import api from '../../services/api'
 import ImportExcel from '../../components/ImportExcel'
+import FoundationTenantPicker from '../../components/FoundationTenantPicker'
 
 interface GTK {
   id: string; nip: string; nuptk: string; nama: string; jenis_kelamin: string
@@ -32,17 +33,22 @@ export default function DataGTKPage() {
   const [showImport, setShowImport] = useState(false)
   const [uploadingFoto, setUploadingFoto] = useState(false)
   const [selected, setSelected] = useState<GTK | null>(null)
+  const [foundationTenantId, setFoundationTenantId] = useState<string | null>(null)
   const fotoRef = useRef<HTMLInputElement>(null)
 
   const fetchData = async () => {
     try {
-      const res = await api.get('/gtk', { params: { search } })
+      const params: any = { search }
+      if (foundationTenantId && foundationTenantId !== 'all') {
+        params.tenant_id = foundationTenantId
+      }
+      const res = await api.get(foundationTenantId ? '/foundation/gtk' : '/gtk', { params })
       setData(res.data)
     } catch { toast.error('Gagal memuat data GTK') }
     finally { setLoading(false) }
   }
 
-  useEffect(() => { fetchData() }, [search])
+  useEffect(() => { fetchData() }, [search, foundationTenantId])
 
   const filtered = useMemo(() =>
     data.filter(g =>
@@ -128,6 +134,13 @@ export default function DataGTKPage() {
           </button>
         </div>
       </div>
+      {/* Foundation Tenant Picker (Cross-tenant data) */}
+      <FoundationTenantPicker
+        selectedTenantId={foundationTenantId}
+        onSelectTenant={setFoundationTenantId}
+        placeholder="Data lokal (lembaga ini)"
+        allOptionLabel="Semua lembaga yayasan (gabungan)"
+      />
 
       {/* Search */}
       <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
@@ -272,9 +285,18 @@ export default function DataGTKPage() {
           templateName="master-gtk-v2.xls"
           headerRow={2}
           columnMap={{ 'Kode GTK': 'nip', 'Nama Lengkap': 'nama', 'TGL Lahir': 'tanggal_lahir', 'NIP/NUPTK': 'nuptk', 'No. HP': 'no_hp' }}
+          foundationTenantId={foundationTenantId}
+          apiEndpoint={foundationTenantId ? 'foundation/gtk' : 'gtk'}
           onImport={async (rows) => {
             for (const row of rows) {
-              await api.post('/gtk', { ...row, jenis_kelamin: 'L', jabatan: 'guru', status_kepegawaian: 'honorer', status: 'aktif' })
+              await api.post(foundationTenantId ? '/foundation/gtk' : '/gtk', { 
+                ...row, 
+                jenis_kelamin: 'L', 
+                jabatan: 'guru', 
+                status_kepegawaian: 'honorer', 
+                status: 'aktif',
+                tenant_id: foundationTenantId && foundationTenantId !== 'all' ? foundationTenantId : undefined
+              })
             }
             fetchData()
           }}

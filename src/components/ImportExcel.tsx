@@ -2,6 +2,7 @@ import { useState, useRef } from 'react'
 import { Upload, FileSpreadsheet, X, Download } from 'lucide-react'
 import * as XLSX from 'xlsx'
 import toast from 'react-hot-toast'
+import FoundationTenantPicker from './FoundationTenantPicker'
 
 interface ImportExcelProps {
   title: string
@@ -11,9 +12,11 @@ interface ImportExcelProps {
   columnMap: Record<string, string> // excel column name -> api field name
   onImport: (data: Record<string, any>[]) => Promise<void>
   onClose: () => void
+  foundationTenantId?: string | null
+  apiEndpoint?: string // default: 'siswa', for cross-tenant: 'foundation/students'
 }
 
-export default function ImportExcel({ title, templateUrl, templateName, headerRow, columnMap, onImport, onClose }: ImportExcelProps) {
+export default function ImportExcel({ title, templateUrl, templateName, headerRow, columnMap, onImport, onClose, foundationTenantId, apiEndpoint = 'siswa' }: ImportExcelProps) {
   const [preview, setPreview] = useState<Record<string, any>[]>([])
   const [headers, setHeaders] = useState<string[]>([])
   const [loading, setLoading] = useState(false)
@@ -56,7 +59,16 @@ export default function ImportExcel({ title, templateUrl, templateName, headerRo
     if (preview.length === 0) { toast.error('Tidak ada data untuk diimport'); return }
     setLoading(true)
     try {
-      await onImport(preview)
+      if (foundationTenantId && foundationTenantId !== 'all') {
+        // For cross-tenant, we need to add tenant_id to each row
+        const dataWithTenant = preview.map(row => ({
+          ...row,
+          tenant_id: foundationTenantId
+        }))
+        await onImport(dataWithTenant)
+      } else {
+        await onImport(preview)
+      }
       toast.success(`${preview.length} data berhasil diimport`)
       onClose()
     } catch (err: any) { toast.error(err.message || 'Gagal import') }
@@ -70,6 +82,15 @@ export default function ImportExcel({ title, templateUrl, templateName, headerRo
           <h2 className="text-lg font-bold flex items-center gap-2"><FileSpreadsheet size={20} /> {title}</h2>
           <button onClick={onClose} className="p-1 hover:bg-gray-100 rounded"><X size={20} /></button>
         </div>
+
+        {foundationTenantId !== undefined && (
+          <FoundationTenantPicker
+            selectedTenantId={foundationTenantId}
+            onSelectTenant={() => {}} // readonly in import modal
+            placeholder="Data lokal (lembaga ini)"
+            allOptionLabel="Semua lembaga yayasan (gabungan)"
+          />
+        )}
 
         {templateName && (
           <div className="bg-blue-50 border border-blue-100 rounded-lg p-3 mb-4">
