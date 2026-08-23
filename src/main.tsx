@@ -21,6 +21,10 @@ try {
       if (tc && data.theme_color) tc.content = data.theme_color
       // Update title
       if (data.name) document.title = data.name
+      // Update favicon (per-tenant logo)
+      const iconUrl = data.icons?.[0]?.src || '/logo-jurnalku-256.png'
+      const favicons = document.querySelectorAll('link[rel="icon"], link[rel="shortcut icon"], link[rel="apple-touch-icon"]')
+      favicons.forEach(el => { el.setAttribute('href', iconUrl) })
     }).catch(() => {})
   }
 } catch {}
