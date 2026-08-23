@@ -67,7 +67,6 @@ import SiswaKantinPage from './pages/siswa/SiswaKantinPage'
 import ChangePasswordPage from './pages/ChangePasswordPage'
 import ProfilePage from './pages/ProfilePage'
 import PanduanPage from './pages/PanduanPage'
-import DomainSetupPage from './pages/admin/DomainSetupPage'
 import ErkamPage from './pages/admin/ErkamPage'
 import SuperadminDashboard from './pages/admin/SuperadminDashboard'
 import SubscriptionGate from './components/SubscriptionGate'
@@ -174,7 +173,6 @@ export default function App() {
           <Route path="cashless-bank-config" element={<CashlessBankConfigPage />} />
           <Route path="kantin-scanner" element={<KantinScannerPage />} />
           {/* Routes baru dari GitHub */}
-          <Route path="domain-setup" element={<DomainSetupPage />} />
           <Route path="erkam" element={<ErkamPage />} />
           <Route path="superadmin" element={
             <ProtectedRoute allowedRoles={['super_admin']}><SuperadminDashboard /></ProtectedRoute>

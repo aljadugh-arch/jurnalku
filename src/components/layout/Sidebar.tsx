@@ -8,7 +8,7 @@ import {
   ClipboardList, UserCheck, QrCode, MapPin,
   X, ChevronDown, ChevronRight, LogOut, School, Layers,
   Activity, Globe, Sparkles, DollarSign, Settings, MessageSquare, FileText,
-  Newspaper, NotebookPen, ClipboardCheck, PiggyBank
+  Newspaper, NotebookPen, ClipboardCheck, PiggyBank, DatabaseBackup
 } from 'lucide-react'
 import { clsx } from 'clsx'
 import { roleLabel } from '../../lib/roles'
@@ -19,7 +19,8 @@ interface MenuItem {
   label: string
   icon: React.ReactNode
   path?: string
-  children?: { label: string; path: string }[]
+  external?: string
+  children?: { label: string; path: string; external?: string }[]
 }
 
 const adminMenuItems: MenuItem[] = [
@@ -63,7 +64,6 @@ const adminMenuItems: MenuItem[] = [
     children: [
       { label: 'Tagihan & Pembayaran', path: '/admin/tagihan' },
       { label: 'Tabungan Siswa', path: '/admin/tabungan' },
-      { label: 'E-Kantin & Cashless', path: '/admin/kantin-menu' },
     ]
   },
   {
@@ -77,6 +77,8 @@ const adminMenuItems: MenuItem[] = [
   { label: 'Pengaturan', icon: <Settings size={20} />, path: '/admin/settings' },
   { label: 'Manajemen Pengguna', icon: <UserCheck size={20} />, path: '/admin/users' },
   { label: 'Manajemen Lembaga', icon: <Globe size={20} />, path: '/admin/tenants' },
+  { label: 'Backup & Restore', icon: <DatabaseBackup size={20} />, path: '/admin/backup-restore' },
+  { label: 'Kelola Website', icon: <Globe size={20} />, path: '/admin/website-lembaga', external: 'https://fazacloud.my.id' },
   {
     label: 'E-Kantin & Cashless',
     icon: <DollarSign size={20} />,
@@ -256,23 +258,50 @@ export default function Sidebar() {
                   {isOpen && expandedMenus.includes(item.label) && (
                     <div className="ml-4 mt-0.5 space-y-0.5 border-l border-white/10 pl-3">
                       {item.children.map(child => (
-                        <Link
-                          key={child.path}
-                          to={child.path}
-                          onClick={handleNav}
-                          className={clsx(
-                            'block px-3 py-1.5 rounded-lg text-xs transition-colors',
-                            isActive(child.path)
-                              ? 'bg-white/20 text-white font-medium'
-                              : 'text-white/60 hover:text-white hover:bg-white/10'
-                          )}
-                        >
-                          {child.label}
-                        </Link>
+                        child.external ? (
+                          <a
+                            key={child.path}
+                            href={child.external}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            onClick={handleNav}
+                            className="block px-3 py-1.5 rounded-lg text-xs transition-colors text-white/60 hover:text-white hover:bg-white/10"
+                          >
+                            {child.label} ↗
+                          </a>
+                        ) : (
+                          <Link
+                            key={child.path}
+                            to={child.path}
+                            onClick={handleNav}
+                            className={clsx(
+                              'block px-3 py-1.5 rounded-lg text-xs transition-colors',
+                              isActive(child.path)
+                                ? 'bg-white/20 text-white font-medium'
+                                : 'text-white/60 hover:text-white hover:bg-white/10'
+                            )}
+                          >
+                            {child.label}
+                          </Link>
+                        )
                       ))}
                     </div>
                   )}
                 </>
+              ) : item.external ? (
+                <a
+                  href={item.external}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={handleNav}
+                  className={clsx(
+                    'flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors',
+                    isOpen ? 'text-white/70 hover:text-white hover:bg-white/10' : 'w-10 mx-auto text-white/70 hover:text-white hover:bg-white/10'
+                  )}
+                >
+                  <span className="flex-shrink-0">{item.icon}</span>
+                  {isOpen && <span>{item.label} ↗</span>}
+                </a>
               ) : (
                 <Link
                   to={item.path!}

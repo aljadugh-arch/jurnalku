@@ -25,6 +25,7 @@ const { getLateDashboard } = require('./dashboard-late.cjs')
 const { registerRoutes: registerBackupRestoreRoutes } = require('./backup-restore.cjs')
 const { registerFinanceExcelRoutes } = require('./finance-excel.cjs')
 const { FEATURE_KEYS, addMonthsIso, accessForTenant, featureForPath, normalizeFeatureSelection, generateUnlockCode, hashUnlockCode, setupSubscriptionTables } = require('./subscription.cjs')
+const { setupBackupTables, registerBackupRoutes } = require('./backup-drive.cjs')
 
 const app = express()
 const PORT = process.env.PORT || 3001
@@ -114,6 +115,7 @@ const db = new Database(dbPath)
 db.pragma('journal_mode = WAL')
 db.pragma('foreign_keys = ON')
 setupPortalCashless(db)
+setupBackupTables(db)
 waQueue.setupWA(db)
 
 // Create tables
@@ -1070,6 +1072,7 @@ registerBackupRestoreRoutes(app, db, { ADMIN, upload: backupUpload, dbPath: path
 registerFinanceExcelRoutes(app, db, { authorize: requireRole('bendahara', 'admin', 'super_admin', 'operator'), upload: multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024, files: 1 } }) })
 registerPortalRoutes(app, db, { auth: authMiddleware, requireRole, uuid: uuidv4, bcrypt })
 registerKantinRoutes(app, db, { requireRole, uuid: uuidv4, bcrypt })
+registerBackupRoutes(app, db, { requireRole, uuid: uuidv4 })
 const BEASISWA_ROLES = requireRole('admin', 'super_admin', 'bendahara')
 const BEASISWA_SELECT = `SELECT b.*, s.nama siswa_nama, s.nis siswa_nis
   FROM beasiswa b JOIN siswa s ON s.id=b.siswa_id AND s.tenant_id=b.tenant_id`
