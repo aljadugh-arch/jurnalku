@@ -212,6 +212,42 @@ function registerKantinRoutes(app, db, { requireRole, uuid, bcrypt }) {
     res.json({ id })
   })
 
+  // Batch create menu items (bulk add / spreadsheet paste / CSV import)
+  app.post('/api/kantin/menu/batch', kadmin, (req, res) => {
+    const items = Array.isArray(req.body?.items) ? req.body.items : null
+    if (!items || !items.length) return res.status(400).json({ error: 'items (array non-kosong) wajib' })
+    if (items.length > 1000) return res.status(400).json({ error: 'maksimal 1000 item per batch' })
+
+    const errors = []
+    const clean = items.map((it, i) => {
+      const row = i + 1
+      const kategori = String(it.kategori ?? '').trim()
+      const nama = String(it.nama ?? '').trim()
+      const harga = Number(it.harga)
+      if (!kategori) errors.push(`Baris ${row}: kategori wajib`)
+      if (!nama) errors.push(`Baris ${row}: nama wajib`)
+      if (!Number.isInteger(harga) || harga <= 0) errors.push(`Baris ${row}: harga harus bilangan bulat > 0`)
+      const stok = Number.isInteger(Number(it.stok)) && Number(it.stok) >= 0 ? Number(it.stok) : 0
+      const urut = Number.isInteger(Number(it.urut)) ? Number(it.urut) : 0
+      const aktif = (it.aktif === undefined || it.aktif === null) ? 1 : (it.aktif ? 1 : 0)
+      return { kategori, nama, deskripsi: String(it.deskripsi ?? '').trim(), harga, stok, foto: it.foto || null, aktif, urut }
+    })
+    if (errors.length) return res.status(400).json({ error: 'Validasi gagal', details: errors.slice(0, 50) })
+
+    const stmt = db.prepare('INSERT INTO kantin_menu (id, tenant_id, kategori, nama, deskripsi, harga, stok, foto, aktif, urut) VALUES (?,?,?,?,?,?,?,?,?,?)')
+    const insertMany = db.transaction(rows => {
+      const ids = []
+      for (const r of rows) {
+        const id = uuid()
+        stmt.run(id, req.tenantId, r.kategori, r.nama, r.deskripsi, r.harga, r.stok, r.foto, r.aktif, r.urut)
+        ids.push(id)
+      }
+      return ids
+    })
+    const ids = insertMany(clean)
+    res.json({ inserted: ids.length, ids })
+  })
+
   app.put('/api/kantin/menu/:id', kadmin, (req, res) => {
     const { kategori, nama, deskripsi, harga, stok, foto, aktif, urut } = req.body
     if (!kategori || !nama || !Number.isInteger(harga) || harga <= 0) {

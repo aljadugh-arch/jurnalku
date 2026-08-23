@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Plus, Edit, Trash2, X, Image, ChevronUp, ChevronDown, Search, Loader2 } from 'lucide-react'
+import { Plus, Edit, Trash2, X, Image, ChevronUp, ChevronDown, Search, Loader2, Upload } from 'lucide-react'
 import toast from 'react-hot-toast'
 import api from '../../services/api'
 
@@ -30,6 +30,54 @@ export default function KantinMenuPage() {
   })
   const [search, setSearch] = useState('')
   const [kategoriFilter, setKategoriFilter] = useState('')
+  const [showBatch, setShowBatch] = useState(false)
+  const [batchText, setBatchText] = useState('')
+  const [batchBusy, setBatchBusy] = useState(false)
+
+  // Parse pasted rows (from Excel/CSV). Columns: nama, harga, kategori?, stok?, deskripsi?
+  // Separator auto-detected: tab (Excel paste) or comma. First line may be a header.
+  const parseBatch = (text: string) => {
+    const lines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean)
+    if (!lines.length) return { items: [], errors: ['Tidak ada baris'] }
+    const sep = lines[0].includes('\t') ? '\t' : ','
+    const looksHeader = /nama/i.test(lines[0]) && /harga/i.test(lines[0])
+    const rows = looksHeader ? lines.slice(1) : lines
+    const items: any[] = []
+    const errors: string[] = []
+    rows.forEach((line, i) => {
+      const c = line.split(sep).map(s => s.trim())
+      const nama = c[0] || ''
+      const harga = parseInt((c[1] || '').replace(/[^\d]/g, ''), 10)
+      const kategori = (c[2] || 'makanan').toLowerCase()
+      const stok = c[3] !== undefined && c[3] !== '' ? parseInt(c[3].replace(/[^\d]/g, ''), 10) : 0
+      const deskripsi = c[4] || ''
+      const n = i + 1
+      if (!nama) { errors.push(`Baris ${n}: nama kosong`); return }
+      if (!Number.isInteger(harga) || harga <= 0) { errors.push(`Baris ${n}: harga tidak valid`); return }
+      if (!KATEGORI.includes(kategori)) { errors.push(`Baris ${n}: kategori "${kategori}" tidak dikenal (${KATEGORI.join('/')})`); return }
+      items.push({ nama, harga, kategori, stok: Number.isInteger(stok) ? stok : 0, deskripsi, aktif: true })
+    })
+    return { items, errors }
+  }
+
+  const batchPreview = parseBatch(batchText)
+
+  const handleBatchSave = async () => {
+    const { items, errors } = batchPreview
+    if (errors.length) return toast.error(`${errors.length} baris bermasalah — perbaiki dulu`)
+    if (!items.length) return toast.error('Tidak ada item valid')
+    setBatchBusy(true)
+    try {
+      const res = await api.post('/kantin/menu/batch', { items })
+      toast.success(`${res.data.inserted} menu ditambahkan`)
+      setShowBatch(false)
+      setBatchText('')
+      fetchMenus()
+    } catch (err: any) {
+      const d = err.response?.data
+      toast.error(d?.details?.length ? d.details.slice(0, 3).join('; ') : (d?.error || 'Gagal import batch'))
+    } finally { setBatchBusy(false) }
+  }
 
   const fetchMenus = async () => {
     try {
@@ -103,12 +151,20 @@ export default function KantinMenuPage() {
           <h1 className="text-2xl font-bold text-gray-800 font-display">Menu Kantin</h1>
           <p className="text-gray-500 text-sm mt-1">Kelola menu makanan, minuman, dan snack kantin</p>
         </div>
-        <button
-          onClick={() => { setForm({ kategori: 'makanan', nama: '', deskripsi: '', harga: 0, stok: 0, foto: '', aktif: true, urut: 0 }); setEditId(null); setShowModal(true) }}
-          className="flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-lg text-sm hover:bg-primary-dark"
-        >
-          <Plus size={16} /> Tambah Menu
-        </button>
+        <div className="flex gap-2">
+          <button
+            onClick={() => { setBatchText(''); setShowBatch(true) }}
+            className="flex items-center gap-2 px-4 py-2 border border-primary text-primary rounded-lg text-sm hover:bg-primary/5"
+          >
+            <Upload size={16} /> Import Batch
+          </button>
+          <button
+            onClick={() => { setForm({ kategori: 'makanan', nama: '', deskripsi: '', harga: 0, stok: 0, foto: '', aktif: true, urut: 0 }); setEditId(null); setShowModal(true) }}
+            className="flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-lg text-sm hover:bg-primary-dark"
+          >
+            <Plus size={16} /> Tambah Menu
+          </button>
+        </div>
       </div>
 
       {/* Filters */}
@@ -265,6 +321,54 @@ export default function KantinMenuPage() {
               <div className="flex gap-3 mt-6 pt-4 border-t">
                 <button onClick={() => { setShowModal(false); setEditId(null); setForm({ kategori: 'makanan', nama: '', deskripsi: '', harga: 0, stok: 0, foto: '', aktif: true, urut: 0 }) }} className="flex-1 px-4 py-2 border rounded-lg text-sm hover:bg-gray-50">Batal</button>
                 <button onClick={handleSave} className="flex-1 px-4 py-2 bg-primary text-white rounded-lg text-sm hover:bg-primary-dark">Simpan</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Batch Import Modal */}
+      {showBatch && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-bold">Import Menu Massal</h2>
+              <button onClick={() => { setShowBatch(false); setBatchText('') }} className="p-1 hover:bg-gray-100 rounded"><X size={20} /></button>
+            </div>
+            <div className="space-y-3">
+              <div className="text-sm text-gray-600 bg-gray-50 rounded-lg p-3 space-y-1">
+                <p className="font-medium">Tempel dari Excel/Sheets atau ketik, satu menu per baris.</p>
+                <p>Kolom (pisah <b>Tab</b> atau <b>koma</b>): <code className="bg-white px-1 rounded">nama, harga, kategori, stok, deskripsi</code></p>
+                <p className="text-xs text-gray-500">kategori: {KATEGORI.join(' / ')} (default makanan). stok &amp; deskripsi opsional. Baris header (mengandung "nama" &amp; "harga") diabaikan otomatis.</p>
+              </div>
+              <textarea
+                value={batchText}
+                onChange={e => setBatchText(e.target.value)}
+                rows={10}
+                placeholder={"Nasi Goreng, 12000, makanan, 20\nEs Teh, 3000, minuman, 50\nRoti Coklat\t5000\tsnack\t30"}
+                className="w-full px-3 py-2 border rounded-lg text-sm font-mono"
+              />
+              {batchText.trim() && (
+                <div className="text-sm">
+                  <p className="text-green-700">{batchPreview.items.length} item valid siap diimport</p>
+                  {batchPreview.errors.length > 0 && (
+                    <div className="mt-1 text-red-600 max-h-32 overflow-y-auto">
+                      {batchPreview.errors.slice(0, 20).map((e, i) => <p key={i} className="text-xs">{e}</p>)}
+                      {batchPreview.errors.length > 20 && <p className="text-xs">…dan {batchPreview.errors.length - 20} lagi</p>}
+                    </div>
+                  )}
+                </div>
+              )}
+              <div className="flex gap-3 mt-4 pt-4 border-t">
+                <button onClick={() => { setShowBatch(false); setBatchText('') }} className="flex-1 px-4 py-2 border rounded-lg text-sm hover:bg-gray-50">Batal</button>
+                <button
+                  onClick={handleBatchSave}
+                  disabled={batchBusy || !batchPreview.items.length || batchPreview.errors.length > 0}
+                  className="flex-1 px-4 py-2 bg-primary text-white rounded-lg text-sm hover:bg-primary-dark disabled:opacity-50 flex items-center justify-center gap-2"
+                >
+                  {batchBusy && <Loader2 size={16} className="animate-spin" />}
+                  Import {batchPreview.items.length > 0 ? `(${batchPreview.items.length})` : ''}
+                </button>
               </div>
             </div>
           </div>

@@ -50,16 +50,17 @@ function setupTenantTables(db) {
 
     CREATE INDEX IF NOT EXISTS idx_tenants_slug ON tenants(slug);
     CREATE INDEX IF NOT EXISTS idx_tenants_domain ON tenants(domain_custom);
-    CREATE INDEX IF NOT EXISTS idx_tenants_foundation ON tenants(foundation_id);
   `)
 
-  // Ensure domain_status column exists (domain provisioning tracking)
+  // Ensure columns exist on pre-existing tenants tables (CREATE TABLE IF NOT EXISTS
+  // is a no-op when the table predates these columns), THEN index foundation_id.
   try {
     const cols = db.prepare("PRAGMA table_info(tenants)").all()
-    if (!cols.some(c => c.name === 'domain_status')) {
-      db.exec("ALTER TABLE tenants ADD COLUMN domain_status TEXT DEFAULT 'active'")
-    }
+    const names = new Set(cols.map(c => c.name))
+    if (!names.has('domain_status')) db.exec("ALTER TABLE tenants ADD COLUMN domain_status TEXT DEFAULT 'active'")
+    if (!names.has('foundation_id')) db.exec("ALTER TABLE tenants ADD COLUMN foundation_id TEXT")
   } catch {}
+  db.exec("CREATE INDEX IF NOT EXISTS idx_tenants_foundation ON tenants(foundation_id)")
 
   // Add tenant_id to all data tables if not exists
   const tables = [
