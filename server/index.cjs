@@ -1134,6 +1134,397 @@ app.get('/api/health', (_req, res) => {
   }
 })
 
+// ============================================================================
+// REST API untuk kolaborasi web app eksternal (External API Integration)
+// ============================================================================
+
+// API Key middleware for external apps
+const API_KEYS = new Map()
+function generateApiKey() {
+  return 'jrnl_' + crypto.randomBytes(24).toString('hex')
+}
+
+function apiKeyMiddleware(req, res, next) {
+  const apiKey = req.headers['x-api-key'] || req.query.api_key
+  if (!apiKey) return res.status(401).json({ error: 'API Key required' })
+  
+  const keyData = API_KEYS.get(apiKey)
+  if (!keyData) return res.status(403).json({ error: 'Invalid API Key' })
+  if (keyData.expires_at && new Date(keyData.expires_at) < new Date()) {
+    API_KEYS.delete(apiKey)
+    return res.status(403).json({ error: 'API Key expired' })
+  }
+  if (!keyData.enabled) return res.status(403).json({ error: 'API Key disabled' })
+  
+  req.apiKey = keyData
+  req.tenantId = keyData.tenant_id
+  next()
+}
+
+// Create API Key (admin only)
+app.post('/api/external/api-keys', ADMIN, (req, res) => {
+  const { name, expires_in_days = 365, permissions = ['read'] } = req.body
+  if (!name) return res.status(400).json({ error: 'Nama API Key wajib diisi' })
+  
+  const apiKey = generateApiKey()
+  const expiresAt = new Date()
+  expiresAt.setDate(expiresAt.getDate() + Number(expires_in_days))
+  
+  const keyData = {
+    id: uuidv4(),
+    name,
+    api_key: apiKey,
+    tenant_id: req.tenantId,
+    permissions: Array.isArray(permissions) ? permissions : ['read'],
+    enabled: true,
+    created_at: new Date().toISOString(),
+    expires_at: expiresAt.toISOString(),
+    last_used_at: null,
+    usage_count: 0
+  }
+  
+  // Store in memory and persist to DB
+  API_KEYS.set(apiKey, keyData)
+  
+  db.prepare('CREATE TABLE IF NOT EXISTS external_api_keys (id TEXT PRIMARY KEY, name TEXT, api_key TEXT UNIQUE, tenant_id TEXT, permissions TEXT, enabled INTEGER DEFAULT 1, created_at TEXT, expires_at TEXT, last_used_at TEXT, usage_count INTEGER DEFAULT 0)').run()
+  db.prepare('INSERT INTO external_api_keys (id, name, api_key, tenant_id, permissions, enabled, created_at, expires_at, last_used_at, usage_count) VALUES (?,?,?,?,?,?,?,?,?,?)')
+    .run(keyData.id, keyData.name, keyData.api_key, keyData.tenant_id, JSON.stringify(keyData.permissions), keyData.enabled ? 1 : 0, keyData.created_at, keyData.expires_at, keyData.last_used_at, keyData.usage_count)
+  
+  res.json({ 
+    success: true, 
+    api_key: apiKey, // Only shown once!
+    key_info: { ...keyData, api_key: '***' }
+  })
+})
+
+// List API Keys (admin only)
+app.get('/api/external/api-keys', ADMIN, (req, res) => {
+  const keys = db.prepare('SELECT id, name, tenant_id, permissions, enabled, created_at, expires_at, last_used_at, usage_count FROM external_api_keys WHERE tenant_id = ? ORDER BY created_at DESC').all(req.tenantId)
+  res.json(keys.map(k => ({ ...k, permissions: JSON.parse(k.permissions || '[]') })))
+})
+
+// Revoke API Key (admin only)
+app.delete('/api/external/api-keys/:id', ADMIN, (req, res) => {
+  const key = db.prepare('SELECT api_key FROM external_api_keys WHERE id = ? AND tenant_id = ?').get(req.params.id, req.tenantId)
+  if (!key) return res.status(404).json({ error: 'API Key tidak ditemukan' })
+  API_KEYS.delete(key.api_key)
+  db.prepare('DELETE FROM external_api_keys WHERE id = ? AND tenant_id = ?').run(req.params.id, req.tenantId)
+  res.json({ success: true })
+})
+
+// ============================================================================
+// Public REST API Endpoints (protected by API Key)
+// ============================================================================
+
+// Get tenant info (public endpoint with API key)
+app.get('/api/external/v1/tenant/info', apiKeyMiddleware, (req, res) => {
+  const tenant = db.prepare('SELECT id, slug, nama, email, telepon, alamat, domain_custom, domain_status, plan, trial_ends_at, subscription_ends_at FROM tenants WHERE id = ?').get(req.tenantId)
+  if (!tenant) return res.status(404).json({ error: 'Tenant tidak ditemukan' })
+  res.json({ tenant })
+})
+
+// Get siswa list with pagination
+app.get('/api/external/v1/siswa', apiKeyMiddleware, (req, res) => {
+  if (!req.apiKey.permissions.includes('read') && !req.apiKey.permissions.includes('siswa:read')) {
+    return res.status(403).json({ error: 'Permission denied: siswa:read required' })
+  }
+  const { page = 1, limit = 50, search = '', rombel_id, status = 'aktif' } = req.query
+  const offset = (Number(page) - 1) * Number(limit)
+  
+  let sql = 'SELECT s.id, s.nis, s.nisn, s.nama, s.jenis_kelamin, s.rombel_id, s.status, s.created_at, r.nama as rombel_nama FROM siswa s LEFT JOIN rombel r ON r.id = s.rombel_id AND r.tenant_id = s.tenant_id WHERE s.tenant_id = ? AND s.status = ?'
+  const params = [req.tenantId, status]
+  
+  if (search) {
+    sql += ' AND (s.nama LIKE ? OR s.nis LIKE ? OR s.nisn LIKE ?)'
+    params.push(`%${search}%`, `%${search}%`, `%${search}%`)
+  }
+  if (rombel_id) {
+    sql += ' AND s.rombel_id = ?'
+    params.push(rombel_id)
+  }
+  
+  sql += ' ORDER BY s.nama LIMIT ? OFFSET ?'
+  params.push(Number(limit), offset)
+  
+  const data = db.prepare(sql).all(...params)
+  const total = db.prepare(sql.replace('SELECT s.id, s.nis, s.nisn, s.nama, s.jenis_kelamin, s.rombel_id, s.status, s.created_at, r.nama as rombel_nama', 'SELECT COUNT(*) as count').split('ORDER BY')[0]).get(...params.slice(0, -2)).count
+  
+  res.json({ data, pagination: { page: Number(page), limit: Number(limit), total, total_pages: Math.ceil(total / Number(limit)) } })
+})
+
+// Get siswa by ID
+app.get('/api/external/v1/siswa/:id', apiKeyMiddleware, (req, res) => {
+  if (!req.apiKey.permissions.includes('read') && !req.apiKey.permissions.includes('siswa:read')) {
+    return res.status(403).json({ error: 'Permission denied: siswa:read required' })
+  }
+  const siswa = db.prepare('SELECT s.*, r.nama as rombel_nama, r.tingkat FROM siswa s LEFT JOIN rombel r ON r.id = s.rombel_id AND r.tenant_id = s.tenant_id WHERE s.id = ? AND s.tenant_id = ?').get(req.params.id, req.tenantId)
+  if (!siswa) return res.status(404).json({ error: 'Siswa tidak ditemukan' })
+  res.json({ siswa })
+})
+
+// Get guru/GTK list
+app.get('/api/external/v1/gtk', apiKeyMiddleware, (req, res) => {
+  if (!req.apiKey.permissions.includes('read') && !req.apiKey.permissions.includes('gtk:read')) {
+    return res.status(403).json({ error: 'Permission denied: gtk:read required' })
+  }
+  const { page = 1, limit = 50, search = '' } = req.query
+  const offset = (Number(page) - 1) * Number(limit)
+  
+  let sql = 'SELECT g.*, u.email, u.role as user_role FROM gtk g LEFT JOIN users u ON u.gtk_id = g.id AND u.tenant_id = g.tenant_id WHERE g.tenant_id = ? AND g.status_kepegawaian = \'Tetap\''
+  const params = [req.tenantId]
+  
+  if (search) {
+    sql += ' AND (g.nama LIKE ? OR g.kode_guru LIKE ? OR g.nip LIKE ?)'
+    params.push(`%${search}%`, `%${search}%`, `%${search}%`)
+  }
+  
+  sql += ' ORDER BY g.nama LIMIT ? OFFSET ?'
+  params.push(Number(limit), offset)
+  
+  const data = db.prepare(sql).all(...params)
+  res.json({ data })
+})
+
+// Get absensi (attendance)
+app.get('/api/external/v1/absensi', apiKeyMiddleware, (req, res) => {
+  if (!req.apiKey.permissions.includes('read') && !req.apiKey.permissions.includes('absensi:read')) {
+    return res.status(403).json({ error: 'Permission denied: absensi:read required' })
+  }
+  const { tanggal, rombel_id, siswa_id, page = 1, limit = 100 } = req.query
+  const offset = (Number(page) - 1) * Number(limit)
+  
+  let sql = 'SELECT a.*, s.nis, s.nama as siswa_nama, r.nama as rombel_nama FROM absensi_siswa a JOIN siswa s ON s.id = a.siswa_id AND s.tenant_id = a.tenant_id LEFT JOIN rombel r ON r.id = s.rombel_id AND r.tenant_id = s.tenant_id WHERE a.tenant_id = ?'
+  const params = [req.tenantId]
+  
+  if (tanggal) { sql += ' AND a.tanggal = ?'; params.push(tanggal) }
+  if (rombel_id) { sql += ' AND s.rombel_id = ?'; params.push(rombel_id) }
+  if (siswa_id) { sql += ' AND a.siswa_id = ?'; params.push(siswa_id) }
+  
+  sql += ' ORDER BY a.tanggal DESC, a.waktu_absen DESC LIMIT ? OFFSET ?'
+  params.push(Number(limit), offset)
+  
+  const data = db.prepare(sql).all(...params)
+  res.json({ data })
+})
+
+// Get nilai (grades)
+app.get('/api/external/v1/nilai', apiKeyMiddleware, (req, res) => {
+  if (!req.apiKey.permissions.includes('read') && !req.apiKey.permissions.includes('nilai:read')) {
+    return res.status(403).json({ error: 'Permission denied: nilai:read required' })
+  }
+  const { siswa_id, mapel_id, rombel_id, semester, tahun_ajaran, page = 1, limit = 100 } = req.query
+  const offset = (Number(page) - 1) * Number(limit)
+  
+  let sql = 'SELECT n.*, s.nis, s.nama as siswa_nama, m.nama as mapel_nama, g.nama as guru_nama FROM nilai n JOIN siswa s ON s.id = n.siswa_id AND s.tenant_id = n.tenant_id JOIN mapel m ON m.id = n.mapel_id AND m.tenant_id = n.tenant_id LEFT JOIN gtk g ON g.id = n.gtk_id AND g.tenant_id = n.tenant_id WHERE n.tenant_id = ?'
+  const params = [req.tenantId]
+  
+  if (siswa_id) { sql += ' AND n.siswa_id = ?'; params.push(siswa_id) }
+  if (mapel_id) { sql += ' AND n.mapel_id = ?'; params.push(mapel_id) }
+  if (rombel_id) { sql += ' AND s.rombel_id = ?'; params.push(rombel_id) }
+  if (semester) { sql += ' AND n.semester = ?'; params.push(semester) }
+  if (tahun_ajaran) { sql += ' AND n.tahun_ajaran = ?'; params.push(tahun_ajaran) }
+  
+  sql += ' ORDER BY n.created_at DESC LIMIT ? OFFSET ?'
+  params.push(Number(limit), offset)
+  
+  const data = db.prepare(sql).all(...params)
+  res.json({ data })
+})
+
+// Get jadwal (schedule)
+app.get('/api/external/v1/jadwal', apiKeyMiddleware, (req, res) => {
+  if (!req.apiKey.permissions.includes('read') && !req.apiKey.permissions.includes('jadwal:read')) {
+    return res.status(403).json({ error: 'Permission denied: jadwal:read required' })
+  }
+  const { rombel_id, guru_id, hari, semester, tahun_ajaran } = req.query
+  
+  let sql = 'SELECT j.*, m.nama as mapel_nama, g.nama as guru_nama, r.nama as rombel_nama FROM jadwal j JOIN mapel m ON m.id = j.mapel_id AND m.tenant_id = j.tenant_id LEFT JOIN gtk g ON g.id = j.gtk_id AND g.tenant_id = j.tenant_id LEFT JOIN rombel r ON r.id = j.rombel_id AND r.tenant_id = j.tenant_id WHERE j.tenant_id = ?'
+  const params = [req.tenantId]
+  
+  if (rombel_id) { sql += ' AND j.rombel_id = ?'; params.push(rombel_id) }
+  if (guru_id) { sql += ' AND j.gtk_id = ?'; params.push(guru_id) }
+  if (hari) { sql += ' AND lower(j.hari) = ?'; params.push(hari.toLowerCase()) }
+  if (semester) { sql += ' AND j.semester = ?'; params.push(semester) }
+  if (tahun_ajaran) { sql += ' AND j.tahun_ajaran = ?'; params.push(tahun_ajaran) }
+  
+  sql += ' ORDER BY j.hari, j.jam_mulai'
+  
+  const data = db.prepare(sql).all(...params)
+  res.json({ data })
+})
+
+// Get rombel (classes)
+app.get('/api/external/v1/rombel', apiKeyMiddleware, (req, res) => {
+  if (!req.apiKey.permissions.includes('read') && !req.apiKey.permissions.includes('rombel:read')) {
+    return res.status(403).json({ error: 'Permission denied: rombel:read required' })
+  }
+  const { tingkat, tahun_ajaran, wali_kelas_id } = req.query
+  
+  let sql = 'SELECT r.*, g.nama as wali_kelas_nama, g.kode_guru FROM rombel r LEFT JOIN gtk g ON g.id = r.wali_kelas_id AND g.tenant_id = r.tenant_id WHERE r.tenant_id = ?'
+  const params = [req.tenantId]
+  
+  if (tingkat) { sql += ' AND r.tingkat = ?'; params.push(tingkat) }
+  if (tahun_ajaran) { sql += ' AND r.tahun_ajaran = ?'; params.push(tahun_ajaran) }
+  if (wali_kelas_id) { sql += ' AND r.wali_kelas_id = ?'; params.push(wali_kelas_id) }
+  
+  sql += ' ORDER BY r.tingkat, r.nama'
+  
+  const data = db.prepare(sql).all(...params)
+  res.json({ data })
+})
+
+// Get mapel (subjects)
+app.get('/api/external/v1/mapel', apiKeyMiddleware, (req, res) => {
+  if (!req.apiKey.permissions.includes('read') && !req.apiKey.permissions.includes('mapel:read')) {
+    return res.status(403).json({ error: 'Permission denied: mapel:read required' })
+  }
+  const { tingkat, semester, tahun_ajaran } = req.query
+  
+  let sql = 'SELECT * FROM mapel WHERE tenant_id = ? AND aktif = 1'
+  const params = [req.tenantId]
+  
+  if (tingkat) { sql += ' AND tingkat = ?'; params.push(tingkat) }
+  if (semester) { sql += ' AND semester = ?'; params.push(semester) }
+  if (tahun_ajaran) { sql += ' AND tahun_ajaran = ?'; params.push(tahun_ajaran) }
+  
+  sql += ' ORDER BY nama'
+  
+  const data = db.prepare(sql).all(...params)
+  res.json({ data })
+})
+
+// Get tagihan (billing)
+app.get('/api/external/v1/tagihan', apiKeyMiddleware, (req, res) => {
+  if (!req.apiKey.permissions.includes('read') && !req.apiKey.permissions.includes('tagihan:read')) {
+    return res.status(403).json({ error: 'Permission denied: tagihan:read required' })
+  }
+  const { siswa_id, status, jenis, page = 1, limit = 50 } = req.query
+  const offset = (Number(page) - 1) * Number(limit)
+  
+  let sql = 'SELECT t.*, s.nis, s.nama as siswa_nama FROM tagihan t JOIN siswa s ON s.id = t.siswa_id AND s.tenant_id = t.tenant_id WHERE t.tenant_id = ?'
+  const params = [req.tenantId]
+  
+  if (siswa_id) { sql += ' AND t.siswa_id = ?'; params.push(siswa_id) }
+  if (status) { sql += ' AND t.status = ?'; params.push(status) }
+  if (jenis) { sql += ' AND t.jenis = ?'; params.push(jenis) }
+  
+  sql += ' ORDER BY t.tanggal_jatuh_tempo DESC LIMIT ? OFFSET ?'
+  params.push(Number(limit), offset)
+  
+  const data = db.prepare(sql).all(...params)
+  res.json({ data })
+})
+
+// Get pembayaran (payments)
+app.get('/api/external/v1/pembayaran', apiKeyMiddleware, (req, res) => {
+  if (!req.apiKey.permissions.includes('read') && !req.apiKey.permissions.includes('pembayaran:read')) {
+    return res.status(403).json({ error: 'Permission denied: pembayaran:read required' })
+  }
+  const { siswa_id, tagihan_id, metode, tanggal_mulai, tanggal_selesai, page = 1, limit = 50 } = req.query
+  const offset = (Number(page) - 1) * Number(limit)
+  
+  let sql = 'SELECT p.*, t.nomor as tagihan_nomor, t.jenis as tagihan_jenis, s.nis, s.nama as siswa_nama FROM pembayaran p JOIN tagihan t ON t.id = p.tagihan_id AND t.tenant_id = p.tenant_id JOIN siswa s ON s.id = t.siswa_id AND s.tenant_id = t.tenant_id WHERE p.tenant_id = ?'
+  const params = [req.tenantId]
+  
+  if (siswa_id) { sql += ' AND t.siswa_id = ?'; params.push(siswa_id) }
+  if (tagihan_id) { sql += ' AND p.tagihan_id = ?'; params.push(tagihan_id) }
+  if (metode) { sql += ' AND p.metode = ?'; params.push(metode) }
+  if (tanggal_mulai) { sql += ' AND p.tanggal >= ?'; params.push(tanggal_mulai) }
+  if (tanggal_selesai) { sql += ' AND p.tanggal <= ?'; params.push(tanggal_selesai) }
+  
+  sql += ' ORDER BY p.tanggal DESC LIMIT ? OFFSET ?'
+  params.push(Number(limit), offset)
+  
+  const data = db.prepare(sql).all(...params)
+  res.json({ data })
+})
+
+// Cashless balance check
+app.get('/api/external/v1/cashless/balance/:student_id', apiKeyMiddleware, (req, res) => {
+  if (!req.apiKey.permissions.includes('read') && !req.apiKey.permissions.includes('cashless:read')) {
+    return res.status(403).json({ error: 'Permission denied: cashless:read required' })
+  }
+  const student = db.prepare('SELECT id, nis, nama FROM siswa WHERE id = ? AND tenant_id = ?').get(req.params.student_id, req.tenantId)
+  if (!student) return res.status(404).json({ error: 'Siswa tidak ditemukan' })
+  
+  const balance = db.prepare('SELECT COALESCE(SUM(amount),0) as saldo FROM cashless_ledger WHERE tenant_id = ? AND student_id = ?').get(req.tenantId, req.params.student_id).saldo
+  
+  res.json({ student_id: req.params.student_id, nis: student.nis, nama: student.nama, saldo: balance })
+})
+
+// Cashless transactions
+app.get('/api/external/v1/cashless/transactions/:student_id', apiKeyMiddleware, (req, res) => {
+  if (!req.apiKey.permissions.includes('read') && !req.apiKey.permissions.includes('cashless:read')) {
+    return res.status(403).json({ error: 'Permission denied: cashless:read required' })
+  }
+  const { page = 1, limit = 50, kind } = req.query
+  const offset = (Number(page) - 1) * Number(limit)
+  
+  let sql = 'SELECT * FROM cashless_ledger WHERE tenant_id = ? AND student_id = ?'
+  const params = [req.tenantId, req.params.student_id]
+  
+  if (kind) { sql += ' AND kind = ?'; params.push(kind) }
+  
+  sql += ' ORDER BY created_at DESC LIMIT ? OFFSET ?'
+  params.push(Number(limit), offset)
+  
+  const data = db.prepare(sql).all(...params)
+  res.json({ data })
+})
+
+// Webhook endpoints for external notifications
+app.post('/api/external/webhook/cashless', apiKeyMiddleware, (req, res) => {
+  if (!req.apiKey.permissions.includes('write') && !req.apiKey.permissions.includes('cashless:write')) {
+    return res.status(403).json({ error: 'Permission denied: cashless:write required' })
+  }
+  // Validate webhook payload
+  const { student_id, amount, kind, reference, idempotency_key } = req.body
+  if (!student_id || !Number.isInteger(amount) || amount <= 0 || !kind || !['credit', 'debit'].includes(kind)) {
+    return res.status(400).json({ error: 'Invalid payload: student_id, amount (integer > 0), kind (credit/debit) required' })
+  }
+  
+  // Check idempotency
+  if (idempotency_key) {
+    const existing = db.prepare('SELECT id FROM cashless_ledger WHERE tenant_id = ? AND idempotency_key = ?').get(req.tenantId, idempotency_key)
+    if (existing) return res.json({ success: true, duplicate: true, id: existing.id })
+  }
+  
+  const id = uuidv4()
+  const tx = {
+    id,
+    tenant_id: req.tenantId,
+    student_id,
+    amount: kind === 'debit' ? -amount : amount,
+    kind,
+    idempotency_key: idempotency_key || null,
+    actor_id: req.apiKey.id,
+    reference: reference || null,
+    created_at: new Date().toISOString()
+  }
+  
+  db.prepare('INSERT INTO cashless_ledger (id, tenant_id, student_id, amount, kind, idempotency_key, actor_id, reference, created_at) VALUES (?,?,?,?,?,?,?,?,?)')
+    .run(tx.id, tx.tenant_id, tx.student_id, tx.amount, tx.kind, tx.idempotency_key, tx.actor_id, tx.reference, tx.created_at)
+  
+  // Update API key usage
+  db.prepare('UPDATE external_api_keys SET usage_count = usage_count + 1, last_used_at = ? WHERE api_key = ?').run(new Date().toISOString(), req.headers['x-api-key'])
+  
+  res.json({ success: true, transaction: tx })
+})
+
+// Load persisted API keys on startup
+setTimeout(() => {
+  try {
+    const keys = db.prepare('SELECT * FROM external_api_keys WHERE enabled = 1').all()
+    keys.forEach(k => {
+      if (k.expires_at && new Date(k.expires_at) < new Date()) return
+      API_KEYS.set(k.api_key, { ...k, permissions: JSON.parse(k.permissions || '[]') })
+    })
+    console.log('[External API] Loaded', API_KEYS.size, 'API keys')
+  } catch (e) {
+    console.log('[External API] No existing keys table:', e.message)
+  }
+}, 1000)
+
 // Lightweight input validation at trust boundaries (no external lib).
 const isEmail = (v) => typeof v === 'string' && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v) && v.length <= 120
 const isStr = (v, min = 1, max = 200) => typeof v === 'string' && v.trim().length >= min && v.length <= max
@@ -2537,8 +2928,17 @@ app.get('/api/pwa/manifest', (req, res) => {
 app.put('/api/settings/pwa', ADMIN, (req, res) => {
   const id = 'main_' + req.tenantId
   db.prepare(`INSERT INTO settings (id,tenant_id,updated_at) VALUES (?,?,datetime('now')) ON CONFLICT(id) DO NOTHING`).run(id, req.tenantId)
-  db.prepare(`UPDATE settings SET pwa_name=?, pwa_icon=?, updated_at=datetime('now') WHERE id=?`).run(req.body.pwa_name || '', req.body.pwa_icon || '', id)
+  db.prepare(`UPDATE settings SET pwa_name=?, pwa_icon=?, pwa_bg_color=?, pwa_theme_color=?, updated_at=datetime('now') WHERE id=?`).run(req.body.pwa_name || '', req.body.pwa_icon || '', req.body.pwa_bg_color || '#ffffff', req.body.pwa_theme_color || '#1e40af', id)
   res.json({ success: true })
+})
+
+// Regenerate PWA manifest - just returns current manifest (dynamic)
+app.post('/api/settings/pwa-manifest', ADMIN, (req, res) => {
+  const s = db.prepare('SELECT pwa_name,pwa_icon,nama_lembaga,logo,primary_color,pwa_bg_color,pwa_theme_color FROM settings WHERE tenant_id=? ORDER BY updated_at DESC LIMIT 1').get(req.tenantId) || {}
+  const t = req.tenant || db.prepare('SELECT nama FROM tenants WHERE id=?').get(req.tenantId) || {}
+  const name = s.pwa_name || (t.nama ? t.nama + ' Apps' : 'Jurnalku')
+  const icon = s.pwa_icon || s.logo || '/logo-jurnalku-256.png'
+  res.json({ name, short_name: name.slice(0, 24), start_url: '/', scope: '/', display: 'standalone', background_color: s.pwa_bg_color || '#ffffff', theme_color: s.pwa_theme_color || s.primary_color || '#2563eb', icons: [{ src: icon, sizes: '256x256', type: 'image/png' }, { src: icon, sizes: '512x512', type: 'image/png' }] })
 })
 
 app.post('/api/jamaah/sesi', ADMIN, (req, res) => {

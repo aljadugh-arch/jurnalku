@@ -345,11 +345,138 @@ function registerKantinRoutes(app, db, { requireRole, uuid, bcrypt }) {
   })
 
   app.put('/api/cashless/provider/bank_transfer', kadmin, (req, res) => {
-    const { enabled, va_prefix, bank_code, admin_fee, manual_verify } = req.body
-    const config = { va_prefix: va_prefix || '', bank_code: bank_code || '', admin_fee: Number(admin_fee) || 0, manual_verify: manual_verify !== false }
+    const { enabled, va_prefix, bank_code, admin_fee, manual_verify, shopee_merchant_id, shopee_partner_key, shopee_partner_secret, gopay_client_id, gopay_client_secret, gopay_merchant_id } = req.body
+    const config = { 
+      va_prefix: va_prefix || '', 
+      bank_code: bank_code || '', 
+      admin_fee: Number(admin_fee) || 0, 
+      manual_verify: manual_verify !== false,
+      shopee_merchant_id: shopee_merchant_id || '',
+      shopee_partner_key: shopee_partner_key || '',
+      shopee_partner_secret: shopee_partner_secret || '',
+      gopay_client_id: gopay_client_id || '',
+      gopay_client_secret: gopay_client_secret || '',
+      gopay_merchant_id: gopay_merchant_id || ''
+    }
     db.prepare('INSERT INTO cashless_provider_config (tenant_id, provider, enabled, config_json) VALUES (?,?,?,?) ON CONFLICT(tenant_id,provider) DO UPDATE SET enabled=excluded.enabled, config_json=excluded.config_json')
       .run(req.tenantId, 'bank_transfer', enabled ? 1 : 0, JSON.stringify(config))
     res.json({ success: true })
+  })
+
+  // Shopee Partner QR Scraping
+  app.post('/api/cashless/provider/bank_transfer/shopee/qr', kadmin, async (req, res) => {
+    const cfg = db.prepare('SELECT config_json FROM cashless_provider_config WHERE tenant_id = ? AND provider = ?').get(req.tenantId, 'bank_transfer')
+    if (!cfg) return res.status(404).json({ error: 'Konfigurasi bank transfer tidak ditemukan' })
+    const config = JSON.parse(cfg.config_json || '{}')
+    const { merchant_id, partner_key, partner_secret } = config
+    if (!merchant_id || !partner_key || !partner_secret) {
+      return res.status(400).json({ error: 'Kredensial Shopee Partner (merchant_id, partner_key, partner_secret) belum dikonfigurasi' })
+    }
+
+    try {
+      const puppeteer = (await import('puppeteer-core')).default
+      const browser = await puppeteer.launch({
+        headless: true,
+        args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
+        executablePath: '/usr/bin/chromium-browser'
+      })
+      
+      const page = await browser.newPage()
+      await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36')
+      
+      // Login to Shopee Partner
+      await page.goto('https://partner.shopee.co.id/', { waitUntil: 'networkidle2', timeout: 30000 })
+      
+      // Fill login form (adjust selectors based on actual page)
+      await page.waitForSelector('input[name="username"], input[type="email"]', { timeout: 10000 })
+      await page.type('input[name="username"], input[type="email"]', merchant_id)
+      await page.type('input[name="password"], input[type="password"]', partner_secret)
+      await page.click('button[type="submit"], button:has-text("Login")')
+      await page.waitForNavigation({ waitUntil: 'networkidle2', timeout: 30000 })
+      
+      // Navigate to QR code page
+      await page.goto('https://partner.shopee.co.id/merchant/qr-code', { waitUntil: 'networkidle2', timeout: 30000 })
+      
+      // Extract QR code image
+      const qrDataUrl = await page.$eval('img[alt*="QR"], img[src*="qr"], .qr-code img', el => el.src).catch(() => null)
+      
+      await browser.close()
+      
+      if (qrDataUrl) {
+        res.json({ success: true, qr_code: qrDataUrl })
+      } else {
+        res.status(500).json({ error: 'QR code tidak ditemukan di halaman Shopee Partner' })
+      }
+    } catch (e) {
+      console.error('[Shopee QR Scrape]', e)
+      res.status(500).json({ error: 'Gagal scrape QR Shopee: ' + e.message })
+    }
+  })
+
+  // GoPay Merchant QR Scraping
+  app.post('/api/cashless/provider/bank_transfer/gopay/qr', kadmin, async (req, res) => {
+    const cfg = db.prepare('SELECT config_json FROM cashless_provider_config WHERE tenant_id = ? AND provider = ?').get(req.tenantId, 'bank_transfer')
+    if (!cfg) return res.status(404).json({ error: 'Konfigurasi bank transfer tidak ditemukan' })
+    const config = JSON.parse(cfg.config_json || '{}')
+    const { gopay_client_id, gopay_client_secret, gopay_merchant_id } = config
+    if (!gopay_client_id || !gopay_client_secret || !gopay_merchant_id) {
+      return res.status(400).json({ error: 'Kredensial GoPay Merchant (client_id, client_secret, merchant_id) belum dikonfigurasi' })
+    }
+
+    try {
+      const puppeteer = (await import('puppeteer-core')).default
+      const browser = await puppeteer.launch({
+        headless: true,
+        args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
+        executablePath: '/usr/bin/chromium-browser'
+      })
+      
+      const page = await browser.newPage()
+      await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36')
+      
+      // Login to GoPay Merchant
+      await page.goto('https://merchant.gopay.co.id/', { waitUntil: 'networkidle2', timeout: 30000 })
+      
+      await page.waitForSelector('input[name="email"], input[type="email"]', { timeout: 10000 })
+      await page.type('input[name="email"], input[type="email"]', gopay_client_id)
+      await page.type('input[name="password"], input[type="password"]', gopay_client_secret)
+      await page.click('button[type="submit"], button:has-text("Login")')
+      await page.waitForNavigation({ waitUntil: 'networkidle2', timeout: 30000 })
+      
+      // Navigate to QR code page
+      await page.goto(`https://merchant.gopay.co.id/merchant/${gopay_merchant_id}/qr-code`, { waitUntil: 'networkidle2', timeout: 30000 })
+      
+      // Extract QR code image
+      const qrDataUrl = await page.$eval('img[alt*="QR"], img[src*="qr"], .qr-code img', el => el.src).catch(() => null)
+      
+      await browser.close()
+      
+      if (qrDataUrl) {
+        res.json({ success: true, qr_code: qrDataUrl })
+      } else {
+        res.status(500).json({ error: 'QR code tidak ditemukan di halaman GoPay Merchant' })
+      }
+    } catch (e) {
+      console.error('[GoPay QR Scrape]', e)
+      res.status(500).json({ error: 'Gagal scrape QR GoPay: ' + e.message })
+    }
+  })
+
+  // Auto-fetch mutation (last 3 digits verification like Fazapay)
+  app.post('/api/cashless/provider/bank_transfer/fetch-mutation', kadmin, async (req, res) => {
+    const cfg = db.prepare('SELECT config_json FROM cashless_provider_config WHERE tenant_id = ? AND provider = ?').get(req.tenantId, 'bank_transfer')
+    if (!cfg) return res.status(404).json({ error: 'Konfigurasi bank transfer tidak ditemukan' })
+    const config = JSON.parse(cfg.config_json || '{}')
+    const { bank_code, va_prefix } = config
+    
+    // This would integrate with bank APIs or scraping
+    // For now return structure for manual implementation per bank
+    res.json({ 
+      success: true, 
+      message: 'Integrasi mutasi bank memerlukan API per bank (BRI, BNI, Mandiri, BCA, dll) atau scraping internet banking',
+      config: { bank_code, va_prefix },
+      note: 'Implementasi penuh butuh akses API bank atau headless browser ke internet banking masing-masing bank'
+    })
   })
 
   // Manual Topup (Bank Transfer)
