@@ -1,8 +1,22 @@
 import * as XLSX from 'xlsx'
 
+export const todayWib = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Jakarta' }).format(new Date())
+export const nowWib = () => new Intl.DateTimeFormat('id-ID', { timeZone: 'Asia/Jakarta', hour: '2-digit', minute: '2-digit', hour12: false }).format(new Date())
+export const yearWib = () => Number(new Intl.DateTimeFormat('en-US', { timeZone: 'Asia/Jakarta', year: 'numeric' }).format(new Date()))
+
+export function addDaysWib(date: string, days: number) {
+  const [y, m, d] = date.split('-').map(Number)
+  const utc = new Date(Date.UTC(y, m - 1, d + days))
+  return utc.toISOString().slice(0, 10)
+}
+
 export function normalizeDate(value: any) {
   if (value === undefined || value === null || value === '') return ''
-  if (value instanceof Date && !isNaN(value.getTime())) return value.toISOString().slice(0, 10)
+  if (value instanceof Date && !isNaN(value.getTime())) {
+    const parts = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Jakarta', year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(value)
+    const p = Object.fromEntries(parts.map(x => [x.type, x.value]))
+    return `${p.year}-${p.month}-${p.day}`
+  }
   if (typeof value === 'number' && value > 1 && value < 60000) {
     const d = XLSX.SSF.parse_date_code(value)
     if (d) return `${d.y}-${String(d.m).padStart(2, '0')}-${String(d.d).padStart(2, '0')}`
@@ -31,5 +45,5 @@ export function formatTanggal(value: any) {
   const m = String(iso).match(/^(\d{4})-(\d{2})-(\d{2})$/)
   if (!m) return String(value)
   const d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]))
-  return d.toLocaleDateString('id-ID', { day: '2-digit', month: 'long', year: 'numeric' })
+  return d.toLocaleDateString('id-ID', { timeZone: 'Asia/Jakarta', day: '2-digit', month: 'long', year: 'numeric' })
 }

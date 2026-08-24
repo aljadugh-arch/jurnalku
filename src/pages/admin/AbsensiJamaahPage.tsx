@@ -2,6 +2,7 @@
 import { Download, FileSpreadsheet, GraduationCap, Save, RefreshCw, List, Edit3, CheckCircle, XCircle } from 'lucide-react'
 import toast from 'react-hot-toast'
 import api from '../../services/api'
+import { todayWib } from '../../lib/dateFormat'
 import * as XLSX from 'xlsx'
 
 interface Siswa { id: string; nama: string; nis: string; rombel_id: string; rombel_nama?: string }
@@ -71,7 +72,7 @@ export default function AbsensiJamaahPage() {
     ])
     ws['!cols'] = [{wch:5},{wch:28},{wch:16},{wch:14},{wch:24},{wch:10},{wch:10},{wch:16}]
     const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, 'Rekap Jamaah')
-    XLSX.writeFile(wb, `Rekap_Absensi_Jamaah_${new Date().toISOString().slice(0,10)}.xlsx`)
+    XLSX.writeFile(wb, `Rekap_Absensi_Jamaah_${todayWib()}.xlsx`)
     toast.success('Excel rekap jamaah diunduh')
   }
 

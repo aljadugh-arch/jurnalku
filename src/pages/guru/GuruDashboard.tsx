@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Calendar, ClipboardCheck, ClipboardList, BookOpen, QrCode, MapPin, Users, PenLine, ChevronRight, CheckCircle2, Clock } from 'lucide-react'
+import { Calendar, ClipboardCheck, ClipboardList, BookOpen, QrCode, MapPin, Users, PenLine, ChevronRight, CheckCircle2, Clock, DoorOpen } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import api from '../../services/api'
 import toast from 'react-hot-toast'
@@ -52,7 +52,7 @@ export default function GuruDashboard() {
     return s >= 0 && e >= 0 && cur >= s && cur <= e
   }
 
-  const tanggal = new Date().toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long' })
+  const tanggal = new Date().toLocaleDateString('id-ID', { timeZone: 'Asia/Jakarta', weekday: 'long', day: 'numeric', month: 'long' })
 
   return (
     <div className="space-y-4">
@@ -66,6 +66,14 @@ export default function GuruDashboard() {
           </h1>
         </div>
       </div>
+
+      <button
+        onClick={() => navigate('/guru/jurnal')}
+        className="w-full inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-5 py-3.5 text-base font-bold text-white shadow-sm shadow-emerald-600/25 transition hover:bg-emerald-700 active:scale-[0.98]"
+      >
+        <DoorOpen size={20} />
+        Masuk Kelas
+      </button>
 
       {/* CTA banner */}
       <div className="relative overflow-hidden rounded-2xl bg-primary p-5 text-white shadow-sm shadow-primary/30">

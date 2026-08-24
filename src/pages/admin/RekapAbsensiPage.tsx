@@ -4,14 +4,15 @@ import { Download, FileSpreadsheet, Users, GraduationCap } from 'lucide-react'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
 import toast from 'react-hot-toast'
 import api from '../../services/api'
+import { todayWib, yearWib, addDaysWib } from '../../lib/dateFormat'
 import * as XLSX from 'xlsx'
 
 export default function RekapAbsensiPage() {
   const [tab, setTab] = useState<'siswa' | 'gtk'>('siswa')
-  const [bulan, setBulan] = useState(() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}` })
+  const [bulan, setBulan] = useState(() => todayWib().slice(0, 7))
   const [mode, setMode] = useState<'harian' | 'mingguan' | 'bulanan' | 'semester'>('bulanan')
-  const [from, setFrom] = useState(() => new Date().toISOString().split('T')[0])
-  const [to, setTo] = useState(() => new Date().toISOString().split('T')[0])
+  const [from, setFrom] = useState(() => todayWib())
+  const [to, setTo] = useState(() => todayWib())
   const [rekapSiswa, setRekapSiswa] = useState<any[]>([])
   const [rekapGtk, setRekapGtk] = useState<any[]>([])
   const [summary, setSummary] = useState<any>({ hadir: 0, sakit: 0, izin: 0, alpha: 0 })
@@ -21,7 +22,8 @@ export default function RekapAbsensiPage() {
   const loadRekap = async () => {
     try {
       const apiMode = mode === 'harian' ? 'daily' : mode === 'mingguan' ? 'weekly' : mode === 'bulanan' ? 'monthly' : 'semester'
-      const res = await api.get('/rekap-absensi', { params: { tipe: tab, mode: apiMode, mulai: from, tanggal_mulai: from, selesai: to, tanggal_selesai: to, bulan, tahun_ajaran: new Date().getFullYear() + '/' + (new Date().getFullYear()+1), semester: 'ganjil' } })
+      const year = yearWib()
+      const res = await api.get('/rekap-absensi', { params: { tipe: tab, mode: apiMode, mulai: from, tanggal_mulai: from, selesai: to, tanggal_selesai: to, bulan, tahun_ajaran: year + '/' + (year + 1), semester: 'ganjil' } })
       if (tab === 'siswa') setRekapSiswa(res.data.detail)
       else setRekapGtk(res.data.detail)
       setSummary(res.data.summary)
@@ -68,9 +70,8 @@ export default function RekapAbsensiPage() {
       const out: string[] = []
       const a = mode === 'bulanan' || mode === 'semester' ? (data[0]?.from || '') : from
       const b = mode === 'bulanan' ? `${bulan}-${String(new Date(Number(bulan.slice(0,4)), Number(bulan.slice(5,7)), 0).getDate()).padStart(2,'0')}` : mode === 'semester' ? (data[0]?.to || to) : to
-      const start = new Date((mode === 'bulanan' ? `${bulan}-01` : a) + 'T00:00:00')
-      const end = new Date(b + 'T00:00:00')
-      for (let d = new Date(start); d <= end; d.setDate(d.getDate()+1)) out.push(d.toISOString().slice(0,10))
+      let cursor = mode === 'bulanan' ? `${bulan}-01` : a
+      while (cursor <= b) { out.push(cursor); cursor = addDaysWib(cursor, 1) }
       return out
     })()
     const periodeText = mode === 'bulanan' ? `${fmt(`${bulan}-01`)} s/d ${fmt(dates[dates.length-1] || `${bulan}-01`)}` : `${fmt(from)} s/d ${fmt(to)}`

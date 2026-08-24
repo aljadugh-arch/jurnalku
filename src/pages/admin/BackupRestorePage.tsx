@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { Download, Upload, Cloud, CheckCircle2, XCircle, Loader2, RefreshCw } from 'lucide-react'
 import toast from 'react-hot-toast'
 import api from '../../services/api'
+import { todayWib } from '../../lib/dateFormat'
 
 interface Section {
   key: string
@@ -83,7 +84,7 @@ export default function BackupRestorePage() {
       const url = URL.createObjectURL(res.data)
       const a = document.createElement('a')
       a.href = url
-      a.download = `jurnalku-backup-${new Date().toISOString().slice(0, 10)}.json`
+      a.download = `jurnalku-backup-${todayWib()}.json`
       a.click()
       URL.revokeObjectURL(url)
       toast.success('Backup berhasil diunduh')

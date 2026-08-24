@@ -2,11 +2,12 @@ import { useState, useEffect } from 'react'
 import { CheckCircle, XCircle, Clock, Save } from 'lucide-react'
 import toast from 'react-hot-toast'
 import api from '../../services/api'
+import { todayWib } from '../../lib/dateFormat'
 
 export default function AbsensiEkskulPage() {
   const [ekskulList, setEkskulList] = useState<any[]>([])
   const [selectedEkskul, setSelectedEkskul] = useState('')
-  const [tanggal, setTanggal] = useState(new Date().toISOString().split('T')[0])
+  const [tanggal, setTanggal] = useState(todayWib())
   const [siswaList, setSiswaList] = useState<any[]>([])
   const [absensi, setAbsensi] = useState<Record<string, string>>({})
   const [existing, setExisting] = useState<any[]>([])

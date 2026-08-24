@@ -421,7 +421,7 @@ export default function JadwalPage() {
       const kepala = (settings.kepala_sekolah as string) || (settings.nama_kepala as string) || ''
       const waka = (settings.waka_kurikulum as string) || ''
       const kota = (settings.kota as string) || (settings.kabupaten as string) || ''
-      const tgl = new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })
+      const tgl = new Date().toLocaleDateString('id-ID', { timeZone: 'Asia/Jakarta', day: 'numeric', month: 'long', year: 'numeric' })
       const colKanan = COL_WAKTU + nRombel * 2 - 3
       setRow(r, { [colKanan]: `${kota ? kota + ', ' : ''}${tgl}` }); r++
       setRow(r, { 0: 'Mengetahui;', [colKanan]: 'Waka Kurikulum' }); r++

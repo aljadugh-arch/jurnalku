@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { MapPin, Clock, CheckCircle, XCircle, Search, UserCheck } from 'lucide-react'
 import toast from 'react-hot-toast'
 import api from '../../services/api'
+import { todayWib } from '../../lib/dateFormat'
 
 interface CeklokRecord {
   id: string
@@ -30,7 +31,7 @@ interface PersonalCeklok {
 }
 
 export default function CekLokAdminPage() {
-  const today = new Date().toISOString().split('T')[0]
+  const today = todayWib()
   const [records, setRecords] = useState<CeklokRecord[]>([])
   const [summary, setSummary] = useState<Summary>({ hadir: 0, terlambat: 0, tidak_hadir: 0, total_guru: 0 })
   const [loading, setLoading] = useState(true)

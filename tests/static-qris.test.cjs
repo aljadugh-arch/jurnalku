@@ -1,0 +1,34 @@
+const test = require('node:test')
+const assert = require('node:assert/strict')
+const { normalizeStaticQrisConfig, validateStaticQrisSubmission } = require('../server/portal-cashless.cjs')
+
+const png = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAAB'
+
+test('static QRIS config keeps only ShopeePay and GoPay merchant images', () => {
+  const value = normalizeStaticQrisConfig({ enabled: true, shopee_qris: png, gopay_qris: png })
+  assert.equal(value.enabled, true)
+  assert.equal(value.shopee_qris, png)
+  assert.equal(value.gopay_qris, png)
+  assert.deepEqual(value.providers, ['shopee', 'gopay'])
+})
+
+test('static QRIS config rejects non-image and oversized payloads', () => {
+  assert.throws(() => normalizeStaticQrisConfig({ enabled: true, shopee_qris: 'https://example.test/x.png' }), /gambar QRIS/i)
+  assert.throws(() => normalizeStaticQrisConfig({ enabled: true, shopee_qris: 'data:image/png;base64,' + 'A'.repeat(1_600_000) }), /maksimal/i)
+})
+
+test('transfer declaration requires a 3 digit unique code matching the transferred amount', () => {
+  const value = validateStaticQrisSubmission({ provider: 'shopee', amount: 50000, unique_code: '123', transfer_amount: 50123, atas_nama: 'Budi', no_rek_dari: '08123456789', bukti_transfer: png })
+  assert.equal(value.provider, 'shopee')
+  assert.equal(value.amount, 50000)
+  assert.equal(value.unique_code, '123')
+  assert.equal(value.transfer_amount, 50123)
+  assert.equal(value.atas_nama, 'Budi')
+  assert.match(value.bank_dari, /ShopeePay/)
+  assert.throws(() => validateStaticQrisSubmission({ provider: 'shopee', amount: 50000, unique_code: '12', transfer_amount: 50012, atas_nama: 'Budi', no_rek_dari: '1', bukti_transfer: png }), /3 digit/i)
+  assert.throws(() => validateStaticQrisSubmission({ provider: 'shopee', amount: 50000, unique_code: '123', transfer_amount: 50124, atas_nama: 'Budi', no_rek_dari: '1', bukti_transfer: png }), /tidak sesuai/i)
+  assert.throws(() => validateStaticQrisSubmission({ provider: 'lain', amount: 50000, unique_code: '123', transfer_amount: 50123, atas_nama: 'Budi', no_rek_dari: '1', bukti_transfer: png }), /metode/i)
+  assert.throws(() => validateStaticQrisSubmission({ provider: 'gopay', amount: 0, unique_code: '123', transfer_amount: 123, atas_nama: 'Budi', no_rek_dari: '1', bukti_transfer: png }), /nominal/i)
+  assert.throws(() => validateStaticQrisSubmission({ provider: 'gopay', amount: 50000, unique_code: '123', transfer_amount: 50123, atas_nama: '', no_rek_dari: '1', bukti_transfer: png }), /pengirim/i)
+  assert.throws(() => validateStaticQrisSubmission({ provider: 'gopay', amount: 50000, unique_code: '123', transfer_amount: 50123, atas_nama: 'Budi', no_rek_dari: '1' }), /bukti/i)
+})

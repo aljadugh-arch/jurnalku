@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import api from '../../services/api'
+import { todayWib } from '../../lib/dateFormat'
 import { BookOpen, Save, Users } from 'lucide-react'
 
 export default function GuruPenilaianHarianPage() {
@@ -8,7 +9,7 @@ export default function GuruPenilaianHarianPage() {
   const [siswaList, setSiswaList] = useState<any[]>([])
   const [selectedMapel, setSelectedMapel] = useState('')
   const [selectedRombel, setSelectedRombel] = useState('')
-  const [tanggal, setTanggal] = useState(new Date().toISOString().split('T')[0])
+  const [tanggal, setTanggal] = useState(todayWib())
   const [penilaianData, setPenilaianData] = useState<any[]>([])
   const [loading, setLoading] = useState(false)
   const [success, setSuccess] = useState(false)

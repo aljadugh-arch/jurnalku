@@ -2,13 +2,14 @@ import { useState, useEffect } from 'react'
 import { Plus, X, Clock, Check, FileText, Send } from 'lucide-react'
 import toast from 'react-hot-toast'
 import api from '../../services/api'
+import { todayWib } from '../../lib/dateFormat'
 
 export default function GuruJurnalPage() {
   const [data, setData] = useState<any[]>([])
   const [showForm, setShowForm] = useState(false)
   const [mapels, setMapels] = useState<any[]>([])
   const [rombels, setRombels] = useState<any[]>([])
-  const [form, setForm] = useState({ mapel_id: '', rombel_id: '', tanggal: new Date().toISOString().split('T')[0], jam_ke: 1, materi: '', kegiatan: '', catatan: '' })
+  const [form, setForm] = useState({ mapel_id: '', rombel_id: '', tanggal: todayWib(), jam_ke: 1, materi: '', kegiatan: '', catatan: '' })
 
   const [jadwalHariIni, setJadwalHariIni] = useState<any[]>([])
 
@@ -41,7 +42,7 @@ export default function GuruJurnalPage() {
       await api.post('/jurnal', { ...form, status })
       toast.success(status === 'submitted' ? 'Jurnal dikirim' : 'Draft disimpan')
       setShowForm(false)
-      setForm({ mapel_id: '', rombel_id: '', tanggal: new Date().toISOString().split('T')[0], jam_ke: 1, materi: '', kegiatan: '', catatan: '' })
+      setForm({ mapel_id: '', rombel_id: '', tanggal: todayWib(), jam_ke: 1, materi: '', kegiatan: '', catatan: '' })
       loadData()
     } catch { toast.error('Gagal menyimpan') }
   }

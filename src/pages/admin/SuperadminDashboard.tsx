@@ -34,7 +34,7 @@ export default function SuperadminDashboard() {
     api.get('/tenants').then(res => { setTenants(res.data); setLoading(false) }).catch(() => setLoading(false))
   }, [])
 
-  const today = new Date().toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
+  const today = new Date().toLocaleDateString('id-ID', { timeZone: 'Asia/Jakarta', weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
 
   if (loading) return <div className="flex items-center justify-center h-64"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" /></div>
 

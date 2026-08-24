@@ -57,7 +57,7 @@ export default function SiswaDashboard() {
     return s >= 0 && e >= 0 && cur >= s && cur <= e
   }
 
-  const tanggal = new Date().toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long' })
+  const tanggal = new Date().toLocaleDateString('id-ID', { timeZone: 'Asia/Jakarta', weekday: 'long', day: 'numeric', month: 'long' })
 
   return (
     <div className="space-y-4">

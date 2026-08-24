@@ -38,8 +38,8 @@ export default function LandingPage() {
             </div>
           </div>
           <div className="flex items-center gap-3">
-            <Link to="/login" className="px-4 py-2 text-sm font-medium text-gray-700 hover:text-gray-900 transition-colors">Masuk</Link>
-            <Link to="/register" className="px-5 py-2.5 bg-primary text-white rounded-lg text-sm font-semibold hover:bg-primary-dark shadow-lg shadow-primary/30 transition-all">Daftar Gratis</Link>
+            <Link to="/login" className="px-5 py-2.5 bg-primary text-white rounded-xl text-sm font-semibold hover:bg-primary-dark shadow-lg shadow-primary/30 transition-all">Masuk</Link>
+            <Link to="/register" className="px-4 py-2 text-sm font-medium text-gray-700 hover:text-primary transition-colors">Mulai Coba Gratis</Link>
           </div>
         </div>
       </nav>
@@ -51,7 +51,7 @@ export default function LandingPage() {
             <Zap size={16} /> Dipercaya 100+ Lembaga Pendidikan
           </div>
           <h1 className="text-4xl sm:text-5xl font-extrabold text-gray-900 font-display leading-tight mb-4">
-            Kelola Sekolah Jadi<br />
+            Kelola Lembaga Jadi<br />
             <span className="bg-gradient-to-r from-primary to-indigo-600 bg-clip-text text-transparent">10x Lebih Cepat!</span>
           </h1>
           <p className="text-lg text-gray-600 max-w-3xl mx-auto mb-3 leading-relaxed">
@@ -90,7 +90,7 @@ export default function LandingPage() {
       <section className="bg-white py-10 border-y border-gray-100">
         <div className="max-w-6xl mx-auto px-4">
           <div className="text-center mb-8">
-            <h2 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-2 font-display">Mengapa 100+ Sekolah Memilih JURNALKU?</h2>
+            <h2 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-2 font-display">Mengapa 100+ Lembaga Memilih JURNALKU?</h2>
             <p className="text-base text-gray-600">Karena kami paham betapa sibuknya Anda</p>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
@@ -126,7 +126,7 @@ export default function LandingPage() {
       {/* Social Proof */}
       <section className="bg-gray-50 py-10 border-y border-gray-200">
         <div className="max-w-4xl mx-auto px-4 text-center">
-          <h2 className="text-xl sm:text-2xl font-bold text-gray-900 mb-6 font-display">Bergabung dengan Sekolah-Sekolah Terbaik</h2>
+          <h2 className="text-xl sm:text-2xl font-bold text-gray-900 mb-6 font-display">Bergabung dengan Lembaga-Lembaga Terbaik</h2>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-6 items-center opacity-60">
             <div className="text-3xl font-bold text-gray-400">SD</div>
             <div className="text-3xl font-bold text-gray-400">SMP</div>
@@ -140,15 +140,15 @@ export default function LandingPage() {
       {/* CTA */}
       <section className="max-w-6xl mx-auto px-4 py-12">
         <div className="bg-gradient-to-r from-primary via-indigo-600 to-purple-600 rounded-3xl p-8 sm:p-12 text-center text-white shadow-2xl">
-          <h2 className="text-2xl sm:text-3xl font-extrabold mb-3 font-display">Digitalisasi Sekolah Anda Hari Ini!</h2>
+          <h2 className="text-2xl sm:text-3xl font-extrabold mb-3 font-display">Digitalisasi Lembaga Anda Hari Ini!</h2>
           <p className="text-lg text-white/90 mb-2 max-w-2xl mx-auto">
             Jangan biarkan administrasi manual menghabiskan waktu berharga Anda.
           </p>
           <p className="text-base text-white/80 mb-6 max-w-xl mx-auto">
-            Daftar gratis sekarang. Setup 15 menit. Langsung pakai.
+            Mulai coba gratis sekarang. Setup 15 menit. Langsung pakai.
           </p>
           <Link to="/register" className="inline-flex items-center gap-2 px-8 py-3.5 bg-white text-primary rounded-xl font-bold text-lg hover:bg-gray-100 shadow-2xl transition-all hover:scale-105">
-            Daftar Gratis — Tanpa Kartu Kredit <ArrowRight size={20} />
+            Mulai Coba Gratis <ArrowRight size={20} />
           </Link>
           <p className="text-sm text-white/70 mt-4">
             <Clock size={14} className="inline mr-1" />

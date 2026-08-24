@@ -54,6 +54,14 @@ test('generation mode accepts only explicit AI or template selection', () => {
   assert.match(validateGenerateInput({ type: 'ATP', subject: 'IPA', grade: 'VIII', topic: 'Sel', mode: 'other' }).error, /mode/i)
 })
 
+test('modul ajar preserves the legacy teacher choices in AI prompt and template', () => {
+  const input = { type: 'MODUL_AJAR', subject: 'IPA', grade: 'Kelas 8 SMP/MTs (Fase D)', topic: 'Sistem pernapasan', mode: 'ai', dimensi: ['Penalaran kritis', 'Kolaborasi'], modelPembelajaran: 'Problem Based Learning (PBL)', targetPesertaDidik: 'Heterogen (Diferensiasi Penuh)', capaianPembelajaran: 'CP IPA Fase D', tujuanPembelajaran: 'Peserta didik mampu menganalisis', kompetensiAwal: 'Memahami organ tubuh', pertanyaanPemantik: 'Mengapa kita bernapas?', saranaPrasarana: 'Buku dan LCD' }
+  const prompt = buildPrompt(input)
+  for (const value of ['Kelas 8 SMP/MTs (Fase D)', 'Penalaran kritis', 'Kolaborasi', 'Problem Based Learning (PBL)', 'Heterogen (Diferensiasi Penuh)', 'CP IPA Fase D', 'Peserta didik mampu menganalisis']) assert.ok(prompt.includes(value), `prompt missing ${value}`)
+  const template = createTemplateContent({ ...input, mode: 'template' })
+  for (const value of ['Penalaran kritis', 'Problem Based Learning (PBL)', 'Heterogen (Diferensiasi Penuh)', 'Peserta didik mampu menganalisis']) assert.ok(template.includes(value), `template missing ${value}`)
+})
+
 test('AI response parser supports OpenAI JSON, Gemini JSON, and OpenAI SSE', () => {
   assert.equal(parseAiResponse(JSON.stringify({ choices: [{ message: { content: 'JSON' } }] })), 'JSON')
   assert.equal(parseAiResponse(JSON.stringify({ candidates: [{ content: { parts: [{ text: 'GEMINI' }] } }] })), 'GEMINI')

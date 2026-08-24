@@ -8,6 +8,9 @@ interface TopupManual {
   tenant_id: string
   student_id: string
   amount: number
+  transfer_amount: number
+  unique_code: string
+  provider: string
   bukti_transfer: string | null
   bank_dari: string
   no_rek_dari: string
@@ -123,7 +126,8 @@ export default function CashlessTopupPage() {
                 <tr>
                   <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">ID</th>
                   <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Siswa</th>
-                  <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase">Nominal</th>
+                  <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase">Nominal / Transfer</th>
+                  <th className="px-4 py-3 text-center text-xs font-semibold text-gray-500 uppercase">Kode</th>
                   <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Bank / Rekening</th>
                   <th className="px-4 py-3 text-center text-xs font-semibold text-gray-500 uppercase">Bukti</th>
                   <th className="px-4 py-3 text-center text-xs font-semibold text-gray-500 uppercase">Status</th>
@@ -139,7 +143,8 @@ export default function CashlessTopupPage() {
                       <p className="font-medium text-gray-800">{topup.siswa_nama}</p>
                       <p className="text-xs text-gray-500 font-mono">{topup.nis}</p>
                     </td>
-                    <td className="px-4 py-3 text-right font-mono font-semibold text-gray-800">Rp {topup.amount.toLocaleString('id-ID')}</td>
+                    <td className="px-4 py-3 text-right font-mono font-semibold text-gray-800"><p>Rp {topup.amount.toLocaleString('id-ID')}</p><p className="text-xs text-blue-600">Transfer Rp {(topup.transfer_amount || topup.amount).toLocaleString('id-ID')}</p></td>
+                    <td className="px-4 py-3 text-center font-mono font-bold text-blue-700">{topup.unique_code || '-'}</td>
                     <td className="px-4 py-3">
                       <p className="text-sm text-gray-700">{topup.bank_dari || '-'}</p>
                       <p className="text-xs text-gray-500 font-mono">{topup.no_rek_dari || '-'}</p>
@@ -218,6 +223,12 @@ export default function CashlessTopupPage() {
                 <div>
                   <p className="text-xs text-gray-500">Nominal</p>
                   <p className="font-bold text-lg text-green-600">Rp {selectedTopup.amount.toLocaleString('id-ID')}</p>
+                  <p className="text-sm text-blue-600">Transfer: Rp {(selectedTopup.transfer_amount || selectedTopup.amount).toLocaleString('id-ID')}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-500">QRIS / Kode Unik</p>
+                  <p className="font-medium">{selectedTopup.provider === 'shopee' ? 'ShopeePay' : selectedTopup.provider === 'gopay' ? 'GoPay' : selectedTopup.bank_dari || '-'}</p>
+                  <p className="font-mono font-bold text-blue-700">{selectedTopup.unique_code || '-'}</p>
                 </div>
                 <div>
                   <p className="text-xs text-gray-500">Status</p>

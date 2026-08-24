@@ -1,14 +1,15 @@
 import { useState, useEffect } from 'react'
 import { ClipboardCheck, CheckCircle, Clock, FileEdit, Calendar } from 'lucide-react'
 import api from '../../services/api'
+import { todayWib } from '../../lib/dateFormat'
 
 export default function SupervisiPage() {
   const [data, setData] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
-  const today = new Date()
-  const firstDay = new Date(today.getFullYear(), today.getMonth(), 1).toISOString().split('T')[0]
+  const today = todayWib()
+  const firstDay = `${today.slice(0, 7)}-01`
   const [from, setFrom] = useState(firstDay)
-  const [to, setTo] = useState(today.toISOString().split('T')[0])
+  const [to, setTo] = useState(today)
 
   const load = () => {
     setLoading(true)

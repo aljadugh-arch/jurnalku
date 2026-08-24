@@ -19,12 +19,18 @@ const documentTypes: { value: DocumentType; label: string; hint: string }[] = [
   { value: 'KISI_KISI', label: 'Kisi-kisi', hint: 'Kisi-kisi soal dan level kognitif' },
 ]
 
+const phaseOptions = ['Fase Fondasi (PAUD/TK)', 'Kelas 1 SD/MI (Fase A)', 'Kelas 2 SD/MI (Fase A)', 'Kelas 3 SD/MI (Fase B)', 'Kelas 4 SD/MI (Fase B)', 'Kelas 5 SD/MI (Fase C)', 'Kelas 6 SD/MI (Fase C)', 'Kelas 7 SMP/MTs (Fase D)', 'Kelas 8 SMP/MTs (Fase D)', 'Kelas 9 SMP/MTs (Fase D)', 'Kelas 10 SMA/MA/SMK (Fase E)', 'Kelas 11 SMA/MA/SMK (Fase F)', 'Kelas 12 SMA/MA/SMK (Fase F)']
+const graduateDimensions = ['Keimanan/ketakwaan terhadap Tuhan YME', 'Kewarganegaraan', 'Penalaran kritis', 'Kreativitas', 'Kolaborasi', 'Kemandirian', 'Kesehatan', 'Komunikasi']
+const learningModels = ['Problem Based Learning (PBL)', 'Project Based Learning (PjBL)', 'Discovery Learning', 'Inquiry Learning', 'Kooperatif (Cooperative Learning)', 'Tatap Muka / Luring', 'Blended Learning']
+const learnerTargets = ['Peserta didik reguler/tipikal (umum)', 'Peserta didik dengan kesulitan belajar', 'Peserta didik dengan pencapaian tinggi', 'Heterogen (Diferensiasi Penuh)']
+
 const initialForm = {
   type: 'STS' as DocumentType,
   mode: 'ai' as GenerationMode,
   subject: '', grade: '', topic: '', curriculum: 'Kurikulum Merdeka', semester: 'Ganjil', academicYear: '2026/2027',
   schoolName: '', teacherName: '', printDate: new Date().toISOString().slice(0, 10), timeAllocation: '2 JP', activityType: 'Diskusi dan pemecahan masalah',
   multipleChoiceCount: 20, essayCount: 5,
+  capaianPembelajaran: '', tujuanPembelajaran: '', dimensi: [] as string[], modelPembelajaran: 'Problem Based Learning (PBL)', targetPesertaDidik: 'Peserta didik reguler/tipikal (umum)', saranaPrasarana: 'Buku Paket, Laptop, LCD Proyektor, Internet, Media Konkret', kompetensiAwal: '', pertanyaanPemantik: '',
 }
 
 export default function GuruModulAjarPage() {
@@ -36,6 +42,7 @@ export default function GuruModulAjarPage() {
   const [history, setHistory] = useState<HistoryItem[]>([])
   const selected = useMemo(() => documentTypes.find(item => item.value === form.type)!, [form.type])
   const assessment = ['STS', 'SAS', 'KISI_KISI'].includes(form.type)
+  const modulAjar = form.type === 'MODUL_AJAR'
 
   const loadHistory = () => { api.get('/ai-documents').then(({ data }) => setHistory(data)).catch(() => {}) }
   useEffect(() => { loadHistory() }, [])
@@ -106,7 +113,7 @@ export default function GuruModulAjarPage() {
           <h2 className="mb-5 flex items-center gap-2 font-semibold text-gray-800 dark:text-slate-100"><BookOpen size={18} className="text-primary" /> Informasi {selected.label}</h2>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <label><span className={labelClass}>Mata Pelajaran</span><input className={inputClass} value={form.subject} onChange={e => setForm({ ...form, subject: e.target.value })} placeholder="Contoh: Matematika" /></label>
-            <label><span className={labelClass}>Kelas / Fase</span><input className={inputClass} value={form.grade} onChange={e => setForm({ ...form, grade: e.target.value })} placeholder="Contoh: Kelas VIII / Fase D" /></label>
+            <label><span className={labelClass}>{modulAjar ? 'Pilih Fase / Kelas' : 'Kelas / Fase'}</span>{modulAjar ? <select className={inputClass} value={form.grade} onChange={e => setForm({ ...form, grade: e.target.value })}><option value="">Pilih Jenjang</option>{phaseOptions.map(option => <option key={option}>{option}</option>)}</select> : <input className={inputClass} value={form.grade} onChange={e => setForm({ ...form, grade: e.target.value })} placeholder="Contoh: Kelas VIII / Fase D" />}</label>
             <label className="sm:col-span-2"><span className={labelClass}>Materi / Topik</span><textarea className={inputClass} rows={3} value={form.topic} onChange={e => setForm({ ...form, topic: e.target.value })} placeholder="Tuliskan ruang lingkup materi dengan jelas" /></label>
             <label><span className={labelClass}>Kurikulum</span><select className={inputClass} value={form.curriculum} onChange={e => setForm({ ...form, curriculum: e.target.value })}><option>Kurikulum Merdeka</option><option>Kurikulum 2013</option><option>Kurikulum Berbasis Cinta</option></select></label>
             <label><span className={labelClass}>Semester</span><select className={inputClass} value={form.semester} onChange={e => setForm({ ...form, semester: e.target.value })}><option>Ganjil</option><option>Genap</option></select></label>
@@ -115,6 +122,23 @@ export default function GuruModulAjarPage() {
             <label><span className={labelClass}>Nama Pengajar</span><input className={inputClass} value={form.teacherName} onChange={e => setForm({ ...form, teacherName: e.target.value })} /></label>
             <label><span className={labelClass}>Tanggal Cetak</span><input type="date" className={inputClass} value={form.printDate} onChange={e => setForm({ ...form, printDate: e.target.value })} /></label>
           </div>
+
+          {modulAjar && <div className="mt-6 space-y-5 border-t border-gray-100 pt-5 dark:border-slate-800">
+            <h3 className="font-semibold text-gray-800 dark:text-slate-100">I. Informasi Pembelajaran</h3>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <label><span className={labelClass}>Model Pembelajaran</span><select className={inputClass} value={form.modelPembelajaran} onChange={e => setForm({ ...form, modelPembelajaran: e.target.value })}>{learningModels.map(option => <option key={option}>{option}</option>)}</select></label>
+              <label><span className={labelClass}>Target Peserta Didik</span><select className={inputClass} value={form.targetPesertaDidik} onChange={e => setForm({ ...form, targetPesertaDidik: e.target.value })}>{learnerTargets.map(option => <option key={option}>{option}</option>)}</select></label>
+              <label className="sm:col-span-2"><span className={labelClass}>Capaian Pembelajaran (CP)</span><textarea className={inputClass} rows={3} value={form.capaianPembelajaran} onChange={e => setForm({ ...form, capaianPembelajaran: e.target.value })} placeholder="Masukkan CP resmi atau biarkan AI merumuskan berdasarkan materi" /></label>
+            </div>
+            <div><span className={labelClass}>Dimensi Profil Lulusan</span><div className="grid grid-cols-2 gap-2 sm:grid-cols-4">{graduateDimensions.map(dimension => <button key={dimension} type="button" onClick={() => setForm(prev => ({ ...prev, dimensi: prev.dimensi.includes(dimension) ? prev.dimensi.filter(item => item !== dimension) : [...prev.dimensi, dimension] }))} className={`rounded-xl border p-3 text-left text-xs transition ${form.dimensi.includes(dimension) ? 'border-primary bg-primary/10 font-semibold text-primary' : 'border-gray-200 text-gray-600 dark:border-slate-700 dark:text-slate-300'}`}>{dimension}</button>)}</div></div>
+            <h3 className="font-semibold text-gray-800 dark:text-slate-100">II. Kompetensi Inti</h3>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <label className="sm:col-span-2"><span className={labelClass}>Tujuan Pembelajaran (TP)</span><textarea className={inputClass} rows={3} value={form.tujuanPembelajaran} onChange={e => setForm({ ...form, tujuanPembelajaran: e.target.value })} placeholder="Isi TP atau biarkan AI merumuskan" /></label>
+              <label><span className={labelClass}>Kompetensi Awal</span><textarea className={inputClass} rows={2} value={form.kompetensiAwal} onChange={e => setForm({ ...form, kompetensiAwal: e.target.value })} /></label>
+              <label><span className={labelClass}>Pertanyaan Pemantik</span><textarea className={inputClass} rows={2} value={form.pertanyaanPemantik} onChange={e => setForm({ ...form, pertanyaanPemantik: e.target.value })} /></label>
+              <label className="sm:col-span-2"><span className={labelClass}>Sarana dan Prasarana</span><textarea className={inputClass} rows={2} value={form.saranaPrasarana} onChange={e => setForm({ ...form, saranaPrasarana: e.target.value })} /></label>
+            </div>
+          </div>}
 
           {assessment && <div className="mt-5 grid grid-cols-2 gap-4 rounded-xl bg-gray-50 p-4 dark:bg-slate-800/70">
             <label><span className={labelClass}>Pilihan Ganda</span><input type="number" min="0" max="100" className={inputClass} value={form.multipleChoiceCount} onChange={e => setForm({ ...form, multipleChoiceCount: Number(e.target.value) })} /></label>

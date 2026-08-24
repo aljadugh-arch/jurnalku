@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { ChevronLeft, ChevronRight, Plus, X, Calendar } from 'lucide-react'
 import toast from 'react-hot-toast'
 import api from '../../services/api'
+import { todayWib } from '../../lib/dateFormat'
 
 interface KBMEvent {
   id: string
@@ -85,7 +86,7 @@ export default function KalenderKBMPage() {
     } catch { toast.error('Gagal menghapus') }
   }
 
-  const today = new Date().toISOString().split('T')[0]
+  const today = todayWib()
   const days = getDaysInMonth()
   const monthNames = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember']
 

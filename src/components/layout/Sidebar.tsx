@@ -111,6 +111,7 @@ const siswaMenuItems: MenuItem[] = [
   { label: 'Dashboard', icon: <LayoutDashboard size={20} />, path: '/siswa' },
   { label: 'Rekap Kehadiran', icon: <UserCheck size={20} />, path: '/siswa#kehadiran' },
   { label: 'Tagihan & Pembayaran', icon: <DollarSign size={20} />, path: '/siswa#tagihan' },
+  { label: 'Top-up QRIS', icon: <QrCode size={20} />, path: '/siswa/qris-topup' },
   { label: 'Tabungan', icon: <PiggyBank size={20} />, path: '/siswa#tabungan' },
   { label: 'Nilai', icon: <BookOpen size={20} />, path: '/siswa#nilai' },
   { label: 'Jadwal Hari Ini', icon: <Calendar size={20} />, path: '/siswa#jadwal' },

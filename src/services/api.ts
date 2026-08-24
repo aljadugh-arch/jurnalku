@@ -21,6 +21,7 @@ api.interceptors.response.use(
   (err) => {
     const url = err.config?.url || ''
     if (err.response?.status === 401 && !url.includes('/auth/login')) {
+      sessionStorage.removeItem('jurnalku_token')
       localStorage.removeItem('jurnalku_token')
       window.location.href = '/login'
     }

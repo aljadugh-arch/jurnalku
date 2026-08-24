@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { CheckCircle, XCircle, Clock, Save, Plus, Trash2, BarChart3 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import api from '../../services/api'
+import { todayWib, addDaysWib } from '../../lib/dateFormat'
 
 export default function AbsensiKegiatanPage() {
   const [kegiatanList, setKegiatanList] = useState<any[]>([])
@@ -11,10 +12,10 @@ export default function AbsensiKegiatanPage() {
   const [saving, setSaving] = useState(false)
   const [showAdd, setShowAdd] = useState(false)
   const [newNama, setNewNama] = useState('')
-  const [newTanggal, setNewTanggal] = useState(new Date().toISOString().split('T')[0])
-  const [sesiTanggal, setSesiTanggal] = useState(new Date().toISOString().split('T')[0])
+  const [newTanggal, setNewTanggal] = useState(todayWib())
+  const [sesiTanggal, setSesiTanggal] = useState(todayWib())
   const [showRekap, setShowRekap] = useState(false)
-  const [rekapRange, setRekapRange] = useState({ mulai: '', selesai: new Date().toISOString().split('T')[0] })
+  const [rekapRange, setRekapRange] = useState({ mulai: '', selesai: todayWib() })
   const [rekapData, setRekapData] = useState<any>(null)
   const [rekapLoading, setRekapLoading] = useState(false)
 
@@ -74,9 +75,7 @@ export default function AbsensiKegiatanPage() {
   }
 
   const openRekap = () => {
-    const d = new Date(sesiTanggal || new Date())
-    const mulai = new Date(d); mulai.setDate(d.getDate() - 6)
-    setRekapRange({ mulai: mulai.toISOString().split('T')[0], selesai: sesiTanggal })
+    setRekapRange({ mulai: addDaysWib(sesiTanggal || todayWib(), -6), selesai: sesiTanggal })
     setShowRekap(true)
   }
 

@@ -68,7 +68,13 @@ function queueDueTeachers(db,{tenantId,date,time}) {
   const conf=db.prepare('SELECT * FROM notif_settings WHERE tenant_id=?').get(tenantId)
   if(!conf?.guru_belum_ceklok||time<conf.batas_ceklok_guru)return out
   const school=db.prepare('SELECT nama_lembaga FROM settings WHERE tenant_id=?').get(tenantId)
-  for(const g of db.prepare("SELECT * FROM gtk WHERE tenant_id=? AND status='aktif' AND NOT EXISTS(SELECT 1 FROM absensi_guru a WHERE a.tenant_id=? AND a.gtk_id=gtk.id AND a.tanggal=?)").all(tenantId,tenantId,date)){
+  const day=['Minggu','Senin','Selasa','Rabu','Kamis','Jumat','Sabtu'][new Date(`${date}T12:00:00Z`).getUTCDay()]
+  // Hanya ingatkan GTK yang memang memiliki jadwal mengajar pada hari tersebut.
+  // Sebelumnya semua GTK aktif ikut diproses, termasuk staf tanpa jadwal.
+  for(const g of db.prepare(`SELECT g.* FROM gtk g
+    WHERE g.tenant_id=? AND g.status='aktif'
+      AND EXISTS (SELECT 1 FROM jadwal j WHERE j.tenant_id=g.tenant_id AND j.gtk_id=g.id AND lower(j.hari)=lower(?) AND COALESCE(j.jenis_kegiatan,'mapel')='mapel')
+      AND NOT EXISTS(SELECT 1 FROM absensi_guru a WHERE a.tenant_id=? AND a.gtk_id=g.id AND a.tanggal=?)`).all(tenantId,day,tenantId,date)){
     if(!normalizePhone(g.no_hp)){out.missing++;continue}
     const message=render(conf.template_guru_ceklok,{nama:g.nama,tanggal:date,lembaga:school?.nama_lembaga||'Sekolah'})
     const r=enqueue(db,{tenantId,phone:g.no_hp,message,key:`guru-belum-ceklok:${g.id}:${date}`,targetType:'gtk',targetId:g.id})
@@ -81,6 +87,7 @@ function queueDueSchedules(db,{tenantId,date,time}) {
   if (shouldSuppress(db, tenantId, date)) return {...out, reason:'holiday'}
   const conf=db.prepare('SELECT * FROM notif_settings WHERE tenant_id=?').get(tenantId)
   if(!conf?.notif_jadwal_guru)return out
+  if(!time || !/^\d{2}:\d{2}$/.test(String(time))) return {...out,reason:'invalid_time'}
   const day=['Minggu','Senin','Selasa','Rabu','Kamis','Jumat','Sabtu'][new Date(`${date}T12:00:00Z`).getUTCDay()]
   const active=db.prepare('SELECT 1 FROM tahun_ajaran WHERE tenant_id=? AND aktif=1 AND (? BETWEEN tanggal_mulai AND tanggal_selesai) LIMIT 1').get(tenantId,date)
   if(!active)return out
@@ -88,10 +95,11 @@ function queueDueSchedules(db,{tenantId,date,time}) {
   const rows=db.prepare(`SELECT j.id,j.gtk_id,j.jam_mulai,j.jam_selesai,g.nama nama_guru,g.no_hp,m.nama mapel,r.nama rombel
     FROM jadwal j JOIN gtk g ON g.id=j.gtk_id AND g.tenant_id=j.tenant_id AND g.status='aktif'
     JOIN mapel m ON m.id=j.mapel_id AND m.tenant_id=j.tenant_id JOIN rombel r ON r.id=j.rombel_id AND r.tenant_id=j.tenant_id
-    WHERE j.tenant_id=? AND j.hari=? AND time(j.jam_mulai) BETWEEN time(?, '+5 minutes') AND time(?, '+5 minutes')`).all(tenantId,day,time,time)
+    WHERE j.tenant_id=? AND lower(j.hari)=lower(?) AND time(j.jam_mulai) BETWEEN time(?) AND time(?, '+5 minutes')`).all(tenantId,day,time,time)
   for(const x of rows){
     if(!normalizePhone(x.no_hp)){out.missing++;continue}
-    const message=render(conf.template_jadwal_guru,{...x,tanggal:date,lembaga:school?.nama_lembaga||'Sekolah'})
+    const defaultTemplate='Assalamu’alaikum {nama_guru}. Pengingat jadwal mengajar {mapel} di kelas {rombel}, pukul {jam_mulai}–{jam_selesai} pada {tanggal}. — {lembaga}'
+    const message=render(String(conf.template_jadwal_guru||'').trim()||defaultTemplate,{...x,tanggal:date,lembaga:school?.nama_lembaga||'Sekolah'})
     const r=enqueue(db,{tenantId,phone:x.no_hp,message,key:`jadwal-guru:${x.id}:${date}:${x.jam_mulai}`,targetType:'gtk',targetId:x.gtk_id})
     if (r.queued) out.queued++
     else out.skipped++

@@ -37,7 +37,7 @@ export default function GuruJadwalPage() {
                     {items.map((j, i) => (
                       <div key={j.id || i} className="p-3 bg-gray-50 rounded-lg">
                         <p className="text-xs text-gray-500">{j.jam_mulai} - {j.jam_selesai}</p>
-                        <p className="text-sm font-medium text-gray-800">{j.mapel_nama || j.mapel_kode}</p>
+                        <p className="text-sm font-medium text-gray-800">{j.jenis_kegiatan === 'mapel' ? (j.mapel_nama || j.mapel_kode || 'Mapel') : (j.nama_kegiatan || (j.jenis_kegiatan === 'istirahat' ? 'Istirahat' : 'Kegiatan'))}</p>
                         <p className="text-xs text-gray-500">{j.rombel_nama} • {j.ruangan || '-'}</p>
                       </div>
                     ))}

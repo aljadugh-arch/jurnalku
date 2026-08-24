@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { MapPin, Camera, Save, CheckCircle, XCircle, Clock } from 'lucide-react'
 import toast from 'react-hot-toast'
 import api from '../../services/api'
+import { todayWib } from '../../lib/dateFormat'
 
 const statusColors: Record<string, string> = {
   hadir: 'bg-green-100 text-green-700',
@@ -11,7 +12,7 @@ const statusColors: Record<string, string> = {
 }
 
 export default function AbsensiGuruPage() {
-  const [tanggal, setTanggal] = useState(new Date().toISOString().split('T')[0])
+  const [tanggal, setTanggal] = useState(todayWib())
   const [gtkList, setGtkList] = useState<any[]>([])
   const [absensi, setAbsensi] = useState<any[]>([])
   const [form, setForm] = useState<Record<string, { status: string; waktu_masuk: string; waktu_pulang: string }>>({})

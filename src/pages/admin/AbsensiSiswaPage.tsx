@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { QrCode, CheckCircle, XCircle, AlertCircle, Clock, Save } from 'lucide-react'
 import toast from 'react-hot-toast'
 import api from '../../services/api'
+import { todayWib } from '../../lib/dateFormat'
 import { Html5Qrcode } from 'html5-qrcode'
 import { QRCodeSVG } from 'qrcode.react'
 import FoundationTenantPicker from '../../components/FoundationTenantPicker'
@@ -14,7 +15,7 @@ const statusColors: Record<string, string> = {
 }
 
 export default function AbsensiSiswaPage() {
-  const [tanggal, setTanggal] = useState(new Date().toISOString().split('T')[0])
+  const [tanggal, setTanggal] = useState(todayWib())
   const [sesi, setSesi] = useState<'masuk' | 'pulang'>('masuk')
   const [rombels, setRombels] = useState<any[]>([])
   const [selectedRombel, setSelectedRombel] = useState('')
@@ -22,7 +23,7 @@ export default function AbsensiSiswaPage() {
   const [absensi, setAbsensi] = useState<Record<string, string>>({})
   const [existing, setExisting] = useState<any[]>([])
   const [loading, setLoading] = useState(false)
-  const [range, setRange] = useState({ mulai: new Date().toISOString().split('T')[0], selesai: new Date().toISOString().split('T')[0], status: 'hadir' })
+  const [range, setRange] = useState({ mulai: todayWib(), selesai: todayWib(), status: 'hadir' })
   const [qrToken, setQrToken] = useState('')
   const [qrOpen, setQrOpen] = useState(false)
   const [lastQr, setLastQr] = useState('')

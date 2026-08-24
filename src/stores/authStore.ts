@@ -21,22 +21,26 @@ export const useAuthStore = create<AuthState>((set) => ({
   isAuthenticated: !!localStorage.getItem('jurnalku_token'),
   login: (user, token) => {
     localStorage.setItem('jurnalku_token', token)
+    sessionStorage.removeItem('jurnalku_token')
     set({ user, token, isAuthenticated: true })
   },
   loginWithCredentials: async (email, password) => {
     const res = await api.post('/auth/login', { email, password })
     localStorage.setItem('jurnalku_token', res.data.token)
+    sessionStorage.removeItem('jurnalku_token')
     set({ user: res.data.user, token: res.data.token, isAuthenticated: true })
     await useSettingsStore.getState().loadSettings()
   },
   loginDemo: async (role) => {
     const res = await api.post('/auth/demo', { role })
     localStorage.setItem('jurnalku_token', res.data.token)
+    sessionStorage.removeItem('jurnalku_token')
     set({ user: res.data.user, token: res.data.token, isAuthenticated: true })
     await useSettingsStore.getState().loadSettings()
   },
   logout: () => {
     localStorage.removeItem('jurnalku_token')
+    sessionStorage.removeItem('jurnalku_token')
     // Clear tenant-scoped preferences so a previous tenant/user cannot
     // leave the next session stuck in its theme or settings.
     localStorage.removeItem('jurnalku_theme')
@@ -53,6 +57,7 @@ export const useAuthStore = create<AuthState>((set) => ({
       const res = await api.get('/auth/me')
       set({ user: res.data, token, isAuthenticated: true })
     } catch {
+      sessionStorage.removeItem('jurnalku_token')
       localStorage.removeItem('jurnalku_token')
       set({ user: null, token: null, isAuthenticated: false })
     }

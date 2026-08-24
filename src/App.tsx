@@ -64,6 +64,7 @@ import SiswaEkskulPage from './pages/siswa/SiswaEkskulPage'
 import SiswaPostingPage from './pages/siswa/SiswaPostingPage'
 import SiswaNilaiPage from './pages/siswa/SiswaNilaiPage'
 import SiswaKantinPage from './pages/siswa/SiswaKantinPage'
+import SiswaQrisTopupPage from './pages/siswa/SiswaQrisTopupPage'
 import ChangePasswordPage from './pages/ChangePasswordPage'
 import ProfilePage from './pages/ProfilePage'
 import PanduanPage from './pages/PanduanPage'
@@ -221,6 +222,7 @@ export default function App() {
           <Route path="posting" element={<SiswaPostingPage />} />
           <Route path="nilai" element={<SiswaNilaiPage />} />
           <Route path="kantin" element={<SiswaKantinPage />} />
+          <Route path="qris-topup" element={<SiswaQrisTopupPage />} />
         </Route>
 
         <Route path="*" element={<Navigate to="/login" replace />} />

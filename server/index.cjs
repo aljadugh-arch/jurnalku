@@ -541,6 +541,9 @@ db.exec(`
     verified_at TEXT,
     catatan TEXT,
     created_at TEXT DEFAULT (datetime('now')),
+    provider TEXT,
+    unique_code TEXT,
+    transfer_amount INTEGER,
     FOREIGN KEY (student_id) REFERENCES siswa(id)
   );
   CREATE INDEX IF NOT EXISTS idx_cashless_topup_manual_tenant ON cashless_topup_manual(tenant_id);

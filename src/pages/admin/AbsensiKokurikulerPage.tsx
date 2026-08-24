@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { CheckCircle, XCircle, Clock, Save, Plus, Trash2 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import api from '../../services/api'
+import { todayWib } from '../../lib/dateFormat'
 
 export default function AbsensiKokurikulerPage() {
   const [kegiatanList, setKegiatanList] = useState<any[]>([])
@@ -11,7 +12,7 @@ export default function AbsensiKokurikulerPage() {
   const [saving, setSaving] = useState(false)
   const [showAdd, setShowAdd] = useState(false)
   const [newNama, setNewNama] = useState('')
-  const [newTanggal, setNewTanggal] = useState(new Date().toISOString().split('T')[0])
+  const [newTanggal, setNewTanggal] = useState(todayWib())
 
   useEffect(() => { loadKegiatan() }, [])
   useEffect(() => {

@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { Plus, X, Search } from 'lucide-react'
 import toast from 'react-hot-toast'
 import api from '../../services/api'
+import { todayWib } from '../../lib/dateFormat'
 
 interface CatatanKepribadian {
   id: string
@@ -32,7 +33,7 @@ export default function CatatanKepribadianGuru() {
     siswa_id: '',
     catatan: '',
     aspek: 'sikap',
-    tanggal: new Date().toISOString().split('T')[0],
+    tanggal: todayWib(),
   })
 
   const fetchData = async () => {
@@ -75,7 +76,7 @@ export default function CatatanKepribadianGuru() {
       await api.post('/catatan-kepribadian', form)
       toast.success('Catatan berhasil disimpan')
       setShowForm(false)
-      setForm({ siswa_id: '', catatan: '', aspek: 'sikap', tanggal: new Date().toISOString().split('T')[0] })
+      setForm({ siswa_id: '', catatan: '', aspek: 'sikap', tanggal: todayWib() })
       fetchData()
     } catch (err: any) {
       toast.error(err.response?.data?.error || 'Gagal menyimpan catatan')
