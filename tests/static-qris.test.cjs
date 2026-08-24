@@ -1,7 +1,7 @@
 const test = require('node:test')
 const assert = require('node:assert/strict')
 const Database = require('better-sqlite3')
-const { setupPortalCashless, normalizeStaticQrisConfig, validateStaticQrisSubmission, assertStaticQrisSubmissionAvailable } = require('../server/portal-cashless.cjs')
+const { setupPortalCashless, normalizeBankTransferConfig, normalizeStaticQrisConfig, validateStaticQrisSubmission, assertStaticQrisSubmissionAvailable } = require('../server/portal-cashless.cjs')
 
 const png = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAAB'
 
@@ -16,6 +16,26 @@ test('static QRIS config keeps only ShopeePay and GoPay merchant images', () => 
 test('static QRIS config rejects non-image and oversized payloads', () => {
   assert.throws(() => normalizeStaticQrisConfig({ enabled: true, shopee_qris: 'https://example.test/x.png' }), /gambar QRIS/i)
   assert.throws(() => normalizeStaticQrisConfig({ enabled: true, shopee_qris: 'data:image/png;base64,' + 'A'.repeat(1_600_000) }), /maksimal/i)
+})
+
+test('bank transfer config normalizes safe values and preserves QRIS images', () => {
+  const value = normalizeBankTransferConfig({
+    va_prefix: ' jurnal01 ', bank_code: '002', admin_fee: '1500', manual_verify: false,
+    shopee_qris: png, gopay_qris: png
+  })
+  assert.deepEqual(value, {
+    va_prefix: 'JURNAL01', bank_code: '002', admin_fee: 1500, manual_verify: false,
+    shopee_qris: png, gopay_qris: png
+  })
+})
+
+test('bank transfer config rejects invalid prefix, bank code, and admin fee', () => {
+  assert.throws(() => normalizeBankTransferConfig({ va_prefix: 'VA<script>' }), /prefix va/i)
+  assert.throws(() => normalizeBankTransferConfig({ bank_code: '2' }), /kode bank/i)
+  assert.throws(() => normalizeBankTransferConfig({ bank_code: 'ABC' }), /kode bank/i)
+  assert.throws(() => normalizeBankTransferConfig({ admin_fee: -1 }), /biaya admin/i)
+  assert.throws(() => normalizeBankTransferConfig({ admin_fee: 1.5 }), /biaya admin/i)
+  assert.throws(() => normalizeBankTransferConfig({ admin_fee: 1_000_001 }), /biaya admin/i)
 })
 
 test('transfer declaration requires a 3 digit unique code matching the transferred amount', () => {

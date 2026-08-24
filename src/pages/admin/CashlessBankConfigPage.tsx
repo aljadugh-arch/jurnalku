@@ -37,7 +37,8 @@ export default function CashlessBankTransferConfigPage() {
     <div className="rounded-xl border border-gray-200 p-4 space-y-3 min-w-0">
       <h3 className="font-semibold flex items-center gap-2"><QrCode size={18} className="shrink-0" />{label}</h3>
       <p className="text-xs text-gray-500">Upload QRIS statis merchant. Sistem tidak mengambil data akun atau cookie merchant.</p>
-      <input type="file" accept="image/png,image/jpeg,image/webp" onChange={e => e.target.files?.[0] && readImage(e.target.files[0], value => setConfig(c => ({ ...c, [key]: value })))} className="block w-full min-w-0 text-sm" />
+      <label htmlFor={`qris-upload-${key}`} className="block text-xs font-medium text-gray-600">Upload gambar QRIS {label}</label>
+      <input id={`qris-upload-${key}`} type="file" accept="image/png,image/jpeg,image/webp" onChange={e => e.target.files?.[0] && readImage(e.target.files[0], value => setConfig(c => ({ ...c, [key]: value })))} className="block w-full min-w-0 text-sm" />
       {config[key] && <img src={config[key]} alt={`QRIS ${label}`} className="w-56 h-56 max-w-full object-contain mx-auto border rounded-lg p-2" />}
       {config[key] && <button type="button" onClick={() => setConfig(c => ({ ...c, [key]: '' }))} className="text-xs text-red-600">Hapus QRIS</button>}
     </div>

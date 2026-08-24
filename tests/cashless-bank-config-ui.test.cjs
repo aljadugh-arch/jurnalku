@@ -23,3 +23,9 @@ test('form transfer bank memakai field konfigurasi backend yang sudah ada', () =
   assert.match(source, /checked=\{config\.manual_verify\}/)
   assert.match(source, /api\.put\('\/cashless\/provider\/bank_transfer', config\)/)
 })
+
+test('input upload QRIS memiliki label aksesibel yang terhubung', () => {
+  assert.match(source, /htmlFor=\{`qris-upload-\$\{key\}`\}/)
+  assert.match(source, /id=\{`qris-upload-\$\{key\}`\}/)
+  assert.match(source, />Upload gambar QRIS \{label\}</)
+})

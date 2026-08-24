@@ -76,6 +76,23 @@ const normalizeStaticQrisConfig = input => {
   const gopay_qris = image(input?.gopay_qris)
   return { enabled: input?.enabled !== false, shopee_qris, gopay_qris, providers: [shopee_qris && 'shopee', gopay_qris && 'gopay'].filter(Boolean) }
 }
+const normalizeBankTransferConfig = input => {
+  const qris = normalizeStaticQrisConfig(input)
+  const va_prefix = String(input?.va_prefix || '').trim().toUpperCase()
+  const bank_code = String(input?.bank_code || '').trim()
+  const admin_fee = Number(input?.admin_fee ?? 0)
+  if (va_prefix && !/^[A-Z0-9]{1,10}$/.test(va_prefix)) throw Error('Prefix VA hanya boleh berisi huruf dan angka, maksimal 10 karakter')
+  if (bank_code && !/^\d{3}$/.test(bank_code)) throw Error('Kode bank harus tepat 3 digit')
+  if (!Number.isSafeInteger(admin_fee) || admin_fee < 0 || admin_fee > 1_000_000) throw Error('Biaya admin harus bilangan bulat antara Rp0 dan Rp1.000.000')
+  return {
+    va_prefix,
+    bank_code,
+    admin_fee,
+    manual_verify: input?.manual_verify !== false,
+    shopee_qris: qris.shopee_qris,
+    gopay_qris: qris.gopay_qris
+  }
+}
 const validateStaticQrisSubmission = input => {
   const provider = String(input?.provider || '').toLowerCase()
   if (!['shopee', 'gopay'].includes(provider)) throw Error('Metode QRIS harus ShopeePay atau GoPay')
@@ -401,16 +418,9 @@ function registerKantinRoutes(app, db, { requireRole, uuid, bcrypt }) {
   })
 
   app.put('/api/cashless/provider/bank_transfer', kadmin, (req, res) => {
-    const { enabled, va_prefix, bank_code, admin_fee, manual_verify, shopee_qris, gopay_qris } = req.body
-    try { normalizeStaticQrisConfig({ enabled, shopee_qris, gopay_qris }) } catch (e) { return res.status(400).json({ error: e.message }) }
-    const config = {
-      va_prefix: va_prefix || '', 
-      bank_code: bank_code || '', 
-      admin_fee: Number(admin_fee) || 0, 
-      manual_verify: manual_verify !== false,
-      shopee_qris: shopee_qris || '',
-      gopay_qris: gopay_qris || ''
-    }
+    const { enabled } = req.body
+    let config
+    try { config = normalizeBankTransferConfig(req.body) } catch (e) { return res.status(400).json({ error: e.message }) }
     db.prepare('INSERT INTO cashless_provider_config (tenant_id, provider, enabled, config_json) VALUES (?,?,?,?) ON CONFLICT(tenant_id,provider) DO UPDATE SET enabled=excluded.enabled, config_json=excluded.config_json')
       .run(req.tenantId, 'bank_transfer', enabled ? 1 : 0, JSON.stringify(config))
     res.json({ success: true })
@@ -619,4 +629,4 @@ function registerKantinRoutes(app, db, { requireRole, uuid, bcrypt }) {
   })
 }
 
-module.exports = { setupPortalCashless, balance, credit, debit, processWebhook, opaqueQr, normalizeStaticQrisConfig, validateStaticQrisSubmission, assertStaticQrisSubmissionAvailable, linkedStudentIds, selectPenilaianStudentId, pesantrenMenu, registerPortalRoutes, registerKantinRoutes }
+module.exports = { setupPortalCashless, balance, credit, debit, processWebhook, opaqueQr, normalizeBankTransferConfig, normalizeStaticQrisConfig, validateStaticQrisSubmission, assertStaticQrisSubmissionAvailable, linkedStudentIds, selectPenilaianStudentId, pesantrenMenu, registerPortalRoutes, registerKantinRoutes }
