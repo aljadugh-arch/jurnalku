@@ -9,6 +9,7 @@ const {
   validateGenerateInput,
   createDocumentDocx,
   parseAiResponse,
+  createTemplateContent,
 } = require('../server/ai-documents.cjs')
 
 test('generator exposes the requested teacher document types', () => {
@@ -30,6 +31,27 @@ test('validation rejects incomplete and excessive requests', () => {
   assert.match(validateGenerateInput({ type: 'STS' }).error, /mata pelajaran/i)
   assert.match(validateGenerateInput({ type: 'STS', subject: 'IPA', grade: 'VIII', topic: 'Sel', multipleChoiceCount: 101 }).error, /maksimal/i)
   assert.equal(validateGenerateInput({ type: 'ATP', subject: 'IPA', grade: 'VIII', topic: 'Sel' }).error, undefined)
+})
+
+test('template mode builds deterministic, editable content for every document type', () => {
+  const base = { subject: 'IPA', grade: 'VIII', topic: 'Sistem pencernaan', semester: 'Ganjil', academicYear: '2026/2027', schoolName: 'MTs Contoh', teacherName: 'Ibu Guru', multipleChoiceCount: 2, essayCount: 1 }
+  for (const type of Object.keys(DOCUMENT_TYPES)) {
+    const first = createTemplateContent({ ...base, type })
+    const second = createTemplateContent({ ...base, type })
+    assert.equal(first, second, `${type} template must be deterministic`)
+    assert.match(first, /IPA/)
+    assert.match(first, /Sistem pencernaan/)
+    assert.ok(first.length > 250, `${type} template is too shallow`)
+  }
+  const assessment = createTemplateContent({ ...base, type: 'STS' })
+  assert.match(assessment, /KUNCI JAWABAN/)
+  assert.match(assessment, /Isilah soal pilihan ganda nomor 1/i)
+})
+
+test('generation mode accepts only explicit AI or template selection', () => {
+  assert.equal(validateGenerateInput({ type: 'ATP', subject: 'IPA', grade: 'VIII', topic: 'Sel', mode: 'template' }).value.mode, 'template')
+  assert.equal(validateGenerateInput({ type: 'ATP', subject: 'IPA', grade: 'VIII', topic: 'Sel', mode: 'ai' }).value.mode, 'ai')
+  assert.match(validateGenerateInput({ type: 'ATP', subject: 'IPA', grade: 'VIII', topic: 'Sel', mode: 'other' }).error, /mode/i)
 })
 
 test('AI response parser supports OpenAI JSON, Gemini JSON, and OpenAI SSE', () => {

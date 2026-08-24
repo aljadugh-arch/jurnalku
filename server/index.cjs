@@ -26,7 +26,7 @@ const { registerRoutes: registerBackupRestoreRoutes } = require('./backup-restor
 const { registerFinanceExcelRoutes } = require('./finance-excel.cjs')
 const { FEATURE_KEYS, addMonthsIso, accessForTenant, featureForPath, normalizeFeatureSelection, generateUnlockCode, hashUnlockCode, setupSubscriptionTables } = require('./subscription.cjs')
 const { setupBackupTables, registerBackupRoutes } = require('./backup-drive.cjs')
-const { DOCUMENT_TYPES, buildPrompt, validateGenerateInput, createDocumentDocx, callAi } = require('./ai-documents.cjs')
+const { DOCUMENT_TYPES, buildPrompt, validateGenerateInput, createTemplateContent, createDocumentDocx, callAi } = require('./ai-documents.cjs')
 
 const app = express()
 const PORT = process.env.PORT || 3001
@@ -4039,13 +4039,14 @@ db.exec(`CREATE TABLE IF NOT EXISTS ai_documents (
   tenant_id TEXT NOT NULL,
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 ); CREATE INDEX IF NOT EXISTS idx_ai_documents_tenant ON ai_documents(tenant_id, created_at DESC);`)
+try { db.exec("ALTER TABLE ai_documents ADD COLUMN generation_mode TEXT NOT NULL DEFAULT 'ai'") } catch (error) { if (!String(error.message).includes('duplicate column name')) throw error }
 
 app.get('/api/ai-documents/types', authMiddleware, (_req, res) => {
   res.json(Object.entries(DOCUMENT_TYPES).map(([value, item]) => ({ value, ...item })))
 })
 
 app.get('/api/ai-documents', STAFF, (req, res) => {
-  const rows = db.prepare('SELECT id,type,title,subject,grade,topic,created_at FROM ai_documents WHERE tenant_id=? ORDER BY created_at DESC LIMIT 100').all(req.tenantId)
+  const rows = db.prepare('SELECT id,type,title,subject,grade,topic,generation_mode,created_at FROM ai_documents WHERE tenant_id=? ORDER BY created_at DESC LIMIT 100').all(req.tenantId)
   res.json(rows)
 })
 
@@ -4060,12 +4061,12 @@ app.post('/api/ai-documents/generate', STAFF, async (req, res) => {
   if (checked.error) return res.status(400).json({ error: checked.error })
   try {
     const input = checked.value
-    const content = await callAi(buildPrompt(input))
+    const content = input.mode === 'template' ? createTemplateContent(input) : await callAi(buildPrompt(input))
     const id = uuidv4()
     const title = `${DOCUMENT_TYPES[input.type].label} ${input.subject} ${input.grade}`.trim()
-    db.prepare('INSERT INTO ai_documents(id,type,title,subject,grade,topic,metadata_json,content,created_by,tenant_id) VALUES(?,?,?,?,?,?,?,?,?,?)')
-      .run(id, input.type, title, input.subject.trim(), input.grade.trim(), input.topic.trim(), JSON.stringify(input), content, req.user?.id || null, req.tenantId)
-    res.status(201).json({ id, title, content, input })
+    db.prepare('INSERT INTO ai_documents(id,type,title,subject,grade,topic,metadata_json,content,created_by,tenant_id,generation_mode) VALUES(?,?,?,?,?,?,?,?,?,?,?)')
+      .run(id, input.type, title, input.subject.trim(), input.grade.trim(), input.topic.trim(), JSON.stringify(input), content, req.user?.id || null, req.tenantId, input.mode)
+    res.status(201).json({ id, title, content, input, generation_mode: input.mode })
   } catch (error) {
     console.error('[AI Documents] generate failed:', error.message)
     res.status(error.message.includes('belum dikonfigurasi') ? 503 : 502).json({ error: error.message })

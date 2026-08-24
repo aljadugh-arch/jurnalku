@@ -33,7 +33,9 @@ const clampInt = (value, fallback) => Number.isFinite(Number(value)) ? Math.trun
 
 function validateGenerateInput(input = {}) {
   const type = clean(input.type).toUpperCase()
+  const mode = clean(input.mode || 'ai').toLowerCase()
   if (!DOCUMENT_TYPES[type]) return { error: 'Jenis dokumen tidak valid' }
+  if (!['ai', 'template'].includes(mode)) return { error: 'Mode generator harus AI atau template' }
   if (!clean(input.subject)) return { error: 'Mata pelajaran wajib diisi' }
   if (!clean(input.grade)) return { error: 'Kelas/fase wajib diisi' }
   if (!clean(input.topic)) return { error: 'Materi/topik wajib diisi' }
@@ -41,7 +43,7 @@ function validateGenerateInput(input = {}) {
   const essayCount = clampInt(input.essayCount, 5)
   if (multipleChoiceCount < 0 || essayCount < 0) return { error: 'Jumlah soal tidak boleh negatif' }
   if (multipleChoiceCount > 100 || essayCount > 30 || multipleChoiceCount + essayCount > 120) return { error: 'Jumlah soal maksimal 120 butir (100 pilihan ganda dan 30 uraian)' }
-  return { value: { ...input, type, multipleChoiceCount, essayCount } }
+  return { value: { ...input, type, mode, multipleChoiceCount, essayCount } }
 }
 
 function buildPrompt(input) {
@@ -61,6 +63,33 @@ function buildPrompt(input) {
     KISI_KISI: `Buat kisi-kisi soal dalam tabel Markdown dengan kolom nomor, capaian pembelajaran, materi, indikator soal, level kognitif, bentuk soal, dan nomor soal. Total ${data.multipleChoiceCount + data.essayCount} butir.`,
   }
   return `${common}\n\n${prompts[data.type]}`
+}
+
+function createTemplateContent(input = {}) {
+  const checked = validateGenerateInput({ ...input, mode: 'template' })
+  if (checked.error) throw new Error(checked.error)
+  const data = checked.value
+  const topic = clean(data.topic)
+  const identity = `**Mata Pelajaran:** ${clean(data.subject)}\n**Kelas/Fase:** ${clean(data.grade)}\n**Materi/Topik:** ${topic}\n**Semester:** ${clean(data.semester) || 'Ganjil'}\n**Tahun Pelajaran:** ${clean(data.academicYear) || 'Tahun berjalan'}\n**Nama Lembaga:** ${clean(data.schoolName) || '................................'}\n**Nama Pengajar:** ${clean(data.teacherName) || '................................'}`
+  const assessment = () => {
+    const pg = Array.from({ length: data.multipleChoiceCount }, (_, i) => `${i + 1}. Isilah soal pilihan ganda nomor ${i + 1} tentang ${topic}.\n   a. Pilihan jawaban A\n   b. Pilihan jawaban B\n   c. Pilihan jawaban C\n   d. Pilihan jawaban D`).join('\n\n')
+    const essay = Array.from({ length: data.essayCount }, (_, i) => `${i + 1}. Tuliskan soal uraian nomor ${i + 1} yang mengukur pemahaman tentang ${topic}.`).join('\n\n')
+    const keys = Array.from({ length: data.multipleChoiceCount }, (_, i) => `${i + 1}. ....`).join('\n')
+    return `${identity}\n\n# PETUNJUK PENGISIAN\nGanti setiap butir contoh dengan soal sesuai indikator. Periksa tingkat kesulitan, bahasa, dan kunci jawaban.\n\n# A. PILIHAN GANDA\n\n${pg || 'Tambahkan soal pilihan ganda di sini.'}\n\n# B. URAIAN\n\n${essay || 'Tambahkan soal uraian di sini.'}\n\n# KUNCI JAWABAN\n\n${keys || '-'}\n\n## Pedoman Uraian\nTuliskan jawaban ideal dan rubrik penskoran setiap butir.`
+  }
+  const table = (title, header, row, notes) => `${identity}\n\n# ${title}\n\n| ${header.join(' | ')} |\n|${header.map(() => '---').join('|')}|\n| ${row.join(' | ')} |\n\n# PETUNJUK PENYUSUNAN\n${notes}\n\n# PENGESAHAN\nDokumen ini harus diperiksa dan disesuaikan kembali dengan CP resmi, kalender pendidikan, karakteristik peserta didik, serta kebijakan lembaga.`
+  const templates = {
+    STS: assessment,
+    SAS: assessment,
+    KISI_KISI: () => table('KISI-KISI SOAL', ['No', 'CP', 'Materi', 'Indikator', 'Level', 'Bentuk', 'Nomor'], ['1', 'Sesuaikan CP', topic, 'Peserta didik mampu ...', 'C1-C4', 'PG/Uraian', '1'], 'Tambahkan baris sesuai jumlah soal dan gunakan kata kerja operasional yang terukur.'),
+    PROTA: () => table('PROGRAM TAHUNAN', ['Semester', 'No', 'Capaian/Materi', 'Tujuan Pembelajaran', 'Alokasi', 'Keterangan'], ['Ganjil', '1', topic, 'Peserta didik mampu ...', '... JP', '...'], 'Petakan seluruh materi satu tahun dan hitung alokasi berdasarkan minggu efektif.'),
+    PROMES: () => table('PROGRAM SEMESTER', ['No', 'Tujuan/Materi', 'JP', 'Bulan', 'Minggu', 'Asesmen'], ['1', topic, '... JP', '...', '1-2', 'Formatif'], 'Sesuaikan distribusi dengan kalender KBM, hari libur, remedial, dan pengayaan.'),
+    ACP: () => table('ANALISIS CAPAIAN PEMBELAJARAN', ['Elemen', 'CP', 'Kompetensi', 'Materi', 'Tujuan', 'Indikator', 'Asesmen'], ['Sesuaikan', 'Salin CP resmi', 'Memahami', topic, 'Peserta didik mampu ...', 'Ditunjukkan dengan ...', 'Tes/produk'], 'Turunkan tujuan dari CP resmi dan pastikan kompetensi serta indikator dapat dinilai.'),
+    ATP: () => table('ALUR TUJUAN PEMBELAJARAN', ['No', 'Elemen/CP', 'Tujuan', 'Materi', 'Aktivitas', 'Alokasi', 'Asesmen'], ['1', 'Sesuaikan CP', 'Mengidentifikasi konsep', topic, 'Mengamati dan berdiskusi', '... JP', 'Diagnostik'], 'Tambahkan tahapan penerapan dan evaluasi; urutkan dari prasyarat menuju kompetensi kompleks.'),
+    LKPD: () => `${identity}\n\n# JUDUL KEGIATAN\nEksplorasi ${topic}\n\n# TUJUAN PEMBELAJARAN\nPeserta didik mampu menjelaskan dan menerapkan konsep ${topic}.\n\n# ALOKASI WAKTU\n${clean(data.timeAllocation) || '2 JP'}\n\n# ALAT DAN BAHAN\n1. Sumber belajar relevan\n2. Alat tulis dan lembar pengamatan\n\n# LANGKAH KERJA\n1. Amati stimulus dari guru.\n2. Diskusikan temuan bersama kelompok.\n3. Catat data, jawaban, dan alasan.\n4. Presentasikan hasil.\n\n# LEMBAR TUGAS\n1. Apa konsep utama pada ${topic}?\n2. Berikan contoh penerapannya.\n3. Tuliskan kesimpulan kelompok.\n\n# REFLEKSI\nHal yang dipahami: ............\nHal yang ingin ditanyakan: ............`,
+    MODUL_AJAR: () => `${identity}\n\n# INFORMASI UMUM\n**Alokasi:** ${clean(data.timeAllocation) || '2 JP'}\n**Model:** ${clean(data.activityType) || 'Diskusi dan pemecahan masalah'}\n\n# KOMPETENSI AWAL\nPeserta didik memiliki pengetahuan awal terkait ${topic}.\n\n# TUJUAN PEMBELAJARAN\nPeserta didik mampu memahami, menjelaskan, dan menerapkan ${topic}.\n\n# PEMAHAMAN BERMAKNA\nKonsep ${topic} berguna untuk memahami situasi nyata.\n\n# PERTANYAAN PEMANTIK\nApa yang sudah diketahui dan di mana konsep ini dijumpai?\n\n# KEGIATAN PEMBELAJARAN\n## Pendahuluan\nSalam, doa, presensi, apersepsi, dan tujuan.\n## Inti\nEksplorasi, diskusi, praktik, pemecahan masalah, dan presentasi.\n## Penutup\nSimpulan, refleksi, umpan balik, dan tindak lanjut.\n\n# ASESMEN\nDiagnostik: pertanyaan awal. Formatif: observasi dan LKPD. Sumatif: tugas atau produk.\n\n# REMEDIAL DAN PENGAYAAN\nPendampingan bertahap dan masalah kontekstual lanjutan.\n\n# REFLEKSI\nCatatan guru: ............\nRefleksi peserta didik: ............`,
+  }
+  return templates[data.type]()
 }
 
 function parseMarkdown(content = '') {
@@ -190,4 +219,4 @@ async function callAi(prompt, options = {}) {
   return clean(content)
 }
 
-module.exports = { DOCUMENT_TYPES, buildPrompt, validateGenerateInput, createDocumentDocx, callAi, parseMarkdown, parseAiResponse }
+module.exports = { DOCUMENT_TYPES, buildPrompt, validateGenerateInput, createTemplateContent, createDocumentDocx, callAi, parseMarkdown, parseAiResponse }
