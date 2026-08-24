@@ -48,7 +48,6 @@ test('DOCX export contains template heading, metadata, body, and answer-key page
   assert.ok(Buffer.isBuffer(buffer))
   const target = path.join('/tmp', 'ai-documents-sts-test.docx')
   fs.writeFileSync(target, buffer)
-  const AdmZip = require('node:fs')
   assert.ok(fs.statSync(target).size > 5000)
   const { execFileSync } = require('node:child_process')
   const xml = execFileSync('unzip', ['-p', target, 'word/document.xml'], { encoding: 'utf8' })
