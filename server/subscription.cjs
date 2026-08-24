@@ -15,7 +15,7 @@ const FEATURE_PREFIXES = {
   keuangan: ['/api/tagihan', '/api/jenis-tagihan', '/api/tabungan', '/api/bendahara', '/api/keuangan', '/api/cashless', '/api/beasiswa'],
   whatsapp: ['/api/broadcast', '/api/wa-', '/api/notif-settings'],
   posting: ['/api/posting'],
-  modul_ajar: ['/api/modul-ajar'],
+  modul_ajar: ['/api/modul-ajar', '/api/ai-documents'],
   backup_drive: ['/api/backup', '/api/google-drive'],
   website: ['/api/tenant/domain', '/api/tenant/domain-status', '/api/tenant/verify-domain', '/api/posting/public'],
   cashless: ['/api/cashless'],

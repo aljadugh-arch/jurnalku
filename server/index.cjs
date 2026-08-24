@@ -26,6 +26,7 @@ const { registerRoutes: registerBackupRestoreRoutes } = require('./backup-restor
 const { registerFinanceExcelRoutes } = require('./finance-excel.cjs')
 const { FEATURE_KEYS, addMonthsIso, accessForTenant, featureForPath, normalizeFeatureSelection, generateUnlockCode, hashUnlockCode, setupSubscriptionTables } = require('./subscription.cjs')
 const { setupBackupTables, registerBackupRoutes } = require('./backup-drive.cjs')
+const { DOCUMENT_TYPES, buildPrompt, validateGenerateInput, createDocumentDocx, callAi } = require('./ai-documents.cjs')
 
 const app = express()
 const PORT = process.env.PORT || 3001
@@ -1147,15 +1148,18 @@ function generateApiKey() {
 function apiKeyMiddleware(req, res, next) {
   const apiKey = req.headers['x-api-key'] || req.query.api_key
   if (!apiKey) return res.status(401).json({ error: 'API Key required' })
-  
-  const keyData = API_KEYS.get(apiKey)
-  if (!keyData) return res.status(403).json({ error: 'Invalid API Key' })
-  if (keyData.expires_at && new Date(keyData.expires_at) < new Date()) {
-    API_KEYS.delete(apiKey)
-    return res.status(403).json({ error: 'API Key expired' })
+  let keyData = API_KEYS.get(apiKey)
+  if (!keyData) {
+    const row = db.prepare('SELECT * FROM external_api_keys WHERE api_key = ?').get(apiKey)
+    if (row) {
+      keyData = { ...row, permissions: JSON.parse(row.permissions || '[]'), enabled: !!row.enabled }
+      API_KEYS.set(apiKey, keyData)
+    }
   }
+  if (!keyData) return res.status(403).json({ error: 'Invalid API Key' })
+  if (keyData.expires_at && new Date(keyData.expires_at) < new Date()) return res.status(403).json({ error: 'API Key expired' })
   if (!keyData.enabled) return res.status(403).json({ error: 'API Key disabled' })
-  
+  db.prepare('UPDATE external_api_keys SET last_used_at=CURRENT_TIMESTAMP, usage_count=usage_count+1 WHERE api_key=?').run(apiKey)
   req.apiKey = keyData
   req.tenantId = keyData.tenant_id
   next()
@@ -2711,8 +2715,8 @@ app.get('/api/guru/jadwal', authMiddleware, (req, res) => {
   const gtk = resolveGtkForUser(req.user.id, req.tenantId)
   if (!gtk) return res.json([])
   let rows = db.prepare(`SELECT j.*, m.nama AS mapel_nama, m.kode AS mapel_kode, r.nama AS rombel_nama
-    FROM jadwal j JOIN mapel m ON j.mapel_id=m.id AND m.tenant_id=j.tenant_id LEFT JOIN rombel r ON j.rombel_id=r.id AND r.tenant_id=j.tenant_id
-    WHERE j.gtk_id=? AND j.tenant_id=? AND j.jenis_kegiatan = 'mapel'
+    FROM jadwal j LEFT JOIN mapel m ON j.mapel_id=m.id AND m.tenant_id=j.tenant_id LEFT JOIN rombel r ON j.rombel_id=r.id AND r.tenant_id=j.tenant_id
+    WHERE j.gtk_id=? AND j.tenant_id=?
     ORDER BY j.hari,j.jam_mulai`).all(gtk.id, req.tenantId)
   if (!rows.length) rows = pengajarAsJadwal(gtk.id, req.tenantId)
   res.json(rows.map(titleHari))
@@ -2901,7 +2905,7 @@ app.post('/api/guru/ceklok', STAFF, (req, res) => {
 
 // ==================== JAMAAH / PORTAL / PWA PATCH ====================
 db.exec(`CREATE TABLE IF NOT EXISTS jamaah_sesi (id TEXT PRIMARY KEY, nama TEXT, mulai TEXT, selesai TEXT, minimal_hadir INTEGER DEFAULT 10, tenant_id TEXT DEFAULT 'default', created_at TEXT DEFAULT (datetime('now')))`)
-for (const [name, definition] of [['pwa_name','TEXT DEFAULT ""'], ['pwa_icon','TEXT DEFAULT ""']]) if (!db.prepare('PRAGMA table_info(settings)').all().some(c => c.name === name)) db.exec(`ALTER TABLE settings ADD COLUMN ${name} ${definition}`)
+for (const [name, definition] of [['pwa_name','TEXT DEFAULT ""'], ['pwa_icon','TEXT DEFAULT ""'], ['pwa_bg_color','TEXT DEFAULT "#ffffff"'], ['pwa_theme_color','TEXT DEFAULT "#1e40af"']]) if (!db.prepare('PRAGMA table_info(settings)').all().some(c => c.name === name)) db.exec(`ALTER TABLE settings ADD COLUMN ${name} ${definition}`)
 
 function linkedStudentIds(req) {
   const ids = db.prepare('SELECT student_id FROM user_students WHERE tenant_id=? AND user_id=? ORDER BY student_id').all(req.tenantId, req.user.id).map(x => x.student_id)
@@ -4022,6 +4026,72 @@ app.delete('/api/tabungan/:id', BENDAHARA, (req, res) => {
 })
 
 // ==================== MODUL AJAR ====================
+db.exec(`CREATE TABLE IF NOT EXISTS ai_documents (
+  id TEXT PRIMARY KEY,
+  type TEXT NOT NULL,
+  title TEXT NOT NULL,
+  subject TEXT NOT NULL,
+  grade TEXT NOT NULL,
+  topic TEXT NOT NULL,
+  metadata_json TEXT NOT NULL DEFAULT '{}',
+  content TEXT NOT NULL,
+  created_by TEXT,
+  tenant_id TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+); CREATE INDEX IF NOT EXISTS idx_ai_documents_tenant ON ai_documents(tenant_id, created_at DESC);`)
+
+app.get('/api/ai-documents/types', authMiddleware, (_req, res) => {
+  res.json(Object.entries(DOCUMENT_TYPES).map(([value, item]) => ({ value, ...item })))
+})
+
+app.get('/api/ai-documents', STAFF, (req, res) => {
+  const rows = db.prepare('SELECT id,type,title,subject,grade,topic,created_at FROM ai_documents WHERE tenant_id=? ORDER BY created_at DESC LIMIT 100').all(req.tenantId)
+  res.json(rows)
+})
+
+app.get('/api/ai-documents/:id', STAFF, (req, res) => {
+  const row = db.prepare('SELECT * FROM ai_documents WHERE id=? AND tenant_id=?').get(req.params.id, req.tenantId)
+  if (!row) return res.status(404).json({ error: 'Dokumen tidak ditemukan' })
+  res.json({ ...row, metadata: JSON.parse(row.metadata_json || '{}') })
+})
+
+app.post('/api/ai-documents/generate', STAFF, async (req, res) => {
+  const checked = validateGenerateInput(req.body)
+  if (checked.error) return res.status(400).json({ error: checked.error })
+  try {
+    const input = checked.value
+    const content = await callAi(buildPrompt(input))
+    const id = uuidv4()
+    const title = `${DOCUMENT_TYPES[input.type].label} ${input.subject} ${input.grade}`.trim()
+    db.prepare('INSERT INTO ai_documents(id,type,title,subject,grade,topic,metadata_json,content,created_by,tenant_id) VALUES(?,?,?,?,?,?,?,?,?,?)')
+      .run(id, input.type, title, input.subject.trim(), input.grade.trim(), input.topic.trim(), JSON.stringify(input), content, req.user?.id || null, req.tenantId)
+    res.status(201).json({ id, title, content, input })
+  } catch (error) {
+    console.error('[AI Documents] generate failed:', error.message)
+    res.status(error.message.includes('belum dikonfigurasi') ? 503 : 502).json({ error: error.message })
+  }
+})
+
+app.post('/api/ai-documents/export-docx', STAFF, async (req, res) => {
+  try {
+    let data = req.body || {}
+    if (data.id) {
+      const row = db.prepare('SELECT * FROM ai_documents WHERE id=? AND tenant_id=?').get(data.id, req.tenantId)
+      if (!row) return res.status(404).json({ error: 'Dokumen tidak ditemukan' })
+      data = { ...JSON.parse(row.metadata_json || '{}'), type: row.type, subject: row.subject, grade: row.grade, topic: row.topic, content: row.content }
+    }
+    if (!data.content || !DOCUMENT_TYPES[String(data.type || '').toUpperCase()]) return res.status(400).json({ error: 'Jenis dan isi dokumen wajib diisi' })
+    const buffer = await createDocumentDocx(data)
+    const filename = `${String(data.type).toUpperCase()}-${String(data.subject || 'dokumen').replace(/[^a-z0-9]+/gi, '-')}.docx`
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document')
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`)
+    res.send(buffer)
+  } catch (error) {
+    console.error('[AI Documents] export failed:', error.message)
+    res.status(500).json({ error: 'Gagal membuat DOCX' })
+  }
+})
+
 app.get('/api/modul-ajar', authMiddleware, (req, res) => {
   res.json(db.prepare('SELECT * FROM modul_ajar WHERE tenant_id = ? ORDER BY created_at DESC').all(req.tenantId))
 })

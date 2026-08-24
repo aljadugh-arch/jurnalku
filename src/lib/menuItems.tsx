@@ -46,7 +46,7 @@ export const adminMenuItems: MenuItem[] = [
   { label: 'Jurnal Mengajar', icon: <ClipboardList size={20} />, path: '/admin/jurnal' },
   { label: 'Rapor Siswa', icon: <FileText size={20} />, path: '/admin/rapor' },
   { label: 'Catatan Kepribadian', icon: <ScrollText size={20} />, path: '/admin/catatan-kepribadian' },
-  { label: 'Generator Modul Ajar', icon: <Sparkles size={20} />, path: '/admin/modul-ajar' },
+  { label: 'Generator AI Guru', icon: <Sparkles size={20} />, path: '/admin/modul-ajar' },
   { label: 'Tahun Ajaran', icon: <School size={20} />, path: '/admin/tahun-ajaran' },
   {
     label: 'Keuangan', icon: <DollarSign size={20} />,
@@ -77,7 +77,7 @@ export const guruMenuItems: MenuItem[] = [
   { label: 'Penugasan', icon: <ClipboardCheck size={20} />, path: '/guru#tugas' },
   { label: 'Absensi Siswa', icon: <QrCode size={20} />, path: '/guru/absensi-siswa' },
   { label: 'Absensi Saya', icon: <MapPin size={20} />, path: '/guru/absensi-guru' },
-  { label: 'Modul Ajar', icon: <Sparkles size={20} />, path: '/guru/modul-ajar' },
+  { label: 'Generator AI Guru', icon: <Sparkles size={20} />, path: '/guru/modul-ajar' },
   { label: 'Kelas Wali Saya', icon: <Layers size={20} />, path: '/guru/rombel' },
 ]
 

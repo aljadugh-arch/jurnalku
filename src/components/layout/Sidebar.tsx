@@ -57,7 +57,7 @@ const adminMenuItems: MenuItem[] = [
   { label: 'Jurnal Mengajar', icon: <ClipboardList size={20} />, path: '/admin/jurnal' },
   { label: 'Rapor Siswa', icon: <FileText size={20} />, path: '/admin/rapor' },
   { label: 'Catatan Kepribadian', icon: <NotebookPen size={20} />, path: '/admin/catatan-kepribadian' },
-  { label: 'Generator Modul Ajar', icon: <Sparkles size={20} />, path: '/admin/modul-ajar' },
+  { label: 'Generator AI Guru', icon: <Sparkles size={20} />, path: '/admin/modul-ajar' },
   { label: 'Tahun Ajaran', icon: <School size={20} />, path: '/admin/tahun-ajaran' },
   {
     label: 'Keuangan', icon: <DollarSign size={20} />,
