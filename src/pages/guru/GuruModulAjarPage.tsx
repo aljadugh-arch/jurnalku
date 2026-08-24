@@ -94,9 +94,9 @@ export default function GuruModulAjarPage() {
       <p className="mt-1 text-sm text-gray-500 dark:text-slate-400">Pilih bantuan AI atau bundle template lama yang cepat dan siap diedit.</p>
     </div>
 
-    <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-5">
-      {documentTypes.map(item => <button key={item.value} type="button" onClick={() => { setForm(prev => ({ ...prev, type: item.value })); setResult(''); setDocumentId('') }} className={`min-h-24 rounded-xl border p-3 text-left transition ${form.type === item.value ? 'border-primary bg-primary/10 text-primary shadow-sm' : 'border-gray-200 bg-white text-gray-700 hover:border-primary/40 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200'}`}>
-        <FileText size={18} /><strong className="mt-2 block text-sm">{item.label}</strong><span className="mt-1 block text-[11px] opacity-70">{item.hint}</span>
+    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
+      {documentTypes.map(item => <button key={item.value} type="button" aria-pressed={form.type === item.value} onClick={() => { setForm(prev => ({ ...prev, type: item.value })); setResult(''); setDocumentId('') }} className={`flex min-h-[64px] w-full items-center gap-3 overflow-hidden rounded-xl border px-3 py-2.5 text-left transition ${form.type === item.value ? 'border-primary bg-primary/10 text-primary shadow-sm' : 'border-gray-200 bg-white text-gray-700 hover:border-primary/40 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200'}`}>
+        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-current/10"><FileText size={17} /></span><span className="min-w-0 flex-1"><strong className="block truncate text-sm leading-5">{item.label}</strong><span className="line-clamp-1 block text-[11px] leading-4 opacity-70">{item.hint}</span></span>
       </button>)}
     </div>
 
