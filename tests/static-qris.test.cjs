@@ -1,6 +1,7 @@
 const test = require('node:test')
 const assert = require('node:assert/strict')
-const { normalizeStaticQrisConfig, validateStaticQrisSubmission } = require('../server/portal-cashless.cjs')
+const Database = require('better-sqlite3')
+const { setupPortalCashless, normalizeStaticQrisConfig, validateStaticQrisSubmission, assertStaticQrisSubmissionAvailable } = require('../server/portal-cashless.cjs')
 
 const png = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAAB'
 
@@ -31,4 +32,21 @@ test('transfer declaration requires a 3 digit unique code matching the transferr
   assert.throws(() => validateStaticQrisSubmission({ provider: 'gopay', amount: 0, unique_code: '123', transfer_amount: 123, atas_nama: 'Budi', no_rek_dari: '1', bukti_transfer: png }), /nominal/i)
   assert.throws(() => validateStaticQrisSubmission({ provider: 'gopay', amount: 50000, unique_code: '123', transfer_amount: 50123, atas_nama: '', no_rek_dari: '1', bukti_transfer: png }), /pengirim/i)
   assert.throws(() => validateStaticQrisSubmission({ provider: 'gopay', amount: 50000, unique_code: '123', transfer_amount: 50123, atas_nama: 'Budi', no_rek_dari: '1' }), /bukti/i)
+})
+
+test('submission requires an enabled configured tenant provider and rejects pending transfer collisions', () => {
+  const db = new Database(':memory:')
+  setupPortalCashless(db)
+  const declaration = validateStaticQrisSubmission({ provider: 'shopee', amount: 50000, unique_code: '123', transfer_amount: 50123, atas_nama: 'Budi', no_rek_dari: '1', bukti_transfer: png })
+
+  assert.throws(() => assertStaticQrisSubmissionAvailable(db, 'tenant-a', declaration), /belum diaktifkan/i)
+  db.prepare('INSERT INTO cashless_provider_config(tenant_id,provider,enabled,config_json) VALUES(?,?,?,?)').run('tenant-a', 'bank_transfer', 1, JSON.stringify({ gopay_qris: png }))
+  assert.throws(() => assertStaticQrisSubmissionAvailable(db, 'tenant-a', declaration), /belum dikonfigurasi/i)
+  db.prepare('UPDATE cashless_provider_config SET config_json=? WHERE tenant_id=? AND provider=?').run(JSON.stringify({ shopee_qris: png }), 'tenant-a', 'bank_transfer')
+  assert.doesNotThrow(() => assertStaticQrisSubmissionAvailable(db, 'tenant-a', declaration))
+
+  db.prepare('INSERT INTO cashless_topup_manual(id,tenant_id,student_id,amount,status,provider,unique_code,transfer_amount) VALUES(?,?,?,?,?,?,?,?)')
+    .run('existing', 'tenant-a', 'student-a', 50000, 'pending', 'shopee', '123', 50123)
+  assert.throws(() => assertStaticQrisSubmissionAvailable(db, 'tenant-a', declaration), /sudah digunakan/i)
+  db.close()
 })

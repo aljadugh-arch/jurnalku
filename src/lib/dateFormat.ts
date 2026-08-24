@@ -44,6 +44,6 @@ export function formatTanggal(value: any) {
   if (!iso) return '-'
   const m = String(iso).match(/^(\d{4})-(\d{2})-(\d{2})$/)
   if (!m) return String(value)
-  const d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]))
+  const d = new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3]), 12))
   return d.toLocaleDateString('id-ID', { timeZone: 'Asia/Jakarta', day: '2-digit', month: 'long', year: 'numeric' })
 }

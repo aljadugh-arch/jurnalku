@@ -16,6 +16,13 @@ function setupPortalCashless(db) {
   try { db.exec('ALTER TABLE cashless_topup_manual ADD COLUMN provider TEXT') } catch {}
   try { db.exec('ALTER TABLE cashless_topup_manual ADD COLUMN unique_code TEXT') } catch {}
   try { db.exec('ALTER TABLE cashless_topup_manual ADD COLUMN transfer_amount INTEGER') } catch {}
+  db.exec(`CREATE TRIGGER IF NOT EXISTS prevent_pending_topup_transfer_collision
+    BEFORE INSERT ON cashless_topup_manual
+    WHEN NEW.status='pending' AND EXISTS(
+      SELECT 1 FROM cashless_topup_manual
+      WHERE tenant_id=NEW.tenant_id AND provider=NEW.provider AND transfer_amount=NEW.transfer_amount AND status='pending'
+    )
+    BEGIN SELECT RAISE(ABORT,'pending transfer amount already used'); END;`)
 }
 
 const validAmount = a => { if (!Number.isSafeInteger(a) || a <= 0) throw Error('nominal wajib integer positif') }
@@ -85,6 +92,15 @@ const validateStaticQrisSubmission = input => {
   if (!/^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/.test(bukti_transfer)) throw Error('Bukti transfer berupa gambar wajib diunggah')
   if (bukti_transfer.length > MAX_QRIS_DATA_URL) throw Error('Ukuran bukti transfer maksimal 1,5 MB')
   return { provider, amount, unique_code, transfer_amount, atas_nama, no_rek_dari, bank_dari: provider === 'shopee' ? 'ShopeePay' : 'GoPay', bukti_transfer }
+}
+const assertStaticQrisSubmissionAvailable = (db, tenantId, declaration) => {
+  const cfg = db.prepare('SELECT enabled,config_json FROM cashless_provider_config WHERE tenant_id=? AND provider=?').get(tenantId, 'bank_transfer')
+  if (!cfg?.enabled) throw Error('QRIS belum diaktifkan oleh lembaga')
+  let config = {}
+  try { config = JSON.parse(cfg.config_json || '{}') } catch {}
+  if (!config[`${declaration.provider}_qris`]) throw Error(`QRIS ${declaration.bank_dari} belum dikonfigurasi`)
+  const collision = db.prepare("SELECT id FROM cashless_topup_manual WHERE tenant_id=? AND provider=? AND transfer_amount=? AND status='pending' LIMIT 1").get(tenantId, declaration.provider, declaration.transfer_amount)
+  if (collision) throw Error('Kode unik sudah digunakan transaksi pending lain; muat ulang halaman untuk mendapatkan kode baru')
 }
 const linkedStudentIds = (db, t, u) => db.prepare('SELECT student_id FROM user_students WHERE tenant_id=? AND user_id=? ORDER BY student_id').all(t, u).map(x => x.student_id)
 
@@ -540,8 +556,16 @@ function registerKantinRoutes(app, db, { requireRole, uuid, bcrypt }) {
     if (!ids.includes(student_id)) return res.status(403).json({ error: 'Bukan siswa/anak tertaut' })
 
     const id = uuid()
-    db.prepare('INSERT INTO cashless_topup_manual (id, tenant_id, student_id, amount, bukti_transfer, bank_dari, no_rek_dari, atas_nama, status, created_at, provider, unique_code, transfer_amount) VALUES (?,?,?,?,?,?,?,?,\'pending\',?,?,?,?)')
-      .run(id, req.tenantId, student_id, declaration.amount, declaration.bukti_transfer, declaration.bank_dari, declaration.no_rek_dari, declaration.atas_nama, new Date().toISOString(), declaration.provider, declaration.unique_code, declaration.transfer_amount)
+    try {
+      db.transaction(() => {
+        assertStaticQrisSubmissionAvailable(db, req.tenantId, declaration)
+        db.prepare('INSERT INTO cashless_topup_manual (id, tenant_id, student_id, amount, bukti_transfer, bank_dari, no_rek_dari, atas_nama, status, created_at, provider, unique_code, transfer_amount) VALUES (?,?,?,?,?,?,?,?,\'pending\',?,?,?,?)')
+          .run(id, req.tenantId, student_id, declaration.amount, declaration.bukti_transfer, declaration.bank_dari, declaration.no_rek_dari, declaration.atas_nama, new Date().toISOString(), declaration.provider, declaration.unique_code, declaration.transfer_amount)
+      })()
+    } catch (e) {
+      const collision = String(e?.code || '').startsWith('SQLITE_CONSTRAINT')
+      return res.status(collision ? 409 : 400).json({ error: collision ? 'Kode unik sudah digunakan transaksi pending lain; muat ulang halaman untuk mendapatkan kode baru' : e.message })
+    }
     res.json({ id, status: 'pending', provider: declaration.provider, amount: declaration.amount })
   })
 
@@ -595,4 +619,4 @@ function registerKantinRoutes(app, db, { requireRole, uuid, bcrypt }) {
   })
 }
 
-module.exports = { setupPortalCashless, balance, credit, debit, processWebhook, opaqueQr, normalizeStaticQrisConfig, validateStaticQrisSubmission, linkedStudentIds, selectPenilaianStudentId, pesantrenMenu, registerPortalRoutes, registerKantinRoutes }
+module.exports = { setupPortalCashless, balance, credit, debit, processWebhook, opaqueQr, normalizeStaticQrisConfig, validateStaticQrisSubmission, assertStaticQrisSubmissionAvailable, linkedStudentIds, selectPenilaianStudentId, pesantrenMenu, registerPortalRoutes, registerKantinRoutes }
