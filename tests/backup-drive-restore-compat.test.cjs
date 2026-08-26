@@ -15,6 +15,14 @@ function database() {
   return db
 }
 
+test('gzip expansion beyond the restore limit is rejected', () => {
+  const db = database()
+  db.prepare('UPDATE tenants SET id=? WHERE id=?').run('mtsplussd7', 'target-tenant')
+  const service = createService(db)
+  const compressed = zlib.gzipSync(Buffer.alloc(10 * 1024 * 1024 + 1, 0x20))
+  assert.throws(() => service.parseArtifact('mtsplussd7', compressed), /terlalu besar/)
+})
+
 test('Google Drive json.gz legacy backup is accepted and remapped to current tenant', () => {
   const db = database()
   db.prepare('UPDATE tenants SET id=? WHERE id=?').run('mtsplussd7', 'target-tenant')
@@ -67,4 +75,27 @@ test('legacy Google Drive backup cannot be uploaded to the wrong tenant', () => 
   }))
 
   assert.throws(() => service.parseArtifact('mimifdangimbang', file), /bukan milik tenant tujuan/)
+})
+
+test('legacy rows preserve database defaults for columns absent from old backup', () => {
+  const db = database()
+  db.exec("CREATE TABLE rombel_jam_pulang (id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL, aktif INTEGER NOT NULL DEFAULT 1)")
+  db.prepare('UPDATE tenants SET id=? WHERE id=?').run('mimifdangimbang', 'target-tenant')
+  const service = createService(db, { backupDir: '/tmp/jurnalku-default-test' })
+  const file = Buffer.from(JSON.stringify({ slug: 'mi-miftahul-huda-ngimbang', data: { rombel_jam_pulang: [{ id: 'pulang-1', tenant_id: 'legacy' }] } }))
+  const artifact = service.parseArtifact('mimifdangimbang', file)
+  service.restore('mimifdangimbang', artifact, 'merge', 'RESTORE')
+  assert.equal(db.prepare('SELECT aktif FROM rombel_jam_pulang').get().aktif, 1)
+})
+
+test('replace clears a supported table explicitly present as an empty legacy array', () => {
+  const db = database()
+  db.exec("CREATE TABLE rombel_jam_pulang (id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL, aktif INTEGER NOT NULL DEFAULT 1)")
+  db.prepare('UPDATE tenants SET id=? WHERE id=?').run('mimifdangimbang', 'target-tenant')
+  db.prepare('INSERT INTO rombel_jam_pulang VALUES (?,?,?)').run('old', 'mimifdangimbang', 1)
+  const service = createService(db, { backupDir: '/tmp/jurnalku-empty-replace-test' })
+  const file = Buffer.from(JSON.stringify({ slug: 'mi-miftahul-huda-ngimbang', data: { rombel_jam_pulang: [] } }))
+  const artifact = service.parseArtifact('mimifdangimbang', file)
+  service.restore('mimifdangimbang', artifact, 'replace', 'RESTORE', 'REPLACE DATA')
+  assert.equal(db.prepare('SELECT count(*) n FROM rombel_jam_pulang').get().n, 0)
 })
