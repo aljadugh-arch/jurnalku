@@ -56,6 +56,15 @@ export default function BackupRestorePage() {
     loadDrive(); loadLogs(); loadCfg()
   }, [])
 
+  const connectDrive = async () => {
+    try {
+      const { data } = await api.get('/google-drive/oauth/start')
+      window.location.assign(data.authorization_url)
+    } catch (err: any) {
+      toast.error(err.response?.data?.error || 'Tidak dapat memulai koneksi Google Drive')
+    }
+  }
+
   const runDriveBackup = async () => {
     setRunning(true)
     try {
@@ -156,9 +165,12 @@ export default function BackupRestorePage() {
       <section className="rounded-xl border border-gray-100 bg-white p-5 shadow-sm">
         <div className="mb-4 flex items-center justify-between">
           <h2 className="flex items-center gap-2 font-semibold text-gray-800"><Cloud size={18} className="text-primary" /> Backup ke Google Drive</h2>
-          <button onClick={loadDrive} className="flex items-center gap-1 text-sm text-primary hover:underline" title="Cek ulang koneksi">
-            <RefreshCw size={14} className={driveLoading ? 'animate-spin' : ''} /> Cek
-          </button>
+          <div className="flex items-center gap-3">
+            <button onClick={connectDrive} className="text-sm text-primary hover:underline">Hubungkan Google</button>
+            <button onClick={loadDrive} className="flex items-center gap-1 text-sm text-primary hover:underline" title="Cek ulang koneksi">
+              <RefreshCw size={14} className={driveLoading ? 'animate-spin' : ''} /> Cek
+            </button>
+          </div>
         </div>
 
         <div className="mb-4 flex items-center gap-2 text-sm">

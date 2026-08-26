@@ -16,6 +16,7 @@ const CREDENTIAL_DIR = process.env.GOOGLE_DRIVE_CREDENTIAL_DIR || '/www/wwwroot/
 const SA_FALLBACK = `${CREDENTIAL_DIR}/service-account.json`
 const OAUTH_TOKEN_FALLBACK = `${CREDENTIAL_DIR}/oauth-token.json`
 const OAUTH_CLIENT_FALLBACK = `${CREDENTIAL_DIR}/oauth-client.json`
+const OAUTH_REDIRECT_URI = process.env.GOOGLE_DRIVE_OAUTH_REDIRECT_URI || 'https://jurnal.cc.cd/api/google-drive/oauth/callback'
 
 function setupBackupTables(db) {
   db.exec(`
@@ -38,6 +39,11 @@ function setupBackupTables(db) {
       retention_days INTEGER DEFAULT 14,
       updated_at TEXT DEFAULT (datetime('now'))
     );
+    CREATE TABLE IF NOT EXISTS google_drive_oauth_state (
+      state TEXT PRIMARY KEY,
+      tenant_id TEXT NOT NULL,
+      expires_at INTEGER NOT NULL
+    );
   `)
 }
 
@@ -48,6 +54,18 @@ function credentialPaths() {
     oauth_token: process.env.GOOGLE_DRIVE_OAUTH_TOKEN_FILE || OAUTH_TOKEN_FALLBACK,
     oauth_client: process.env.GOOGLE_DRIVE_OAUTH_CLIENT_FILE || OAUTH_CLIENT_FALLBACK,
   }
+}
+
+function tenantTokenPath(tenantId) {
+  const safe = String(tenantId || 'tenant').replace(/[^a-z0-9_-]/gi, '_')
+  return `${CREDENTIAL_DIR}/oauth-token-${safe}.json`
+}
+
+function oauthClient() {
+  const data = readJsonCredential(credentialPaths().oauth_client, 'OAuth client')
+  const web = data?.web || data?.installed || {}
+  if (!web.client_id || !web.client_secret || !web.token_uri) throw new Error('JSON OAuth client tidak lengkap')
+  return { ...web, redirect_uri: OAUTH_REDIRECT_URI }
 }
 
 function readJsonCredential(file, label) {
@@ -67,8 +85,12 @@ function credentialMode() {
   return preferred
 }
 
-function availableAuth() {
+function availableAuth(tenantId) {
   const paths = credentialPaths()
+  if (tenantId) {
+    const perTenant = tenantTokenPath(tenantId)
+    if (fs.existsSync(perTenant)) paths.oauth_token = perTenant
+  }
   const preferred = credentialMode()
   const auths = []
   const sa = readJsonCredential(paths.service_account, 'service account')
@@ -101,9 +123,9 @@ function availableAuth() {
   return auths
 }
 
-async function loadAuth() {
+async function loadAuth(tenantId) {
   const preferred = credentialMode()
-  const auths = availableAuth()
+  const auths = availableAuth(tenantId)
   if (!auths.length) throw new Error('Tidak ada kredensial Google Drive yang valid. Butuh service-account JSON atau OAuth2 refresh token.')
   if (preferred === 'auto') return auths[0]
   const selected = auths.find(auth => auth.type === preferred)
@@ -185,11 +207,11 @@ async function getAccessToken(auth) {
   return getAccessTokenOAuth2(auth)
 }
 
-async function resolveWorkingAuth() {
+async function resolveWorkingAuth(tenantId) {
   const preferred = String(process.env.GOOGLE_DRIVE_AUTH_MODE || 'auto').toLowerCase()
-  const auths = availableAuth()
-  if (!auths.length) return { auth: await loadAuth(), token: null }
-  const ordered = preferred === 'auto' ? auths : [await loadAuth()]
+  const auths = availableAuth(tenantId)
+  if (!auths.length) return { auth: await loadAuth(tenantId), token: null }
+  const ordered = preferred === 'auto' ? auths : [await loadAuth(tenantId)]
   const failures = []
   for (const auth of ordered) {
     try { return { auth, token: await getAccessToken(auth) } }
@@ -250,10 +272,42 @@ function registerBackupRoutes(app, db, { requireRole, uuid }) {
     db.prepare('SELECT tenant_id, folder_id, auto_enabled, retention_days FROM backup_config WHERE tenant_id = ?').get(tenantId)
     || { tenant_id: tenantId, folder_id: null, auto_enabled: 0, retention_days: 14 }
 
+  app.get('/api/google-drive/oauth/start', kadmin, (req, res) => {
+    try {
+      const client = oauthClient()
+      const state = crypto.randomBytes(32).toString('hex')
+      db.prepare('DELETE FROM google_drive_oauth_state WHERE expires_at < ?').run(Math.floor(Date.now() / 1000))
+      db.prepare('INSERT INTO google_drive_oauth_state (state, tenant_id, expires_at) VALUES (?,?,?)')
+        .run(state, req.tenantId, Math.floor(Date.now() / 1000) + 600)
+      const params = new URLSearchParams({ client_id: client.client_id, redirect_uri: OAUTH_REDIRECT_URI, response_type: 'code', access_type: 'offline', prompt: 'consent', scope: 'https://www.googleapis.com/auth/drive.file', state })
+      res.json({ authorization_url: `https://accounts.google.com/o/oauth2/v2/auth?${params}` })
+    } catch (e) { res.status(500).json({ error: String(e.message || e) }) }
+  })
+
+  app.get('/api/google-drive/oauth/callback', async (req, res) => {
+    const { code, state, error } = req.query || {}
+    if (error) return res.status(400).send('Otorisasi Google dibatalkan. Silakan tutup halaman ini.')
+    if (!code || !state) return res.status(400).send('Callback OAuth tidak lengkap.')
+    const row = db.prepare('SELECT * FROM google_drive_oauth_state WHERE state = ? AND expires_at >= ?').get(String(state), Math.floor(Date.now() / 1000))
+    db.prepare('DELETE FROM google_drive_oauth_state WHERE state = ?').run(String(state))
+    if (!row) return res.status(400).send('State OAuth tidak valid atau sudah kedaluwarsa.')
+    try {
+      const client = oauthClient()
+      const body = new URLSearchParams({ code: String(code), client_id: client.client_id, client_secret: client.client_secret, redirect_uri: OAUTH_REDIRECT_URI, grant_type: 'authorization_code' }).toString()
+      const tokenResp = await fetch(client.token_uri, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body })
+      const token = await tokenResp.json()
+      if (!tokenResp.ok || !token.refresh_token) throw new Error(token.error_description || token.error || 'Google tidak mengembalikan refresh token')
+      const file = tenantTokenPath(row.tenant_id)
+      fs.mkdirSync(CREDENTIAL_DIR, { recursive: true, mode: 0o700 })
+      fs.writeFileSync(file, JSON.stringify({ ...token, created: Math.floor(Date.now() / 1000) }, null, 2), { mode: 0o600 })
+      res.send('Google Drive berhasil terhubung ke tenant ini. Anda dapat menutup halaman ini.')
+    } catch (e) { res.status(502).send(`Koneksi Google Drive gagal: ${String(e.message || e)}`) }
+  })
+
   // Status koneksi Google Drive
   app.get('/api/google-drive/status', kadmin, async (req, res) => {
     try {
-      const { auth, token } = await resolveWorkingAuth()
+      const { auth, token } = await resolveWorkingAuth(req.tenantId)
       const cfg = getConfig(req.tenantId)
       const folderId = cfg.folder_id || process.env.GOOGLE_DRIVE_BACKUP_FOLDER_ID || null
       let folder_ok = false
@@ -284,7 +338,7 @@ function registerBackupRoutes(app, db, { requireRole, uuid }) {
     const slug = (tenant?.slug || req.tenantId || 'tenant').replace(/[^a-z0-9_-]/gi, '_')
     const filename = `jurnal-${slug}-${tsStamp()}.json.gz`
     try {
-      const { token } = await resolveWorkingAuth()
+      const { token } = await resolveWorkingAuth(req.tenantId)
       const cfg = getConfig(req.tenantId)
       const folderId = cfg.folder_id || process.env.GOOGLE_DRIVE_BACKUP_FOLDER_ID || null
 
