@@ -15,7 +15,7 @@ interface PreviewResult {
   sections: Array<{ key: string; label: string; count: number }>
 }
 
-interface DriveStatus { connected: boolean; email?: string; folder_id?: string | null; folder_ok?: boolean; error?: string }
+interface DriveStatus { connected: boolean; email?: string; folder_id?: string | null; folder_ok?: boolean; error?: string; auth_type?: 'oauth2' | 'service_account' }
 interface BackupLog { id: string; filename: string; drive_file_id: string | null; size: number; status: string; error: string | null; created_at: string }
 
 const fmtSize = (b: number) => b < 1024 ? `${b} B` : b < 1048576 ? `${(b / 1024).toFixed(1)} KB` : `${(b / 1048576).toFixed(2)} MB`
@@ -165,7 +165,7 @@ export default function BackupRestorePage() {
           {driveLoading ? (
             <span className="flex items-center gap-2 text-gray-500"><Loader2 size={16} className="animate-spin" /> Memeriksa koneksi…</span>
           ) : drive?.connected ? (
-            <span className="flex items-center gap-2 rounded-full bg-green-50 px-3 py-1 text-green-700"><CheckCircle2 size={16} /> Terhubung{drive.email ? ` (${drive.email})` : ''}{drive.folder_ok === false ? ' — folder belum bisa diakses' : ''}</span>
+            <span className="flex items-center gap-2 rounded-full bg-green-50 px-3 py-1 text-green-700"><CheckCircle2 size={16} /> Terhubung via {drive.auth_type === 'service_account' ? 'Service Account' : 'OAuth'}{drive.email ? ` (${drive.email})` : ''}{drive.folder_ok === false ? ' — folder belum bisa diakses' : ''}</span>
           ) : (
             <span className="flex items-center gap-2 rounded-full bg-red-50 px-3 py-1 text-red-700"><XCircle size={16} /> Tidak terhubung{drive?.error ? `: ${drive.error}` : ''}</span>
           )}

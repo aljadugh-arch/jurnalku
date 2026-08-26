@@ -12,9 +12,10 @@ const crypto = require('node:crypto')
 const zlib = require('node:zlib')
 const fs = require('node:fs')
 
-const SA_FALLBACK = '/www/wwwroot/fazapay.ccwu.cc/storage/google-drive-service-account.json'
-const OAUTH_TOKEN_FILE = '/www/wwwroot/fazapay.ccwu.cc/storage/google_drive_token.json'
-const OAUTH_CLIENT_FILE = '/www/wwwroot/fazapay.ccwu.cc/storage/client_secret_336863782312_hht9dmpnlev3uvtnok4435drogr1muk7_apps.json'
+const CREDENTIAL_DIR = process.env.GOOGLE_DRIVE_CREDENTIAL_DIR || '/www/wwwroot/jurnal.cc.cd/var/credentials/google-drive'
+const SA_FALLBACK = `${CREDENTIAL_DIR}/service-account.json`
+const OAUTH_TOKEN_FALLBACK = `${CREDENTIAL_DIR}/oauth-token.json`
+const OAUTH_CLIENT_FALLBACK = `${CREDENTIAL_DIR}/oauth-client.json`
 
 function setupBackupTables(db) {
   db.exec(`
@@ -41,37 +42,73 @@ function setupBackupTables(db) {
 }
 
 // --- Auth mode detection & loading ---
-async function loadAuth() {
-  // Try service account first (env override or fallback)
-  const saPath = process.env.GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON_FILE || SA_FALLBACK
-  if (fs.existsSync(saPath)) {
-    const raw = fs.readFileSync(saPath, 'utf8')
-    const sa = JSON.parse(raw)
-    if (sa.client_email && sa.private_key) {
-      return { type: 'service_account', sa }
+function credentialPaths() {
+  return {
+    service_account: process.env.GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON_FILE || SA_FALLBACK,
+    oauth_token: process.env.GOOGLE_DRIVE_OAUTH_TOKEN_FILE || OAUTH_TOKEN_FALLBACK,
+    oauth_client: process.env.GOOGLE_DRIVE_OAUTH_CLIENT_FILE || OAUTH_CLIENT_FALLBACK,
+  }
+}
+
+function readJsonCredential(file, label) {
+  try { return JSON.parse(fs.readFileSync(file, 'utf8')) }
+  catch (e) {
+    if (e?.code === 'ENOENT') return null
+    if (e instanceof SyntaxError) throw new Error(`JSON ${label} tidak valid`)
+    throw new Error(`${label} tidak dapat dibaca`)
+  }
+}
+
+function credentialMode() {
+  const preferred = String(process.env.GOOGLE_DRIVE_AUTH_MODE || 'auto').toLowerCase()
+  if (!['auto', 'oauth2', 'service_account'].includes(preferred)) {
+    throw new Error('GOOGLE_DRIVE_AUTH_MODE harus auto, oauth2, atau service_account')
+  }
+  return preferred
+}
+
+function availableAuth() {
+  const paths = credentialPaths()
+  const preferred = credentialMode()
+  const auths = []
+  const sa = readJsonCredential(paths.service_account, 'service account')
+  if (sa) {
+    if (sa.type !== 'service_account' || !sa.client_email || !sa.private_key) {
+      if (preferred === 'service_account') throw new Error('JSON service account tidak lengkap')
+    } else {
+      auths.push({ type: 'service_account', sa })
     }
   }
-  
-  // Fallback: OAuth2 refresh token + client credentials
-  if (fs.existsSync(OAUTH_TOKEN_FILE) && fs.existsSync(OAUTH_CLIENT_FILE)) {
-    const tokenRaw = fs.readFileSync(OAUTH_TOKEN_FILE, 'utf8')
-    const clientRaw = fs.readFileSync(OAUTH_CLIENT_FILE, 'utf8')
-    const tokenData = JSON.parse(tokenRaw)
-    const clientData = JSON.parse(clientRaw)
-    const web = clientData.web || clientData.installed || {}
-    if (tokenData.refresh_token && web.client_id && web.client_secret && web.token_uri) {
-      return {
+
+  const tokenData = readJsonCredential(paths.oauth_token, 'OAuth token')
+  const clientData = readJsonCredential(paths.oauth_client, 'OAuth client')
+  if (tokenData || clientData) {
+    const web = clientData?.web || clientData?.installed || {}
+    if (!tokenData?.refresh_token || !web.client_id || !web.client_secret || !web.token_uri) {
+      if (preferred === 'oauth2') throw new Error('JSON OAuth token/client tidak lengkap')
+    } else {
+      auths.push({
         type: 'oauth2',
         refresh_token: tokenData.refresh_token,
         client_id: web.client_id,
         client_secret: web.client_secret,
         token_uri: web.token_uri,
-        scopes: tokenData.scope || 'https://www.googleapis.com/auth/drive.file'
-      }
+        scopes: tokenData.scope || 'https://www.googleapis.com/auth/drive.file',
+        token_file: paths.oauth_token,
+      })
     }
   }
-  
-  throw new Error('Tidak ada kredensial Google Drive yang valid. Butuh service account JSON atau OAuth2 refresh token.')
+  return auths
+}
+
+async function loadAuth() {
+  const preferred = credentialMode()
+  const auths = availableAuth()
+  if (!auths.length) throw new Error('Tidak ada kredensial Google Drive yang valid. Butuh service-account JSON atau OAuth2 refresh token.')
+  if (preferred === 'auto') return auths[0]
+  const selected = auths.find(auth => auth.type === preferred)
+  if (!selected) throw new Error(`Kredensial Google Drive mode ${preferred} tidak tersedia`)
+  return selected
 }
 
 function b64url(buf) {
@@ -128,16 +165,16 @@ async function getAccessTokenOAuth2(auth) {
   const data = await resp.json()
   if (!resp.ok || !data.access_token) throw new Error('gagal ambil access token (OAuth2): ' + (data.error_description || data.error || resp.status))
   
-  // Update token file if new refresh_token received (rotate)
+  // Update token file if Google rotates the refresh token.
   if (data.refresh_token && data.refresh_token !== auth.refresh_token) {
-    const tokenData = JSON.parse(fs.readFileSync(OAUTH_TOKEN_FILE, 'utf8'))
+    const tokenData = JSON.parse(fs.readFileSync(auth.token_file, 'utf8'))
     tokenData.access_token = data.access_token
     tokenData.refresh_token = data.refresh_token
     tokenData.expires_in = data.expires_in
     tokenData.token_type = data.token_type
     tokenData.scope = data.scope || auth.scopes
     tokenData.created = Math.floor(Date.now() / 1000)
-    fs.writeFileSync(OAUTH_TOKEN_FILE, JSON.stringify(tokenData, null, 2))
+    fs.writeFileSync(auth.token_file, JSON.stringify(tokenData, null, 2), { mode: 0o600 })
   }
   return data.access_token
 }
@@ -146,6 +183,19 @@ async function getAccessTokenOAuth2(auth) {
 async function getAccessToken(auth) {
   if (auth.type === 'service_account') return getAccessTokenSA(auth.sa)
   return getAccessTokenOAuth2(auth)
+}
+
+async function resolveWorkingAuth() {
+  const preferred = String(process.env.GOOGLE_DRIVE_AUTH_MODE || 'auto').toLowerCase()
+  const auths = availableAuth()
+  if (!auths.length) return { auth: await loadAuth(), token: null }
+  const ordered = preferred === 'auto' ? auths : [await loadAuth()]
+  const failures = []
+  for (const auth of ordered) {
+    try { return { auth, token: await getAccessToken(auth) } }
+    catch (e) { failures.push(`${auth.type}: ${String(e.message || e)}`) }
+  }
+  throw new Error(`Semua metode autentikasi Google Drive gagal (${failures.join('; ')})`)
 }
 
 // Multipart upload ke Drive (metadata + media), return file id
@@ -203,12 +253,11 @@ function registerBackupRoutes(app, db, { requireRole, uuid }) {
   // Status koneksi Google Drive
   app.get('/api/google-drive/status', kadmin, async (req, res) => {
     try {
-      const auth = await loadAuth()
+      const { auth, token } = await resolveWorkingAuth()
       const cfg = getConfig(req.tenantId)
       const folderId = cfg.folder_id || process.env.GOOGLE_DRIVE_BACKUP_FOLDER_ID || null
       let folder_ok = false
       try {
-        const token = await getAccessToken(auth)
         if (folderId) {
           const r = await fetch(`https://www.googleapis.com/drive/v3/files/${folderId}?supportsAllDrives=true&fields=id,name`, {
             headers: { Authorization: `Bearer ${token}` },
@@ -235,7 +284,7 @@ function registerBackupRoutes(app, db, { requireRole, uuid }) {
     const slug = (tenant?.slug || req.tenantId || 'tenant').replace(/[^a-z0-9_-]/gi, '_')
     const filename = `jurnal-${slug}-${tsStamp()}.json.gz`
     try {
-      const auth = await loadAuth()
+      const { token } = await resolveWorkingAuth()
       const cfg = getConfig(req.tenantId)
       const folderId = cfg.folder_id || process.env.GOOGLE_DRIVE_BACKUP_FOLDER_ID || null
 
@@ -243,7 +292,6 @@ function registerBackupRoutes(app, db, { requireRole, uuid }) {
       const json = JSON.stringify({ tenant_id: req.tenantId, slug, exported_at: new Date().toISOString(), data })
       const gz = zlib.gzipSync(Buffer.from(json, 'utf8'))
 
-      const token = await getAccessToken(auth)
       const driveFileId = await driveUpload(token, { name: filename, folderId, buffer: gz, mimeType: 'application/gzip' })
 
       db.prepare('INSERT INTO backup_log (id, tenant_id, filename, drive_file_id, size, status) VALUES (?,?,?,?,?,?)')
@@ -289,4 +337,4 @@ function registerBackupRoutes(app, db, { requireRole, uuid }) {
   })
 }
 
-module.exports = { setupBackupTables, registerBackupRoutes }
+module.exports = { setupBackupTables, registerBackupRoutes, loadAuth, resolveWorkingAuth }
