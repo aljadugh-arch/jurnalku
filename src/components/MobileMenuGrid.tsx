@@ -12,16 +12,17 @@ const colors = [
 ]
 
 function MenuLink({ item, index, onClick }: { item: FlatMenu; index: number; onClick?: () => void }) {
-  return (
-    <Link to={item.path} onClick={onClick} className="group flex min-w-0 flex-col items-center text-center">
+  const content = (
+    <>
       <span className={`w-12 h-12 rounded-2xl flex items-center justify-center transition-transform group-active:scale-90 ${colors[index % colors.length]}`}>
         {item.icon}
       </span>
       <span className="mt-2 w-full text-[11px] leading-4 font-medium text-gray-600 dark:text-gray-300 line-clamp-2">
         {item.label}
       </span>
-    </Link>
+    </>
   )
+  return item.external ? <a href={item.external} target="_blank" rel="noopener noreferrer" onClick={onClick} className="group flex min-w-0 flex-col items-center text-center">{content}</a> : <Link to={item.path} onClick={onClick} className="group flex min-w-0 flex-col items-center text-center">{content}</Link>
 }
 
 /** Mobile/tablet: 7 menu utama + Lainnya dalam grid tetap 4x2. */

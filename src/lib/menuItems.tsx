@@ -9,7 +9,8 @@ export interface MenuItem {
   label: string
   icon: React.ReactNode
   path?: string
-  children?: { label: string; path: string }[]
+  external?: string
+  children?: { label: string; path: string; external?: string }[]
 }
 
 // Admin/operator/TU: urut sesuai alur input data — master data dulu, operasional, lalu pengaturan.
@@ -67,7 +68,7 @@ export const adminMenuItems: MenuItem[] = [
   { label: 'Manajemen Pengguna', icon: <UserCheck size={20} />, path: '/admin/users' },
   { label: 'Manajemen Lembaga', icon: <Globe size={20} />, path: '/admin/tenants' },
   { label: 'Backup & Restore', icon: <DatabaseBackup size={20} />, path: '/admin/backup-restore' },
-  { label: 'Kelola Website', icon: <Globe size={20} />, path: '/admin/website-lembaga' },
+  { label: 'Kelola Website', icon: <Globe size={20} />, path: '/admin/website-lembaga', external: 'https://fazacloud.my.id' },
   {
     label: 'E-Kantin & Cashless', icon: <DollarSign size={20} />,
     children: [
@@ -142,14 +143,14 @@ export function menuForRole(role?: string): MenuItem[] {
 }
 
 // Ratakan menu (parent + anak submenu) jadi daftar link datar untuk grid ikon.
-export interface FlatMenu { label: string; path: string; icon: React.ReactNode }
+export interface FlatMenu { label: string; path: string; icon: React.ReactNode; external?: string }
 export function flattenMenu(items: MenuItem[]): FlatMenu[] {
   const out: FlatMenu[] = []
   for (const it of items) {
     if (it.children) {
-      for (const c of it.children) out.push({ label: c.label, path: c.path, icon: it.icon })
+      for (const c of it.children) out.push({ label: c.label, path: c.path, icon: it.icon, external: c.external })
     } else if (it.path) {
-      out.push({ label: it.label, path: it.path, icon: it.icon })
+      out.push({ label: it.label, path: it.path, icon: it.icon, external: it.external })
     }
   }
   return out

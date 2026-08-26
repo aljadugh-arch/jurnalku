@@ -434,6 +434,12 @@ export default function SettingsPage() {
               type="button"
               onClick={async () => {
                 try {
+                  await api.put('/settings/pwa', {
+                    pwa_enabled: form.pwa_enabled,
+                    pwa_name: form.pwa_name,
+                    pwa_theme_color: form.pwa_theme_color,
+                    pwa_bg_color: form.pwa_bg_color,
+                  })
                   await api.post('/settings/pwa-manifest')
                   toast.success('Manifest PWA berhasil diregenerasi')
                 } catch (e: any) {

@@ -2926,7 +2926,8 @@ function selectLinkedStudent(req) {
 }
 
 app.get('/api/pwa/manifest', (req, res) => {
-  const s = db.prepare('SELECT pwa_name,pwa_icon,nama_lembaga,logo,primary_color FROM settings WHERE tenant_id=? ORDER BY updated_at DESC LIMIT 1').get(req.tenantId) || {}
+  const s = db.prepare('SELECT pwa_enabled,pwa_name,pwa_icon,nama_lembaga,logo,primary_color,pwa_bg_color,pwa_theme_color FROM settings WHERE tenant_id=? ORDER BY updated_at DESC LIMIT 1').get(req.tenantId) || {}
+  if (s.pwa_enabled === 0) return res.status(404).json({ error: 'PWA dinonaktifkan' })
   const t = req.tenant || db.prepare('SELECT nama FROM tenants WHERE id=?').get(req.tenantId) || {}
   const name = s.pwa_name || (t.nama ? t.nama + ' Apps' : 'Jurnalku')
   const icon = s.pwa_icon || s.logo || '/logo-jurnalku-256.png'

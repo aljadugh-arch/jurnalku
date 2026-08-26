@@ -57,12 +57,6 @@ export default function CatatanKepribadianGuru() {
 
   useEffect(() => { fetchData() }, [])
 
-  const [rombelSaya, setRombelSaya] = useState<any[]>([])
-  const [filterRombel, setFilterRombel] = useState('')
-  useEffect(() => {
-    api.get('/guru/pengajar-saya').then((r: any) => setRombelSaya(r.data.rombel || [])).catch(() => {})
-  }, [])
-
   const handleOpenForm = () => {
     setSiswaSearch('')
     fetchSiswa()

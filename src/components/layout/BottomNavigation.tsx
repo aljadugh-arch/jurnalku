@@ -31,6 +31,7 @@ type NavItem = {
   path: string
   icon: React.ReactNode
   group?: string
+  external?: string
 }
 
 const iconSize = 21
@@ -105,7 +106,6 @@ function roleItems(role?: string, hideStaffCeklok?: boolean): NavItem[] {
     { label: 'Pengajar', path: '/admin/pengajar', icon: <BookOpen size={iconSize} /> },
     { label: 'Mapel', path: '/admin/mapel', icon: <BookOpen size={iconSize} /> },
     { label: 'Rombel', path: '/admin/rombel', icon: <ListChecks size={iconSize} /> },
-    { label: 'Presensi', path: '/admin/absensi-siswa', icon: <UserCheck size={iconSize} /> },
     { label: 'Abs. Guru', path: '/admin/absensi-guru', icon: <MapPin size={iconSize} /> },
     { label: 'Rekap Absen', path: '/admin/rekap-absensi', icon: <ClipboardCheck size={iconSize} /> },
     { label: 'Ekskul', path: '/admin/ekskul', icon: <ListChecks size={iconSize} /> },
@@ -114,20 +114,18 @@ function roleItems(role?: string, hideStaffCeklok?: boolean): NavItem[] {
     { label: 'Abs. Kokurikuler', path: '/admin/absensi-kokurikuler', icon: <UserCheck size={iconSize} /> },
     { label: 'Abs. Kegiatan', path: '/admin/absensi-kegiatan', icon: <UserCheck size={iconSize} /> },
     { label: 'Jurnal', path: '/admin/jurnal', icon: <ClipboardList size={iconSize} /> },
-    { label: 'Kalender', path: '/admin/kalender-kbm', icon: <Calendar size={iconSize} /> },
     { label: 'Rapor', path: '/admin/rapor', icon: <FileText size={iconSize} /> },
     { label: 'Catatan', path: '/admin/catatan-kepribadian', icon: <FileText size={iconSize} /> },
     { label: 'Modul', path: '/admin/modul-ajar', icon: <FileText size={iconSize} /> },
     { label: 'Tagihan', path: '/admin/tagihan', icon: <DollarSign size={iconSize} /> },
     { label: 'Tabungan', path: '/admin/tabungan', icon: <CreditCard size={iconSize} /> },
-    { label: 'Ekskul', path: '/admin/ekskul', icon: <ListChecks size={iconSize} /> },
     { label: 'Broadcast', path: '/admin/broadcast', icon: <FileText size={iconSize} /> },
     { label: 'Notif WA', path: '/admin/notif-settings', icon: <Settings size={iconSize} /> },
     { label: 'WA Gateway', path: '/admin/wa-gateway', icon: <Settings size={iconSize} /> },
     { label: 'Pengguna', path: '/admin/users', icon: <ShieldCheck size={iconSize} /> },
     { label: 'Setting', path: '/admin/settings', icon: <Settings size={iconSize} /> },
     { label: 'Backup', path: '/admin/backup-restore', icon: <ShieldCheck size={iconSize} /> },
-    { label: 'Website', path: '/admin/website-lembaga', icon: <Home size={iconSize} /> },
+    { label: 'Website', path: '/admin/website-lembaga', icon: <Home size={iconSize} />, external: 'https://fazacloud.my.id' },
     { label: 'Menu Kantin', path: '/admin/kantin-menu', icon: <CreditCard size={iconSize} /> },
     { label: 'Order Kantin', path: '/admin/kantin-orders', icon: <CreditCard size={iconSize} /> },
     { label: 'Topup Manual', path: '/admin/cashless-topup', icon: <CreditCard size={iconSize} /> },
@@ -177,9 +175,11 @@ export default function BottomNavigation() {
             </div>
             <div className="grid grid-cols-4 gap-2">
               {more.map(item => (
-                <Link
-                  key={item.label}
-                  to={item.path}
+                <a
+                  key={`${item.label}-${item.path}`}
+                  href={item.external || item.path}
+                  target={item.external ? '_blank' : undefined}
+                  rel={item.external ? 'noopener noreferrer' : undefined}
                   onClick={() => setOpen(false)}
                   className={clsx(
                     'flex min-h-20 flex-col items-center justify-center gap-1 rounded-2xl px-2 text-center text-xs font-semibold',
@@ -190,7 +190,7 @@ export default function BottomNavigation() {
                 >
                   {item.icon}
                   <span>{item.label}</span>
-                </Link>
+                </a>
               ))}
             </div>
           </div>
@@ -201,7 +201,7 @@ export default function BottomNavigation() {
         <div className="mx-auto grid max-w-xl grid-cols-5 gap-1">
           {primary.map(item => (
             <Link
-              key={item.label}
+              key={`${item.label}-${item.path}`}
               to={item.path}
               className={clsx(
                 'flex min-h-14 flex-col items-center justify-center gap-0.5 rounded-2xl text-[11px] font-semibold transition',
