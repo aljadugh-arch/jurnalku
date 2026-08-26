@@ -30,8 +30,14 @@ export function applyTheme(s: ThemeSettings) {
     root.setProperty('--color-primary-dark', shade(s.primary_color, -20))
   }
   if (s.accent_color) {
+    // Accent is its own design token. Keep the secondary aliases for older
+    // components, but do not silently map the preset to an unrelated token.
+    root.setProperty('--color-accent', s.accent_color)
+    root.setProperty('--color-accent-light', shade(s.accent_color, 20))
+    root.setProperty('--color-accent-dark', shade(s.accent_color, -20))
     root.setProperty('--color-secondary', s.accent_color)
     root.setProperty('--color-secondary-light', shade(s.accent_color, 20))
+    root.setProperty('--color-secondary-dark', shade(s.accent_color, -20))
   }
   if (s.sidebar_color) {
     root.setProperty('--color-sidebar', s.sidebar_color)

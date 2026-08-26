@@ -3,13 +3,17 @@ import { escapeHtml } from '../../utils/escapeHtml'
 import { Download, FileSpreadsheet, Eye, CheckCircle, XCircle, Clock } from 'lucide-react'
 import toast from 'react-hot-toast'
 import api from '../../services/api'
+import { useAuthStore } from '../../stores/authStore'
 import * as XLSX from 'xlsx'
 
 export default function JurnalPage() {
+  const user = useAuthStore(s => s.user)
+  const canReview = ['admin', 'super_admin', 'kepala', 'operator'].includes(user?.role || '')
   const [data, setData] = useState<any[]>([])
   const [filter, setFilter] = useState({ tanggal: '', guru_id: '', status: '' })
   const [gtks, setGtks] = useState<any[]>([])
   const [detail, setDetail] = useState<any>(null)
+  const [bulkSaving, setBulkSaving] = useState(false)
 
   useEffect(() => {
     api.get('/gtk').then(res => setGtks(res.data))
@@ -32,6 +36,29 @@ export default function JurnalPage() {
     toast.success(`Status diubah ke ${status}`)
     loadData()
     if (detail?.id === id) setDetail({ ...detail, status })
+  }
+
+  const bulkUpdateStatus = async (status: 'approved' | 'rejected') => {
+    const submittedCount = data.filter(j => j.status === 'submitted').length
+    if (!submittedCount) return toast.error('Tidak ada jurnal submitted pada filter ini')
+    const action = status === 'approved' ? 'Setujui' : 'Tolak'
+    if (!confirm(`${action} ${submittedCount} jurnal submitted yang sedang tampil?`)) return
+    const confirmation = status === 'approved' ? 'SETUJUI SEMUA' : 'TOLAK SEMUA'
+    setBulkSaving(true)
+    try {
+      const { data: result } = await api.post('/jurnal/bulk-status', {
+        status,
+        tanggal: filter.tanggal || undefined,
+        guru_id: filter.guru_id || undefined,
+        confirmation,
+      })
+      toast.success(`${result.count} jurnal berhasil ${status === 'approved' ? 'disetujui' : 'ditolak'}`)
+      await loadData()
+    } catch (err: any) {
+      toast.error(err.response?.data?.error || 'Gagal memproses jurnal')
+    } finally {
+      setBulkSaving(false)
+    }
   }
 
   const exportExcel = () => {
@@ -94,6 +121,16 @@ export default function JurnalPage() {
         </select>
       </div>
 
+      {canReview && <div className="flex flex-col sm:flex-row gap-2">
+        <button onClick={() => bulkUpdateStatus('approved')} disabled={bulkSaving || !data.some(j => j.status === 'submitted')} className="inline-flex items-center justify-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg text-sm hover:bg-green-700 disabled:opacity-50">
+          <CheckCircle size={16} /> Setujui Semua
+        </button>
+        <button onClick={() => bulkUpdateStatus('rejected')} disabled={bulkSaving || !data.some(j => j.status === 'submitted')} className="inline-flex items-center justify-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg text-sm hover:bg-red-700 disabled:opacity-50">
+          <XCircle size={16} /> Tolak Semua
+        </button>
+        <p className="self-center text-xs text-gray-500">Hanya jurnal submitted pada filter tanggal dan guru yang aktif.</p>
+      </div>}
+
       {/* Tiles */}
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
         {data.length === 0 ? <p className="col-span-full py-8 text-center text-gray-400">Belum ada jurnal</p> : data.map(j => (
@@ -106,7 +143,7 @@ export default function JurnalPage() {
             <p className="mt-2 line-clamp-2 text-sm text-gray-700">{j.materi || 'Materi belum diisi'}</p>
             <div className="mt-3 flex items-center justify-end gap-1 border-t border-gray-50 pt-3">
               <button onClick={() => setDetail(j)} className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg" title="Detail"><Eye size={16} /></button>
-              {j.status === 'submitted' && <><button onClick={() => updateStatus(j.id, 'approved')} className="p-1.5 text-green-600 hover:bg-green-50 rounded-lg" title="Approve"><CheckCircle size={16} /></button><button onClick={() => updateStatus(j.id, 'rejected')} className="p-1.5 text-red-600 hover:bg-red-50 rounded-lg" title="Reject"><XCircle size={16} /></button></>}
+              {canReview && j.status === 'submitted' && <><button onClick={() => updateStatus(j.id, 'approved')} className="p-1.5 text-green-600 hover:bg-green-50 rounded-lg" title="Approve"><CheckCircle size={16} /></button><button onClick={() => updateStatus(j.id, 'rejected')} className="p-1.5 text-red-600 hover:bg-red-50 rounded-lg" title="Reject"><XCircle size={16} /></button></>}
             </div>
           </article>
         ))}
@@ -142,7 +179,7 @@ export default function JurnalPage() {
                 <p className="bg-gray-50 p-3 rounded-lg mt-1">{detail.catatan || '-'}</p>
               </div>
             </div>
-            {detail.status === 'submitted' && (
+            {canReview && detail.status === 'submitted' && (
               <div className="flex gap-2 mt-4">
                 <button onClick={() => updateStatus(detail.id, 'approved')} className="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg text-sm">Approve</button>
                 <button onClick={() => updateStatus(detail.id, 'rejected')} className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg text-sm">Reject</button>
