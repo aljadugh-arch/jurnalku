@@ -103,7 +103,7 @@ export default function BackupRestorePage() {
     try {
       const fd = new FormData()
       fd.append('backup', f)
-      const res = await api.post('/backup-restore/preview', fd)
+      const res = await api.post('/backup-restore/preview', fd, { headers: { 'Content-Type': undefined } })
       setPreview(res.data)
       toast.success('File backup valid')
     } catch (err: any) {
@@ -126,7 +126,7 @@ export default function BackupRestorePage() {
       fd.append('mode', mode)
       fd.append('confirmation', 'RESTORE')
       if (mode === 'replace') fd.append('replace_confirmation', 'REPLACE DATA')
-      const { data } = await api.post('/backup-restore/restore', fd)
+      const { data } = await api.post('/backup-restore/restore', fd, { headers: { 'Content-Type': undefined } })
       toast.success(`Restore selesai: ${data.inserted} ditambahkan, ${data.skipped} dilewati`)
       setFile(null)
       setPreview(null)

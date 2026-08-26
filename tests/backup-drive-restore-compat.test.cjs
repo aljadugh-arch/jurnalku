@@ -21,6 +21,14 @@ test('gzip expansion beyond the restore limit is rejected', () => {
   const service = createService(db)
   const compressed = zlib.gzipSync(Buffer.alloc(10 * 1024 * 1024 + 1, 0x20))
   assert.throws(() => service.parseArtifact('mtsplussd7', compressed), /terlalu besar/)
+  db.close()
+})
+
+test('empty upload buffer returns the required-file validation error', () => {
+  const db = database()
+  const service = createService(db)
+  assert.throws(() => service.parseArtifact('mtsplussd7', Buffer.alloc(0)), /File backup wajib/)
+  db.close()
 })
 
 test('Google Drive json.gz legacy backup is accepted and remapped to current tenant', () => {
