@@ -12,7 +12,7 @@ interface Section {
 
 interface PreviewResult {
   total: number
-  sections: string[]
+  sections: Array<{ key: string; label: string; count: number }>
 }
 
 interface DriveStatus { connected: boolean; email?: string; folder_id?: string | null; folder_ok?: boolean; error?: string }
@@ -260,10 +260,10 @@ export default function BackupRestorePage() {
         </p>
         <label className="flex cursor-pointer items-center justify-center gap-2 rounded-lg border-2 border-dashed p-6 text-sm text-gray-600 hover:border-primary hover:text-primary">
           <Upload size={18} />
-          {file?.name || 'Pilih file backup JSON'}
+          {file?.name || 'Pilih file backup JSON / JSON.GZ'}
           <input
             type="file"
-            accept=".json,application/json"
+            accept=".json,.gz,.json.gz,application/json,application/gzip"
             className="hidden"
             onChange={e => handleFileChange(e.target.files?.[0] || null)}
           />
