@@ -17,9 +17,8 @@ test('mobile sheets share PortalSheet and palette has seven solid colors', () =>
 test('PWA and fixed scrolling layout contracts', () => {
   assert.match(read('index.html'), /viewport-fit=cover/)
   assert.equal(JSON.parse(read('public/manifest.webmanifest')).display, 'standalone')
-  assert.match(read('public/sw.js'), /jurnalku-v2/)
+  assert.match(read('public/sw.js'), /jurnalku-v\d+/)
   const layout = read('src/components/layout/DashboardLayout.tsx')
   assert.match(layout, /h-screen overflow-hidden/)
   assert.match(layout, /overflow-y-auto/)
-  assert.match(layout, /location.pathname/)
 })

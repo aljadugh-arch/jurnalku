@@ -7,8 +7,11 @@ const read = relative => fs.readFileSync(path.join(__dirname, '..', relative), '
 const bottomNavigation = read('src/components/layout/BottomNavigation.tsx')
 const sidebar = read('src/components/layout/Sidebar.tsx')
 const menuItems = read('src/lib/menuItems.tsx')
+const iconMenuGrid = read('src/components/IconMenuGrid.tsx')
 const settings = read('src/pages/admin/SettingsPage.tsx')
 const main = read('src/main.tsx')
+const indexHtml = read('index.html')
+const serviceWorker = read('public/sw.js')
 const guruNotes = read('src/pages/guru/GuruCatatanKepribadianPage.tsx')
 const server = read('server/index.cjs')
 
@@ -24,14 +27,27 @@ test('wali kelas tidak lagi diduplikasi di kelompok jadwal atau navigasi mobile 
   const librarySchedule = menuItems.match(/label: 'Jadwal Pelajaran'[\s\S]*?children: \[([\s\S]*?)\]/)?.[1] || ''
   assert.doesNotMatch(sidebarSchedule, /Wali Kelas|\/admin\/wali-kelas/)
   assert.doesNotMatch(librarySchedule, /Wali Kelas|\/admin\/wali-kelas/)
+  assert.doesNotMatch(sidebar, /path: '\/admin\/wali-kelas'/)
+  assert.doesNotMatch(menuItems, /path: '\/admin\/wali-kelas'/)
   assert.doesNotMatch(bottomNavigation, /label: 'Wali Kelas', path: '\/admin\/wali-kelas'/)
+  assert.doesNotMatch(iconMenuGrid, /label: 'Wali Kelas'|\/admin\/wali-kelas/)
 })
 
 test('regenerate manifest memakai base URL API dengan benar dan manifest memakai URL stabil', () => {
   assert.match(settings, /api\.post\('\/settings\/pwa-manifest'/)
   assert.doesNotMatch(settings, /api\.post\('\/api\/settings\/pwa-manifest'/)
+  assert.match(indexHtml, /rel="manifest" href="\/api\/pwa\/manifest"/)
+  assert.doesNotMatch(indexHtml, /navigator\.serviceWorker\.register/)
   assert.match(main, /linkEl\.href = '\/api\/pwa\/manifest'/)
+  assert.match(main, /navigator\.serviceWorker\.register\('\/sw\.js'\)/)
+  assert.match(main, /navigator\.serviceWorker\.getRegistrations\(\)/)
+  assert.match(main, /registration\.unregister\(\)/)
+  assert.match(main, /linkEl\.removeAttribute\('href'\)/)
   assert.doesNotMatch(main, /URL\.createObjectURL/)
+  assert.doesNotMatch(serviceWorker, /manifest\.webmanifest/)
+  assert.match(serviceWorker, /pathname === '\/api\/pwa\/manifest'\) return/)
+  assert.match(bottomNavigation, /item\.external \? \(/)
+  assert.match(bottomNavigation, /<Link[\s\S]*to=\{item\.path\}/)
 })
 
 test('backend menyimpan status PWA dan menyajikan manifest tenant dengan benar', () => {
@@ -40,6 +56,7 @@ test('backend menyimpan status PWA dan menyajikan manifest tenant dengan benar',
   assert.match(server, /SELECT pwa_enabled,pwa_name,pwa_icon,nama_lembaga,logo,primary_color,pwa_bg_color,pwa_theme_color FROM settings/)
   assert.match(server, /s\.pwa_enabled === 0.*status\(404\)/)
   assert.match(server, /application\/manifest\+json/)
+  assert.match(server, /req\.body\.pwa_icon === undefined/)
   assert.match(settings, /api\.put\('\/settings\/pwa'/)
 })
 

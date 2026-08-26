@@ -2459,7 +2459,12 @@ app.delete('/api/mapel/:id', ADMIN, (req, res) => {
 
 // ==================== ROMBEL ====================
 app.get('/api/rombel', authMiddleware, (req, res) => {
-  const rows = db.prepare(`SELECT r.*, g.nama as wali_kelas_nama, (SELECT COUNT(*) FROM siswa WHERE rombel_id = r.id) as jumlah_siswa FROM rombel r LEFT JOIN gtk g ON r.wali_kelas_id = g.id WHERE r.tenant_id=? ORDER BY r.tingkat, r.nama`).all(req.tenantId)
+  const rows = db.prepare(`SELECT r.*, g.nama as wali_kelas_nama, (SELECT COUNT(*) FROM siswa WHERE rombel_id = r.id AND tenant_id = r.tenant_id) as jumlah_siswa FROM rombel r LEFT JOIN gtk g ON r.wali_kelas_id = g.id AND g.tenant_id = r.tenant_id WHERE r.tenant_id=? ORDER BY r.tingkat, r.nama`).all(req.tenantId)
+  res.json(rows)
+})
+
+app.get('/api/rombel/:id/siswa', ADMIN, (req, res) => {
+  const rows = db.prepare(`SELECT s.id, s.nama, s.nis, s.nisn, s.rombel_id, s.status FROM rombel r JOIN siswa s ON s.rombel_id = r.id WHERE r.id = ? AND r.tenant_id = ? AND s.tenant_id = ? ORDER BY s.nama`).all(req.params.id, req.tenantId, req.tenantId)
   res.json(rows)
 })
 
@@ -2936,7 +2941,9 @@ app.get('/api/pwa/manifest', (req, res) => {
 app.put('/api/settings/pwa', ADMIN, (req, res) => {
   const id = 'main_' + req.tenantId
   db.prepare(`INSERT INTO settings (id,tenant_id,updated_at) VALUES (?,?,datetime('now')) ON CONFLICT(id) DO NOTHING`).run(id, req.tenantId)
-  db.prepare(`UPDATE settings SET pwa_enabled=?, pwa_name=?, pwa_icon=?, pwa_bg_color=?, pwa_theme_color=?, updated_at=datetime('now') WHERE id=?`).run(req.body.pwa_enabled ? 1 : 0, req.body.pwa_name || '', req.body.pwa_icon || '', req.body.pwa_bg_color || '#ffffff', req.body.pwa_theme_color || '#1e40af', id)
+  const current = db.prepare('SELECT pwa_icon FROM settings WHERE id=? AND tenant_id=?').get(id, req.tenantId)
+  const pwaIcon = req.body.pwa_icon === undefined ? (current?.pwa_icon || '') : (req.body.pwa_icon || '')
+  db.prepare(`UPDATE settings SET pwa_enabled=?, pwa_name=?, pwa_icon=?, pwa_bg_color=?, pwa_theme_color=?, updated_at=datetime('now') WHERE id=? AND tenant_id=?`).run(req.body.pwa_enabled ? 1 : 0, req.body.pwa_name || '', pwaIcon, req.body.pwa_bg_color || '#ffffff', req.body.pwa_theme_color || '#1e40af', id, req.tenantId)
   res.json({ success: true })
 })
 
@@ -4346,7 +4353,23 @@ app.get('/api/jurnal/me', authMiddleware, (req, res) => {
 
 app.get('/api/jurnal', authMiddleware, (req, res) => {
   const { tanggal, gtk_id, guru_id, status } = req.query
-  let sql = `SELECT j.*, g.nama as guru_nama, m.nama as mapel_nama, r.nama as rombel_nama FROM jurnal_mengajar j LEFT JOIN gtk g ON j.guru_id = g.id LEFT JOIN mapel m ON j.mapel_id = m.id LEFT JOIN rombel r ON j.rombel_id = r.id WHERE j.tenant_id = ?`
+  let sql = `SELECT j.*, COALESCE((
+      SELECT jg.nama
+      FROM jadwal jd
+      JOIN gtk jg ON jg.id = jd.gtk_id AND jg.tenant_id = jd.tenant_id
+      WHERE jd.mapel_id = j.mapel_id AND jd.rombel_id = j.rombel_id AND jd.tenant_id = j.tenant_id
+        AND lower(jd.hari) = CASE strftime('%w', j.tanggal)
+          WHEN '0' THEN 'minggu' WHEN '1' THEN 'senin' WHEN '2' THEN 'selasa'
+          WHEN '3' THEN 'rabu' WHEN '4' THEN 'kamis' WHEN '5' THEN 'jumat' WHEN '6' THEN 'sabtu'
+        END
+      ORDER BY CASE WHEN jd.gtk_id = j.guru_id THEN 0 ELSE 1 END, jd.jam_mulai, jd.id
+      LIMIT 1
+    ), g.nama) as guru_nama, m.nama as mapel_nama, r.nama as rombel_nama
+    FROM jurnal_mengajar j
+    LEFT JOIN gtk g ON j.guru_id = g.id AND g.tenant_id = j.tenant_id
+    LEFT JOIN mapel m ON j.mapel_id = m.id AND m.tenant_id = j.tenant_id
+    LEFT JOIN rombel r ON j.rombel_id = r.id AND r.tenant_id = j.tenant_id
+    WHERE j.tenant_id = ?`
   const params = [req.tenantId]
   if (tanggal) { sql += ' AND j.tanggal = ?'; params.push(tanggal) }
   if (gtk_id || guru_id) { sql += ' AND j.guru_id = ?'; params.push(gtk_id || guru_id) }

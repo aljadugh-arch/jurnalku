@@ -7,27 +7,40 @@ import { applyTheme } from './stores/themeStore'
 // Apply dark mode from persisted store before first render
 applyTheme()
 
-// Update manifest href to dynamic per-tenant manifest
-try {
+// Enable PWA discovery and its service worker only for tenants that opted in.
+async function configurePwa() {
   const linkEl = document.querySelector('link[rel="manifest"]') as HTMLLinkElement | null
-  if (linkEl) {
-    // Keep a stable manifest URL so the browser can discover and install the PWA.
-    // The server serves tenant-specific JSON from this URL.
-    linkEl.href = '/api/pwa/manifest'
-    fetch('/api/pwa/manifest').then(r => r.ok ? r.json() : null).then(data => {
-      if (!data) return
-      // Update theme-color meta
-      const tc = document.querySelector('meta[name="theme-color"]') as HTMLMetaElement | null
-      if (tc && data.theme_color) tc.content = data.theme_color
-      // Update title
-      if (data.name) document.title = data.name
-      // Update favicon (per-tenant logo)
-      const iconUrl = data.icons?.[0]?.src || '/logo-jurnalku-256.png'
-      const favicons = document.querySelectorAll('link[rel="icon"], link[rel="shortcut icon"], link[rel="apple-touch-icon"]')
-      favicons.forEach(el => { el.setAttribute('href', iconUrl) })
-    }).catch(() => {})
+  if (!linkEl) return
+
+  linkEl.href = '/api/pwa/manifest'
+  try {
+    const response = await fetch('/api/pwa/manifest')
+    if (!response.ok) {
+      linkEl.removeAttribute('href')
+      if ('serviceWorker' in navigator) {
+        const registrations = await navigator.serviceWorker.getRegistrations()
+        await Promise.all(registrations.map(registration => registration.unregister()))
+      }
+      return
+    }
+
+    const data = await response.json()
+    const tc = document.querySelector('meta[name="theme-color"]') as HTMLMetaElement | null
+    if (tc && data.theme_color) tc.content = data.theme_color
+    if (data.name) document.title = data.name
+    const iconUrl = data.icons?.[0]?.src || '/logo-jurnalku-256.png'
+    const favicons = document.querySelectorAll('link[rel="icon"], link[rel="shortcut icon"], link[rel="apple-touch-icon"]')
+    favicons.forEach(el => { el.setAttribute('href', iconUrl) })
+
+    if ('serviceWorker' in navigator) {
+      await navigator.serviceWorker.register('/sw.js')
+    }
+  } catch {
+    // Keep the application usable when PWA discovery is temporarily unavailable.
   }
-} catch {}
+}
+
+void configurePwa()
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

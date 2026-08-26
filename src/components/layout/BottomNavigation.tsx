@@ -174,24 +174,36 @@ export default function BottomNavigation() {
               </button>
             </div>
             <div className="grid grid-cols-4 gap-2">
-              {more.map(item => (
-                <a
-                  key={`${item.label}-${item.path}`}
-                  href={item.external || item.path}
-                  target={item.external ? '_blank' : undefined}
-                  rel={item.external ? 'noopener noreferrer' : undefined}
-                  onClick={() => setOpen(false)}
-                  className={clsx(
-                    'flex min-h-20 flex-col items-center justify-center gap-1 rounded-2xl px-2 text-center text-xs font-semibold',
-                    isActive(location.pathname, item.path)
-                      ? 'bg-primary text-white shadow-lg shadow-primary/25'
-                      : 'bg-gray-50 text-gray-700 dark:bg-gray-800 dark:text-gray-200'
-                  )}
-                >
-                  {item.icon}
-                  <span>{item.label}</span>
-                </a>
-              ))}
+              {more.map(item => {
+                const className = clsx(
+                  'flex min-h-20 flex-col items-center justify-center gap-1 rounded-2xl px-2 text-center text-xs font-semibold',
+                  isActive(location.pathname, item.path)
+                    ? 'bg-primary text-white shadow-lg shadow-primary/25'
+                    : 'bg-gray-50 text-gray-700 dark:bg-gray-800 dark:text-gray-200'
+                )
+                const content = <>{item.icon}<span>{item.label}</span></>
+                return item.external ? (
+                  <a
+                    key={`${item.label}-${item.path}`}
+                    href={item.external}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    onClick={() => setOpen(false)}
+                    className={className}
+                  >
+                    {content}
+                  </a>
+                ) : (
+                  <Link
+                    key={`${item.label}-${item.path}`}
+                    to={item.path}
+                    onClick={() => setOpen(false)}
+                    className={className}
+                  >
+                    {content}
+                  </Link>
+                )
+              })}
             </div>
           </div>
         </div>

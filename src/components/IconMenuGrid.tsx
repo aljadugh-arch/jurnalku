@@ -1,6 +1,6 @@
 import { useState } from 'react'
 
-import { Users, UserCheck, Calendar, BookOpen, Layers, ClipboardList, DollarSign, Settings, BarChart, Grid3x3 } from 'lucide-react'
+import { UserCheck, Calendar, BookOpen, Layers, ClipboardList, DollarSign, Settings, BarChart, Grid3x3 } from 'lucide-react'
 import PortalSheet from './ui/PortalSheet'
 import { useNavigate } from 'react-router-dom'
 import { useAuthStore } from '../stores/authStore'
@@ -18,7 +18,6 @@ interface MenuItem {
 const MENU_ITEMS: MenuItem[] = [
   { label: 'Pengajar', icon: UserCheck, path: '/admin/pengajar', roles: ['admin', 'kepala', 'operator'], color: 'bg-purple-500' },
   { label: 'Jadwal', icon: Calendar, path: '/admin/jadwal', roles: ['admin', 'kepala', 'operator'], color: 'bg-orange-500' },
-  { label: 'Wali Kelas', icon: Users, path: '/admin/wali-kelas', roles: ['admin', 'kepala', 'operator'], color: 'bg-teal-500' },
   { label: 'Absensi Siswa', icon: ClipboardList, path: '/admin/absensi-siswa', roles: ['admin', 'kepala', 'operator'], color: 'bg-cyan-500' },
   { label: 'Absensi Guru', icon: UserCheck, path: '/admin/absensi-guru', roles: ['admin', 'kepala', 'operator'], color: 'bg-sky-500' },
   { label: 'Rapor', icon: BarChart, path: '/admin/rapor', roles: ['admin', 'kepala', 'operator'], color: 'bg-fuchsia-500' },

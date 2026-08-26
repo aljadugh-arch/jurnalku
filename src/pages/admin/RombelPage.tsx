@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from 'react'
 import { Plus, Trash2, X, Users, Pencil, Search, ArrowRightLeft, ChevronRight } from 'lucide-react'
 import toast from 'react-hot-toast'
 import api from '../../services/api'
+import { createPortal } from 'react-dom'
 
 interface Rombel {
   id: string; nama: string; tingkat: string; tahun_ajaran: string
@@ -42,7 +43,7 @@ export default function RombelPage() {
   const fetchSiswa = async (rombelId: string) => {
     setLoadingSiswa(true)
     try {
-      const res = await api.get('/siswa', { params: { rombel_id: rombelId } })
+      const res = await api.get(`/rombel/${rombelId}/siswa`)
       setSiswas(res.data)
     } catch { toast.error('Gagal memuat siswa') }
     finally { setLoadingSiswa(false) }
@@ -151,7 +152,7 @@ export default function RombelPage() {
       </div>
 
       {/* Grid rombel — simpel: nama + wali kelas saja */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
         {loading ? (
           <p className="text-gray-400 col-span-3 text-center py-8">Memuat...</p>
         ) : data.length === 0 ? (
@@ -159,7 +160,10 @@ export default function RombelPage() {
         ) : data.map(r => (
           <div
             key={r.id}
+            role="button"
+            tabIndex={0}
             onClick={() => openDetail(r)}
+            onKeyDown={e => { if (e.target !== e.currentTarget) return; if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openDetail(r) } }}
             className={`bg-white rounded-xl p-4 shadow-sm border cursor-pointer transition-all hover:shadow-md hover:border-primary/40 ${selectedRombel?.id === r.id ? 'border-primary ring-2 ring-primary/20' : 'border-gray-100'}`}
           >
             <div className="flex items-center justify-between">
@@ -198,7 +202,7 @@ export default function RombelPage() {
       </div>
 
       {/* Popup detail siswa */}
-      {selectedRombel && (
+      {selectedRombel && createPortal(
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 w-full max-w-3xl max-h-[90vh] overflow-auto">
           {/* Panel header */}
@@ -273,7 +277,7 @@ export default function RombelPage() {
             ))}
           </div>
         </div>
-        </div>
+        </div>, document.body
       )}
 
       {/* Modal tambah/edit rombel */}

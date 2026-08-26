@@ -3,7 +3,6 @@ import { escapeHtml } from '../../utils/escapeHtml'
 import { Download, FileSpreadsheet, Eye, CheckCircle, XCircle, Clock } from 'lucide-react'
 import toast from 'react-hot-toast'
 import api from '../../services/api'
-import ResponsiveTable from '../../components/ui/ResponsiveTable'
 import * as XLSX from 'xlsx'
 
 export default function JurnalPage() {
@@ -95,40 +94,22 @@ export default function JurnalPage() {
         </select>
       </div>
 
-      {/* Table */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 sm:p-5">
-        <ResponsiveTable<any>
-          columns={[
-            { key: 'tanggal', header: 'Tanggal', hideOnMobile: true, className: 'text-xs' },
-            { key: 'guru_nama', header: 'Guru', className: 'font-medium text-gray-800' },
-            { key: 'mapel_nama', header: 'Mapel', hideOnMobile: true },
-            { key: 'rombel_nama', header: 'Rombel' },
-            { key: 'jam_ke', header: 'Jam', className: 'text-center', hideOnMobile: true },
-            { key: 'materi', header: 'Materi', hideOnMobile: true, className: 'max-w-[160px] lg:max-w-[240px]', render: (j) => <span className="truncate block">{j.materi}</span> },
-            { key: 'status', header: 'Status', render: (j) => (
-              <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                j.status === 'approved' ? 'bg-green-100 text-green-700' :
-                j.status === 'submitted' ? 'bg-blue-100 text-blue-700' :
-                j.status === 'rejected' ? 'bg-red-100 text-red-700' :
-                'bg-yellow-100 text-yellow-700'
-              }`}>{j.status}</span>
-            ) },
-          ]}
-          rows={data}
-          rowKey={(j) => j.id}
-          empty="Belum ada jurnal"
-          actions={(j) => (
-            <div className="flex items-center gap-1">
-              <button onClick={() => setDetail(j)} className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg" title="Detail"><Eye size={16} /></button>
-              {j.status === 'submitted' && (
-                <>
-                  <button onClick={() => updateStatus(j.id, 'approved')} className="p-1.5 text-green-600 hover:bg-green-50 rounded-lg" title="Approve"><CheckCircle size={16} /></button>
-                  <button onClick={() => updateStatus(j.id, 'rejected')} className="p-1.5 text-red-600 hover:bg-red-50 rounded-lg" title="Reject"><XCircle size={16} /></button>
-                </>
-              )}
+      {/* Tiles */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+        {data.length === 0 ? <p className="col-span-full py-8 text-center text-gray-400">Belum ada jurnal</p> : data.map(j => (
+          <article key={j.id} className="rounded-xl border border-gray-100 bg-white p-4 shadow-sm">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0"><p className="font-semibold text-gray-800 truncate">{j.guru_nama}</p><p className="text-xs text-gray-500 truncate">{j.mapel_nama} · {j.rombel_nama}</p></div>
+              <span className={`shrink-0 px-2 py-1 rounded-full text-xs font-medium ${j.status === 'approved' ? 'bg-green-100 text-green-700' : j.status === 'submitted' ? 'bg-blue-100 text-blue-700' : j.status === 'rejected' ? 'bg-red-100 text-red-700' : 'bg-yellow-100 text-yellow-700'}`}>{j.status}</span>
             </div>
-          )}
-        />
+            <p className="mt-3 text-xs text-gray-500">{j.tanggal} · Jam {j.jam_ke || '-'}</p>
+            <p className="mt-2 line-clamp-2 text-sm text-gray-700">{j.materi || 'Materi belum diisi'}</p>
+            <div className="mt-3 flex items-center justify-end gap-1 border-t border-gray-50 pt-3">
+              <button onClick={() => setDetail(j)} className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg" title="Detail"><Eye size={16} /></button>
+              {j.status === 'submitted' && <><button onClick={() => updateStatus(j.id, 'approved')} className="p-1.5 text-green-600 hover:bg-green-50 rounded-lg" title="Approve"><CheckCircle size={16} /></button><button onClick={() => updateStatus(j.id, 'rejected')} className="p-1.5 text-red-600 hover:bg-red-50 rounded-lg" title="Reject"><XCircle size={16} /></button></>}
+            </div>
+          </article>
+        ))}
       </div>
 
       {/* Detail Modal */}
