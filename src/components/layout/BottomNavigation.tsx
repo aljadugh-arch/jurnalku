@@ -80,11 +80,11 @@ function roleItems(role?: string, hideStaffCeklok?: boolean): NavItem[] {
   if (role === 'kepala') {
     return [
       { label: 'Home', path: '/admin', icon: <Home size={iconSize} /> },
+      { label: 'Kalender', path: '/admin/kalender-kbm', icon: <Calendar size={iconSize} /> },
+      { label: 'Presensi', path: '/admin/absensi-siswa', icon: <UserCheck size={iconSize} /> },
+      ...(hideStaffCeklok ? [] : [ceklokStaff]),
       { label: 'Posting', path: '/admin/posting', icon: <FileText size={iconSize} /> },
       ...(hideStaffCeklok ? [] : [absensiSaya]),
-      { label: 'Kalender', path: '/admin/kalender-kbm', icon: <Calendar size={iconSize} /> },
-      ...(hideStaffCeklok ? [] : [ceklokStaff]),
-      { label: 'Presensi', path: '/admin/absensi-siswa', icon: <UserCheck size={iconSize} /> },
       { label: 'Rekap', path: '/admin/rekap-absensi', icon: <ClipboardList size={iconSize} /> },
       { label: 'Keuangan', path: '/admin/tagihan', icon: <DollarSign size={iconSize} /> },
       { label: 'Supervisi', path: '/admin/supervisi', icon: <ShieldCheck size={iconSize} /> },
@@ -96,10 +96,10 @@ function roleItems(role?: string, hideStaffCeklok?: boolean): NavItem[] {
 
   return [
     { label: 'Home', path: '/admin', icon: <Home size={iconSize} /> },
-    { label: 'Posting', path: '/admin/posting', icon: <FileText size={iconSize} /> },
     { label: 'Kalender', path: '/admin/kalender-kbm', icon: <Calendar size={iconSize} /> },
     { label: 'Presensi', path: '/admin/absensi-siswa', icon: <UserCheck size={iconSize} /> },
     ...(hideStaffCeklok ? [] : [ceklokStaff]),
+    { label: 'Posting', path: '/admin/posting', icon: <FileText size={iconSize} /> },
     { label: 'Siswa', path: '/admin/siswa', icon: <GraduationCap size={iconSize} /> },
     { label: 'GTK', path: '/admin/gtk', icon: <Users size={iconSize} /> },
     { label: 'Jadwal', path: '/admin/jadwal', icon: <Calendar size={iconSize} /> },
