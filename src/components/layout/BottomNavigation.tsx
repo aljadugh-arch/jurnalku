@@ -41,6 +41,7 @@ function roleItems(role?: string, hideStaffCeklok?: boolean): NavItem[] {
   if (role === 'guru' || role === 'wali_kelas') {
     return [
       { label: 'Home', path: '/guru', icon: <Home size={iconSize} /> },
+      { label: 'Posting', path: '/guru/posting', icon: <FileText size={iconSize} /> },
       { label: 'Ceklok', path: '/guru/absensi-guru', icon: <MapPin size={iconSize} /> },
       { label: 'Jadwal', path: '/guru/jadwal', icon: <Calendar size={iconSize} /> },
       { label: 'Absensi', path: '/guru/absensi-siswa', icon: <UserCheck size={iconSize} /> },
@@ -78,6 +79,7 @@ function roleItems(role?: string, hideStaffCeklok?: boolean): NavItem[] {
   if (role === 'kepala') {
     return [
       { label: 'Home', path: '/admin', icon: <Home size={iconSize} /> },
+      { label: 'Posting', path: '/admin/posting', icon: <FileText size={iconSize} /> },
       ...(hideStaffCeklok ? [] : [absensiSaya]),
       { label: 'Kalender', path: '/admin/kalender-kbm', icon: <Calendar size={iconSize} /> },
       ...(hideStaffCeklok ? [] : [ceklokStaff]),
@@ -93,6 +95,7 @@ function roleItems(role?: string, hideStaffCeklok?: boolean): NavItem[] {
 
   return [
     { label: 'Home', path: '/admin', icon: <Home size={iconSize} /> },
+    { label: 'Posting', path: '/admin/posting', icon: <FileText size={iconSize} /> },
     { label: 'Kalender', path: '/admin/kalender-kbm', icon: <Calendar size={iconSize} /> },
     { label: 'Presensi', path: '/admin/absensi-siswa', icon: <UserCheck size={iconSize} /> },
     ...(hideStaffCeklok ? [] : [ceklokStaff]),
@@ -100,12 +103,16 @@ function roleItems(role?: string, hideStaffCeklok?: boolean): NavItem[] {
     { label: 'GTK', path: '/admin/gtk', icon: <Users size={iconSize} /> },
     { label: 'Jadwal', path: '/admin/jadwal', icon: <Calendar size={iconSize} /> },
     { label: 'Pengajar', path: '/admin/pengajar', icon: <BookOpen size={iconSize} /> },
-    { label: 'Wali Kelas', path: '/admin/wali-kelas', icon: <Users size={iconSize} /> },
     { label: 'Mapel', path: '/admin/mapel', icon: <BookOpen size={iconSize} /> },
     { label: 'Rombel', path: '/admin/rombel', icon: <ListChecks size={iconSize} /> },
     { label: 'Presensi', path: '/admin/absensi-siswa', icon: <UserCheck size={iconSize} /> },
     { label: 'Abs. Guru', path: '/admin/absensi-guru', icon: <MapPin size={iconSize} /> },
     { label: 'Rekap Absen', path: '/admin/rekap-absensi', icon: <ClipboardCheck size={iconSize} /> },
+    { label: 'Ekskul', path: '/admin/ekskul', icon: <ListChecks size={iconSize} /> },
+    { label: 'Abs. Ekskul', path: '/admin/absensi-ekskul', icon: <UserCheck size={iconSize} /> },
+    { label: 'Abs. Jamaah', path: '/admin/absensi-jamaah', icon: <UserCheck size={iconSize} /> },
+    { label: 'Abs. Kokurikuler', path: '/admin/absensi-kokurikuler', icon: <UserCheck size={iconSize} /> },
+    { label: 'Abs. Kegiatan', path: '/admin/absensi-kegiatan', icon: <UserCheck size={iconSize} /> },
     { label: 'Jurnal', path: '/admin/jurnal', icon: <ClipboardList size={iconSize} /> },
     { label: 'Kalender', path: '/admin/kalender-kbm', icon: <Calendar size={iconSize} /> },
     { label: 'Rapor', path: '/admin/rapor', icon: <FileText size={iconSize} /> },
@@ -119,6 +126,13 @@ function roleItems(role?: string, hideStaffCeklok?: boolean): NavItem[] {
     { label: 'WA Gateway', path: '/admin/wa-gateway', icon: <Settings size={iconSize} /> },
     { label: 'Pengguna', path: '/admin/users', icon: <ShieldCheck size={iconSize} /> },
     { label: 'Setting', path: '/admin/settings', icon: <Settings size={iconSize} /> },
+    { label: 'Backup', path: '/admin/backup-restore', icon: <ShieldCheck size={iconSize} /> },
+    { label: 'Website', path: '/admin/website-lembaga', icon: <Home size={iconSize} /> },
+    { label: 'Menu Kantin', path: '/admin/kantin-menu', icon: <CreditCard size={iconSize} /> },
+    { label: 'Order Kantin', path: '/admin/kantin-orders', icon: <CreditCard size={iconSize} /> },
+    { label: 'Topup Manual', path: '/admin/cashless-topup', icon: <CreditCard size={iconSize} /> },
+    { label: 'Bank Transfer', path: '/admin/cashless-bank-config', icon: <CreditCard size={iconSize} /> },
+    { label: 'Kasir QR', path: '/admin/kantin-scanner', icon: <CreditCard size={iconSize} /> },
   ]
 }
 

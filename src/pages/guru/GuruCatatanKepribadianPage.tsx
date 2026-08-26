@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { Plus, X, Search } from 'lucide-react'
 import toast from 'react-hot-toast'
 import api from '../../services/api'
@@ -48,9 +48,9 @@ export default function CatatanKepribadianGuru() {
     }
   }
 
-  const fetchSiswa = async (q = '') => {
+  const fetchSiswa = async () => {
     try {
-      const res = await api.get('/siswa', { params: q ? { search: q } : {} })
+      const res = await api.get('/siswa')
       setSiswaList(res.data)
     } catch { toast.error('Gagal memuat daftar siswa') }
   }
@@ -68,6 +68,12 @@ export default function CatatanKepribadianGuru() {
     fetchSiswa()
     setShowForm(true)
   }
+
+  const filteredSiswa = useMemo(() => {
+    const q = siswaSearch.trim().toLowerCase()
+    if (!q) return siswaList
+    return siswaList.filter(s => [s.nama, s.nis, s.rombel_nama].some(value => String(value || '').toLowerCase().includes(q)))
+  }, [siswaList, siswaSearch])
 
   const handleSubmit = async () => {
     if (!form.siswa_id) { toast.error('Pilih siswa'); return }
@@ -194,14 +200,14 @@ export default function CatatanKepribadianGuru() {
             <div className="space-y-3">
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1">Siswa *</label>
-                <div className="relative mb-2"><Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" /><input value={siswaSearch} onChange={e => { setSiswaSearch(e.target.value); fetchSiswa(e.target.value) }} placeholder="Cari nama / NIS / rombel..." className="w-full pl-9 pr-3 py-2 border border-gray-300 rounded-lg text-sm" /></div>
+                <div className="relative mb-2"><Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" /><input value={siswaSearch} onChange={e => setSiswaSearch(e.target.value)} placeholder="Cari nama / NIS / rombel..." className="w-full pl-9 pr-3 py-2 border border-gray-300 rounded-lg text-sm" /></div>
                 <select
                   value={form.siswa_id}
                   onChange={e => setForm({ ...form, siswa_id: e.target.value })}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white"
                 >
                   <option value="">-- Pilih Siswa --</option>
-                  {siswaList.map(s => (
+                  {filteredSiswa.map(s => (
                     <option key={s.id} value={s.id}>{s.nama} ({s.nis}) {s.rombel_nama ? '· ' + s.rombel_nama : ''}</option>
                   ))}
                 </select>

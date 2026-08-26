@@ -2,7 +2,7 @@ import {
   LayoutDashboard, Users, GraduationCap, BookOpen, Calendar,
   ClipboardList, UserCheck, QrCode, MapPin,
   Layers, Activity, Globe, Sparkles, DollarSign, Settings, MessageSquare,
-  FileText, ClipboardCheck, ScrollText, School, Wallet, Receipt
+  FileText, ClipboardCheck, ScrollText, School, Wallet, Receipt, DatabaseBackup
 } from 'lucide-react'
 
 export interface MenuItem {
@@ -15,6 +15,7 @@ export interface MenuItem {
 // Admin/operator/TU: urut sesuai alur input data — master data dulu, operasional, lalu pengaturan.
 export const adminMenuItems: MenuItem[] = [
   { label: 'Dashboard', icon: <LayoutDashboard size={20} />, path: '/admin' },
+  { label: 'Posting', icon: <FileText size={20} />, path: '/admin/posting' },
   { label: 'Data Siswa', icon: <GraduationCap size={20} />, path: '/admin/siswa' },
   { label: 'Data GTK', icon: <Users size={20} />, path: '/admin/gtk' },
   { label: 'Mata Pelajaran', icon: <BookOpen size={20} />, path: '/admin/mapel' },
@@ -25,7 +26,6 @@ export const adminMenuItems: MenuItem[] = [
     children: [
       { label: 'Kelola Jadwal', path: '/admin/jadwal' },
       { label: 'Pengajar', path: '/admin/pengajar' },
-      { label: 'Wali Kelas', path: '/admin/wali-kelas' },
     ]
   },
   {
@@ -66,10 +66,23 @@ export const adminMenuItems: MenuItem[] = [
   { label: 'Pengaturan', icon: <Settings size={20} />, path: '/admin/settings' },
   { label: 'Manajemen Pengguna', icon: <UserCheck size={20} />, path: '/admin/users' },
   { label: 'Manajemen Lembaga', icon: <Globe size={20} />, path: '/admin/tenants' },
+  { label: 'Backup & Restore', icon: <DatabaseBackup size={20} />, path: '/admin/backup-restore' },
+  { label: 'Kelola Website', icon: <Globe size={20} />, path: '/admin/website-lembaga' },
+  {
+    label: 'E-Kantin & Cashless', icon: <DollarSign size={20} />,
+    children: [
+      { label: 'Menu Kantin', path: '/admin/kantin-menu' },
+      { label: 'Order Kantin', path: '/admin/kantin-orders' },
+      { label: 'Verifikasi Topup Manual', path: '/admin/cashless-topup' },
+      { label: 'Konfigurasi Bank Transfer', path: '/admin/cashless-bank-config' },
+      { label: 'Kasir QR Scanner', path: '/admin/kantin-scanner' },
+    ]
+  },
 ]
 
 export const guruMenuItems: MenuItem[] = [
   { label: 'Dashboard', icon: <LayoutDashboard size={20} />, path: '/guru' },
+  { label: 'Posting', icon: <FileText size={20} />, path: '/guru/posting' },
   { label: 'Jurnal Mengajar', icon: <ClipboardList size={20} />, path: '/guru/jurnal' },
   { label: 'Penilaian Harian', icon: <BookOpen size={20} />, path: '/guru/penilaian-harian' },
   { label: 'Catatan Kepribadian', icon: <ScrollText size={20} />, path: '/guru/catatan-kepribadian' },
@@ -91,6 +104,7 @@ export const siswaMenuItems: MenuItem[] = [
 // Kepala Madrasah/Sekolah = pimpinan, tetap punya ceklok sendiri karena masuk kategori GTK.
 export const kepalaMenuItems: MenuItem[] = [
   { label: 'Dashboard', icon: <LayoutDashboard size={20} />, path: '/admin' },
+  { label: 'Posting', icon: <FileText size={20} />, path: '/admin/posting' },
   { label: 'Ceklok & Rekap', icon: <MapPin size={20} />, path: '/admin/ceklok' },
   { label: 'Absensi Saya', icon: <UserCheck size={20} />, path: '/admin/absensi-saya' },
   { label: 'Data Siswa', icon: <GraduationCap size={20} />, path: '/admin/siswa' },
@@ -147,7 +161,7 @@ const adminPrimaryGrid: FlatMenu[] = [
   { label: 'Kelola Jadwal', path: '/admin/jadwal', icon: <Calendar size={20} /> },
   { label: 'Absensi Siswa', path: '/admin/absensi-siswa', icon: <UserCheck size={20} /> },
   { label: 'Absensi GTK', path: '/admin/absensi-guru', icon: <MapPin size={20} /> },
-  { label: 'Wali Kelas', path: '/admin/wali-kelas', icon: <Users size={20} /> },
+  { label: 'Posting', path: '/admin/posting', icon: <FileText size={20} /> },
   { label: 'Rekapitulasi', path: '/admin/rekap-absensi', icon: <ClipboardList size={20} /> },
   { label: 'Tagihan', path: '/admin/tagihan', icon: <DollarSign size={20} /> },
   { label: 'Tabungan', path: '/admin/tabungan', icon: <School size={20} /> },

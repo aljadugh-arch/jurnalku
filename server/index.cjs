@@ -2064,16 +2064,16 @@ app.get('/api/geocode/search', async (req, res) => {
 })
 
 app.put('/api/settings', ADMIN, (req, res) => {
-  const { nama_lembaga, alamat, telepon, email, theme, primary_color, accent_color, sidebar_color, geo_latitude, geo_longitude, geo_radius, jenjang, hari_libur, bg_size, bg_position, bg_repeat, bg_blur } = req.body
+  const { nama_lembaga, alamat, telepon, email, theme, primary_color, accent_color, sidebar_color, geo_latitude, geo_longitude, geo_radius, jenjang, hari_libur, bg_size, bg_position, bg_repeat, bg_blur, pwa_enabled, pwa_name, pwa_theme_color, pwa_bg_color } = req.body
   const id = 'main_' + req.tenantId
   const bg_size_v = bg_size || 'cover'
   const bg_position_v = bg_position || 'center'
   const bg_repeat_v = bg_repeat || 'no-repeat'
   const bg_blur_v = bg_blur || 0
-  db.prepare(`INSERT INTO settings (id, tenant_id, nama_lembaga, alamat, telepon, email, theme, primary_color, accent_color, sidebar_color, geo_latitude, geo_longitude, geo_radius, jenjang, hari_libur, bg_size, bg_position, bg_repeat, bg_blur, updated_at)
-    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,datetime('now'))
-    ON CONFLICT(id) DO UPDATE SET nama_lembaga=excluded.nama_lembaga, alamat=excluded.alamat, telepon=excluded.telepon, email=excluded.email, theme=excluded.theme, primary_color=excluded.primary_color, accent_color=excluded.accent_color, sidebar_color=excluded.sidebar_color, geo_latitude=excluded.geo_latitude, geo_longitude=excluded.geo_longitude, geo_radius=excluded.geo_radius, jenjang=excluded.jenjang, hari_libur=excluded.hari_libur, bg_size=excluded.bg_size, bg_position=excluded.bg_position, bg_repeat=excluded.bg_repeat, bg_blur=excluded.bg_blur, updated_at=datetime('now')`)
-    .run(id, req.tenantId, nama_lembaga, alamat, telepon, email, theme, primary_color, accent_color, sidebar_color, geo_latitude || null, geo_longitude || null, geo_radius || 200, jenjang || '', JSON.stringify(hari_libur || []), bg_size_v, bg_position_v, bg_repeat_v, bg_blur_v)
+  db.prepare(`INSERT INTO settings (id, tenant_id, nama_lembaga, alamat, telepon, email, theme, primary_color, accent_color, sidebar_color, geo_latitude, geo_longitude, geo_radius, jenjang, hari_libur, bg_size, bg_position, bg_repeat, bg_blur, pwa_enabled, pwa_name, pwa_theme_color, pwa_bg_color, updated_at)
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,datetime('now'))
+    ON CONFLICT(id) DO UPDATE SET nama_lembaga=excluded.nama_lembaga, alamat=excluded.alamat, telepon=excluded.telepon, email=excluded.email, theme=excluded.theme, primary_color=excluded.primary_color, accent_color=excluded.accent_color, sidebar_color=excluded.sidebar_color, geo_latitude=excluded.geo_latitude, geo_longitude=excluded.geo_longitude, geo_radius=excluded.geo_radius, jenjang=excluded.jenjang, hari_libur=excluded.hari_libur, bg_size=excluded.bg_size, bg_position=excluded.bg_position, bg_repeat=excluded.bg_repeat, bg_blur=excluded.bg_blur, pwa_enabled=excluded.pwa_enabled, pwa_name=excluded.pwa_name, pwa_theme_color=excluded.pwa_theme_color, pwa_bg_color=excluded.pwa_bg_color, updated_at=datetime('now')`)
+    .run(id, req.tenantId, nama_lembaga, alamat, telepon, email, theme, primary_color, accent_color, sidebar_color, geo_latitude || null, geo_longitude || null, geo_radius || 200, jenjang || '', JSON.stringify(hari_libur || []), bg_size_v, bg_position_v, bg_repeat_v, bg_blur_v, pwa_enabled ? 1 : 0, pwa_name || '', pwa_theme_color || '#1e40af', pwa_bg_color || '#ffffff')
   res.json({ success: true })
 })
 
@@ -2908,7 +2908,7 @@ app.post('/api/guru/ceklok', STAFF, (req, res) => {
 
 // ==================== JAMAAH / PORTAL / PWA PATCH ====================
 db.exec(`CREATE TABLE IF NOT EXISTS jamaah_sesi (id TEXT PRIMARY KEY, nama TEXT, mulai TEXT, selesai TEXT, minimal_hadir INTEGER DEFAULT 10, tenant_id TEXT DEFAULT 'default', created_at TEXT DEFAULT (datetime('now')))`)
-for (const [name, definition] of [['pwa_name','TEXT DEFAULT ""'], ['pwa_icon','TEXT DEFAULT ""'], ['pwa_bg_color','TEXT DEFAULT "#ffffff"'], ['pwa_theme_color','TEXT DEFAULT "#1e40af"']]) if (!db.prepare('PRAGMA table_info(settings)').all().some(c => c.name === name)) db.exec(`ALTER TABLE settings ADD COLUMN ${name} ${definition}`)
+for (const [name, definition] of [['pwa_enabled','INTEGER DEFAULT 0'], ['pwa_name','TEXT DEFAULT ""'], ['pwa_icon','TEXT DEFAULT ""'], ['pwa_bg_color','TEXT DEFAULT "#ffffff"'], ['pwa_theme_color','TEXT DEFAULT "#1e40af"']]) if (!db.prepare('PRAGMA table_info(settings)').all().some(c => c.name === name)) db.exec(`ALTER TABLE settings ADD COLUMN ${name} ${definition}`)
 
 function linkedStudentIds(req) {
   const ids = db.prepare('SELECT student_id FROM user_students WHERE tenant_id=? AND user_id=? ORDER BY student_id').all(req.tenantId, req.user.id).map(x => x.student_id)
@@ -2930,12 +2930,12 @@ app.get('/api/pwa/manifest', (req, res) => {
   const t = req.tenant || db.prepare('SELECT nama FROM tenants WHERE id=?').get(req.tenantId) || {}
   const name = s.pwa_name || (t.nama ? t.nama + ' Apps' : 'Jurnalku')
   const icon = s.pwa_icon || s.logo || '/logo-jurnalku-256.png'
-  res.json({ name, short_name: name.slice(0, 24), start_url: '/', scope: '/', display: 'standalone', background_color: '#ffffff', theme_color: s.primary_color || '#2563eb', icons: [{ src: icon, sizes: '256x256', type: 'image/png' }, { src: icon, sizes: '512x512', type: 'image/png' }] })
+  res.type('application/manifest+json').set('Cache-Control', 'no-store').json({ name, short_name: name.slice(0, 24), start_url: '/', scope: '/', display: 'standalone', background_color: s.pwa_bg_color || '#ffffff', theme_color: s.pwa_theme_color || s.primary_color || '#2563eb', icons: [{ src: icon, sizes: '256x256', type: 'image/png' }, { src: icon, sizes: '512x512', type: 'image/png' }] })
 })
 app.put('/api/settings/pwa', ADMIN, (req, res) => {
   const id = 'main_' + req.tenantId
   db.prepare(`INSERT INTO settings (id,tenant_id,updated_at) VALUES (?,?,datetime('now')) ON CONFLICT(id) DO NOTHING`).run(id, req.tenantId)
-  db.prepare(`UPDATE settings SET pwa_name=?, pwa_icon=?, pwa_bg_color=?, pwa_theme_color=?, updated_at=datetime('now') WHERE id=?`).run(req.body.pwa_name || '', req.body.pwa_icon || '', req.body.pwa_bg_color || '#ffffff', req.body.pwa_theme_color || '#1e40af', id)
+  db.prepare(`UPDATE settings SET pwa_enabled=?, pwa_name=?, pwa_icon=?, pwa_bg_color=?, pwa_theme_color=?, updated_at=datetime('now') WHERE id=?`).run(req.body.pwa_enabled ? 1 : 0, req.body.pwa_name || '', req.body.pwa_icon || '', req.body.pwa_bg_color || '#ffffff', req.body.pwa_theme_color || '#1e40af', id)
   res.json({ success: true })
 })
 
@@ -2945,7 +2945,7 @@ app.post('/api/settings/pwa-manifest', ADMIN, (req, res) => {
   const t = req.tenant || db.prepare('SELECT nama FROM tenants WHERE id=?').get(req.tenantId) || {}
   const name = s.pwa_name || (t.nama ? t.nama + ' Apps' : 'Jurnalku')
   const icon = s.pwa_icon || s.logo || '/logo-jurnalku-256.png'
-  res.json({ name, short_name: name.slice(0, 24), start_url: '/', scope: '/', display: 'standalone', background_color: s.pwa_bg_color || '#ffffff', theme_color: s.pwa_theme_color || s.primary_color || '#2563eb', icons: [{ src: icon, sizes: '256x256', type: 'image/png' }, { src: icon, sizes: '512x512', type: 'image/png' }] })
+  res.type('application/manifest+json').set('Cache-Control', 'no-store').json({ name, short_name: name.slice(0, 24), start_url: '/', scope: '/', display: 'standalone', background_color: s.pwa_bg_color || '#ffffff', theme_color: s.pwa_theme_color || s.primary_color || '#2563eb', icons: [{ src: icon, sizes: '256x256', type: 'image/png' }, { src: icon, sizes: '512x512', type: 'image/png' }] })
 })
 
 app.post('/api/jamaah/sesi', ADMIN, (req, res) => {

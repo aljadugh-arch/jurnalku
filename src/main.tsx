@@ -11,11 +11,11 @@ applyTheme()
 try {
   const linkEl = document.querySelector('link[rel="manifest"]') as HTMLLinkElement | null
   if (linkEl) {
-    // Point to dynamic API manifest for per-tenant PWA name/icon
+    // Keep a stable manifest URL so the browser can discover and install the PWA.
+    // The server serves tenant-specific JSON from this URL.
+    linkEl.href = '/api/pwa/manifest'
     fetch('/api/pwa/manifest').then(r => r.ok ? r.json() : null).then(data => {
       if (!data) return
-      const blob = new Blob([JSON.stringify(data)], { type: 'application/manifest+json' })
-      linkEl.href = URL.createObjectURL(blob)
       // Update theme-color meta
       const tc = document.querySelector('meta[name="theme-color"]') as HTMLMetaElement | null
       if (tc && data.theme_color) tc.content = data.theme_color

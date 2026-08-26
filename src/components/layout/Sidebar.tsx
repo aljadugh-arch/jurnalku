@@ -36,7 +36,6 @@ const adminMenuItems: MenuItem[] = [
     children: [
       { label: 'Kelola Jadwal', path: '/admin/jadwal' },
       { label: 'Pengajar', path: '/admin/pengajar' },
-      { label: 'Wali Kelas', path: '/admin/wali-kelas' },
     ]
   },
   {

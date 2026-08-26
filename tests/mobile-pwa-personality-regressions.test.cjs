@@ -1,0 +1,47 @@
+const test = require('node:test')
+const assert = require('node:assert/strict')
+const fs = require('node:fs')
+const path = require('node:path')
+
+const read = relative => fs.readFileSync(path.join(__dirname, '..', relative), 'utf8')
+const bottomNavigation = read('src/components/layout/BottomNavigation.tsx')
+const sidebar = read('src/components/layout/Sidebar.tsx')
+const menuItems = read('src/lib/menuItems.tsx')
+const settings = read('src/pages/admin/SettingsPage.tsx')
+const main = read('src/main.tsx')
+const guruNotes = read('src/pages/guru/GuruCatatanKepribadianPage.tsx')
+const server = read('server/index.cjs')
+
+test('posting tersedia di navigasi mobile admin dan guru', () => {
+  assert.match(bottomNavigation, /label: 'Posting', path: '\/admin\/posting'/)
+  assert.match(bottomNavigation, /label: 'Posting', path: '\/guru\/posting'/)
+  assert.match(menuItems, /label: 'Posting'.*path: '\/admin\/posting'/)
+  assert.match(menuItems, /label: 'Posting'.*path: '\/guru\/posting'/)
+})
+
+test('wali kelas tidak lagi diduplikasi di kelompok jadwal atau navigasi mobile admin', () => {
+  const sidebarSchedule = sidebar.match(/label: 'Jadwal Pelajaran'[\s\S]*?children: \[([\s\S]*?)\]/)?.[1] || ''
+  const librarySchedule = menuItems.match(/label: 'Jadwal Pelajaran'[\s\S]*?children: \[([\s\S]*?)\]/)?.[1] || ''
+  assert.doesNotMatch(sidebarSchedule, /Wali Kelas|\/admin\/wali-kelas/)
+  assert.doesNotMatch(librarySchedule, /Wali Kelas|\/admin\/wali-kelas/)
+  assert.doesNotMatch(bottomNavigation, /label: 'Wali Kelas', path: '\/admin\/wali-kelas'/)
+})
+
+test('regenerate manifest memakai base URL API dengan benar dan manifest memakai URL stabil', () => {
+  assert.match(settings, /api\.post\('\/settings\/pwa-manifest'/)
+  assert.doesNotMatch(settings, /api\.post\('\/api\/settings\/pwa-manifest'/)
+  assert.match(main, /linkEl\.href = '\/api\/pwa\/manifest'/)
+  assert.doesNotMatch(main, /URL\.createObjectURL/)
+})
+
+test('backend menyimpan status PWA dan menyajikan manifest dengan content type yang benar', () => {
+  assert.match(server, /\['pwa_enabled','INTEGER DEFAULT 0'\]/)
+  assert.match(server, /pwa_enabled=excluded\.pwa_enabled/)
+  assert.match(server, /application\/manifest\+json/)
+})
+
+test('pencarian siswa catatan guru difilter lokal tanpa request balapan per ketikan', () => {
+  assert.match(guruNotes, /const filteredSiswa = useMemo\(\(\) =>/)
+  assert.match(guruNotes, /filteredSiswa\.map/)
+  assert.doesNotMatch(guruNotes, /onChange=\{e => \{ setSiswaSearch\(e\.target\.value\); fetchSiswa\(e\.target\.value\) \}\}/)
+})

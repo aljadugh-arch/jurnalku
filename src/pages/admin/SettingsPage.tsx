@@ -434,7 +434,7 @@ export default function SettingsPage() {
               type="button"
               onClick={async () => {
                 try {
-                  await api.post('/api/settings/pwa-manifest')
+                  await api.post('/settings/pwa-manifest')
                   toast.success('Manifest PWA berhasil diregenerasi')
                 } catch (e: any) {
                   toast.error(e.response?.data?.error || 'Gagal meregenerasi manifest')
