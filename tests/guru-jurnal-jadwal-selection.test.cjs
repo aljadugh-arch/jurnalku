@@ -18,6 +18,9 @@ test('dashboard schedule opens journal with the exact selected schedule', () => 
 test('journal schedule API matches the dashboard mapel-only tenant-scoped contract', () => {
   const route = server.slice(server.indexOf("app.get('/api/jurnal/jadwal-hari-ini'"), server.indexOf("app.get('/api/jurnal/me'"))
   assert.match(route, /j\.jenis_kegiatan = 'mapel'/)
+  assert.match(route, /require\('\.\/attendance-rules\.cjs'\)\.hariJakarta\(\)/)
+  assert.match(route, /new Date\(`\$\{tgl\}T12:00:00\+07:00`\)\.getUTCDay\(\)/)
+  assert.doesNotMatch(route, /new Date\(tgl \+ 'T00:00:00\+07:00'\)/)
   assert.match(route, /m\.tenant_id = j\.tenant_id/)
   assert.match(route, /r\.tenant_id = j\.tenant_id/)
 })

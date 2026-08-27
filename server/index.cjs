@@ -4394,9 +4394,14 @@ const HARI_ID = ['minggu', 'senin', 'selasa', 'rabu', 'kamis', 'jumat', 'sabtu']
 app.get('/api/jurnal/jadwal-hari-ini', authMiddleware, (req, res) => {
   const gtk = resolveGtkForUser(req.user.id, req.tenantId)
   if (!gtk) return res.json({ gtk_id: null, hari: null, jadwal: [] })
-  const tgl = req.query.tanggal || todayJakarta()
-  const d = new Date(tgl + 'T00:00:00+07:00')
-  const hari = HARI_ID[isNaN(d.getTime()) ? new Date().getDay() : d.getDay()]
+  const requestedTanggal = typeof req.query.tanggal === 'string' ? req.query.tanggal : ''
+  const validTanggal = /^\d{4}-\d{2}-\d{2}$/.test(requestedTanggal)
+  const tgl = validTanggal ? requestedTanggal : todayJakarta()
+  // Untuk default "hari ini", gunakan helper WIB yang sama dengan dashboard.
+  // Date-only + offset dapat bergeser satu hari saat server berjalan di UTC.
+  const hari = validTanggal
+    ? HARI_ID[new Date(`${tgl}T12:00:00+07:00`).getUTCDay()]
+    : require('./attendance-rules.cjs').hariJakarta()
   const rows = db.prepare(`SELECT j.id as jadwal_id, j.mapel_id, j.rombel_id, j.jam_mulai, j.jam_selesai, j.ruangan,
     m.nama as mapel_nama, m.kode as mapel_kode, r.nama as rombel_nama
     FROM jadwal j
