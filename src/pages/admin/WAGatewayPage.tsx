@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { MessageSquare, Wifi, WifiOff, Send, Settings, CheckCircle, XCircle } from 'lucide-react'
 import toast from 'react-hot-toast'
 import api from '../../services/api'
@@ -11,21 +11,67 @@ export default function WAGatewayPage() {
   const [testMsg, setTestMsg] = useState('Test pesan dari JURNALKU 🎓')
   const [testResult, setTestResult] = useState<any>(null)
   const [waStatus, setWaStatus] = useState<any>(null)
+  const [qrImage, setQrImage] = useState<string | null>(null)
+  const [connecting, setConnecting] = useState(false)
 
-  useEffect(() => { loadConfig(); loadStatus() }, [])
+  const statusTimer = useRef<number | null>(null)
 
-  const loadConfig = async () => {
+  const loadConfig = useCallback(async () => {
     try {
       const res = await api.get('/wa-gateway/config')
       setConfig(res.data)
     } catch { toast.error('Gagal load konfigurasi') }
     finally { setLoading(false) }
-  }
+  }, [])
 
-  const loadStatus = async () => { try { const r = await api.get('/wa-gateway/status'); setWaStatus(r.data) } catch {} }
-  const connect = async () => { try { await api.post('/wa-gateway/connect'); toast.success('Connect diminta'); setTimeout(loadStatus, 1000) } catch { toast.error('Gagal connect') } }
-  const disconnect = async () => { try { await api.post('/wa-gateway/logout'); toast.success('Disconnect diminta'); setTimeout(loadStatus, 1000) } catch { toast.error('Gagal disconnect') } }
-  const openQr = async () => { try { const r = await api.get('/wa-gateway/qr-image'); if (!r.data.image) return toast.error('QR belum tersedia'); const w=window.open('','_blank'); w?.document.write(`<img src="${r.data.image}" style="width:280px"><p>Status: ${r.data.status}</p>`) } catch { toast.error('QR belum tersedia') } }
+  const loadStatus = useCallback(async () => {
+    try {
+      const r = await api.get('/wa-gateway/status')
+      setWaStatus(r.data)
+      if (r.data.status === 'connected') {
+        setConnecting(false); setQrImage(null)
+        if (statusTimer.current) { window.clearInterval(statusTimer.current); statusTimer.current = null }
+      }
+    } catch {}
+  }, [])
+  const loadQr = useCallback(async () => {
+    try {
+      const r = await api.get('/wa-gateway/qr-image')
+      if (r.data.image) setQrImage(r.data.image)
+      if (r.data.status) setWaStatus((s: any) => ({ ...s, status: r.data.status, has_qr: !!r.data.image }))
+    } catch {}
+  }, [])
+
+  useEffect(() => {
+    loadConfig(); loadStatus()
+    return () => { if (statusTimer.current) window.clearInterval(statusTimer.current) }
+  }, [loadStatus])
+  const connect = async () => {
+    try {
+      setConnecting(true); setQrImage(null)
+      await api.post('/wa-gateway/connect')
+      toast.success('Gateway dimulai, menunggu QR...')
+      if (statusTimer.current) window.clearInterval(statusTimer.current)
+      let tries = 0
+      statusTimer.current = window.setInterval(async () => {
+        tries++
+        await loadStatus(); await loadQr()
+        if (tries >= 90 || waStatus?.status === 'connected') {
+          if (statusTimer.current) window.clearInterval(statusTimer.current)
+          statusTimer.current = null
+        }
+      }, 1000)
+    } catch { setConnecting(false); toast.error('Gagal connect') }
+  }
+  const disconnect = async () => { try { await api.post('/wa-gateway/logout'); setConnecting(false); setQrImage(null); toast.success('Disconnect diminta'); setTimeout(loadStatus, 1000) } catch { toast.error('Gagal disconnect') } }
+  const openQr = async () => {
+    try {
+      const r = await api.get('/wa-gateway/qr-image')
+      if (!r.data.image) return toast.error('QR belum tersedia; tunggu beberapa detik lalu refresh')
+      setQrImage(r.data.image)
+      const w=window.open('','_blank'); w?.document.write(`<img src="${r.data.image}" style="width:280px"><p>Scan QR WhatsApp ini</p>`)
+    } catch { toast.error('QR belum tersedia; tunggu beberapa detik lalu refresh') }
+  }
 
   const handleSave = async () => {
     setSaving(true)
@@ -69,11 +115,19 @@ export default function WAGatewayPage() {
         <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100 space-y-3">
           <h2 className="text-lg font-bold text-gray-800">Device Baileys</h2>
           <p className="text-sm text-gray-500">Status: <b>{waStatus?.status || 'disconnected'}</b> {waStatus?.phone ? `· ${waStatus.phone}` : ''}</p>
+          {waStatus?.last_error && <p className="text-xs text-red-600">{waStatus.last_error}</p>}
+          {(qrImage || waStatus?.has_qr) && (
+            <div className="rounded-xl border bg-white p-3 w-fit">
+              {qrImage ? <img src={qrImage} alt="QR WhatsApp" className="w-[280px] max-w-full" /> : <p className="text-sm text-gray-500">QR tersedia. Klik Scan QR atau tunggu dimuat.</p>}
+              <p className="text-xs text-gray-500 text-center mt-2">WhatsApp → Perangkat tertaut → Tautkan perangkat</p>
+            </div>
+          )}
+          {connecting && !qrImage && <p className="text-sm text-amber-600">Menyiapkan QR WhatsApp…</p>}
           <div className="flex gap-2 flex-wrap">
-            <button onClick={connect} className="px-4 py-2 bg-green-600 text-white rounded-lg text-sm">Connect Device</button>
+            <button onClick={connect} disabled={connecting} className="px-4 py-2 bg-green-600 text-white rounded-lg text-sm disabled:opacity-50">{connecting ? 'Connecting…' : 'Connect Device'}</button>
             <button onClick={disconnect} className="px-4 py-2 bg-red-600 text-white rounded-lg text-sm">Disconnect Device</button>
             <button onClick={openQr} className="px-4 py-2 bg-primary text-white rounded-lg text-sm">Scan QR</button>
-            <button onClick={loadStatus} className="px-4 py-2 bg-gray-100 rounded-lg text-sm">Refresh Status</button>
+            <button onClick={() => { loadStatus(); loadQr() }} className="px-4 py-2 bg-gray-100 rounded-lg text-sm">Refresh Status</button>
           </div>
         </div>
       )}

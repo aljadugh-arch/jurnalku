@@ -3,10 +3,14 @@ import path from 'node:path'
 import fs from 'node:fs'
 import pino from 'pino'
 import makeWASocket, { DisconnectReason, useMultiFileAuthState, fetchLatestBaileysVersion } from '@whiskeysockets/baileys'
+import dotenv from 'dotenv'
 import queue from './wa-queue.cjs'
 import workerUtils from './wa-worker-utils.cjs'
 
-const db=new Database(path.join(import.meta.dirname,'jurnalku.db')); db.pragma('journal_mode=WAL'); queue.setupWA(db)
+dotenv.config({ path: path.join(import.meta.dirname, '.env') })
+const dbPath = process.env.DB_PATH ? path.resolve(import.meta.dirname, process.env.DB_PATH) : path.join(import.meta.dirname, 'jurnalku.db')
+const authRoot = process.env.WA_AUTH_DIR ? path.resolve(import.meta.dirname, process.env.WA_AUTH_DIR) : path.join(import.meta.dirname, 'wa-auth')
+const db=new Database(dbPath); db.pragma('journal_mode=WAL'); queue.setupWA(db)
 const log=pino({level:process.env.LOG_LEVEL||'info'}); const sockets=new Map(); const stopping=new Set(); const retryAfter=new Map()
 const {createVersionResolver,forEachTenantSettled}=workerUtils; const resolveVersion=createVersionResolver(fetchLatestBaileysVersion)
 const nowWib=()=>({date:new Date().toLocaleDateString('en-CA',{timeZone:'Asia/Jakarta'}),time:new Date().toLocaleTimeString('en-GB',{timeZone:'Asia/Jakarta',hour:'2-digit',minute:'2-digit',hour12:false})})
@@ -14,9 +18,10 @@ const safe=id=>String(id).replace(/[^a-zA-Z0-9_-]/g,'_')
 function session(tenantId,status,extra={}){db.prepare(`INSERT INTO wa_sessions(tenant_id,status,qr,last_error,phone,updated_at) VALUES(?,?,?,?,?,datetime('now')) ON CONFLICT(tenant_id) DO UPDATE SET status=excluded.status,qr=CASE WHEN excluded.status='qr' THEN excluded.qr WHEN excluded.status='connected' THEN NULL ELSE wa_sessions.qr END,last_error=excluded.last_error,phone=COALESCE(excluded.phone,wa_sessions.phone),updated_at=datetime('now')`).run(tenantId,status,extra.qr||null,extra.error||null,extra.phone||null)}
 async function connect(tenantId){
   if(sockets.has(tenantId) || Date.now() < (retryAfter.get(tenantId)||0))return
-  fs.mkdirSync(path.join(import.meta.dirname,'wa-auth',safe(tenantId)),{recursive:true})
+  const authDir = path.join(authRoot, safe(tenantId))
+  fs.mkdirSync(authDir,{recursive:true})
   // eslint-disable-next-line react-hooks/rules-of-hooks -- Baileys auth helper, not a React Hook
-  const {state,saveCreds}=await useMultiFileAuthState(path.join(import.meta.dirname,'wa-auth',safe(tenantId)))
+  const {state,saveCreds}=await useMultiFileAuthState(authDir)
   const version=await resolveVersion()
   const sock=makeWASocket({version,auth:state,logger:log.child({tenantId}),printQRInTerminal:false}); sockets.set(tenantId,sock); session(tenantId,'connecting')
   sock.ev.on('creds.update',saveCreds)
@@ -36,7 +41,7 @@ async function tick(){
     if(x.requested_action==='connect')await connect(x.tenant_id)
     if(x.requested_action==='logout'){
       const sock=sockets.get(x.tenant_id); stopping.add(x.tenant_id); if(sock)await sock.logout().catch(()=>sock.end(undefined)); sockets.delete(x.tenant_id)
-      fs.rmSync(path.join(import.meta.dirname,'wa-auth',safe(x.tenant_id)),{recursive:true,force:true}); session(x.tenant_id,'disconnected')
+      fs.rmSync(path.join(authRoot, safe(x.tenant_id)),{recursive:true,force:true}); session(x.tenant_id,'disconnected')
     }
   },(e,x)=>{retryAfter.set(x.tenant_id,Date.now()+10000);session(x.tenant_id,'reconnecting',{error:String(e.message||e).slice(0,500)});log.error({tenantId:x.tenant_id,err:e.message},'WA requested action failed')})
   await forEachTenantSettled(db.prepare("SELECT tenant_id FROM wa_gateway_config WHERE enabled=1 AND provider='baileys'").all(),async c=>{
