@@ -2969,7 +2969,7 @@ app.get('/api/pwa/manifest', (req, res) => {
   const t = req.tenant || db.prepare('SELECT nama FROM tenants WHERE id=?').get(req.tenantId) || {}
   const name = s.pwa_name || (t.nama ? t.nama + ' Apps' : 'Jurnalku')
   const version = String(s.updated_at || Date.now()).replace(/[^0-9]/g, '')
-  const withAssetVersion = asset => asset.startsWith('/uploads/') ? `${asset}${asset.includes('?') ? '&' : '?'}v=${version}` : asset
+  const withAssetVersion = asset => asset.startsWith('/uploads/') ? `${encodeURI(asset)}${asset.includes('?') ? '&' : '?'}v=${version}` : asset
   const icon = withAssetVersion(s.pwa_icon || s.logo || '/logo-jurnalku-256.png')
   res.type('application/manifest+json').set('Cache-Control', 'no-store').json({ name, short_name: name.slice(0, 24), start_url: '/', scope: '/', display: 'standalone', background_color: s.pwa_bg_color || '#ffffff', theme_color: s.pwa_theme_color || s.primary_color || '#2563eb', version, icons: [{ src: icon, sizes: '256x256', type: 'image/png' }, { src: icon, sizes: '512x512', type: 'image/png' }] })
 })
