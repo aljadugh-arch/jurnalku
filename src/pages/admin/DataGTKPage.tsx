@@ -6,13 +6,13 @@ import ImportExcel from '../../components/ImportExcel'
 import FoundationTenantPicker from '../../components/FoundationTenantPicker'
 
 interface GTK {
-  id: string; nip: string; nuptk: string; nama: string; jenis_kelamin: string
+  id: string; nik: string; nip: string; nuptk: string; nama: string; jenis_kelamin: string
   tempat_lahir: string; tanggal_lahir: string; alamat: string; no_hp: string
   email: string; jabatan: string; status_kepegawaian: string; bidang_studi: string; status: string; foto?: string
 }
 
 const emptyForm = {
-  nip: '', nuptk: '', nama: '', jenis_kelamin: 'L', tempat_lahir: '',
+  nik: '', nip: '', nuptk: '', nama: '', jenis_kelamin: 'L', tempat_lahir: '',
   tanggal_lahir: '', alamat: '', no_hp: '', email: '', jabatan: 'guru',
   status_kepegawaian: 'honorer', bidang_studi: '', status: 'aktif'
 }
@@ -74,7 +74,7 @@ export default function DataGTKPage() {
   }
 
   const handleEdit = (g: GTK) => {
-    setForm({ nip: g.nip || '', nuptk: g.nuptk || '', nama: g.nama, jenis_kelamin: g.jenis_kelamin, tempat_lahir: g.tempat_lahir || '', tanggal_lahir: g.tanggal_lahir || '', alamat: g.alamat || '', no_hp: g.no_hp || '', email: g.email || '', jabatan: g.jabatan, status_kepegawaian: g.status_kepegawaian, bidang_studi: g.bidang_studi || '', status: g.status })
+    setForm({ nik: g.nik || '', nip: g.nip || '', nuptk: g.nuptk || '', nama: g.nama, jenis_kelamin: g.jenis_kelamin, tempat_lahir: g.tempat_lahir || '', tanggal_lahir: g.tanggal_lahir || '', alamat: g.alamat || '', no_hp: g.no_hp || '', email: g.email || '', jabatan: g.jabatan, status_kepegawaian: g.status_kepegawaian, bidang_studi: g.bidang_studi || '', status: g.status })
     setEditId(g.id); setShowModal(true)
   }
 
@@ -106,8 +106,8 @@ export default function DataGTKPage() {
   }
 
   const handleExport = () => {
-    const header = 'NIP,NUPTK,Nama,JK,Jabatan,Status Kepegawaian,Bidang Studi,Email,No HP'
-    const rows = data.map(g => [g.nip, g.nuptk, g.nama, g.jenis_kelamin, g.jabatan, g.status_kepegawaian, g.bidang_studi, g.email, g.no_hp].join(','))
+    const header = 'NIK,NIP,NUPTK,Nama,JK,Jabatan,Status Kepegawaian,Bidang Studi,Email,No HP'
+    const rows = data.map(g => [g.nik || '', g.nip, g.nuptk, g.nama, g.jenis_kelamin, g.jabatan, g.status_kepegawaian, g.bidang_studi, g.email, g.no_hp].join(','))
     const csv = [header, ...rows].join('\n')
     const blob = new Blob([csv], { type: 'text/csv' })
     const url = URL.createObjectURL(blob)
@@ -211,6 +211,7 @@ export default function DataGTKPage() {
 
           <div className="px-5 py-4 grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
             {[
+              ['NIK', selected.nik || '-'],
               ['NIP', selected.nip || '-'],
               ['NUPTK', selected.nuptk || '-'],
               ['Jenis Kelamin', selected.jenis_kelamin === 'L' ? 'Laki-laki' : 'Perempuan'],
@@ -254,7 +255,8 @@ export default function DataGTKPage() {
               <button onClick={() => setShowModal(false)} className="p-1 hover:bg-gray-100 rounded-lg"><X size={20} /></button>
             </div>
             <div className="space-y-3">
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-3 gap-3">
+                <div><label className="block text-xs font-medium text-gray-600 mb-1">NIK</label><input inputMode="numeric" maxLength={16} value={form.nik} onChange={e => setForm({...form, nik: e.target.value.replace(/\D/g, '')})} placeholder="16 digit" className="w-full px-3 py-2 border rounded-lg text-sm" /></div>
                 <div><label className="block text-xs font-medium text-gray-600 mb-1">NIP</label><input value={form.nip} onChange={e => setForm({...form, nip: e.target.value})} className="w-full px-3 py-2 border rounded-lg text-sm" /></div>
                 <div><label className="block text-xs font-medium text-gray-600 mb-1">NUPTK</label><input value={form.nuptk} onChange={e => setForm({...form, nuptk: e.target.value})} className="w-full px-3 py-2 border rounded-lg text-sm" /></div>
               </div>
@@ -286,14 +288,14 @@ export default function DataGTKPage() {
           title="Import Data GTK"
           templateName="master-gtk-v2.xls"
           headerRow={2}
-          columnMap={{ 'Kode GTK': 'nip', 'Nama Lengkap': 'nama', 'TGL Lahir': 'tanggal_lahir', 'NIP/NUPTK': 'nuptk', 'No. HP': 'no_hp' }}
+          columnMap={{ 'NIK': 'nik', 'Kode GTK': 'nip', 'Nama Lengkap': 'nama', 'TGL Lahir': 'tanggal_lahir', 'NIP/NUPTK': 'nuptk', 'No. HP': 'no_hp' }}
           foundationTenantId={foundationTenantId}
           apiEndpoint={foundationTenantId ? 'foundation/gtk' : 'gtk'}
           onImport={async (rows) => {
             for (const row of rows) {
               await api.post(foundationTenantId ? '/foundation/gtk' : '/gtk', { 
                 ...row, 
-                jenis_kelamin: 'L', 
+                nik: String(row.nik || ''), jenis_kelamin: 'L',
                 jabatan: 'guru', 
                 status_kepegawaian: 'honorer', 
                 status: 'aktif',

@@ -162,6 +162,7 @@ db.exec(`
 
   CREATE TABLE IF NOT EXISTS siswa (
     id TEXT PRIMARY KEY,
+    nik TEXT,
     nis TEXT UNIQUE NOT NULL,
     nisn TEXT,
     nama TEXT NOT NULL,
@@ -179,6 +180,7 @@ db.exec(`
 
   CREATE TABLE IF NOT EXISTS gtk (
     id TEXT PRIMARY KEY,
+    nik TEXT,
     nip TEXT UNIQUE,
     nuptk TEXT,
     nama TEXT NOT NULL,
@@ -2199,7 +2201,7 @@ app.get('/api/siswa', authMiddleware, (req, res) => {
     sql += ` AND (r.wali_kelas_id=? OR s.rombel_id IN (SELECT rombel_id FROM pengajar WHERE gtk_id=? AND tenant_id=? UNION SELECT rombel_id FROM jadwal WHERE gtk_id=? AND tenant_id=?))`
     params.push(gtk.id, gtk.id, req.tenantId, gtk.id, req.tenantId)
   }
-  if (search) { sql += ' AND (s.nama LIKE ? OR s.nis LIKE ? OR s.nisn LIKE ? OR r.nama LIKE ?)'; params.push(`%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`) }
+  if (search) { sql += ' AND (s.nama LIKE ? OR s.nik LIKE ? OR s.nis LIKE ? OR s.nisn LIKE ? OR r.nama LIKE ?)'; params.push(`%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`) }
   if (rombel_id) { sql += ' AND s.rombel_id = ?'; params.push(rombel_id) }
   if (status) { sql += ' AND s.status = ?'; params.push(status) }
   sql += ' ORDER BY s.nama'
@@ -2208,10 +2210,11 @@ app.get('/api/siswa', authMiddleware, (req, res) => {
 
 app.post('/api/siswa', ADMIN, (req, res) => {
   const id = uuidv4()
-  const { nis, nisn, nama, jenis_kelamin, tempat_lahir, tanggal_lahir, alamat, no_hp, nama_ortu, rombel_id } = req.body
+  const { nik, nis, nisn, nama, jenis_kelamin, tempat_lahir, tanggal_lahir, alamat, no_hp, nama_ortu, rombel_id } = req.body
+  if (nik && !/^\d{16}$/.test(String(nik))) return res.status(400).json({ error: 'NIK harus berupa 16 digit angka.' })
   try {
-    db.prepare('INSERT INTO siswa (id, nis, nisn, nama, jenis_kelamin, tempat_lahir, tanggal_lahir, alamat, no_hp, nama_ortu, rombel_id, tenant_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)')
-      .run(id, nis, nisn, nama, jenis_kelamin, tempat_lahir, tanggal_lahir, alamat, no_hp, nama_ortu, rombel_id, req.tenantId)
+    db.prepare('INSERT INTO siswa (id, nik, nis, nisn, nama, jenis_kelamin, tempat_lahir, tanggal_lahir, alamat, no_hp, nama_ortu, rombel_id, tenant_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)')
+      .run(id, nik || null, nis, nisn, nama, jenis_kelamin, tempat_lahir, tanggal_lahir, alamat, no_hp, nama_ortu, rombel_id, req.tenantId)
     const siswa = db.prepare('SELECT * FROM siswa WHERE id = ? AND tenant_id = ?').get(id, req.tenantId)
     ensureStudentUser(siswa, req.tenantId)
     res.json({ id, akun_siswa: true })
@@ -2222,10 +2225,11 @@ app.post('/api/siswa', ADMIN, (req, res) => {
 })
 
 app.put('/api/siswa/:id', ADMIN, (req, res) => {
-  const { nis, nisn, nama, jenis_kelamin, tempat_lahir, tanggal_lahir, alamat, no_hp, nama_ortu, rombel_id, status } = req.body
+  const { nik, nis, nisn, nama, jenis_kelamin, tempat_lahir, tanggal_lahir, alamat, no_hp, nama_ortu, rombel_id, status } = req.body
+  if (nik && !/^\d{16}$/.test(String(nik))) return res.status(400).json({ error: 'NIK harus berupa 16 digit angka.' })
   try {
-    db.prepare('UPDATE siswa SET nis=?, nisn=?, nama=?, jenis_kelamin=?, tempat_lahir=?, tanggal_lahir=?, alamat=?, no_hp=?, nama_ortu=?, rombel_id=?, status=? WHERE id=? AND tenant_id=?')
-      .run(nis, nisn, nama, jenis_kelamin, tempat_lahir, tanggal_lahir, alamat, no_hp, nama_ortu, rombel_id, status, req.params.id, req.tenantId)
+    db.prepare('UPDATE siswa SET nik=?, nis=?, nisn=?, nama=?, jenis_kelamin=?, tempat_lahir=?, tanggal_lahir=?, alamat=?, no_hp=?, nama_ortu=?, rombel_id=?, status=? WHERE id=? AND tenant_id=?')
+      .run(nik || null, nis, nisn, nama, jenis_kelamin, tempat_lahir, tanggal_lahir, alamat, no_hp, nama_ortu, rombel_id, status, req.params.id, req.tenantId)
     const siswa = db.prepare('SELECT * FROM siswa WHERE id = ? AND tenant_id = ?').get(req.params.id, req.tenantId)
     if (siswa && siswa.status === 'aktif') ensureStudentUser(siswa, req.tenantId)
     res.json({ success: true })
@@ -2319,7 +2323,7 @@ app.get('/api/gtk', authMiddleware, (req, res) => {
     LEFT JOIN mapel m ON m.id = p.mapel_id AND m.tenant_id = g.tenant_id
     WHERE 1=1 AND g.tenant_id=?`
   const params = [req.tenantId]
-  if (search) { sql += ' AND (g.nama LIKE ? OR g.nip LIKE ?)'; params.push(`%${search}%`, `%${search}%`) }
+  if (search) { sql += ' AND (g.nama LIKE ? OR g.nik LIKE ? OR g.nip LIKE ?)'; params.push(`%${search}%`, `%${search}%`, `%${search}%`) }
   if (jabatan) { sql += ' AND g.jabatan = ?'; params.push(jabatan) }
   if (status_kepegawaian) { sql += ' AND g.status_kepegawaian = ?'; params.push(status_kepegawaian) }
   sql += ' GROUP BY g.id ORDER BY g.nama'
@@ -2328,10 +2332,11 @@ app.get('/api/gtk', authMiddleware, (req, res) => {
 
 app.post('/api/gtk', ADMIN, (req, res) => {
   const id = uuidv4()
-  const { nip, nuptk, nama, jenis_kelamin, tempat_lahir, tanggal_lahir, alamat, no_hp, email, jabatan, status_kepegawaian, bidang_studi, kode_guru } = req.body
+  const { nik, nip, nuptk, nama, jenis_kelamin, tempat_lahir, tanggal_lahir, alamat, no_hp, email, jabatan, status_kepegawaian, bidang_studi, kode_guru } = req.body
+  if (nik && !/^\d{16}$/.test(String(nik))) return res.status(400).json({ error: 'NIK harus berupa 16 digit angka.' })
   try {
-    db.prepare('INSERT INTO gtk (id, nip, nuptk, nama, jenis_kelamin, tempat_lahir, tanggal_lahir, alamat, no_hp, email, jabatan, status_kepegawaian, bidang_studi, kode_guru, tenant_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
-      .run(id, nip || null, nuptk, nama, jenis_kelamin, tempat_lahir, tanggal_lahir, alamat, no_hp, email, jabatan, status_kepegawaian, bidang_studi, kode_guru || '', req.tenantId)
+    db.prepare('INSERT INTO gtk (id, nik, nip, nuptk, nama, jenis_kelamin, tempat_lahir, tanggal_lahir, alamat, no_hp, email, jabatan, status_kepegawaian, bidang_studi, kode_guru, tenant_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
+      .run(id, nik || null, nip || null, nuptk, nama, jenis_kelamin, tempat_lahir, tanggal_lahir, alamat, no_hp, email, jabatan, status_kepegawaian, bidang_studi, kode_guru || '', req.tenantId)
     res.json({ id })
   } catch (e) {
     if (e.code === 'SQLITE_CONSTRAINT_UNIQUE' || e.code === 'SQLITE_CONSTRAINT') return res.status(400).json({ error: 'NIP ' + nip + ' sudah dipakai GTK lain.' })
@@ -2340,10 +2345,11 @@ app.post('/api/gtk', ADMIN, (req, res) => {
 })
 
 app.put('/api/gtk/:id', ADMIN, (req, res) => {
-  const { nip, nuptk, nama, jenis_kelamin, tempat_lahir, tanggal_lahir, alamat, no_hp, email, jabatan, status_kepegawaian, bidang_studi, status, kode_guru } = req.body
+  const { nik, nip, nuptk, nama, jenis_kelamin, tempat_lahir, tanggal_lahir, alamat, no_hp, email, jabatan, status_kepegawaian, bidang_studi, status, kode_guru } = req.body
+  if (nik && !/^\d{16}$/.test(String(nik))) return res.status(400).json({ error: 'NIK harus berupa 16 digit angka.' })
   try {
-    db.prepare('UPDATE gtk SET nip=?, nuptk=?, nama=?, jenis_kelamin=?, tempat_lahir=?, tanggal_lahir=?, alamat=?, no_hp=?, email=?, jabatan=?, status_kepegawaian=?, bidang_studi=?, status=?, kode_guru=? WHERE id=? AND tenant_id=?')
-      .run(nip || null, nuptk, nama, jenis_kelamin, tempat_lahir, tanggal_lahir, alamat, no_hp, email, jabatan, status_kepegawaian, bidang_studi, status, kode_guru || '', req.params.id, req.tenantId)
+    db.prepare('UPDATE gtk SET nik=?, nip=?, nuptk=?, nama=?, jenis_kelamin=?, tempat_lahir=?, tanggal_lahir=?, alamat=?, no_hp=?, email=?, jabatan=?, status_kepegawaian=?, bidang_studi=?, status=?, kode_guru=? WHERE id=? AND tenant_id=?')
+      .run(nik || null, nip || null, nuptk, nama, jenis_kelamin, tempat_lahir, tanggal_lahir, alamat, no_hp, email, jabatan, status_kepegawaian, bidang_studi, status, kode_guru || '', req.params.id, req.tenantId)
     res.json({ success: true })
   } catch (e) {
     if (e.code === 'SQLITE_CONSTRAINT_UNIQUE' || e.code === 'SQLITE_CONSTRAINT') return res.status(400).json({ error: 'NIP ' + nip + ' sudah dipakai GTK lain.' })

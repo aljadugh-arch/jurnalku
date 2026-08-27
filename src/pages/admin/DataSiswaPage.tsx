@@ -7,6 +7,7 @@ import FoundationTenantPicker from '../../components/FoundationTenantPicker'
 
 interface Siswa {
   id: string
+  nik: string
   nis: string
   nisn: string
   nama: string
@@ -23,7 +24,7 @@ interface Siswa {
 }
 
 const emptyForm: Omit<Siswa, 'id'> = {
-  nis: '', nisn: '', nama: '', jenis_kelamin: 'L', tempat_lahir: '',
+  nik: '', nis: '', nisn: '', nama: '', jenis_kelamin: 'L', tempat_lahir: '',
   tanggal_lahir: '', alamat: '', no_hp: '', nama_ortu: '', rombel_id: '',
   rombel_nama: '', status: 'aktif'
 }
@@ -105,6 +106,7 @@ export default function DataSiswaPage() {
 
   const handleEdit = (siswa: Siswa) => {
     setForm({
+      nik: siswa.nik || '',
       nis: siswa.nis, nisn: siswa.nisn, nama: siswa.nama,
       jenis_kelamin: siswa.jenis_kelamin, tempat_lahir: siswa.tempat_lahir,
       tanggal_lahir: siswa.tanggal_lahir, alamat: siswa.alamat,
@@ -140,9 +142,9 @@ export default function DataSiswaPage() {
   }
 
   const handleExport = () => {
-    const header = 'NIS,NISN,Nama,JK,Tempat Lahir,Tgl Lahir,Alamat,No HP,Nama Ortu,Status'
+    const header = 'NIK,NIS,NISN,Nama,JK,Tempat Lahir,Tgl Lahir,Alamat,No HP,Nama Ortu,Status'
     const rows = data.map((s) =>
-      [s.nis, s.nisn, s.nama, s.jenis_kelamin, s.tempat_lahir, s.tanggal_lahir, s.alamat, s.no_hp, s.nama_ortu, s.status].join(',')
+      [s.nik || '', s.nis, s.nisn, s.nama, s.jenis_kelamin, s.tempat_lahir, s.tanggal_lahir, s.alamat, s.no_hp, s.nama_ortu, s.status].join(',')
     )
     const csv = [header, ...rows].join('\n')
     const blob = new Blob([csv], { type: 'text/csv' })
@@ -303,6 +305,7 @@ export default function DataSiswaPage() {
 
           {/* Detail content */}
           <div className="px-5 py-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-8 gap-y-4">
+            <DetailRow label="NIK" value={selectedSiswa.nik || '-'} mono />
             <DetailRow label="NIS" value={selectedSiswa.nis || '-'} mono />
             <DetailRow label="NISN" value={selectedSiswa.nisn || '-'} mono />
             <DetailRow label="Jenis Kelamin" value={selectedSiswa.jenis_kelamin === 'L' ? 'Laki-laki' : 'Perempuan'} />
@@ -334,7 +337,11 @@ export default function DataSiswaPage() {
               <button onClick={() => setShowModal(false)} className="p-1 hover:bg-gray-100 rounded-lg"><X size={20} /></button>
             </div>
             <div className="space-y-3">
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-3 gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">NIK</label>
+                  <input inputMode="numeric" maxLength={16} value={form.nik} onChange={(e) => setForm({...form, nik: e.target.value.replace(/\D/g, '')})} placeholder="16 digit" className="w-full px-3 py-2 border rounded-lg text-sm" />
+                </div>
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-1">NIS *</label>
                   <input value={form.nis} onChange={(e) => setForm({...form, nis: e.target.value})} className="w-full px-3 py-2 border rounded-lg text-sm" />
@@ -413,7 +420,7 @@ export default function DataSiswaPage() {
           title="Import Data Siswa"
           templateName="master-siswa-v2.xls"
           headerRow={0}
-          columnMap={{ 'Nama': 'nama', 'NAMA': 'nama', 'NIS': 'nis', 'NISN': 'nisn', 'JK': 'jenis_kelamin', 'Jenis Kelamin': 'jenis_kelamin', 'Tempat Lahir': 'tempat_lahir', 'Tanggal Lahir': 'tanggal_lahir', 'Alamat': 'alamat', 'No HP': 'no_hp', 'Nama Ortu': 'nama_ortu' }}
+          columnMap={{ 'Nama': 'nama', 'NAMA': 'nama', 'NIK': 'nik', 'NIS': 'nis', 'NISN': 'nisn', 'JK': 'jenis_kelamin', 'Jenis Kelamin': 'jenis_kelamin', 'Tempat Lahir': 'tempat_lahir', 'Tanggal Lahir': 'tanggal_lahir', 'Alamat': 'alamat', 'No HP': 'no_hp', 'Nama Ortu': 'nama_ortu' }}
           foundationTenantId={foundationTenantId}
           apiEndpoint={foundationTenantId ? 'foundation/students' : 'siswa'}
           onImport={async (rows) => {
@@ -423,7 +430,7 @@ export default function DataSiswaPage() {
               await api.post(foundationTenantId ? '/foundation/students' : '/siswa', {
                 nis: String(row.nis || ''), nisn: String(row.nisn || ''), nama: row.nama,
                 jenis_kelamin: jk, tempat_lahir: row.tempat_lahir || '',
-                tanggal_lahir: row.tanggal_lahir || '', alamat: row.alamat || '',
+                nik: String(row.nik || ''), tanggal_lahir: row.tanggal_lahir || '', alamat: row.alamat || '',
                 no_hp: String(row.no_hp || ''), nama_ortu: row.nama_ortu || '',
                 rombel_id: '', status: 'aktif',
                 tenant_id: foundationTenantId && foundationTenantId !== 'all' ? foundationTenantId : undefined

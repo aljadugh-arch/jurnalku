@@ -86,6 +86,15 @@ function setupTenantTables(db) {
     }
   }
 
+  // Ensure optional NIK columns exist on pre-existing databases.
+  for (const table of ['siswa', 'gtk']) {
+    try {
+      const cols = db.prepare(`PRAGMA table_info(${table})`).all()
+      if (!cols.some(c => c.name === 'nik')) db.exec(`ALTER TABLE ${table} ADD COLUMN nik TEXT`)
+      db.exec(`CREATE INDEX IF NOT EXISTS idx_${table}_nik_tenant ON ${table}(nik, tenant_id)`)
+    } catch (e) { console.error(`[migration] ${table}.nik failed`, e.message) }
+  }
+
   // Ensure users.must_change_password column exists (force first-login password reset)
   try {
     const userCols = db.prepare("PRAGMA table_info(users)").all()
