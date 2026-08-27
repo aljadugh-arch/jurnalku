@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Calendar, ClipboardCheck, ClipboardList, BookOpen, QrCode, MapPin, Users, PenLine, ChevronRight, CheckCircle2, Clock, DoorOpen } from 'lucide-react'
+import { Calendar, ClipboardCheck, ClipboardList, BookOpen, QrCode, MapPin, Users, PenLine, ChevronRight, Clock, DoorOpen, ScrollText, UserCheck } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import api from '../../services/api'
 import toast from 'react-hot-toast'
@@ -42,7 +42,6 @@ export default function GuruDashboard() {
   const approved = rekap.approved ?? 0
   // API lama hanya return 'total', API baru return draft/submitted/approved
   const totalJurnal = (draft + submitted + approved) || (rekap.total ?? 0)
-  const pending = (draft + submitted) || Math.max(0, totalJurnal - approved)
   const persenApproved = totalJurnal > 0 ? Math.round((approved / totalJurnal) * 100) : 0
 
   const cur = nowMinutes()
@@ -97,10 +96,10 @@ export default function GuruDashboard() {
 
       {/* Quick Stats */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <button onClick={() => navigate('/guru/jadwal')} className="text-left active:scale-95 transition"><StatCard label="Jadwal Hari Ini" value={data.jadwal_hari_ini.length + ' JP'} icon={<Calendar size={18} />} gradient="from-blue-500 to-indigo-600" /></button>
-        <button onClick={() => navigate('/guru/jurnal')} className="text-left active:scale-95 transition"><StatCard label="Jurnal Disetujui" value={approved} icon={<CheckCircle2 size={18} />} gradient="from-green-500 to-emerald-600" sub={persenApproved + '% selesai'} /></button>
-        <button onClick={() => navigate('/guru/jurnal')} className="text-left active:scale-95 transition"><StatCard label="Jurnal Pending" value={pending} icon={<ClipboardList size={18} />} gradient="from-orange-500 to-amber-600" /></button>
-        <button onClick={() => navigate('/guru/rombel')} className="text-left active:scale-95 transition"><StatCard label="Rombel Diampu" value={data.rombel_count} icon={<Users size={18} />} gradient="from-purple-500 to-fuchsia-600" /></button>
+        <button onClick={() => navigate('/guru/jadwal')} className="text-left active:scale-95 transition"><StatCard label="Jadwal Guru Hari Ini" value={data.jadwal_hari_ini.length + ' JP'} icon={<Calendar size={18} />} gradient="from-blue-500 to-indigo-600" /></button>
+        <button onClick={() => navigate('/guru/absensi-siswa')} className="text-left active:scale-95 transition"><StatCard label="Absensi Siswa" value={data.absensi_hari_ini ?? 0} icon={<UserCheck size={18} />} gradient="from-green-500 to-emerald-600" sub="Siswa diabsen hari ini" /></button>
+        <button onClick={() => navigate('/guru/catatan-kepribadian')} className="text-left active:scale-95 transition"><StatCard label="Catatan Kepribadian" value={data.catatan_count ?? 0} icon={<ScrollText size={18} />} gradient="from-orange-500 to-amber-600" /></button>
+        <button onClick={() => navigate('/guru/absensi-siswa')} className="text-left active:scale-95 transition"><StatCard label="Siswa Rombel Jadwal" value={data.siswa_rombel_count ?? 0} icon={<Users size={18} />} gradient="from-purple-500 to-fuchsia-600" sub="Rombel mapel hari ini" /></button>
       </div>
 
       {/* Rekap Jurnal + progress */}

@@ -72,7 +72,7 @@ test('regenerate manifest memakai base URL API dengan benar dan manifest memakai
 test('backend menyimpan status PWA dan menyajikan manifest tenant dengan benar', () => {
   assert.match(server, /\['pwa_enabled','INTEGER DEFAULT 0'\]/)
   assert.match(server, /pwa_enabled=excluded\.pwa_enabled/)
-  assert.match(server, /SELECT pwa_enabled,pwa_name,pwa_icon,nama_lembaga,logo,primary_color,pwa_bg_color,pwa_theme_color FROM settings/)
+  assert.match(server, /SELECT pwa_enabled,pwa_name,pwa_icon,nama_lembaga,logo,primary_color,pwa_bg_color,pwa_theme_color,updated_at FROM settings/)
   assert.match(server, /s\.pwa_enabled === 0.*status\(404\)/)
   assert.match(server, /application\/manifest\+json/)
   assert.match(server, /req\.body\.pwa_icon === undefined/)

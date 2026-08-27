@@ -2088,8 +2088,12 @@ app.post('/api/settings/logo', ADMIN, upload.single('logo'), (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'No file' })
   const logoPath = `/uploads/${req.file.filename}`
   const id = 'main_' + req.tenantId
-  db.prepare(`INSERT INTO settings (id, tenant_id, logo, updated_at) VALUES (?,?,?,datetime('now'))
-    ON CONFLICT(id) DO UPDATE SET logo=excluded.logo, updated_at=datetime('now')`).run(id, req.tenantId, logoPath)
+  const current = db.prepare('SELECT logo, pwa_icon FROM settings WHERE id=? AND tenant_id=?').get(id, req.tenantId) || {}
+  const pwaIcon = (!current.pwa_icon || current.pwa_icon === current.logo) ? logoPath : current.pwa_icon
+  db.prepare(`INSERT INTO settings (id, tenant_id, logo, pwa_icon, updated_at) VALUES (?,?,?,?,datetime('now'))
+    ON CONFLICT(id) DO UPDATE SET logo=excluded.logo,
+      pwa_icon=CASE WHEN settings.pwa_icon IS NULL OR settings.pwa_icon='' OR settings.pwa_icon=settings.logo THEN excluded.logo ELSE settings.pwa_icon END,
+      updated_at=datetime('now')`).run(id, req.tenantId, logoPath, pwaIcon)
   res.json({ logo: logoPath })
 })
 
@@ -2724,21 +2728,23 @@ function pengajarAsJadwal(gtkId, tenantId) {
 app.get('/api/guru/dashboard', authMiddleware, (req, res) => {
   const gtk = resolveGtkForUser(req.user.id, req.tenantId)
   const gtkId = gtk?.id
-  if (!gtkId) return res.json({ jadwal_hari_ini: [], rekap_jurnal: { total: 0 }, rombel_count: 0, wali_rombel: [] })
-  
+  if (!gtkId) return res.json({ jadwal_hari_ini: [], rekap_jurnal: { total: 0 }, absensi_hari_ini: 0, catatan_count: 0, siswa_rombel_count: 0, rombel_count: 0, wali_rombel: [] })
+
   const today = require('./attendance-rules.cjs').hariJakarta()
-  let jadwal = db.prepare(`SELECT j.*, m.nama as mapel_nama, r.nama as rombel_nama FROM jadwal j JOIN mapel m ON j.mapel_id=m.id AND m.tenant_id=j.tenant_id LEFT JOIN rombel r ON j.rombel_id=r.id AND r.tenant_id=j.tenant_id WHERE j.gtk_id=? AND lower(j.hari)=? AND j.tenant_id=? AND j.jenis_kegiatan = 'mapel' ORDER BY j.jam_mulai`).all(gtkId, today, req.tenantId)
-  if (!jadwal.length) jadwal = db.prepare(`SELECT j.*, m.nama as mapel_nama, r.nama as rombel_nama FROM jadwal j JOIN mapel m ON j.mapel_id=m.id AND m.tenant_id=j.tenant_id LEFT JOIN rombel r ON j.rombel_id=r.id AND r.tenant_id=j.tenant_id WHERE j.gtk_id=? AND j.tenant_id=? AND j.jenis_kegiatan = 'mapel' ORDER BY j.hari,j.jam_mulai`).all(gtkId, req.tenantId)
-  if (!jadwal.length) jadwal = pengajarAsJadwal(gtkId, req.tenantId)
-  
+  const todayDate = todayJakarta()
+  const jadwal = db.prepare(`SELECT j.*, m.nama as mapel_nama, r.nama as rombel_nama FROM jadwal j JOIN mapel m ON j.mapel_id=m.id AND m.tenant_id=j.tenant_id LEFT JOIN rombel r ON j.rombel_id=r.id AND r.tenant_id=j.tenant_id WHERE j.gtk_id=? AND lower(j.hari)=? AND j.tenant_id=? AND j.jenis_kegiatan = 'mapel' ORDER BY j.jam_mulai`).all(gtkId, today, req.tenantId)
+
   const totalJurnal = db.prepare("SELECT COUNT(*) as c FROM jurnal_mengajar WHERE guru_id=? AND tenant_id=?").get(gtkId, req.tenantId).c
   const rombelCount = db.prepare("SELECT COUNT(DISTINCT rombel_id) as c FROM pengajar WHERE gtk_id=? AND tenant_id=?").get(gtkId, req.tenantId).c
+  const absensiHariIni = db.prepare(`SELECT COUNT(DISTINCT a.siswa_id) c FROM absensi_siswa a WHERE a.tenant_id=? AND a.tanggal=? AND a.rombel_id IN (SELECT DISTINCT rombel_id FROM jadwal WHERE gtk_id=? AND tenant_id=? AND lower(hari)=? AND jenis_kegiatan='mapel')`).get(req.tenantId, todayDate, gtkId, req.tenantId, today).c
+  const catatanCount = db.prepare(`SELECT COUNT(*) c FROM catatan_kepribadian c JOIN siswa s ON s.id=c.siswa_id AND s.tenant_id=c.tenant_id WHERE c.tenant_id=? AND s.rombel_id IN (SELECT DISTINCT rombel_id FROM jadwal WHERE gtk_id=? AND tenant_id=? AND lower(hari)=? AND jenis_kegiatan='mapel')`).get(req.tenantId, gtkId, req.tenantId, today).c
+  const siswaRombelCount = db.prepare(`SELECT COUNT(*) c FROM siswa s WHERE s.tenant_id=? AND COALESCE(s.status,'aktif')='aktif' AND s.rombel_id IN (SELECT DISTINCT rombel_id FROM jadwal WHERE gtk_id=? AND tenant_id=? AND lower(hari)=? AND jenis_kegiatan='mapel')`).get(req.tenantId, gtkId, req.tenantId, today).c
   const waliRombel = db.prepare(`SELECT r.*, (SELECT COUNT(*) FROM siswa s WHERE s.rombel_id=r.id AND s.tenant_id=?) as jumlah_siswa FROM rombel r WHERE r.wali_kelas_id=? AND r.tenant_id=? ORDER BY r.tingkat, r.nama`).all(req.tenantId, gtkId, req.tenantId)
   const mapelDiampu = db.prepare(`SELECT DISTINCT m.id, m.nama, m.kode, m.kelompok FROM pengajar p JOIN mapel m ON m.id=p.mapel_id AND m.tenant_id=p.tenant_id WHERE p.gtk_id=? AND p.tenant_id=? ORDER BY m.kelompok, m.nama`).all(gtkId, req.tenantId)
   const ekskulDiampu = db.prepare('SELECT id,nama,hari,jam_mulai,jam_selesai FROM ekskul WHERE pembina_id=? AND tenant_id=? ORDER BY nama').all(gtkId, req.tenantId)
-  
+
   const tugas = db.prepare(`SELECT t.*, m.nama mapel_nama, r.nama rombel_nama FROM tugas_siswa t LEFT JOIN mapel m ON m.id=t.mapel_id AND m.tenant_id=t.tenant_id LEFT JOIN rombel r ON r.id=t.rombel_id AND r.tenant_id=t.tenant_id WHERE t.guru_id=? AND t.tenant_id=? ORDER BY t.created_at DESC LIMIT 20`).all(gtkId, req.tenantId)
-  res.json({ jadwal_hari_ini: jadwal, mapel_diampu: mapelDiampu, ekskul_diampu: ekskulDiampu, tugas, rekap_jurnal: { total: totalJurnal }, rombel_count: rombelCount, wali_rombel: waliRombel, gtk: gtk })
+  res.json({ jadwal_hari_ini: jadwal, mapel_diampu: mapelDiampu, ekskul_diampu: ekskulDiampu, tugas, rekap_jurnal: { total: totalJurnal }, absensi_hari_ini: absensiHariIni, catatan_count: catatanCount, siswa_rombel_count: siswaRombelCount, rombel_count: rombelCount, wali_rombel: waliRombel, gtk })
 })
 
 
@@ -2958,12 +2964,14 @@ function selectLinkedStudent(req) {
 }
 
 app.get('/api/pwa/manifest', (req, res) => {
-  const s = db.prepare('SELECT pwa_enabled,pwa_name,pwa_icon,nama_lembaga,logo,primary_color,pwa_bg_color,pwa_theme_color FROM settings WHERE tenant_id=? ORDER BY updated_at DESC LIMIT 1').get(req.tenantId) || {}
+  const s = db.prepare('SELECT pwa_enabled,pwa_name,pwa_icon,nama_lembaga,logo,primary_color,pwa_bg_color,pwa_theme_color,updated_at FROM settings WHERE tenant_id=? ORDER BY updated_at DESC LIMIT 1').get(req.tenantId) || {}
   if (s.pwa_enabled === 0) return res.status(404).json({ error: 'PWA dinonaktifkan' })
   const t = req.tenant || db.prepare('SELECT nama FROM tenants WHERE id=?').get(req.tenantId) || {}
   const name = s.pwa_name || (t.nama ? t.nama + ' Apps' : 'Jurnalku')
-  const icon = s.pwa_icon || s.logo || '/logo-jurnalku-256.png'
-  res.type('application/manifest+json').set('Cache-Control', 'no-store').json({ name, short_name: name.slice(0, 24), start_url: '/', scope: '/', display: 'standalone', background_color: s.pwa_bg_color || '#ffffff', theme_color: s.pwa_theme_color || s.primary_color || '#2563eb', icons: [{ src: icon, sizes: '256x256', type: 'image/png' }, { src: icon, sizes: '512x512', type: 'image/png' }] })
+  const version = String(s.updated_at || Date.now()).replace(/[^0-9]/g, '')
+  const withAssetVersion = asset => asset.startsWith('/uploads/') ? `${asset}${asset.includes('?') ? '&' : '?'}v=${version}` : asset
+  const icon = withAssetVersion(s.pwa_icon || s.logo || '/logo-jurnalku-256.png')
+  res.type('application/manifest+json').set('Cache-Control', 'no-store').json({ name, short_name: name.slice(0, 24), start_url: '/', scope: '/', display: 'standalone', background_color: s.pwa_bg_color || '#ffffff', theme_color: s.pwa_theme_color || s.primary_color || '#2563eb', version, icons: [{ src: icon, sizes: '256x256', type: 'image/png' }, { src: icon, sizes: '512x512', type: 'image/png' }] })
 })
 app.put('/api/settings/pwa', ADMIN, (req, res) => {
   const id = 'main_' + req.tenantId

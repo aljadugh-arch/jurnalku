@@ -25,6 +25,13 @@ const statusColor: Record<string, string> = {
 
 const gtkPhotoUrl = (foto?: string) => foto ? encodeURI(foto) : ''
 
+function GTKPhoto({ foto, nama }: { foto?: string; nama: string }) {
+  const [failed, setFailed] = useState(false)
+  useEffect(() => setFailed(false), [foto])
+  if (foto && !failed) return <img src={gtkPhotoUrl(foto)} alt={nama} onError={() => setFailed(true)} className="w-full h-full object-cover" />
+  return <div className="w-full h-full bg-primary/10 flex items-center justify-center text-primary font-bold text-lg">{nama.charAt(0)}</div>
+}
+
 export default function DataGTKPage() {
   const [data, setData] = useState<GTK[]>([])
   const [search, setSearch] = useState('')
@@ -166,10 +173,7 @@ export default function DataGTKPage() {
           >
             <div className="flex items-center gap-3">
               <div className="w-12 h-12 rounded-full overflow-hidden border flex-shrink-0 bg-gray-100">
-                {g.foto
-                  ? <img src={gtkPhotoUrl(g.foto)} alt={g.nama} className="w-full h-full object-cover" />
-                  : <div className="w-full h-full bg-primary/10 flex items-center justify-center text-primary font-bold text-lg">{g.nama.charAt(0)}</div>
-                }
+                <GTKPhoto foto={g.foto} nama={g.nama} />
               </div>
               <div className="flex-1 min-w-0">
                 <p className="font-bold text-gray-800 truncate">{g.nama}</p>
@@ -196,10 +200,7 @@ export default function DataGTKPage() {
           <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
             <div className="flex items-center gap-3">
               <div className="w-12 h-12 rounded-full overflow-hidden border flex-shrink-0 bg-gray-100">
-                {selected.foto
-                  ? <img src={gtkPhotoUrl(selected.foto)} alt={selected.nama} className="w-full h-full object-cover" />
-                  : <div className="w-full h-full bg-primary/10 flex items-center justify-center text-primary font-bold text-lg">{selected.nama.charAt(0)}</div>
-                }
+                <GTKPhoto foto={selected.foto} nama={selected.nama} />
               </div>
               <div>
                 <h2 className="font-bold text-gray-800">{selected.nama}</h2>
