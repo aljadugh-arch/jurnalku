@@ -27,6 +27,11 @@ function toMinutes(t: string) {
   return h * 60 + m
 }
 
+function teacherDisplayName(gtk: any) {
+  const name = gtk?.nama || 'Guru'
+  return `${String(gtk?.jenis_kelamin || '').toUpperCase() === 'P' ? 'Ibu' : 'Pak'} ${name}`
+}
+
 export default function GuruDashboard() {
   const [data, setData] = useState<any>({ jadwal_hari_ini: [], rekap_jurnal: { draft: 0, submitted: 0, approved: 0, total: 0 }, rombel_count: 0, gtk: null, tugas: [] })
   const [tugasForm, setTugasForm] = useState({ judul: '', deskripsi: '', deadline: '', rombel_id: '', mapel_id: '' })
@@ -61,7 +66,7 @@ export default function GuruDashboard() {
         <div className="min-w-0">
           <p className="text-gray-500 text-sm">{tanggal}</p>
           <h1 className="text-2xl sm:text-3xl font-bold text-gray-800 font-display">
-            {greetingByHour()}, {data.gtk?.nama || 'Guru'} 👋
+            {greetingByHour()}, {teacherDisplayName(data.gtk)} 👋
           </h1>
         </div>
       </div>
@@ -95,11 +100,11 @@ export default function GuruDashboard() {
       </div>
 
       {/* Quick Stats */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <button onClick={() => navigate('/guru/jadwal')} className="text-left active:scale-95 transition"><StatCard label="Jadwal Guru Hari Ini" value={data.jadwal_hari_ini.length + ' JP'} icon={<Calendar size={18} />} gradient="from-blue-500 to-indigo-600" /></button>
-        <button onClick={() => navigate('/guru/absensi-siswa')} className="text-left active:scale-95 transition"><StatCard label="Absensi Siswa" value={data.absensi_hari_ini ?? 0} icon={<UserCheck size={18} />} gradient="from-green-500 to-emerald-600" sub="Siswa diabsen hari ini" /></button>
-        <button onClick={() => navigate('/guru/catatan-kepribadian')} className="text-left active:scale-95 transition"><StatCard label="Catatan Kepribadian" value={data.catatan_count ?? 0} icon={<ScrollText size={18} />} gradient="from-orange-500 to-amber-600" /></button>
-        <button onClick={() => navigate('/guru/absensi-siswa')} className="text-left active:scale-95 transition"><StatCard label="Siswa Rombel Jadwal" value={data.siswa_rombel_count ?? 0} icon={<Users size={18} />} gradient="from-purple-500 to-fuchsia-600" sub="Rombel mapel hari ini" /></button>
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 auto-rows-fr">
+        <button onClick={() => navigate('/guru/jadwal')} className="h-full text-left active:scale-95 transition"><StatCard label="Jadwal Guru Hari Ini" value={data.jadwal_hari_ini.length} icon={<Calendar size={18} />} gradient="from-blue-500 to-indigo-600" sub="Jadwal mengajar hari ini" /></button>
+        <button onClick={() => navigate('/guru/absensi-siswa')} className="h-full text-left active:scale-95 transition"><StatCard label="Absensi Siswa" value={data.absensi_hari_ini ?? 0} icon={<UserCheck size={18} />} gradient="from-green-500 to-emerald-600" sub="Siswa diabsen hari ini" /></button>
+        <button onClick={() => navigate('/guru/catatan-kepribadian')} className="h-full text-left active:scale-95 transition"><StatCard label="Catatan Kepribadian" value={data.catatan_count ?? 0} icon={<ScrollText size={18} />} gradient="from-orange-500 to-amber-600" /></button>
+        <button onClick={() => navigate('/guru/penilaian-harian')} className="h-full text-left active:scale-95 transition"><StatCard label="Nilai/Penilaian Siswa" value={data.nilai_siswa_count ?? 0} icon={<Users size={18} />} gradient="from-purple-500 to-fuchsia-600" sub="Sesuai jadwal mengajar" /></button>
       </div>
 
       {/* Rekap Jurnal + progress */}

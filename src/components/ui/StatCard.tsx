@@ -11,7 +11,7 @@ export default function StatCard({ label, value, icon, gradient = 'from-blue-500
   sub?: string
   onClick?: () => void
 }) {
-  const base = 'bg-white rounded-xl p-3 sm:p-4 shadow-sm border border-gray-100 transition text-left w-full'
+  const base = 'bg-white rounded-xl p-3 sm:p-4 shadow-sm border border-gray-100 transition text-left w-full h-full min-h-[124px] flex flex-col'
   const body = (
     <>
       <div className="flex items-center justify-between gap-2">

@@ -1,7 +1,12 @@
 const test = require('node:test')
 const assert = require('node:assert/strict')
 const Database = require('better-sqlite3')
-const { setupWA, queueDueSchedules } = require('../server/wa-queue.cjs')
+const { setupWA, queueDueSchedules, honorificTeacherName } = require('../server/wa-queue.cjs')
+
+test('sapaan guru otomatis memakai Pak dan Ibu sesuai jenis kelamin', () => {
+  assert.equal(honorificTeacherName('Ahmad', 'L'), 'Pak Ahmad')
+  assert.equal(honorificTeacherName('Siti', 'P'), 'Ibu Siti')
+})
 
 test('jadwal mapel tetap masuk antrean dengan template bawaan saat template tenant kosong', () => {
   const db = new Database(':memory:')

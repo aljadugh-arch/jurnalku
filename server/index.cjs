@@ -2725,6 +2725,30 @@ function pengajarAsJadwal(gtkId, tenantId) {
     WHERE p.gtk_id=? AND p.tenant_id=? ORDER BY m.nama, r.nama`).all(gtkId, tenantId)
 }
 
+function honorificTeacherName(name, jenisKelamin) {
+  const clean = String(name || '').trim()
+  if (!clean) return 'Guru'
+  return `${String(jenisKelamin || '').toUpperCase() === 'P' ? 'Ibu' : 'Pak'} ${clean}`
+}
+
+function teacherCanTeachPair(gtkId, tenantId, mapelId, rombelId, tanggal) {
+  const day = HARI_ID[new Date(`${tanggal}T12:00:00+07:00`).getUTCDay()]
+  return !!db.prepare(`SELECT 1 FROM jadwal WHERE gtk_id=? AND mapel_id=? AND rombel_id=? AND tenant_id=? AND lower(hari)=? AND jenis_kegiatan='mapel'
+    UNION SELECT 1 FROM pengajar WHERE gtk_id=? AND mapel_id=? AND rombel_id=? AND tenant_id=?`).get(
+      gtkId, mapelId, rombelId, tenantId, day, gtkId, mapelId, rombelId, tenantId)
+}
+
+function teacherCanAccessStudentOnDate(req, siswaId, tanggal) {
+  if (!['guru', 'wali_kelas'].includes(req.user.role)) return true
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(tanggal || ''))) return false
+  const gtk = resolveGtkForUser(req.user.id, req.tenantId)
+  if (!gtk) return false
+  const day = HARI_ID[new Date(`${tanggal}T12:00:00+07:00`).getUTCDay()]
+  return !!db.prepare(`SELECT 1 FROM siswa s WHERE s.id=? AND s.tenant_id=? AND COALESCE(s.status,'aktif')='aktif'
+    AND s.rombel_id IN (SELECT rombel_id FROM jadwal WHERE gtk_id=? AND tenant_id=? AND lower(hari)=? AND jenis_kegiatan='mapel')`)
+    .get(siswaId, req.tenantId, gtk.id, req.tenantId, day)
+}
+
 app.get('/api/guru/dashboard', authMiddleware, (req, res) => {
   const gtk = resolveGtkForUser(req.user.id, req.tenantId)
   const gtkId = gtk?.id
@@ -2744,7 +2768,21 @@ app.get('/api/guru/dashboard', authMiddleware, (req, res) => {
   const ekskulDiampu = db.prepare('SELECT id,nama,hari,jam_mulai,jam_selesai FROM ekskul WHERE pembina_id=? AND tenant_id=? ORDER BY nama').all(gtkId, req.tenantId)
 
   const tugas = db.prepare(`SELECT t.*, m.nama mapel_nama, r.nama rombel_nama FROM tugas_siswa t LEFT JOIN mapel m ON m.id=t.mapel_id AND m.tenant_id=t.tenant_id LEFT JOIN rombel r ON r.id=t.rombel_id AND r.tenant_id=t.tenant_id WHERE t.guru_id=? AND t.tenant_id=? ORDER BY t.created_at DESC LIMIT 20`).all(gtkId, req.tenantId)
-  res.json({ jadwal_hari_ini: jadwal, mapel_diampu: mapelDiampu, ekskul_diampu: ekskulDiampu, tugas, rekap_jurnal: { total: totalJurnal }, absensi_hari_ini: absensiHariIni, catatan_count: catatanCount, siswa_rombel_count: siswaRombelCount, rombel_count: rombelCount, wali_rombel: waliRombel, gtk })
+  res.json({ jadwal_hari_ini: jadwal, mapel_diampu: mapelDiampu, ekskul_diampu: ekskulDiampu, tugas, rekap_jurnal: { total: totalJurnal }, absensi_hari_ini: absensiHariIni, catatan_count: catatanCount, siswa_rombel_count: siswaRombelCount, nilai_siswa_count: siswaRombelCount, rombel_count: rombelCount, wali_rombel: waliRombel, gtk: { ...gtk, nama_tampilan: honorificTeacherName(gtk.nama, gtk.jenis_kelamin) } })
+})
+
+app.get('/api/guru/jadwal-context', authMiddleware, (req, res) => {
+  const gtk = resolveGtkForUser(req.user.id, req.tenantId)
+  if (!gtk) return res.json({ gtk: null, tanggal: todayJakarta(), jadwal: [], siswa: [] })
+  const requested = typeof req.query.tanggal === 'string' ? req.query.tanggal : ''
+  const tanggal = /^\d{4}-\d{2}-\d{2}$/.test(requested) ? requested : todayJakarta()
+  const day = HARI_ID[new Date(`${tanggal}T12:00:00+07:00`).getUTCDay()]
+  const jadwal = db.prepare(`SELECT DISTINCT j.id AS jadwal_id,j.mapel_id,j.rombel_id,j.hari,j.jam_mulai,j.jam_selesai,j.ruangan,m.nama AS mapel_nama,m.kode AS mapel_kode,r.nama AS rombel_nama
+    FROM jadwal j JOIN mapel m ON m.id=j.mapel_id AND m.tenant_id=j.tenant_id LEFT JOIN rombel r ON r.id=j.rombel_id AND r.tenant_id=j.tenant_id
+    WHERE j.gtk_id=? AND j.tenant_id=? AND lower(j.hari)=? AND j.jenis_kegiatan='mapel' ORDER BY j.jam_mulai`).all(gtk.id, req.tenantId, day)
+  const ids = [...new Set(jadwal.map(j => j.rombel_id).filter(Boolean))]
+  const siswa = ids.length ? db.prepare(`SELECT s.id,s.nis,s.nisn,s.nama,s.jenis_kelamin,s.rombel_id,r.nama AS rombel_nama FROM siswa s LEFT JOIN rombel r ON r.id=s.rombel_id AND r.tenant_id=s.tenant_id WHERE s.tenant_id=? AND COALESCE(s.status,'aktif')='aktif' AND s.rombel_id IN (${ids.map(() => '?').join(',')}) ORDER BY r.nama,s.nama`).all(req.tenantId, ...ids) : []
+  res.json({ gtk: { ...gtk, nama_tampilan: honorificTeacherName(gtk.nama, gtk.jenis_kelamin) }, tanggal, jadwal, siswa })
 })
 
 
@@ -4666,6 +4704,11 @@ app.get('/api/penilaian-harian', authMiddleware, (req, res) => {
 app.post('/api/penilaian-harian', STAFF, (req, res) => {
   const id = uuidv4()
   const { jurnal_id, siswa_id, mapel_id, tanggal, sikap, keaktifan, pengetahuan, catatan } = req.body
+  if (['guru', 'wali_kelas'].includes(req.user.role)) {
+    const gtk = resolveGtkForUser(req.user.id, req.tenantId)
+    const siswa = db.prepare('SELECT rombel_id FROM siswa WHERE id=? AND tenant_id=?').get(siswa_id, req.tenantId)
+    if (!gtk || !siswa || !teacherCanTeachPair(gtk.id, req.tenantId, mapel_id, siswa.rombel_id, tanggal)) return res.status(403).json({ error: 'Siswa/mapel tidak sesuai jadwal mengajar Anda' })
+  }
   db.prepare(`INSERT INTO penilaian_harian (id, jurnal_id, siswa_id, mapel_id, tanggal, sikap, keaktifan, pengetahuan, catatan, tenant_id) 
     VALUES (?,?,?,?,?,?,?,?,?,?)`).run(id, jurnal_id||null, siswa_id, mapel_id, tanggal, sikap||0, keaktifan||0, pengetahuan||0, catatan||'', req.tenantId)
   res.json({ id })
@@ -4674,6 +4717,13 @@ app.post('/api/penilaian-harian', STAFF, (req, res) => {
 app.post('/api/penilaian-harian/bulk', STAFF, (req, res) => {
   const { jurnal_id, mapel_id, tanggal, data } = req.body
   if (!data || !Array.isArray(data)) return res.status(400).json({ error: 'Data harus array' })
+  if (['guru', 'wali_kelas'].includes(req.user.role)) {
+    const gtk = resolveGtkForUser(req.user.id, req.tenantId)
+    if (!gtk || data.some(d => {
+      const siswa = db.prepare('SELECT rombel_id FROM siswa WHERE id=? AND tenant_id=?').get(d.siswa_id, req.tenantId)
+      return !siswa || !teacherCanTeachPair(gtk.id, req.tenantId, mapel_id, siswa.rombel_id, tanggal)
+    })) return res.status(403).json({ error: 'Terdapat siswa di luar jadwal mengajar Anda' })
+  }
   let count = 0
   for (const d of data) {
     const exists = db.prepare('SELECT id FROM penilaian_harian WHERE siswa_id = ? AND mapel_id = ? AND tanggal = ? AND tenant_id=?').get(d.siswa_id, mapel_id, tanggal, req.tenantId)
@@ -4731,9 +4781,36 @@ function teacherCanAccessStudent(req, siswaId) {
     .get(siswaId, req.tenantId, gtk.id, gtk.id, req.tenantId, gtk.id, req.tenantId)
 }
 
+app.post('/api/catatan-kepribadian', TEACHER, (req, res) => {
+  const { siswa_id, catatan, aspek, tanggal } = req.body
+  if (!siswa_id || !String(catatan || '').trim() || !tanggal) return res.status(400).json({ error: 'siswa_id, catatan, dan tanggal wajib' })
+  if (!teacherCanAccessStudentOnDate(req, siswa_id, tanggal)) return res.status(403).json({ error: 'Siswa tidak sesuai jadwal mengajar Anda pada tanggal tersebut' })
+  const siswa = db.prepare('SELECT id FROM siswa WHERE id=? AND tenant_id=?').get(siswa_id, req.tenantId)
+  if (!siswa) return res.status(404).json({ error: 'Siswa tidak ditemukan' })
+  const id = uuidv4()
+  const period = `harian-${tanggal}`
+  db.prepare(`INSERT INTO catatan_kepribadian (id, siswa_id, tahun_ajaran, semester, sikap_spiritual, sikap_sosial, kelakuan, kerajinan, kerapian, kedisiplinan, catatan_wali_kelas, saran, tenant_id, updated_at)
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,datetime('now'))
+    ON CONFLICT(siswa_id, tahun_ajaran, semester, tenant_id) DO UPDATE SET
+      sikap_spiritual=excluded.sikap_spiritual, catatan_wali_kelas=excluded.catatan_wali_kelas,
+      saran=excluded.saran, updated_at=datetime('now')`)
+    .run(id, siswa_id, tanggal.slice(0, 4), period, aspek || 'sikap', '', 'Baik', 'Baik', 'Baik', 'Baik', String(catatan).trim(), tanggal, req.tenantId)
+  res.json({ id })
+})
+
+app.delete('/api/catatan-kepribadian/:id', TEACHER, (req, res) => {
+  const row = db.prepare('SELECT c.id,c.siswa_id FROM catatan_kepribadian c WHERE c.id=? AND c.tenant_id=?').get(req.params.id, req.tenantId)
+  if (!row || !teacherCanAccessStudent(req, row.siswa_id)) return res.status(404).json({ error: 'Catatan tidak ditemukan' })
+  db.prepare('DELETE FROM catatan_kepribadian WHERE id=? AND tenant_id=?').run(req.params.id, req.tenantId)
+  res.json({ success: true })
+})
+
 app.get('/api/catatan-kepribadian', authMiddleware, (req, res) => {
   const { siswa_id, rombel_id, tahun_ajaran, semester } = req.query
-  let sql = `SELECT c.*, s.nama as siswa_nama, s.nis, r.nama as rombel_nama
+  let sql = `SELECT c.*, s.nama as siswa_nama, s.nis, r.nama as rombel_nama,
+    c.catatan_wali_kelas AS catatan,
+    CASE WHEN c.semester LIKE 'harian-%' THEN c.sikap_spiritual ELSE 'sikap' END AS aspek,
+    CASE WHEN c.semester LIKE 'harian-%' THEN c.saran ELSE substr(c.updated_at,1,10) END AS tanggal
     FROM catatan_kepribadian c
     LEFT JOIN siswa s ON c.siswa_id = s.id
     LEFT JOIN rombel r ON s.rombel_id = r.id

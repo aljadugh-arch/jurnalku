@@ -39,6 +39,11 @@ function claimNext(db,tenantId) {
     return r.changes?db.prepare('SELECT * FROM wa_queue WHERE id=? AND tenant_id=?').get(row.id,tenantId):null
   })()
 }
+function honorificTeacherName(name, jenisKelamin) {
+  const clean = String(name || '').trim()
+  if (!clean) return 'Guru'
+  return `${String(jenisKelamin || '').toUpperCase() === 'P' ? 'Ibu' : 'Pak'} ${clean}`
+}
 function render(template,data){return String(template||'').replace(/\{(\w+)\}/g,(_,k)=>data[k]??'')}
 function tenantHolidayState(db, tenantId, date) {
   const settings = db.prepare('SELECT hari_libur FROM settings WHERE tenant_id=?').get(tenantId)
@@ -76,7 +81,8 @@ function queueDueTeachers(db,{tenantId,date,time}) {
       AND EXISTS (SELECT 1 FROM jadwal j WHERE j.tenant_id=g.tenant_id AND j.gtk_id=g.id AND lower(j.hari)=lower(?) AND COALESCE(j.jenis_kegiatan,'mapel')='mapel')
       AND NOT EXISTS(SELECT 1 FROM absensi_guru a WHERE a.tenant_id=? AND a.gtk_id=g.id AND a.tanggal=?)`).all(tenantId,day,tenantId,date)){
     if(!normalizePhone(g.no_hp)){out.missing++;continue}
-    const message=render(conf.template_guru_ceklok,{nama:g.nama,tanggal:date,lembaga:school?.nama_lembaga||'Sekolah'})
+      const namaGuru = honorificTeacherName(g.nama, g.jenis_kelamin)
+    const message=render(conf.template_guru_ceklok,{nama:namaGuru,nama_guru:namaGuru,tanggal:date,lembaga:school?.nama_lembaga||'Sekolah'})
     const r=enqueue(db,{tenantId,phone:g.no_hp,message,key:`guru-belum-ceklok:${g.id}:${date}`,targetType:'gtk',targetId:g.id})
     if (r.queued) out.queued++
     else out.skipped++
@@ -99,11 +105,15 @@ function queueDueSchedules(db,{tenantId,date,time}) {
   for(const x of rows){
     if(!normalizePhone(x.no_hp)){out.missing++;continue}
     const defaultTemplate='Assalamu’alaikum {nama_guru}. Pengingat jadwal mengajar {mapel} di kelas {rombel}, pukul {jam_mulai}–{jam_selesai} pada {tanggal}. — {lembaga}'
-    const message=render(String(conf.template_jadwal_guru||'').trim()||defaultTemplate,{...x,tanggal:date,lembaga:school?.nama_lembaga||'Sekolah'})
+    const gtkColumns = db.prepare('PRAGMA table_info(gtk)').all()
+    const hasGender = gtkColumns.some(column => column.name === 'jenis_kelamin')
+    const gender = hasGender ? db.prepare('SELECT jenis_kelamin FROM gtk WHERE id=? AND tenant_id=?').get(x.gtk_id, tenantId)?.jenis_kelamin : 'L'
+    const namaGuru = honorificTeacherName(x.nama_guru, gender)
+    const message=render(String(conf.template_jadwal_guru||'').trim()||defaultTemplate,{...x,nama_guru:namaGuru,tanggal:date,lembaga:school?.nama_lembaga||'Sekolah'})
     const r=enqueue(db,{tenantId,phone:x.no_hp,message,key:`jadwal-guru:${x.id}:${date}:${x.jam_mulai}`,targetType:'gtk',targetId:x.gtk_id})
     if (r.queued) out.queued++
     else out.skipped++
   }
   return out
 }
-module.exports={setupWA,normalizePhone,enqueue,claimNext,render,queueWaliAttendance,queueDueTeachers,queueDueSchedules,isWhitelisted,shouldSuppress}
+module.exports={setupWA,normalizePhone,enqueue,claimNext,render,honorificTeacherName,queueWaliAttendance,queueDueTeachers,queueDueSchedules,isWhitelisted,shouldSuppress}

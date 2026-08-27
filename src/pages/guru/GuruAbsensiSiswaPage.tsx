@@ -5,7 +5,9 @@ import api from '../../services/api'
 import { todayWib } from '../../lib/dateFormat'
 
 export default function GuruAbsensiSiswaPage() {
-  const [rombels, setRombels] = useState<any[]>([])
+  const [jadwal, setJadwal] = useState<any[]>([])
+  const [contextSiswa, setContextSiswa] = useState<any[]>([])
+  const [selectedJadwal, setSelectedJadwal] = useState('')
   const [selectedRombel, setSelectedRombel] = useState('')
   const [tanggal, setTanggal] = useState(todayWib())
   const [sesi, setSesi] = useState<'masuk' | 'pulang'>('masuk')
@@ -13,25 +15,26 @@ export default function GuruAbsensiSiswaPage() {
   const [absensi, setAbsensi] = useState<Record<string, string>>({})
   const [saving, setSaving] = useState(false)
 
-  useEffect(() => {
-    api.get('/rombel').then(res => {
-      setRombels(res.data)
-      if (res.data.length > 0) setSelectedRombel(res.data[0].id)
-    })
-  }, [])
+  useEffect(() => { loadContext(tanggal) }, [])
+
+  const loadContext = async (date: string) => {
+    const res = await api.get('/guru/jadwal-context', { params: { tanggal: date } })
+    setJadwal(res.data.jadwal || [])
+    setContextSiswa(res.data.siswa || [])
+    const first = res.data.jadwal?.[0]
+    setSelectedJadwal(first?.jadwal_id || '')
+    setSelectedRombel(first?.rombel_id || '')
+  }
 
   useEffect(() => {
     if (selectedRombel && tanggal) {
       loadAbsensi()
     }
-  }, [selectedRombel, tanggal, sesi])
+  }, [selectedRombel, tanggal, sesi, contextSiswa])
 
   const loadAbsensi = async () => {
-    const [siswaRes, absenRes] = await Promise.all([
-      api.get('/siswa', { params: { rombel_id: selectedRombel } }),
-      api.get('/absensi-siswa', { params: { rombel_id: selectedRombel, tanggal } })
-    ])
-    setSiswaList(siswaRes.data)
+    const absenRes = await api.get('/absensi-siswa', { params: { rombel_id: selectedRombel, tanggal } })
+    setSiswaList(contextSiswa.filter(s => s.rombel_id === selectedRombel))
     const map: Record<string, string> = {}
     absenRes.data.forEach((a: any) => { map[a.siswa_id] = a.status })
     setAbsensi(map)
@@ -64,16 +67,18 @@ export default function GuruAbsensiSiswaPage() {
       </div>
 
       <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100 flex flex-col sm:flex-row gap-3">
-        <select value={selectedRombel} onChange={e => setSelectedRombel(e.target.value)} className="px-4 py-2 border border-gray-300 rounded-lg text-sm">
-          {rombels.map(r => <option key={r.id} value={r.id}>{r.nama} ({r.tingkat})</option>)}
+        <select value={selectedJadwal} onChange={e => { const j = jadwal.find(x => x.jadwal_id === e.target.value); setSelectedJadwal(e.target.value); setSelectedRombel(j?.rombel_id || '') }} className="min-w-0 flex-1 px-4 py-2 border border-gray-300 rounded-lg text-sm">
+          <option value="">Pilih jadwal mengajar hari ini</option>
+          {jadwal.map(j => <option key={j.jadwal_id} value={j.jadwal_id}>{j.jam_mulai}–{j.jam_selesai} · {j.mapel_nama} · {j.rombel_nama}</option>)}
         </select>
-        <input type="date" value={tanggal} onChange={e => setTanggal(e.target.value)} className="px-3 py-2 border border-gray-300 rounded-lg text-sm" />
+        <input type="date" value={tanggal} onChange={e => { setTanggal(e.target.value); loadContext(e.target.value) }} className="px-3 py-2 border border-gray-300 rounded-lg text-sm" />
         <select value={sesi} onChange={e => setSesi(e.target.value as 'masuk' | 'pulang')} className="px-4 py-2 border border-gray-300 rounded-lg text-sm">
           <option value="masuk">Sesi Masuk</option>
           <option value="pulang">Sesi Pulang</option>
         </select>
       </div>
 
+      {!jadwal.length && <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 text-sm text-amber-800">Tidak ada jadwal mengajar Anda pada tanggal ini. Absensi siswa dikosongkan.</div>}
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">

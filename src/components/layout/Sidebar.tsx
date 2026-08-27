@@ -103,7 +103,6 @@ const guruMenuItems: MenuItem[] = [
   { label: 'Absensi Ekskul/Peminatan', icon: <UserCheck size={20} />, path: '/guru/absensi-ekskul' },
   { label: 'Absensi Saya', icon: <MapPin size={20} />, path: '/guru/absensi-guru' },
   { label: 'Modul Ajar', icon: <Sparkles size={20} />, path: '/guru/modul-ajar' },
-  { label: 'Kelas Wali Saya', icon: <Layers size={20} />, path: '/guru/rombel' },
 ]
 
 const siswaMenuItems: MenuItem[] = [
@@ -179,6 +178,7 @@ export default function Sidebar() {
               ? guruMenuItems
               : siswaMenuItems
   ).filter(item => item.path !== '/admin/tenants' || user?.role === 'super_admin')
+    .concat(user?.role === 'wali_kelas' ? [{ label: 'Kelas Wali Saya', icon: <Layers size={20} />, path: '/guru/rombel' }] : [])
     .map(item => ({ ...item, children: item.children?.filter(child => pathEnabled(child.path, features)) }))
     .filter(item => item.path ? pathEnabled(item.path, features) : !!item.children?.length)
 

@@ -40,7 +40,7 @@ function roleItems(role?: string, hideStaffCeklok?: boolean): NavItem[] {
   const ceklokStaff: NavItem = { label: 'Ceklok', path: '/admin/ceklok', icon: <MapPin size={iconSize} /> }
   const absensiSaya: NavItem = { label: 'Absensi Saya', path: '/admin/absensi-saya', icon: <UserCheck size={iconSize} /> }
   if (role === 'guru' || role === 'wali_kelas') {
-    return [
+    const teacherItems = [
       { label: 'Home', path: '/guru', icon: <Home size={iconSize} /> },
       { label: 'Posting', path: '/guru/posting', icon: <FileText size={iconSize} /> },
       { label: 'Ceklok', path: '/guru/absensi-guru', icon: <MapPin size={iconSize} /> },
@@ -51,8 +51,10 @@ function roleItems(role?: string, hideStaffCeklok?: boolean): NavItem[] {
       { label: 'Tugas', path: '/guru#tugas', icon: <ClipboardCheck size={iconSize} /> },
       { label: 'Catatan', path: '/guru/catatan-kepribadian', icon: <FileText size={iconSize} /> },
       { label: 'Modul', path: '/guru/modul-ajar', icon: <FileText size={iconSize} /> },
-      { label: 'Rombel', path: '/guru/rombel', icon: <GraduationCap size={iconSize} /> },
     ]
+    return role === 'wali_kelas'
+      ? teacherItems.concat({ label: 'Rombel', path: '/guru/rombel', icon: <GraduationCap size={iconSize} /> })
+      : teacherItems
   }
 
   if (role === 'siswa') {

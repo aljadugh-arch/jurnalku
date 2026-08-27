@@ -82,29 +82,29 @@ export default function UserManagementPage() {
 
       <div className="min-w-0 bg-white rounded-xl p-4 sm:p-6 shadow-sm border border-gray-100">
         <h2 className="font-semibold text-gray-700 mb-4 flex items-center gap-2"><UserPlus size={18} /> Tambah Pengguna</h2>
-        <div className="grid md:grid-cols-2 gap-3 mb-4 p-3 bg-gray-50 rounded-xl">
-          <div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4 p-3 bg-gray-50 rounded-xl">
+          <div className="min-w-0 min-h-[104px]">
             <label className="block text-xs font-medium text-gray-500 mb-1">Cari & pilih GTK</label>
             <div className="relative">
               <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
-              <input value={gtkSearch} onChange={e => setGtkSearch(e.target.value)} placeholder="Nama atau NIP guru..." className="w-full pl-8 pr-3 py-2 border rounded-lg text-sm" />
+              <input value={gtkSearch} onChange={e => setGtkSearch(e.target.value)} placeholder="Nama atau NIP guru..." className="w-full min-w-0 h-11 pl-8 pr-3 py-2 border rounded-lg text-sm" />
             </div>
             {gtkSearch && filteredGtk.map(g => <button key={g.id} type="button" onClick={() => pickGtk(g)} className="block w-full text-left px-3 py-1.5 text-xs bg-white border-b hover:bg-blue-50 rounded">{g.nama} {g.nip ? '('+g.nip+')' : ''}</button>)}
           </div>
-          <div>
+          <div className="min-w-0 min-h-[104px]">
             <label className="block text-xs font-medium text-gray-500 mb-1">Cari & pilih Siswa</label>
             <div className="relative">
               <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
-              <input value={siswaSearch} onChange={e => setSiswaSearch(e.target.value)} placeholder="Nama atau NIS siswa..." className="w-full pl-8 pr-3 py-2 border rounded-lg text-sm" />
+              <input value={siswaSearch} onChange={e => setSiswaSearch(e.target.value)} placeholder="Nama atau NIS siswa..." className="w-full min-w-0 h-11 pl-8 pr-3 py-2 border rounded-lg text-sm" />
             </div>
             {siswaSearch && filteredSiswa.map(sw => <button key={sw.id} type="button" onClick={() => pickSiswa(sw)} className="block w-full text-left px-3 py-1.5 text-xs bg-white border-b hover:bg-blue-50 rounded">{sw.nama} ({sw.nis})</button>)}
           </div>
         </div>
-        <div className="grid md:grid-cols-2 gap-4">
-          <input placeholder="Nama lengkap" value={form.nama} onChange={e => setForm({ ...form, nama: e.target.value })} className="px-4 py-2 border rounded-lg text-sm" />
-          <input placeholder="Email" value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} className="px-4 py-2 border rounded-lg text-sm" />
-          <input placeholder="Password (min 6)" type="password" value={form.password} onChange={e => setForm({ ...form, password: e.target.value })} className="px-4 py-2 border rounded-lg text-sm" />
-          <select value={form.role} onChange={e => setForm({ ...form, role: e.target.value })} className="px-4 py-2 border rounded-lg text-sm">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <input placeholder="Nama lengkap" value={form.nama} onChange={e => setForm({ ...form, nama: e.target.value })} className="w-full min-w-0 h-11 px-4 py-2 border rounded-lg text-sm" />
+          <input placeholder="Email" value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} className="w-full min-w-0 h-11 px-4 py-2 border rounded-lg text-sm" />
+          <input placeholder="Password (min 6)" type="password" value={form.password} onChange={e => setForm({ ...form, password: e.target.value })} className="w-full min-w-0 h-11 px-4 py-2 border rounded-lg text-sm" />
+          <select value={form.role} onChange={e => setForm({ ...form, role: e.target.value })} className="w-full min-w-0 h-11 px-4 py-2 border rounded-lg text-sm">
             {CREATABLE.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
           </select>
         </div>
@@ -114,10 +114,10 @@ export default function UserManagementPage() {
       </div>
 
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-        <div className="sm:hidden divide-y">
+        <div className="lg:hidden divide-y">
           {users.map(u => <div key={u.id} className="p-4 flex items-start gap-3"><div className="min-w-0 flex-1"><p className="font-medium text-gray-800 break-words">{u.nama}</p><p className="mt-1 text-sm text-gray-600 break-all">{u.email}</p><span className="mt-2 inline-flex max-w-full items-center gap-1 px-2 py-1 rounded-full text-xs bg-primary/10 text-primary"><Shield size={12} className="shrink-0"/><span className="break-words">{roleLabel(u.role)}</span></span></div><button aria-label={`Hapus ${u.nama}`} onClick={() => remove(u)} className="shrink-0 p-2 text-gray-400 hover:text-red-500"><Trash2 size={16}/></button></div>)}
         </div>
-        <div className="hidden sm:block overflow-x-auto">
+        <div className="hidden lg:block overflow-x-auto">
           <table className="w-full min-w-[640px] text-sm">
             <thead className="bg-gray-50 text-gray-500 text-left"><tr><th className="px-4 py-3">Nama</th><th className="px-4 py-3">Email</th><th className="px-4 py-3">Role</th><th className="px-4 py-3 w-16"></th></tr></thead>
             <tbody className="divide-y">{users.map(u => <tr key={u.id}><td className="px-4 py-3 font-medium text-gray-800 break-words">{u.nama}</td><td className="px-4 py-3 text-gray-600 break-all">{u.email}</td><td className="px-4 py-3"><span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs bg-primary/10 text-primary"><Shield size={12}/>{roleLabel(u.role)}</span></td><td className="px-4 py-3"><button aria-label={`Hapus ${u.nama}`} onClick={() => remove(u)} className="text-gray-400 hover:text-red-500"><Trash2 size={16}/></button></td></tr>)}</tbody>

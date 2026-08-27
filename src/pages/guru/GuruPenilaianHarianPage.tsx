@@ -4,8 +4,10 @@ import { todayWib } from '../../lib/dateFormat'
 import { BookOpen, Save, Users } from 'lucide-react'
 
 export default function GuruPenilaianHarianPage() {
-  const [mapelList, setMapelList] = useState<any[]>([])
   const [rombelList, setRombelList] = useState<any[]>([])
+  const [jadwalList, setJadwalList] = useState<any[]>([])
+  const [contextSiswa, setContextSiswa] = useState<any[]>([])
+  const [selectedJadwal, setSelectedJadwal] = useState('')
   const [siswaList, setSiswaList] = useState<any[]>([])
   const [selectedMapel, setSelectedMapel] = useState('')
   const [selectedRombel, setSelectedRombel] = useState('')
@@ -15,21 +17,28 @@ export default function GuruPenilaianHarianPage() {
   const [success, setSuccess] = useState(false)
 
   useEffect(() => {
-    loadPengajarSaya()
+    loadJadwalContext(tanggal)
   }, [])
 
   useEffect(() => {
     if (selectedRombel) {
       loadSiswa()
     }
-  }, [selectedRombel])
+  }, [selectedRombel, contextSiswa])
 
-  // Auto-scope: hanya mapel & kelas yg diampu guru ini (dari data Pengajar)
-  const loadPengajarSaya = async () => {
+  // Auto-scope: hanya pasangan mapel/kelas pada jadwal mengajar tanggal terpilih.
+  const loadJadwalContext = async (date: string) => {
     try {
-      const { data } = await api.get('/guru/pengajar-saya')
-      setMapelList(data.mapel || [])
-      setRombelList(data.rombel || [])
+      const { data } = await api.get('/guru/jadwal-context', { params: { tanggal: date } })
+      const rows = data.jadwal || []
+      setJadwalList(rows)
+      setContextSiswa(data.siswa || [])
+      setRombelList([...new Map(rows.map((j: any) => [j.rombel_id, { id: j.rombel_id, nama: j.rombel_nama }])).values()] as any[])
+      const first = rows[0]
+      setSelectedJadwal(first?.jadwal_id || '')
+      setSelectedMapel(first?.mapel_id || '')
+      setSelectedRombel(first?.rombel_id || '')
+      if (!first) { setSiswaList([]); setPenilaianData([]) }
     } catch (e) {
       console.error(e)
     }
@@ -37,7 +46,7 @@ export default function GuruPenilaianHarianPage() {
 
   const loadSiswa = async () => {
     try {
-      const { data } = await api.get(`/siswa?rombel_id=${selectedRombel}`)
+      const data = contextSiswa.filter((s: any) => s.rombel_id === selectedRombel)
       setSiswaList(data)
       // Initialize penilaian data
       const initial = data.map((s: any) => ({
@@ -129,20 +138,20 @@ export default function GuruPenilaianHarianPage() {
             <input
               type="date"
               value={tanggal}
-              onChange={e => setTanggal(e.target.value)}
+              onChange={e => { setTanggal(e.target.value); loadJadwalContext(e.target.value) }}
               className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary/20 focus:border-primary"
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Mata Pelajaran</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Jadwal Mengajar</label>
             <select
-              value={selectedMapel}
-              onChange={e => setSelectedMapel(e.target.value)}
+              value={selectedJadwal}
+              onChange={e => { const j = jadwalList.find(x => x.jadwal_id === e.target.value); setSelectedJadwal(e.target.value); setSelectedMapel(j?.mapel_id || ''); setSelectedRombel(j?.rombel_id || '') }}
               className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary/20 focus:border-primary"
             >
-              <option value="">Pilih Mapel</option>
-              {mapelList.map(m => (
-                <option key={m.id} value={m.id}>{m.nama}</option>
+              <option value="">Pilih Jadwal</option>
+              {jadwalList.map(j => (
+                <option key={j.jadwal_id} value={j.jadwal_id}>{j.jam_mulai} · {j.mapel_nama} · {j.rombel_nama}</option>
               ))}
             </select>
           </div>
@@ -150,7 +159,7 @@ export default function GuruPenilaianHarianPage() {
             <label className="block text-sm font-medium text-gray-700 mb-1">Kelas</label>
             <select
               value={selectedRombel}
-              onChange={e => setSelectedRombel(e.target.value)}
+              disabled
               className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary/20 focus:border-primary"
             >
               <option value="">Pilih Kelas</option>

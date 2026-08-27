@@ -92,7 +92,6 @@ export const guruMenuItems: MenuItem[] = [
   { label: 'Absensi Siswa', icon: <QrCode size={20} />, path: '/guru/absensi-siswa' },
   { label: 'Absensi Saya', icon: <MapPin size={20} />, path: '/guru/absensi-guru' },
   { label: 'Generator AI Guru', icon: <Sparkles size={20} />, path: '/guru/modul-ajar' },
-  { label: 'Kelas Wali Saya', icon: <Layers size={20} />, path: '/guru/rombel' },
 ]
 
 export const siswaMenuItems: MenuItem[] = [
@@ -139,7 +138,10 @@ export function menuForRole(role?: string): MenuItem[] {
     : role === 'admin' || role === 'super_admin' ? adminMenuItems
     : role === 'guru' || role === 'wali_kelas' ? guruMenuItems
     : siswaMenuItems
-  return items.filter(item => item.path !== '/admin/tenants' || role === 'super_admin')
+  const visible = items.filter(item => item.path !== '/admin/tenants' || role === 'super_admin')
+  return role === 'wali_kelas'
+    ? [...visible, { label: 'Kelas Wali Saya', icon: <Layers size={20} />, path: '/guru/rombel' }]
+    : visible
 }
 
 // Ratakan menu (parent + anak submenu) jadi daftar link datar untuk grid ikon.

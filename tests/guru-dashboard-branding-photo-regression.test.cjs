@@ -20,14 +20,14 @@ test('dashboard guru hanya memakai jadwal mapel hari Jakarta tanpa fallback hari
   assert.match(route, /siswa_rombel_count/)
 })
 
-test('empat kartu guru menunjukkan jadwal, absensi, catatan, dan siswa rombel jadwal', () => {
+test('empat kartu guru menunjukkan jadwal, absensi, catatan, dan penilaian siswa', () => {
   assert.match(dashboard, /label="Jadwal Guru Hari Ini"/)
   assert.match(dashboard, /label="Absensi Siswa"/)
   assert.match(dashboard, /data\.absensi_hari_ini/)
   assert.match(dashboard, /label="Catatan Kepribadian"/)
   assert.match(dashboard, /data\.catatan_count/)
-  assert.match(dashboard, /label="Siswa Rombel Jadwal"/)
-  assert.match(dashboard, /data\.siswa_rombel_count/)
+  assert.match(dashboard, /label="Nilai\/Penilaian Siswa"/)
+  assert.match(dashboard, /data\.nilai_siswa_count/)
   assert.doesNotMatch(dashboard, /label="Jurnal Disetujui"|label="Jurnal Pending"|label="Rombel Diampu"/)
 })
 
