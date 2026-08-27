@@ -346,6 +346,9 @@ function registerKantinRoutes(app, db, { requireRole, uuid, bcrypt }) {
     if (!student_id || !Array.isArray(items) || items.length === 0) {
       return res.status(400).json({ error: 'student_id dan items wajib' })
     }
+    if (['siswa', 'wali_murid'].includes(req.user.role) && !linkedStudentIds(db, req.tenantId, req.user.id).includes(String(student_id))) {
+      return res.status(403).json({ error: 'Bukan siswa/anak tertaut' })
+    }
     const siswa = db.prepare('SELECT id FROM siswa WHERE id = ? AND tenant_id = ? AND status = ?').get(student_id, req.tenantId, 'aktif')
     if (!siswa) return res.status(404).json({ error: 'Siswa tidak ditemukan atau tidak aktif' })
 

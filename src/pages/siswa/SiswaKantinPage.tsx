@@ -27,18 +27,19 @@ export default function SiswaKantinPage() {
   const [kategoris, setKategoris] = useState<string[]>(['semua'])
   const [checkingOut, setCheckingOut] = useState(false)
   const [saldo, setSaldo] = useState(0)
+  const [studentId, setStudentId] = useState('')
   const [showCart, setShowCart] = useState(false)
 
   useEffect(() => {
     loadMenus()
-    loadSaldo()
+    loadStudent()
   }, [])
 
   const loadMenus = async () => {
     try {
-      const res = await api.get<{ data: MenuItem[] }>('/api/kantin/menu?aktif=true')
-      setMenus(res.data.data)
-      const cats = [...new Set(res.data.data.map(m => m.kategori).filter(Boolean))]
+      const res = await api.get<MenuItem[]>('/kantin/menu?aktif=true')
+      setMenus(res.data)
+      const cats = [...new Set(res.data.map(m => m.kategori).filter(Boolean))]
       setKategoris(['semua', ...cats])
     } catch (e) {
       toast.error('Gagal memuat menu kantin')
@@ -47,9 +48,21 @@ export default function SiswaKantinPage() {
     }
   }
 
-  const loadSaldo = async () => {
+  const loadStudent = async () => {
     try {
-      const res = await api.get('/api/cashless/saldo')
+      const children = await api.get<Array<{ id: string }>>('/portal/children')
+      const id = children.data[0]?.id || ''
+      setStudentId(id)
+      if (id) await loadSaldo(id)
+    } catch (e) {
+      console.error('Gagal memuat akun siswa')
+    }
+  }
+
+  const loadSaldo = async (id = studentId) => {
+    if (!id) return
+    try {
+      const res = await api.get(`/portal/summary?student_id=${encodeURIComponent(id)}`)
       setSaldo(res.data.saldo || 0)
     } catch (e) {
       console.error('Gagal memuat saldo')
@@ -113,11 +126,11 @@ export default function SiswaKantinPage() {
         qty: item.qty,
         harga: item.harga
       }))
-      const res = await api.post('/api/kantin/order', { items: orderItems })
+      await api.post('/kantin/orders', { student_id: studentId, items: orderItems })
       toast.success('Pesanan berhasil dibuat!')
       setCart([])
       setShowCart(false)
-      loadSaldo()
+      loadSaldo(studentId)
     } catch (e: any) {
       toast.error(e.response?.data?.error || 'Gagal membuat pesanan')
     } finally {

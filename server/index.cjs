@@ -18,7 +18,7 @@ const { intervalTumpangTindih } = require('./jadwal-time-rules.cjs')
 const { bulkAssignGuru } = require('./jadwal-guru-repair.cjs')
 const { detectJadwalConflicts } = require('./jadwal-conflicts.cjs')
 const { importJadwalRows } = require('./jadwal-import.cjs')
-const { setupPortalCashless, registerPortalRoutes, registerKantinRoutes } = require('./portal-cashless.cjs')
+const { setupPortalCashless, registerPortalRoutes, registerKantinRoutes, selectPenilaianStudentId } = require('./portal-cashless.cjs')
 const waQueue = require('./wa-queue.cjs')
 const { isDriveFolderUrl } = require('./library-config.cjs')
 const { getLateDashboard } = require('./dashboard-late.cjs')
@@ -1023,6 +1023,7 @@ function requireRole(...roles) {
 const ADMIN = requireRole('admin', 'super_admin')
 const SUPER = requireRole('super_admin')
 const STAFF = requireRole('admin', 'super_admin', 'guru', 'wali_kelas', 'operator', 'tata_usaha', 'tu', 'kepala')
+const TEACHER = requireRole('guru', 'wali_kelas')
 const JOURNAL_REVIEWER = requireRole('admin', 'super_admin', 'kepala', 'operator')
 const BENDAHARA = requireRole('bendahara', 'admin', 'super_admin', 'operator')
 const DASHBOARD_ROLES = requireRole('admin', 'super_admin', 'kepala', 'operator', 'bendahara', 'tata_usaha', 'tu')
@@ -2633,7 +2634,7 @@ app.post('/api/kegiatan-khusus', ADMIN, (req, res) => {
 
 app.delete('/api/kegiatan-khusus/:id', ADMIN, (req, res) => {
   db.prepare('DELETE FROM kegiatan_khusus WHERE id = ? AND tenant_id=?').run(req.params.id, req.tenantId)
-  db.prepare('DELETE FROM absensi_kegiatan WHERE kegiatan_id = ?').run(req.params.id)
+  db.prepare('DELETE FROM absensi_kegiatan WHERE kegiatan_id = ? AND tenant_id = ?').run(req.params.id, req.tenantId)
   res.json({ success: true })
 })
 
@@ -2764,7 +2765,7 @@ app.get('/api/guru/tugas', authMiddleware, (req, res) => {
   if (!gtk) return res.json([])
   res.json(db.prepare(`SELECT t.*, m.nama mapel_nama, r.nama rombel_nama FROM tugas_siswa t LEFT JOIN mapel m ON m.id=t.mapel_id AND m.tenant_id=t.tenant_id LEFT JOIN rombel r ON r.id=t.rombel_id AND r.tenant_id=t.tenant_id WHERE t.guru_id=? AND t.tenant_id=? ORDER BY t.created_at DESC LIMIT 50`).all(gtk.id, req.tenantId))
 })
-app.post('/api/guru/tugas', authMiddleware, (req, res) => {
+app.post('/api/guru/tugas', TEACHER, (req, res) => {
   const gtk = resolveGtkForUser(req.user.id, req.tenantId)
   if (!gtk) return res.status(400).json({ error: 'Akun guru belum terhubung GTK' })
   const { mapel_id, rombel_id, judul, deskripsi, deadline } = req.body || {}
@@ -2779,7 +2780,7 @@ app.post('/api/guru/tugas', authMiddleware, (req, res) => {
   db.prepare('INSERT INTO tugas_siswa (id,guru_id,mapel_id,rombel_id,judul,deskripsi,deadline,tenant_id) VALUES (?,?,?,?,?,?,?,?)').run(id, gtk.id, mapel_id || null, rombel_id, judul.trim(), deskripsi || '', deadline || null, req.tenantId)
   res.json({ id })
 })
-app.delete('/api/guru/tugas/:id', authMiddleware, (req, res) => {
+app.delete('/api/guru/tugas/:id', TEACHER, (req, res) => {
   const gtk = resolveGtkForUser(req.user.id, req.tenantId)
   if (!gtk) return res.status(400).json({ error: 'Akun guru belum terhubung GTK' })
   db.prepare('DELETE FROM tugas_siswa WHERE id=? AND guru_id=? AND tenant_id=?').run(req.params.id, gtk.id, req.tenantId)
@@ -3230,10 +3231,10 @@ app.get('/api/siswa/dashboard', authMiddleware, (req, res) => {
 
 // ==================== SISWA JADWAL ====================
 app.get('/api/siswa/jadwal', authMiddleware, (req, res) => {
-  const user = db.prepare('SELECT * FROM users WHERE id = ?').get(req.user.id)
-  const siswa = user?.nis ? db.prepare('SELECT * FROM siswa WHERE nis = ?').get(user.nis) : null
+  const studentId = selectLinkedStudent(req)
+  const siswa = studentId ? db.prepare('SELECT * FROM siswa WHERE id = ? AND tenant_id = ?').get(studentId, req.tenantId) : null
   if (!siswa || !siswa.rombel_id) return res.json([])
-  const rows = db.prepare(`SELECT j.*, m.nama as mapel_nama, g.nama as guru_nama FROM jadwal j LEFT JOIN mapel m ON j.mapel_id = m.id LEFT JOIN gtk g ON j.gtk_id = g.id WHERE j.rombel_id = ? ORDER BY j.hari, j.jam_mulai`).all(siswa.rombel_id)
+  const rows = db.prepare(`SELECT j.*, m.nama as mapel_nama, g.nama as guru_nama FROM jadwal j LEFT JOIN mapel m ON j.mapel_id = m.id AND m.tenant_id = j.tenant_id LEFT JOIN gtk g ON j.gtk_id = g.id AND g.tenant_id = j.tenant_id WHERE j.rombel_id = ? AND j.tenant_id = ? ORDER BY j.hari, j.jam_mulai`).all(siswa.rombel_id, req.tenantId)
   res.json(rows)
 })
 
