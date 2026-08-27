@@ -23,6 +23,8 @@ const statusColor: Record<string, string> = {
   honorer: 'bg-yellow-100 text-yellow-700',
 }
 
+const gtkPhotoUrl = (foto?: string) => foto ? encodeURI(foto) : ''
+
 export default function DataGTKPage() {
   const [data, setData] = useState<GTK[]>([])
   const [search, setSearch] = useState('')
@@ -165,7 +167,7 @@ export default function DataGTKPage() {
             <div className="flex items-center gap-3">
               <div className="w-12 h-12 rounded-full overflow-hidden border flex-shrink-0 bg-gray-100">
                 {g.foto
-                  ? <img src={g.foto} alt={g.nama} className="w-full h-full object-cover" />
+                  ? <img src={gtkPhotoUrl(g.foto)} alt={g.nama} className="w-full h-full object-cover" />
                   : <div className="w-full h-full bg-primary/10 flex items-center justify-center text-primary font-bold text-lg">{g.nama.charAt(0)}</div>
                 }
               </div>
@@ -195,7 +197,7 @@ export default function DataGTKPage() {
             <div className="flex items-center gap-3">
               <div className="w-12 h-12 rounded-full overflow-hidden border flex-shrink-0 bg-gray-100">
                 {selected.foto
-                  ? <img src={selected.foto} alt={selected.nama} className="w-full h-full object-cover" />
+                  ? <img src={gtkPhotoUrl(selected.foto)} alt={selected.nama} className="w-full h-full object-cover" />
                   : <div className="w-full h-full bg-primary/10 flex items-center justify-center text-primary font-bold text-lg">{selected.nama.charAt(0)}</div>
                 }
               </div>

@@ -2868,7 +2868,7 @@ app.get('/api/guru/absensi-saya', authMiddleware, (req, res) => {
 })
 
 app.post('/api/guru/ceklok', STAFF, (req, res) => {
-  const gtk = resolveGtkForUser(req.user.id, req.tenantId)
+  let gtk = resolveGtkForUser(req.user.id, req.tenantId)
   if (!gtk) {
     const ADMIN_ROLES2 = ['admin','super_admin','kepala','bendahara','operator','tata_usaha','tu']
     if (ADMIN_ROLES2.includes(req.user.role)) {
