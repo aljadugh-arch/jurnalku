@@ -1601,7 +1601,7 @@ function resolveGtkForUser(userId, tenantId) {
 
 const DEMO_HOSTS = new Set(['jurnal.cc.cd', 'jurnalmadrasah.web.id'])
 app.post('/api/auth/demo', (req, res) => {
-  const demoHost = String(req.hostname || '').toLowerCase()
+  const demoHost = String(req.headers.host || '').split(':')[0].replace(/\.$/, '').toLowerCase()
   if (!DEMO_HOSTS.has(demoHost)) return res.status(404).json({ error: 'Not found' })
   const role = String(req.body?.role || 'admin')
   const allowed = ['admin','kepala','guru','wali_kelas','bendahara','siswa']
@@ -4394,7 +4394,7 @@ app.get('/api/jurnal/me', authMiddleware, (req, res) => {
   res.json(rows)
 })
 
-app.get('/api/jurnal', JOURNAL_REVIEWER, (req, res) => {
+app.get('/api/jurnal', requireRole('admin', 'super_admin', 'kepala', 'operator', 'bendahara', 'tata_usaha', 'tu'), (req, res) => {
   const { tanggal, gtk_id, guru_id, status } = req.query
   let sql = `SELECT j.*, COALESCE((
       SELECT jg.nama
@@ -4460,7 +4460,7 @@ app.get('/api/supervisi/rekap', JOURNAL_REVIEWER, (req, res) => {
 
 app.post('/api/jurnal', STAFF, (req, res) => {
   const id = uuidv4()
-  let { guru_id, mapel_id, rombel_id, tanggal, jam_ke, materi, kegiatan, catatan } = req.body
+  let { guru_id, mapel_id, rombel_id, tanggal, jam_ke, materi, kegiatan, catatan, status } = req.body
   const teacher = ['guru', 'wali_kelas'].includes(req.user.role)
   if (teacher) {
     const gtk = resolveGtkForUser(req.user.id, req.tenantId)
@@ -4469,11 +4469,13 @@ app.post('/api/jurnal', STAFF, (req, res) => {
   }
   if (!guru_id) return res.status(400).json({ error: 'guru_id required' })
   if (!tanggal || !mapel_id || !rombel_id) return res.status(400).json({ error: 'mapel_id, rombel_id, dan tanggal wajib' })
+  status = status || 'submitted'
+  if (!['draft', 'submitted'].includes(status)) return res.status(400).json({ error: 'Status jurnal tidak valid' })
   const gtk = db.prepare('SELECT id FROM gtk WHERE id = ? AND tenant_id = ?').get(guru_id, req.tenantId)
   const mapel = db.prepare('SELECT id FROM mapel WHERE id = ? AND tenant_id = ?').get(mapel_id, req.tenantId)
   const rombel = db.prepare('SELECT id FROM rombel WHERE id = ? AND tenant_id = ?').get(rombel_id, req.tenantId)
   if (!gtk || !mapel || !rombel) return res.status(400).json({ error: 'GTK, mapel, atau rombel tidak valid untuk lembaga ini' })
-  db.prepare('INSERT INTO jurnal_mengajar (id, guru_id, mapel_id, rombel_id, tanggal, jam_ke, materi, kegiatan, catatan, status, tenant_id) VALUES (?,?,?,?,?,?,?,?,?,?,?)').run(id, guru_id, mapel_id, rombel_id, tanggal, jam_ke||1, materi||'', kegiatan||'', catatan||'', 'submitted', req.tenantId)
+  db.prepare('INSERT INTO jurnal_mengajar (id, guru_id, mapel_id, rombel_id, tanggal, jam_ke, materi, kegiatan, catatan, status, tenant_id) VALUES (?,?,?,?,?,?,?,?,?,?,?)').run(id, guru_id, mapel_id, rombel_id, tanggal, jam_ke||1, materi||'', kegiatan||'', catatan||'', status, req.tenantId)
   res.json({ id })
 })
 
@@ -4494,6 +4496,7 @@ app.put('/api/jurnal/:id', STAFF, (req, res) => {
 
 app.delete('/api/jurnal/:id', STAFF, (req, res) => {
   const reviewer = ['admin','super_admin','kepala','operator'].includes(req.user.role)
+  if (!reviewer && !['guru', 'wali_kelas'].includes(req.user.role)) return res.status(403).json({ error: 'Role tidak diizinkan menghapus jurnal' })
   let result
   if (reviewer) {
     result = db.prepare('DELETE FROM jurnal_mengajar WHERE id=? AND tenant_id=?').run(req.params.id, req.tenantId)

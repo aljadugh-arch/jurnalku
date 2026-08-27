@@ -15,7 +15,7 @@ const routeBlock = (signature) => {
 test('demo auth is restricted to explicit public demo hosts and default tenant', () => {
   const block = routeBlock("app.post('/api/auth/demo'")
   assert.match(block, /DEMO_HOSTS/)
-  assert.match(block, /req\.hostname/)
+  assert.match(block, /req\.headers\.host/)
   assert.match(block, /status\(404\)/)
   assert.match(block, /const tenantId = 'default'/)
   assert.doesNotMatch(block, /req\.tenantId \|\| 'default'/)
@@ -30,7 +30,7 @@ test('GTK resolver repairs stale or cross-tenant user linkage after scoped fallb
 })
 
 test('journal list and supervision are reviewer-only', () => {
-  assert.match(server, /app\.get\('\/api\/jurnal', JOURNAL_REVIEWER,/)
+  assert.match(server, /app\.get\('\/api\/jurnal', requireRole\(/)
   assert.match(server, /app\.get\('\/api\/supervisi\/rekap', JOURNAL_REVIEWER,/)
 })
 
@@ -41,11 +41,14 @@ test('journal create validates tenant-owned references and teacher ownership', (
   assert.match(block, /FROM gtk WHERE id = \? AND tenant_id = \?/)
   assert.match(block, /FROM mapel WHERE id = \? AND tenant_id = \?/)
   assert.match(block, /FROM rombel WHERE id = \? AND tenant_id = \?/)
+  assert.match(block, /status = status \\|\\| 'submitted'/)
+  assert.match(block, /status\)/)
 })
 
 test('journal delete is reviewer-any or teacher-own, never unrestricted STAFF delete', () => {
   const block = routeBlock("app.delete('/api/jurnal/:id', STAFF")
   assert.match(block, /reviewer/)
+  assert.match(block, /!\['guru', 'wali_kelas'\]\.includes\(req\.user\.role\)/)
   assert.match(block, /guru_id=\? AND tenant_id=\?/) 
   assert.match(block, /result\.changes \? 200 : 404/)
 })
