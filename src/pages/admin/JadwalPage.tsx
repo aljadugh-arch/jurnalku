@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
 import { escapeHtml } from '../../utils/escapeHtml'
-import { Plus, Trash2, AlertTriangle, X, Download, FileSpreadsheet, Pencil, Settings2, Wand2 } from 'lucide-react'
+import { Plus, Trash2, AlertTriangle, X, Download, FileSpreadsheet, Pencil, Settings2, Wand2, CalendarDays } from 'lucide-react'
 import toast from 'react-hot-toast'
 import api from '../../services/api'
 import * as XLSX from 'xlsx'
@@ -39,6 +39,9 @@ export default function JadwalPage() {
   const [selectedSchedules, setSelectedSchedules] = useState<string[]>([])
   const [bulkGtkId, setBulkGtkId] = useState('')
   const [conflicts, setConflicts] = useState<any[]>([])
+  const [todayRows, setTodayRows] = useState<Jadwal[]>([])
+  const [todayInfo, setTodayInfo] = useState({ hari: '', tanggal: '' })
+  const [showToday, setShowToday] = useState(false)
   const [showForm, setShowForm] = useState(false)
   const [showTemplateModal, setShowTemplateModal] = useState(false)
   const [editId, setEditId] = useState<string | null>(null)
@@ -238,6 +241,15 @@ export default function JadwalPage() {
       const t = await api.get('/template-jadwal')
       setTemplates(t.data)
     } catch (err: any) { toast.error(err.response?.data?.error || 'Gagal hapus template') }
+  }
+
+  const loadToday = async () => {
+    try {
+      const res = await api.get('/jadwal/hari-ini')
+      setTodayRows(res.data.rows || [])
+      setTodayInfo({ hari: res.data.hari || '', tanggal: res.data.tanggal || '' })
+      setShowToday(true)
+    } catch (err: any) { toast.error(err.response?.data?.error || 'Gagal memuat jadwal hari ini') }
   }
 
   const checkConflicts = async (silent = false) => {
@@ -510,6 +522,9 @@ export default function JadwalPage() {
           <button onClick={exportPDF} className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg text-sm hover:bg-red-700">
             <Download size={16} /> PDF
           </button>
+          <button onClick={loadToday} className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700">
+            <CalendarDays size={16} /> Jadwal Hari Ini Semua Rombel
+          </button>
           <button onClick={() => checkConflicts(false)} className="flex items-center gap-2 px-4 py-2 bg-orange-500 text-white rounded-lg text-sm hover:bg-orange-600">
             <AlertTriangle size={16} /> Cek Tabrakan
           </button>
@@ -525,6 +540,18 @@ export default function JadwalPage() {
           <BulkDeleteButton kategori="jadwal" label="Jadwal" onDone={loadJadwal} />
         </div>
       </div>
+
+      {showToday && (
+        <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
+          <div className="flex items-center justify-between gap-3 mb-3">
+            <div><h2 className="font-semibold text-blue-900">Jadwal Hari Ini Semua Rombel</h2><p className="text-xs text-blue-700 capitalize">{todayInfo.hari} · {todayInfo.tanggal} · {todayRows.length} jadwal</p></div>
+            <button onClick={() => setShowToday(false)} className="p-1 text-blue-700 hover:bg-blue-100 rounded-lg"><X size={18} /></button>
+          </div>
+          {todayRows.length === 0 ? <p className="text-sm text-blue-800">Tidak ada jadwal untuk hari ini.</p> : (
+            <div className="overflow-x-auto"><table className="w-full text-sm"><thead><tr className="text-left text-blue-800 border-b border-blue-200"><th className="py-2 pr-3">Jam</th><th className="py-2 pr-3">Rombel</th><th className="py-2 pr-3">Kegiatan/Mapel</th><th className="py-2">Guru</th></tr></thead><tbody className="divide-y divide-blue-100">{todayRows.map(j => <tr key={j.id}><td className="py-2 pr-3 whitespace-nowrap">{j.jam_mulai}–{j.jam_selesai}</td><td className="py-2 pr-3 font-medium">{j.rombel_nama || '-'}</td><td className="py-2 pr-3">{j.jenis_kegiatan === 'mapel' ? (j.mapel_nama || '-') : (j.nama_kegiatan || '-')}</td><td className="py-2">{j.gtk_nama || '-'}</td></tr>)}</tbody></table></div>
+          )}
+        </div>
+      )}
 
       {conflicts.length > 0 && (
         <div className="bg-red-50 border border-red-200 rounded-xl p-4">

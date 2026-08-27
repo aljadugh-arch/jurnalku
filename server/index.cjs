@@ -3586,6 +3586,20 @@ function ensurePengajarFromJadwal({ gtk_id, mapel_id, rombel_id, tenant_id }) {
 }
 
 // ==================== JADWAL ====================
+app.get('/api/jadwal/hari-ini', ADMIN, (req, res) => {
+  const hari = require('./attendance-rules.cjs').hariJakarta()
+  const rows = db.prepare(`SELECT j.*, m.nama AS mapel_nama, m.kode AS mapel_kode,
+    r.nama AS rombel_nama, g.nama AS gtk_nama, g.nama AS guru_nama,
+    CASE WHEN g.id IS NULL THEN 0 ELSE 1 END AS guru_valid
+    FROM jadwal j
+    LEFT JOIN mapel m ON j.mapel_id=m.id AND m.tenant_id=j.tenant_id
+    LEFT JOIN rombel r ON j.rombel_id=r.id AND r.tenant_id=j.tenant_id
+    LEFT JOIN gtk g ON j.gtk_id=g.id AND g.tenant_id=j.tenant_id
+    WHERE j.tenant_id=? AND lower(j.hari)=?
+    ORDER BY j.jam_mulai, r.nama, m.nama, j.nama_kegiatan`).all(req.tenantId, hari)
+  res.json({ hari, tanggal: todayJakarta(), rows })
+})
+
 app.get('/api/jadwal', authMiddleware, (req, res) => {
   const { rombel_id, gtk_id } = req.query
   let sql = `SELECT j.*, m.nama as mapel_nama, m.kode as mapel_kode, r.nama as rombel_nama, g.nama as gtk_nama, g.nama as guru_nama, CASE WHEN g.id IS NULL THEN 0 ELSE 1 END as guru_valid FROM jadwal j LEFT JOIN mapel m ON j.mapel_id = m.id AND m.tenant_id = j.tenant_id LEFT JOIN rombel r ON j.rombel_id = r.id AND r.tenant_id = j.tenant_id LEFT JOIN gtk g ON j.gtk_id = g.id AND g.tenant_id = j.tenant_id WHERE j.tenant_id=?`
@@ -4380,9 +4394,9 @@ app.get('/api/jurnal/jadwal-hari-ini', authMiddleware, (req, res) => {
   const rows = db.prepare(`SELECT j.id as jadwal_id, j.mapel_id, j.rombel_id, j.jam_mulai, j.jam_selesai, j.ruangan,
     m.nama as mapel_nama, m.kode as mapel_kode, r.nama as rombel_nama
     FROM jadwal j
-    LEFT JOIN mapel m ON j.mapel_id = m.id
-    LEFT JOIN rombel r ON j.rombel_id = r.id
-    WHERE j.gtk_id = ? AND lower(j.hari) = ? AND j.tenant_id = ?
+    JOIN mapel m ON j.mapel_id = m.id AND m.tenant_id = j.tenant_id
+    LEFT JOIN rombel r ON j.rombel_id = r.id AND r.tenant_id = j.tenant_id
+    WHERE j.gtk_id = ? AND lower(j.hari) = ? AND j.tenant_id = ? AND j.jenis_kegiatan = 'mapel'
     ORDER BY j.jam_mulai`).all(gtk.id, hari, req.tenantId)
   res.json({ gtk_id: gtk.id, tanggal: tgl, hari, jadwal: rows })
 })
@@ -4475,6 +4489,14 @@ app.post('/api/jurnal', STAFF, (req, res) => {
   const mapel = db.prepare('SELECT id FROM mapel WHERE id = ? AND tenant_id = ?').get(mapel_id, req.tenantId)
   const rombel = db.prepare('SELECT id FROM rombel WHERE id = ? AND tenant_id = ?').get(rombel_id, req.tenantId)
   if (!gtk || !mapel || !rombel) return res.status(400).json({ error: 'GTK, mapel, atau rombel tidak valid untuk lembaga ini' })
+  if (teacher) {
+    const assigned = db.prepare(`SELECT 1 FROM jadwal WHERE gtk_id=? AND mapel_id=? AND rombel_id=? AND tenant_id=? AND jenis_kegiatan='mapel'
+      UNION SELECT 1 FROM pengajar WHERE gtk_id=? AND mapel_id=? AND rombel_id=? AND tenant_id=?`).get(
+      guru_id, mapel_id, rombel_id, req.tenantId,
+      guru_id, mapel_id, rombel_id, req.tenantId
+    )
+    if (!assigned) return res.status(403).json({ error: 'Jadwal/rombel tidak sesuai dengan penugasan guru' })
+  }
   db.prepare('INSERT INTO jurnal_mengajar (id, guru_id, mapel_id, rombel_id, tanggal, jam_ke, materi, kegiatan, catatan, status, tenant_id) VALUES (?,?,?,?,?,?,?,?,?,?,?)').run(id, guru_id, mapel_id, rombel_id, tanggal, jam_ke||1, materi||'', kegiatan||'', catatan||'', status, req.tenantId)
   res.json({ id })
 })

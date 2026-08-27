@@ -145,7 +145,7 @@ export default function GuruDashboard() {
             return (
               <button
                 key={j.id || i}
-                onClick={() => navigate('/guru/jurnal')}
+                onClick={() => navigate(`/guru/jurnal?jadwal_id=${encodeURIComponent(j.id)}`)}
                 className={rowCls + ' w-full text-left'}
               >
                 <div className={tileCls}>

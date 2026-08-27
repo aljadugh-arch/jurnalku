@@ -3,8 +3,10 @@ import { Plus, X, Clock, Check, FileText, Send } from 'lucide-react'
 import toast from 'react-hot-toast'
 import api from '../../services/api'
 import { todayWib } from '../../lib/dateFormat'
+import { useSearchParams } from 'react-router-dom'
 
 export default function GuruJurnalPage() {
+  const [searchParams, setSearchParams] = useSearchParams()
   const [data, setData] = useState<any[]>([])
   const [showForm, setShowForm] = useState(false)
   const [mapels, setMapels] = useState<any[]>([])
@@ -27,6 +29,13 @@ export default function GuruJurnalPage() {
       const rombelList = p.data.rombel?.length ? p.data.rombel : jadwal.map((x: any) => ({ id: x.rombel_id, nama: x.rombel_nama })).filter((x: any, i: number, a: any[]) => a.findIndex((y: any) => y.id === x.id) === i)
       setMapels(mapelList)
       setRombels(rombelList)
+      const requestedJadwalId = searchParams.get('jadwal_id')
+      const selected = requestedJadwalId ? jadwal.find((x: any) => x.jadwal_id === requestedJadwalId) : null
+      if (selected) {
+        setForm(f => ({ ...f, mapel_id: selected.mapel_id, rombel_id: selected.rombel_id }))
+        setShowForm(true)
+        setSearchParams({}, { replace: true })
+      }
     })
   }, [])
 
