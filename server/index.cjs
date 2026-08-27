@@ -1580,8 +1580,8 @@ function resolveGtkForUser(userId, tenantId) {
   if (!gtk && u.nip) gtk = db.prepare('SELECT * FROM gtk WHERE nip = ? AND tenant_id = ?').get(u.nip, tid)
   if (!gtk && u.kode_guru) gtk = db.prepare("SELECT * FROM gtk WHERE kode_guru = ? AND kode_guru != '' AND tenant_id = ?").get(u.kode_guru, tid)
   if (!gtk && u.email) gtk = db.prepare("SELECT * FROM gtk WHERE email = ? AND email != '' AND tenant_id = ?").get(u.email, tid)
-  // Kalau ketemu tapi users.gtk_id kosong, simpan biar next lookup instan.
-  if (gtk && !u.gtk_id) { try { db.prepare('UPDATE users SET gtk_id = ? WHERE id = ? AND tenant_id = ?').run(gtk.id, u.id, tid) } catch {} }
+  // Simpan juga hasil fallback saat gtk_id lama menunjuk GTK tenant lain / sudah tidak valid.
+  if (gtk && u.gtk_id !== gtk.id) { try { db.prepare('UPDATE users SET gtk_id = ? WHERE id = ? AND tenant_id = ?').run(gtk.id, u.id, tid) } catch {} }
   // Auto-create GTK on-demand utk staf (admin/operator/TU/kepala) yg belum punya GTK -> agar bisa ceklok.
   if (!gtk && ['admin', 'operator', 'tata_usaha', 'tu', 'kepala'].includes(u.role)) {
     try {
@@ -1598,7 +1598,10 @@ function resolveGtkForUser(userId, tenantId) {
 }
 
 
+const DEMO_HOSTS = new Set(['jurnal.cc.cd', 'jurnalmadrasah.web.id'])
 app.post('/api/auth/demo', (req, res) => {
+  const demoHost = String(req.hostname || '').toLowerCase()
+  if (!DEMO_HOSTS.has(demoHost)) return res.status(404).json({ error: 'Not found' })
   const role = String(req.body?.role || 'admin')
   const allowed = ['admin','kepala','guru','wali_kelas','bendahara','siswa']
   if (!allowed.includes(role)) return res.status(400).json({ error: 'Role demo tidak tersedia' })
@@ -1633,7 +1636,7 @@ app.post('/api/auth/demo', (req, res) => {
     db.prepare('INSERT INTO users (id,nama,email,password,role,tenant_id,gtk_id,siswa_id,nis,must_change_password) VALUES (?,?,?,?,?,?,?,?,?,0)').run(id,nama,email,pass,actualRole,tenantId,gtkId,siswaId,nis)
     return db.prepare('SELECT * FROM users WHERE id=?').get(id)
   }
-  let tenantId = req.tenantId || 'default'
+  const tenantId = 'default'
   let user = db.prepare('SELECT * FROM users WHERE tenant_id=? AND role=? ORDER BY created_at LIMIT 1').get(tenantId, role)
   if (!user && role === 'wali_kelas') user = db.prepare("SELECT * FROM users WHERE tenant_id=? AND role='guru' ORDER BY created_at LIMIT 1").get(tenantId)
   if (!user) user = makeDemo(role)
@@ -4390,7 +4393,7 @@ app.get('/api/jurnal/me', authMiddleware, (req, res) => {
   res.json(rows)
 })
 
-app.get('/api/jurnal', authMiddleware, (req, res) => {
+app.get('/api/jurnal', JOURNAL_REVIEWER, (req, res) => {
   const { tanggal, gtk_id, guru_id, status } = req.query
   let sql = `SELECT j.*, COALESCE((
       SELECT jg.nama
@@ -4432,7 +4435,7 @@ app.post('/api/jurnal/bulk-status', JOURNAL_REVIEWER, (req, res) => {
 })
 
 // Supervisi Kepala Sekolah: rekap aktivitas mengajar per guru
-app.get('/api/supervisi/rekap', authMiddleware, (req, res) => {
+app.get('/api/supervisi/rekap', JOURNAL_REVIEWER, (req, res) => {
   const { from, to } = req.query
   const cond = []
   const params = []
@@ -4457,12 +4460,18 @@ app.get('/api/supervisi/rekap', authMiddleware, (req, res) => {
 app.post('/api/jurnal', STAFF, (req, res) => {
   const id = uuidv4()
   let { guru_id, mapel_id, rombel_id, tanggal, jam_ke, materi, kegiatan, catatan } = req.body
-  // If guru_id not provided, use logged-in user's gtk_id
-  if (!guru_id) {
-    const user = db.prepare("SELECT gtk_id FROM users WHERE id = ?").get(req.user.id)
-    guru_id = user?.gtk_id
+  const teacher = ['guru', 'wali_kelas'].includes(req.user.role)
+  if (teacher) {
+    const gtk = resolveGtkForUser(req.user.id, req.tenantId)
+    if (!gtk) return res.status(403).json({ error: 'Akun guru belum terhubung ke GTK' })
+    guru_id = gtk.id
   }
   if (!guru_id) return res.status(400).json({ error: 'guru_id required' })
+  if (!tanggal || !mapel_id || !rombel_id) return res.status(400).json({ error: 'mapel_id, rombel_id, dan tanggal wajib' })
+  const gtk = db.prepare('SELECT id FROM gtk WHERE id = ? AND tenant_id = ?').get(guru_id, req.tenantId)
+  const mapel = db.prepare('SELECT id FROM mapel WHERE id = ? AND tenant_id = ?').get(mapel_id, req.tenantId)
+  const rombel = db.prepare('SELECT id FROM rombel WHERE id = ? AND tenant_id = ?').get(rombel_id, req.tenantId)
+  if (!gtk || !mapel || !rombel) return res.status(400).json({ error: 'GTK, mapel, atau rombel tidak valid untuk lembaga ini' })
   db.prepare('INSERT INTO jurnal_mengajar (id, guru_id, mapel_id, rombel_id, tanggal, jam_ke, materi, kegiatan, catatan, status, tenant_id) VALUES (?,?,?,?,?,?,?,?,?,?,?)').run(id, guru_id, mapel_id, rombel_id, tanggal, jam_ke||1, materi||'', kegiatan||'', catatan||'', 'submitted', req.tenantId)
   res.json({ id })
 })
@@ -4483,8 +4492,16 @@ app.put('/api/jurnal/:id', STAFF, (req, res) => {
 })
 
 app.delete('/api/jurnal/:id', STAFF, (req, res) => {
-  db.prepare('DELETE FROM jurnal_mengajar WHERE id = ? AND tenant_id = ?').run(req.params.id, req.tenantId)
-  res.json({ success: true })
+  const reviewer = ['admin','super_admin','kepala','operator'].includes(req.user.role)
+  let result
+  if (reviewer) {
+    result = db.prepare('DELETE FROM jurnal_mengajar WHERE id=? AND tenant_id=?').run(req.params.id, req.tenantId)
+  } else {
+    const gtk = resolveGtkForUser(req.user.id, req.tenantId)
+    if (!gtk) return res.status(403).json({ error: 'Akun guru belum terhubung ke GTK' })
+    result = db.prepare("DELETE FROM jurnal_mengajar WHERE id=? AND guru_id=? AND tenant_id=? AND status IN ('draft','rejected')").run(req.params.id, gtk.id, req.tenantId)
+  }
+  res.status(result.changes ? 200 : 404).json(result.changes ? { success: true } : { error: 'Jurnal tidak ditemukan atau tidak dapat dihapus' })
 })
 
 // ==================== POSTING ====================
