@@ -8,7 +8,7 @@ import {
   ClipboardList, UserCheck, QrCode, MapPin,
   X, ChevronDown, ChevronRight, LogOut, School, Layers,
   Activity, Globe, Sparkles, DollarSign, Settings, MessageSquare, FileText,
-  Newspaper, NotebookPen, ClipboardCheck, PiggyBank, DatabaseBackup
+  Newspaper, NotebookPen, ClipboardCheck, PiggyBank, DatabaseBackup, Code2
 } from 'lucide-react'
 import { clsx } from 'clsx'
 import { roleLabel } from '../../lib/roles'
@@ -74,6 +74,7 @@ const adminMenuItems: MenuItem[] = [
     ]
   },
   { label: 'Pengaturan', icon: <Settings size={20} />, path: '/admin/settings' },
+  { label: 'REST API Developer', icon: <Code2 size={20} />, path: '/admin/developer-api' },
   { label: 'Manajemen Pengguna', icon: <UserCheck size={20} />, path: '/admin/users' },
   { label: 'Manajemen Lembaga', icon: <Globe size={20} />, path: '/admin/tenants' },
   { label: 'Backup & Restore', icon: <DatabaseBackup size={20} />, path: '/admin/backup-restore' },

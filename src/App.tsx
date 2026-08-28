@@ -77,6 +77,8 @@ import KantinOrdersPage from './pages/admin/KantinOrdersPage'
 import CashlessTopupPage from './pages/admin/CashlessTopupPage'
 import CashlessBankConfigPage from './pages/admin/CashlessBankConfigPage'
 import KantinScannerPage from './pages/admin/KantinScannerPage'
+import DeveloperApiPage from './pages/admin/DeveloperApiPage'
+import PwaInstallPrompt from './components/PwaInstallPrompt'
 
 function AdminIndexRoute() {
   const { user } = useAuthStore()
@@ -107,6 +109,7 @@ export default function App() {
   return (
     <BrowserRouter>
       <Toaster position="top-right" />
+      <PwaInstallPrompt />
       <Routes>
         <Route path="/" element={<LandingPage />} />
         <Route path="/login" element={<LoginPage />} />
@@ -142,6 +145,9 @@ export default function App() {
           <Route path="tagihan" element={<TagihanPage />} />
           <Route path="tabungan" element={<TabunganPage />} />
           <Route path="settings" element={<SettingsPage />} />
+          <Route path="developer-api" element={
+            <ProtectedRoute allowedRoles={['admin', 'super_admin']}><DeveloperApiPage /></ProtectedRoute>
+          } />
           <Route path="wa-gateway" element={<WAGatewayPage />} />
           <Route path="notif-settings" element={<NotifSettingsPage />} />
           <Route path="tenants" element={

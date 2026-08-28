@@ -451,13 +451,14 @@ export default function SettingsPage() {
               <Smartphone size={15} />
               Regenerate Manifest
             </button>
-            <p className="text-xs text-gray-400 mt-1">Perbarui file manifest.json berdasarkan pengaturan di atas.</p>
+            <p className="text-xs text-gray-400 mt-1">Perbarui manifest dinamis berdasarkan pengaturan di atas.</p>
           </div>
 
           {/* Info box */}
           <div className="rounded-lg bg-blue-50 border border-blue-200 p-4 text-sm text-blue-800">
             <p className="font-semibold mb-1">💡 Cara Install PWA</p>
             <ul className="list-disc list-inside space-y-1 text-xs text-blue-700">
+              <li><strong>Di dalam aplikasi:</strong> gunakan tombol &quot;Install aplikasi&quot; yang muncul otomatis ketika browser siap.</li>
               <li><strong>Android (Chrome):</strong> buka situs → menu ⋮ → &quot;Tambahkan ke layar utama&quot;.</li>
               <li><strong>iOS (Safari):</strong> buka situs → tombol Bagikan → &quot;Tambah ke Layar Utama&quot;.</li>
               <li><strong>Desktop (Chrome/Edge):</strong> klik ikon instal di address bar.</li>

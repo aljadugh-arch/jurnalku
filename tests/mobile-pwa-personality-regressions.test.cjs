@@ -64,7 +64,7 @@ test('regenerate manifest memakai base URL API dengan benar dan manifest memakai
   assert.match(main, /linkEl\.removeAttribute\('href'\)/)
   assert.doesNotMatch(main, /URL\.createObjectURL/)
   assert.doesNotMatch(serviceWorker, /manifest\.webmanifest/)
-  assert.match(serviceWorker, /pathname === '\/api\/pwa\/manifest'\) return/)
+  assert.match(serviceWorker, /pathname\.startsWith\('\/api\/'\)\) return/)
   assert.match(bottomNavigation, /item\.external \? \(/)
   assert.match(bottomNavigation, /<Link[\s\S]*to=\{item\.path\}/)
 })

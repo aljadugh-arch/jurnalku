@@ -126,6 +126,7 @@ function roleItems(role?: string, hideStaffCeklok?: boolean): NavItem[] {
     { label: 'WA Gateway', path: '/admin/wa-gateway', icon: <Settings size={iconSize} /> },
     { label: 'Pengguna', path: '/admin/users', icon: <ShieldCheck size={iconSize} /> },
     { label: 'Setting', path: '/admin/settings', icon: <Settings size={iconSize} /> },
+    { label: 'REST API', path: '/admin/developer-api', icon: <Settings size={iconSize} /> },
     { label: 'Backup', path: '/admin/backup-restore', icon: <ShieldCheck size={iconSize} /> },
     { label: 'Website', path: '/admin/website-lembaga', icon: <Home size={iconSize} />, external: 'https://fazacloud.my.id' },
     { label: 'Menu Kantin', path: '/admin/kantin-menu', icon: <CreditCard size={iconSize} /> },
