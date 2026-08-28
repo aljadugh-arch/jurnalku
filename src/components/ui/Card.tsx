@@ -9,9 +9,9 @@ export default function Card({ children, className = '', title, icon, action }: 
   action?: ReactNode
 }) {
   return (
-    <div className={'bg-white rounded-xl p-4 sm:p-5 shadow-sm border border-gray-100 ' + className}>
+    <div className={'bg-white rounded-xl p-3.5 sm:p-4 shadow-sm border border-gray-100 ' + className}>
       {(title || action) && (
-        <div className="flex items-center justify-between mb-3 gap-2">
+        <div className="flex items-center justify-between mb-2.5 gap-2">
           {title && (
             <h3 className="text-sm font-semibold text-gray-800 flex items-center gap-2 min-w-0">
               {icon}

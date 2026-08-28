@@ -43,12 +43,12 @@ export default function AdminDashboard() {
   ]
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       <PageHeader title="Dashboard" subtitle="Ringkasan data sekolah/madrasah hari ini" />
       <MobileMenuGrid />
 
       {/* Stat Cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5">
         {statCards.map((stat) => (
           <Link key={stat.label} to={stat.path} className="block active:scale-[0.98] transition-transform">
             <StatCard label={stat.label} value={stat.value} icon={stat.icon} gradient={stat.gradient} sub={stat.sub} />
@@ -56,10 +56,10 @@ export default function AdminDashboard() {
         ))}
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
         {/* Kehadiran Hari Ini */}
         <Card title="Kehadiran Hari Ini" icon={<UserCheck size={18} className="text-primary" />}>
-          <div className="space-y-4">
+          <div className="space-y-3">
             <div>
               <div className="flex justify-between text-sm mb-1">
                 <span className="text-gray-600">Siswa</span>
@@ -118,7 +118,7 @@ export default function AdminDashboard() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
         {/* Chart Kehadiran Guru 7 Hari */}
         <Card title="Kehadiran Guru (7 Hari Terakhir)" icon={<Users size={18} className="text-green-600" />}>
           <ResponsiveContainer width="100%" height={200}>

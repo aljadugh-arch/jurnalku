@@ -68,7 +68,7 @@ export default function SuperadminDashboard() {
   }
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-4">
       <div>
         <h1 className="text-xl md:text-2xl font-extrabold text-gray-900">Dashboard Superadmin 👑</h1>
         <p className="text-sm text-gray-500 mt-0.5 flex items-center gap-1.5"><CalendarDays size={14} /> {today}</p>

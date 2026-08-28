@@ -12,7 +12,13 @@ const crypto = require('node:crypto')
 const zlib = require('node:zlib')
 const fs = require('node:fs')
 
-const CREDENTIAL_DIR = process.env.GOOGLE_DRIVE_CREDENTIAL_DIR || '/www/wwwroot/jurnal.cc.cd/var/credentials/google-drive'
+const path = require('node:path')
+
+// Kredensial dicari per-aplikasi (relatif ke folder server yang berjalan) agar
+// jurnal.cc.cd dan jurnalmadrasah.web.id tidak saling membaca kredensial satu sama lain.
+// Override penuh tetap dimungkinkan lewat env GOOGLE_DRIVE_CREDENTIAL_DIR.
+const APP_ROOT = path.resolve(__dirname, '..')
+const CREDENTIAL_DIR = process.env.GOOGLE_DRIVE_CREDENTIAL_DIR || path.join(APP_ROOT, 'var/credentials/google-drive')
 const SA_FALLBACK = `${CREDENTIAL_DIR}/service-account.json`
 const OAUTH_TOKEN_FALLBACK = `${CREDENTIAL_DIR}/oauth-token.json`
 const OAUTH_CLIENT_FALLBACK = `${CREDENTIAL_DIR}/oauth-client.json`
@@ -126,7 +132,10 @@ function availableAuth(tenantId) {
 async function loadAuth(tenantId) {
   const preferred = credentialMode()
   const auths = availableAuth(tenantId)
-  if (!auths.length) throw new Error('Tidak ada kredensial Google Drive yang valid. Butuh service-account JSON atau OAuth2 refresh token.')
+  if (!auths.length) {
+    const dir = credentialPaths().service_account.replace(/\/service-account\.json$/, '')
+    throw new Error(`Google Drive belum dikonfigurasi untuk tenant ini. Letakkan salah satu di ${dir}: (1) service-account.json, atau (2) oauth-client.json lalu tekan "Hubungkan Google" untuk membuat oauth-token-<tenant>.json.`)
+  }
   if (preferred === 'auto') return auths[0]
   const selected = auths.find(auth => auth.type === preferred)
   if (!selected) throw new Error(`Kredensial Google Drive mode ${preferred} tidak tersedia`)
@@ -329,6 +338,23 @@ function registerBackupRoutes(app, db, { requireRole, uuid }) {
     } catch (e) {
       return res.json({ connected: false, error: String(e.message || e) })
     }
+  })
+
+  // Diagnostik konfigurasi (tanpa membocorkan isi kredensial)
+  app.get('/api/google-drive/diagnostics', kadmin, (req, res) => {
+    const paths = credentialPaths()
+    const perTenant = tenantTokenPath(req.tenantId)
+    const exists = (f) => { try { return fs.existsSync(f) } catch { return false } }
+    res.json({
+      credential_dir: CREDENTIAL_DIR,
+      auth_mode: process.env.GOOGLE_DRIVE_AUTH_MODE || 'auto',
+      files: {
+        service_account: exists(paths.service_account),
+        oauth_client: exists(paths.oauth_client),
+        oauth_token_shared: exists(paths.oauth_token),
+        oauth_token_tenant: exists(perTenant),
+      },
+    })
   })
 
   // Jalankan backup sekarang

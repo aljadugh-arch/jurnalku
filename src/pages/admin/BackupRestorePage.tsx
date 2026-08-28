@@ -16,6 +16,7 @@ interface PreviewResult {
 }
 
 interface DriveStatus { connected: boolean; email?: string; folder_id?: string | null; folder_ok?: boolean; error?: string; auth_type?: 'oauth2' | 'service_account' }
+interface DriveDiagnostics { credential_dir: string; auth_mode: string; files: { service_account: boolean; oauth_client: boolean; oauth_token_shared: boolean; oauth_token_tenant: boolean } }
 interface BackupLog { id: string; filename: string; drive_file_id: string | null; size: number; status: string; error: string | null; created_at: string }
 
 const fmtSize = (b: number) => b < 1024 ? `${b} B` : b < 1048576 ? `${(b / 1024).toFixed(1)} KB` : `${(b / 1048576).toFixed(2)} MB`
@@ -30,6 +31,7 @@ export default function BackupRestorePage() {
 
   // Google Drive
   const [drive, setDrive] = useState<DriveStatus | null>(null)
+  const [diag, setDiag] = useState<DriveDiagnostics | null>(null)
   const [driveLoading, setDriveLoading] = useState(false)
   const [running, setRunning] = useState(false)
   const [logs, setLogs] = useState<BackupLog[]>([])
@@ -37,7 +39,10 @@ export default function BackupRestorePage() {
 
   const loadDrive = () => {
     setDriveLoading(true)
-    api.get('/google-drive/status').then(({ data }) => setDrive(data)).catch(() => setDrive({ connected: false })).finally(() => setDriveLoading(false))
+    Promise.all([
+      api.get('/google-drive/status').then(({ data }) => setDrive(data)).catch(() => setDrive({ connected: false })),
+      api.get('/google-drive/diagnostics').then(({ data }) => setDiag(data)).catch(() => setDiag(null)),
+    ]).finally(() => setDriveLoading(false))
   }
   const loadLogs = () => { api.get('/backup/log').then(({ data }) => setLogs(data)).catch(() => {}) }
   const loadCfg = () => {
@@ -182,6 +187,21 @@ export default function BackupRestorePage() {
             <span className="flex items-center gap-2 rounded-full bg-red-50 px-3 py-1 text-red-700"><XCircle size={16} /> Tidak terhubung{drive?.error ? `: ${drive.error}` : ''}</span>
           )}
         </div>
+
+        {!drive?.connected && !driveLoading && diag && (
+          <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900 space-y-2">
+            <p className="font-semibold">Cara mengaktifkan Google Drive untuk aplikasi ini</p>
+            <ol className="list-decimal pl-4 space-y-1">
+              <li>Unduh kredensial dari Google Cloud Console (OAuth client bertipe Web, atau Service Account JSON) milik proyek aplikasi ini — jangan memakai kredensial aplikasi lain.</li>
+              <li>Simpan ke folder server: <code className="rounded bg-amber-100 px-1 break-all">{diag.credential_dir}</code></li>
+              <li>OAuth: simpan sebagai <code className="rounded bg-amber-100 px-1">oauth-client.json</code>, lalu tekan <b>Hubungkan Google</b> di atas dan selesaikan persetujuan. Token disimpan otomatis per-tenant.</li>
+              <li>Service Account: simpan sebagai <code className="rounded bg-amber-100 px-1">service-account.json</code> dan bagikan folder Drive ke email service account tersebut.</li>
+            </ol>
+            <p className="text-amber-800">
+              Status file: service-account.json {diag.files.service_account ? 'ada' : 'belum ada'} · oauth-client.json {diag.files.oauth_client ? 'ada' : 'belum ada'} · token tenant {diag.files.oauth_token_tenant ? 'ada' : 'belum ada'}
+            </p>
+          </div>
+        )}
 
         <div className="grid gap-3 sm:grid-cols-3">
           <div className="sm:col-span-2">

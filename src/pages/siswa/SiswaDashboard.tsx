@@ -60,40 +60,40 @@ export default function SiswaDashboard() {
   const tanggal = new Date().toLocaleDateString('id-ID', { timeZone: 'Asia/Jakarta', weekday: 'long', day: 'numeric', month: 'long' })
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       {/* Greeting header */}
-      <div className="flex flex-col items-center text-center sm:flex-row sm:items-center sm:text-left gap-3 min-w-0">
-        <Avatar src={data.siswa?.foto || null} name={data.siswa?.nama} size={76} className="shrink-0" />
+      <div className="flex flex-col items-center text-center sm:flex-row sm:items-center sm:text-left gap-2.5 min-w-0">
+        <Avatar src={data.siswa?.foto || null} name={data.siswa?.nama} size={64} className="shrink-0" />
         <div className="min-w-0">
-          <p className="text-gray-500 text-sm">{tanggal}</p>
-          <h1 className="text-2xl sm:text-3xl font-bold text-gray-800 font-display">
+          <p className="text-gray-500 text-xs">{tanggal}</p>
+          <h1 className="text-xl sm:text-2xl font-bold text-gray-800 font-display leading-tight">
             {greetingByHour()}, {data.siswa?.nama || 'Siswa'} 👋
           </h1>
         </div>
       </div>
 
       {/* CTA banner */}
-      <div className="relative overflow-hidden rounded-2xl bg-primary p-5 text-white shadow-sm shadow-primary/30">
+      <div className="relative overflow-hidden rounded-2xl bg-primary p-4 text-white shadow-sm shadow-primary/30">
         <div className="absolute -right-8 -top-10 w-40 h-40 bg-white/10 rounded-full"></div>
         <div className="absolute -right-4 -bottom-12 w-32 h-32 bg-white/5 rounded-full"></div>
-        <div className="relative z-10 flex items-center justify-between gap-4">
+        <div className="relative z-10 flex items-center justify-between gap-3">
           <div className="min-w-0">
-            <p className="text-xs uppercase tracking-wider text-white/80">Kehadiran</p>
-            <h2 className="text-lg sm:text-xl font-bold mt-0.5">Riwayat Absensi</h2>
-            <p className="text-sm text-white/80 mt-1">Pantau catatan kehadiranmu</p>
+            <p className="text-[11px] uppercase tracking-wider text-white/80">Kehadiran</p>
+            <h2 className="text-base sm:text-lg font-bold mt-0.5">Riwayat Absensi</h2>
+            <p className="text-xs text-white/80 mt-0.5">Pantau catatan kehadiranmu</p>
           </div>
           <button
             onClick={() => navigate('/siswa/absensi')}
-            className="shrink-0 inline-flex items-center gap-2 bg-white text-primary px-4 py-2.5 rounded-xl text-sm font-semibold shadow-sm hover:bg-white/90 active:scale-95 transition"
+            className="shrink-0 inline-flex items-center gap-2 bg-white text-primary px-3.5 py-2 rounded-xl text-sm font-semibold shadow-sm hover:bg-white/90 active:scale-95 transition"
           >
-            <ClipboardCheck size={16} />
+            <ClipboardCheck size={15} />
             Lihat
           </button>
         </div>
       </div>
 
       {/* Rekap Absensi Bulan Ini */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
         <StatCard label="Hadir" value={data.rekap.hadir} icon={<CheckCircle size={18} />} gradient="from-green-500 to-emerald-600" onClick={() => navigate('/siswa/absensi')} />
         <StatCard label="Sakit" value={data.rekap.sakit} icon={<Activity size={18} />} gradient="from-yellow-500 to-amber-600" onClick={() => navigate('/siswa/absensi')} />
         <StatCard label="Izin" value={data.rekap.izin} icon={<Calendar size={18} />} gradient="from-blue-500 to-indigo-600" onClick={() => navigate('/siswa/absensi')} />

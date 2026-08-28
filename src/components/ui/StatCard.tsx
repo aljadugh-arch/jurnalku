@@ -11,17 +11,17 @@ export default function StatCard({ label, value, icon, gradient = 'from-blue-500
   sub?: string
   onClick?: () => void
 }) {
-  const base = 'bg-white rounded-xl p-3 sm:p-4 shadow-sm border border-gray-100 transition text-left w-full h-full min-h-[124px] flex flex-col'
+  const base = 'bg-white rounded-xl p-3 shadow-sm border border-gray-100 transition text-left w-full h-full min-h-[104px] flex flex-col'
   const body = (
     <>
       <div className="flex items-center justify-between gap-2">
-        <div className={'w-9 h-9 sm:w-10 sm:h-10 rounded-lg bg-gradient-to-br ' + gradient + ' flex items-center justify-center text-white shrink-0'}>
+        <div className={'w-8 h-8 sm:w-9 sm:h-9 rounded-lg bg-gradient-to-br ' + gradient + ' flex items-center justify-center text-white shrink-0'}>
           {icon}
         </div>
-        <p className="text-xl sm:text-2xl font-bold text-gray-800 truncate">{value}</p>
+        <p className="text-lg sm:text-xl font-bold text-gray-800 truncate">{value}</p>
       </div>
-      <p className="text-xs text-gray-500 mt-2 truncate">{label}</p>
-      {sub && <p className="text-xs text-green-600 mt-0.5 truncate">{sub}</p>}
+      <p className="text-xs text-gray-500 mt-1.5 truncate">{label}</p>
+      {sub && <p className="text-[11px] text-green-600 mt-0.5 truncate">{sub}</p>}
     </>
   )
   if (onClick) {

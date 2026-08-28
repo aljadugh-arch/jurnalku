@@ -59,13 +59,13 @@ export default function GuruDashboard() {
   const tanggal = new Date().toLocaleDateString('id-ID', { timeZone: 'Asia/Jakarta', weekday: 'long', day: 'numeric', month: 'long' })
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       {/* Greeting header */}
-      <div className="flex flex-col items-center text-center sm:flex-row sm:items-center sm:text-left gap-3 min-w-0">
-        <Avatar src={data.gtk?.foto || null} name={data.gtk?.nama} size={76} className="shrink-0" />
+      <div className="flex flex-col items-center text-center sm:flex-row sm:items-center sm:text-left gap-2.5 min-w-0">
+        <Avatar src={data.gtk?.foto || null} name={data.gtk?.nama} size={64} className="shrink-0" />
         <div className="min-w-0">
-          <p className="text-gray-500 text-sm">{tanggal}</p>
-          <h1 className="text-2xl sm:text-3xl font-bold text-gray-800 font-display">
+          <p className="text-gray-500 text-xs">{tanggal}</p>
+          <h1 className="text-xl sm:text-2xl font-bold text-gray-800 font-display leading-tight">
             {greetingByHour()}, {teacherDisplayName(data.gtk)} 👋
           </h1>
         </div>
@@ -73,34 +73,34 @@ export default function GuruDashboard() {
 
       <button
         onClick={() => navigate('/guru/jurnal')}
-        className="w-full inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-5 py-3.5 text-base font-bold text-white shadow-sm shadow-emerald-600/25 transition hover:bg-emerald-700 active:scale-[0.98]"
+        className="w-full inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-bold text-white shadow-sm shadow-emerald-600/25 transition hover:bg-emerald-700 active:scale-[0.98]"
       >
-        <DoorOpen size={20} />
+        <DoorOpen size={18} />
         Masuk Kelas
       </button>
 
       {/* CTA banner */}
-      <div className="relative overflow-hidden rounded-2xl bg-primary p-5 text-white shadow-sm shadow-primary/30">
+      <div className="relative overflow-hidden rounded-2xl bg-primary p-4 text-white shadow-sm shadow-primary/30">
         <div className="absolute -right-8 -top-10 w-40 h-40 bg-white/10 rounded-full"></div>
         <div className="absolute -right-4 -bottom-12 w-32 h-32 bg-white/5 rounded-full"></div>
-        <div className="relative z-10 flex items-center justify-between gap-4">
+        <div className="relative z-10 flex items-center justify-between gap-3">
           <div className="min-w-0">
-            <p className="text-xs uppercase tracking-wider text-white/80">Jurnal Mengajar</p>
-            <h2 className="text-lg sm:text-xl font-bold mt-0.5">Input Jurnal Mengajar</h2>
-            <p className="text-sm text-white/80 mt-1">Catat kegiatan pembelajaran hari ini</p>
+            <p className="text-[11px] uppercase tracking-wider text-white/80">Jurnal Mengajar</p>
+            <h2 className="text-base sm:text-lg font-bold mt-0.5">Input Jurnal Mengajar</h2>
+            <p className="text-xs text-white/80 mt-0.5">Catat kegiatan pembelajaran hari ini</p>
           </div>
           <button
             onClick={() => navigate('/guru/jurnal')}
-            className="shrink-0 inline-flex items-center gap-2 bg-white text-primary px-4 py-2.5 rounded-xl text-sm font-semibold shadow-sm hover:bg-white/90 active:scale-95 transition"
+            className="shrink-0 inline-flex items-center gap-2 bg-white text-primary px-3.5 py-2 rounded-xl text-sm font-semibold shadow-sm hover:bg-white/90 active:scale-95 transition"
           >
-            <PenLine size={16} />
+            <PenLine size={15} />
             Isi Jurnal
           </button>
         </div>
       </div>
 
       {/* Quick Stats */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 auto-rows-fr">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 auto-rows-fr">
         <button onClick={() => navigate('/guru/jadwal')} className="h-full text-left active:scale-95 transition"><StatCard label="Jadwal Guru Hari Ini" value={data.jadwal_hari_ini.length} icon={<Calendar size={18} />} gradient="from-blue-500 to-indigo-600" sub="Jadwal mengajar hari ini" /></button>
         <button onClick={() => navigate('/guru/absensi-siswa')} className="h-full text-left active:scale-95 transition"><StatCard label="Absensi Siswa" value={data.absensi_hari_ini ?? 0} icon={<UserCheck size={18} />} gradient="from-green-500 to-emerald-600" sub="Siswa diabsen hari ini" /></button>
         <button onClick={() => navigate('/guru/catatan-kepribadian')} className="h-full text-left active:scale-95 transition"><StatCard label="Catatan Kepribadian" value={data.catatan_count ?? 0} icon={<ScrollText size={18} />} gradient="from-orange-500 to-amber-600" /></button>
@@ -109,43 +109,43 @@ export default function GuruDashboard() {
 
       {/* Rekap Jurnal + progress */}
       <Card title="Rekap Jurnal" icon={<ClipboardList size={18} className="text-primary" />}>
-        <div className="flex items-center justify-between text-xs text-gray-500 mb-2">
+        <div className="flex items-center justify-between text-xs text-gray-500 mb-1.5">
           <span>{approved} disetujui dari {totalJurnal} jurnal</span>
           <span className="font-semibold text-primary">{persenApproved}%</span>
         </div>
-        <div className="w-full bg-gray-100 rounded-full h-2.5 overflow-hidden">
+        <div className="w-full bg-gray-100 rounded-full h-2 overflow-hidden">
           <div className="bg-primary h-full rounded-full transition-all" style={{ width: persenApproved + '%' }}></div>
         </div>
-        <div className="grid grid-cols-3 gap-2 mt-3 text-center">
-          <div className="rounded-lg bg-gray-50 p-2">
-            <p className="text-lg font-bold text-gray-700">{draft}</p>
-            <p className="text-xs text-gray-500">Draft</p>
+        <div className="grid grid-cols-3 gap-2 mt-2.5 text-center">
+          <div className="rounded-lg bg-gray-50 p-1.5">
+            <p className="text-base font-bold text-gray-700">{draft}</p>
+            <p className="text-[11px] text-gray-500">Draft</p>
           </div>
-          <div className="rounded-lg bg-amber-50 p-2">
-            <p className="text-lg font-bold text-amber-600">{submitted}</p>
-            <p className="text-xs text-gray-500">Terkirim</p>
+          <div className="rounded-lg bg-amber-50 p-1.5">
+            <p className="text-base font-bold text-amber-600">{submitted}</p>
+            <p className="text-[11px] text-gray-500">Terkirim</p>
           </div>
-          <div className="rounded-lg bg-green-50 p-2">
-            <p className="text-lg font-bold text-green-600">{approved}</p>
-            <p className="text-xs text-gray-500">Disetujui</p>
+          <div className="rounded-lg bg-green-50 p-1.5">
+            <p className="text-base font-bold text-green-600">{approved}</p>
+            <p className="text-[11px] text-gray-500">Disetujui</p>
           </div>
         </div>
       </Card>
 
       {/* Jadwal Hari Ini */}
       <Card title="Jadwal Mengajar Hari Ini" icon={<Calendar size={18} className="text-primary" />}>
-        <div className="space-y-2">
+        <div className="space-y-1.5">
           {data.jadwal_hari_ini.length === 0 && (
-            <p className="text-gray-400 text-sm text-center py-6">Tidak ada jadwal hari ini</p>
+            <p className="text-gray-400 text-sm text-center py-4">Tidak ada jadwal hari ini</p>
           )}
           {data.jadwal_hari_ini.map((j: any, i: number) => {
             const active = isCurrent(j)
             const rowCls = active
-              ? 'flex items-center gap-3 p-3 rounded-xl border border-primary/30 bg-primary/5 ring-1 ring-primary/20'
-              : 'flex items-center gap-3 p-3 rounded-xl border border-gray-100 bg-white hover:bg-gray-50 transition'
+              ? 'flex items-center gap-2.5 p-2.5 rounded-xl border border-primary/30 bg-primary/5 ring-1 ring-primary/20'
+              : 'flex items-center gap-2.5 p-2.5 rounded-xl border border-gray-100 bg-white hover:bg-gray-50 transition'
             const tileCls = active
-              ? 'flex flex-col items-center justify-center min-w-[64px] rounded-lg bg-primary text-white px-2 py-1.5'
-              : 'flex flex-col items-center justify-center min-w-[64px] rounded-lg bg-gray-100 text-gray-700 px-2 py-1.5'
+              ? 'flex flex-col items-center justify-center min-w-[58px] rounded-lg bg-primary text-white px-2 py-1'
+              : 'flex flex-col items-center justify-center min-w-[58px] rounded-lg bg-gray-100 text-gray-700 px-2 py-1'
             return (
               <button
                 key={j.id || i}
@@ -188,34 +188,34 @@ export default function GuruDashboard() {
           <textarea value={tugasForm.deskripsi} onChange={e => setTugasForm({...tugasForm, deskripsi: e.target.value})} placeholder="Instruksi tugas" className="md:col-span-2 px-3 py-2 border rounded-lg text-sm" rows={3} />
         </div>
         <button onClick={async () => { try { await api.post('/guru/tugas', tugasForm); const r = await api.get('/guru/dashboard'); setData(r.data); setTugasForm({...tugasForm, judul: '', deskripsi: ''}); toast.success('Tugas dikirim') } catch (err: any) { toast.error(err.response?.data?.error || 'Gagal kirim tugas') } }} className="px-4 py-2 bg-primary text-white rounded-lg text-sm">Kirim Tugas</button>
-        <div className="mt-4 space-y-2">
-          {(data.tugas || []).slice(0,5).map((t: any) => <div key={t.id} className="rounded-xl border border-gray-100 p-3"><div className="flex items-start justify-between gap-2"><div><p className="font-semibold text-gray-800">{t.judul}</p><p className="text-xs text-gray-500">{t.mapel_nama || '-'} · {t.rombel_nama || '-'} · {t.deadline || '-'}</p></div><button onClick={async () => { await api.delete('/guru/tugas/' + t.id); const r=await api.get('/guru/dashboard'); setData(r.data) }} className="text-xs text-red-600 hover:underline">Hapus</button></div></div>)}
-          {(data.tugas || []).length === 0 && <p className="text-gray-400 text-sm text-center py-4">Belum ada tugas</p>}
+        <div className="mt-3 space-y-1.5">
+          {(data.tugas || []).slice(0,5).map((t: any) => <div key={t.id} className="rounded-xl border border-gray-100 p-2.5"><div className="flex items-start justify-between gap-2"><div><p className="font-semibold text-gray-800 text-sm">{t.judul}</p><p className="text-xs text-gray-500">{t.mapel_nama || '-'} · {t.rombel_nama || '-'} · {t.deadline || '-'}</p></div><button onClick={async () => { await api.delete('/guru/tugas/' + t.id); const r=await api.get('/guru/dashboard'); setData(r.data) }} className="text-xs text-red-600 hover:underline">Hapus</button></div></div>)}
+          {(data.tugas || []).length === 0 && <p className="text-gray-400 text-sm text-center py-3">Belum ada tugas</p>}
         </div>
       </Card>
 
       {/* Quick Actions */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-        <button onClick={() => navigate('/guru/absensi-guru')} className="bg-white rounded-xl p-4 shadow-sm border border-gray-100 hover:shadow-md transition-shadow text-left">
-          <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-green-500 to-emerald-600 flex items-center justify-center text-white mb-3">
-            <MapPin size={18} />
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+        <button onClick={() => navigate('/guru/absensi-guru')} className="bg-white rounded-xl p-3 shadow-sm border border-gray-100 hover:shadow-md transition-shadow text-left">
+          <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-green-500 to-emerald-600 flex items-center justify-center text-white mb-2">
+            <MapPin size={16} />
           </div>
-          <h4 className="font-medium text-gray-800">Ceklok Kehadiran</h4>
-          <p className="text-sm text-gray-500 mt-1">Absen masuk/pulang via GPS</p>
+          <h4 className="font-medium text-gray-800 text-sm">Ceklok Kehadiran</h4>
+          <p className="text-xs text-gray-500 mt-0.5">Absen masuk/pulang via GPS</p>
         </button>
-        <button onClick={() => navigate('/guru/absensi-siswa')} className="bg-white rounded-xl p-4 shadow-sm border border-gray-100 hover:shadow-md transition-shadow text-left">
-          <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-purple-500 to-fuchsia-600 flex items-center justify-center text-white mb-3">
-            <QrCode size={18} />
+        <button onClick={() => navigate('/guru/absensi-siswa')} className="bg-white rounded-xl p-3 shadow-sm border border-gray-100 hover:shadow-md transition-shadow text-left">
+          <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-purple-500 to-fuchsia-600 flex items-center justify-center text-white mb-2">
+            <QrCode size={16} />
           </div>
-          <h4 className="font-medium text-gray-800">Absensi Siswa</h4>
-          <p className="text-sm text-gray-500 mt-1">Input absensi kelas</p>
+          <h4 className="font-medium text-gray-800 text-sm">Absensi Siswa</h4>
+          <p className="text-xs text-gray-500 mt-0.5">Input absensi kelas</p>
         </button>
-        <button onClick={() => navigate('/guru/modul-ajar')} className="bg-white rounded-xl p-4 shadow-sm border border-gray-100 hover:shadow-md transition-shadow text-left">
-          <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white mb-3">
-            <BookOpen size={18} />
+        <button onClick={() => navigate('/guru/modul-ajar')} className="bg-white rounded-xl p-3 shadow-sm border border-gray-100 hover:shadow-md transition-shadow text-left">
+          <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white mb-2">
+            <BookOpen size={16} />
           </div>
-          <h4 className="font-medium text-gray-800">Modul Ajar AI</h4>
-          <p className="text-sm text-gray-500 mt-1">Generate modul otomatis</p>
+          <h4 className="font-medium text-gray-800 text-sm">Modul Ajar AI</h4>
+          <p className="text-xs text-gray-500 mt-0.5">Generate modul otomatis</p>
         </button>
       </div>
     </div>
