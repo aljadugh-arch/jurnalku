@@ -33,13 +33,43 @@ function teacherDisplayName(gtk: any) {
 }
 
 export default function GuruDashboard() {
-  const [data, setData] = useState<any>({ jadwal_hari_ini: [], rekap_jurnal: { draft: 0, submitted: 0, approved: 0, total: 0 }, rombel_count: 0, gtk: null, tugas: [] })
+  const [data, setData] = useState<any>({ jadwal_hari_ini: [], sesi_kelas_aktif: null, rekap_jurnal: { draft: 0, submitted: 0, approved: 0, total: 0 }, rombel_count: 0, gtk: null, tugas: [] })
   const [tugasForm, setTugasForm] = useState({ judul: '', deskripsi: '', deadline: '', rombel_id: '', mapel_id: '' })
+  const [classBusy, setClassBusy] = useState(false)
   const navigate = useNavigate()
 
+  const loadDashboard = () => api.get('/guru/dashboard').then(res => {
+    setData(res.data)
+    const j = res.data.jadwal_hari_ini?.[0]
+    if (j) setTugasForm(f => ({ ...f, rombel_id: j.rombel_id || '', mapel_id: j.mapel_id || '' }))
+  })
+
   useEffect(() => {
-    api.get('/guru/dashboard').then(res => { setData(res.data); const j=res.data.jadwal_hari_ini?.[0]; if (j) setTugasForm(f => ({ ...f, rombel_id: j.rombel_id || '', mapel_id: j.mapel_id || '' })) }).catch(() => {})
+    loadDashboard().catch(() => {})
   }, [])
+
+  const enterClass = async (jadwal: any) => {
+    if (!jadwal?.id) return toast.error('Tidak ada jadwal mengajar hari ini')
+    setClassBusy(true)
+    try {
+      await api.post('/guru/sesi-kelas/masuk', { jadwal_id: jadwal.id })
+      toast.success(`Masuk kelas ${jadwal.rombel_nama}`)
+      await loadDashboard()
+    } catch (err: any) {
+      toast.error(err.response?.data?.error || 'Gagal mencatat masuk kelas')
+    } finally { setClassBusy(false) }
+  }
+
+  const finishClass = async () => {
+    setClassBusy(true)
+    try {
+      await api.post('/guru/sesi-kelas/selesai')
+      toast.success('Sesi kelas diselesaikan')
+      await loadDashboard()
+    } catch (err: any) {
+      toast.error(err.response?.data?.error || 'Gagal menyelesaikan kelas')
+    } finally { setClassBusy(false) }
+  }
 
   const rekap = data.rekap_jurnal || {}
   const draft = rekap.draft ?? 0
@@ -71,13 +101,24 @@ export default function GuruDashboard() {
         </div>
       </div>
 
-      <button
-        onClick={() => navigate('/guru/jurnal')}
-        className="w-full inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-bold text-white shadow-sm shadow-emerald-600/25 transition hover:bg-emerald-700 active:scale-[0.98]"
-      >
-        <DoorOpen size={18} />
-        Masuk Kelas
-      </button>
+      {data.sesi_kelas_aktif ? (
+        <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <div className="min-w-0">
+              <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700">Sedang di kelas sejak {data.sesi_kelas_aktif.waktu_masuk}</p>
+              <p className="font-bold text-gray-800 truncate">{data.sesi_kelas_aktif.rombel_nama} • {data.sesi_kelas_aktif.mapel_nama}</p>
+            </div>
+            <button disabled={classBusy} onClick={finishClass} className="inline-flex items-center justify-center gap-2 rounded-xl bg-red-600 px-4 py-2.5 text-sm font-bold text-white disabled:opacity-50">
+              <DoorOpen size={18} /> Selesai Kelas
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-center">
+          <p className="font-bold text-emerald-800">Masuk Kelas</p>
+          <p className="text-xs text-emerald-700">Pilih tombol Masuk pada jadwal kelas yang benar di bawah.</p>
+        </div>
+      )}
 
       {/* CTA banner */}
       <div className="relative overflow-hidden rounded-2xl bg-primary p-4 text-white shadow-sm shadow-primary/30">
@@ -165,6 +206,15 @@ export default function GuruDashboard() {
                     <Clock size={12} /> {j.rombel_nama} • {j.ruangan || '-'}
                   </p>
                 </div>
+                {!data.sesi_kelas_aktif && (
+                  <span
+                    role="button"
+                    tabIndex={0}
+                    onClick={event => { event.stopPropagation(); enterClass(j) }}
+                    onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); event.stopPropagation(); enterClass(j) } }}
+                    className="shrink-0 rounded-lg bg-emerald-600 px-2.5 py-1.5 text-xs font-bold text-white"
+                  >Masuk</span>
+                )}
                 <ChevronRight size={18} className="text-gray-400 shrink-0" />
               </button>
             )

@@ -268,6 +268,28 @@ db.exec(`
     FOREIGN KEY (rombel_id) REFERENCES rombel(id)
   );
 
+  CREATE TABLE IF NOT EXISTS sesi_kelas_guru (
+    id TEXT PRIMARY KEY,
+    jadwal_id TEXT NOT NULL,
+    guru_id TEXT NOT NULL,
+    mapel_id TEXT NOT NULL,
+    rombel_id TEXT NOT NULL,
+    tanggal TEXT NOT NULL,
+    waktu_masuk TEXT NOT NULL,
+    waktu_selesai TEXT,
+    status TEXT DEFAULT 'aktif',
+    menit_terlambat INTEGER DEFAULT 0,
+    tenant_id TEXT NOT NULL,
+    created_at TEXT DEFAULT (datetime('now')),
+    updated_at TEXT,
+    FOREIGN KEY (jadwal_id) REFERENCES jadwal(id),
+    FOREIGN KEY (guru_id) REFERENCES gtk(id),
+    FOREIGN KEY (mapel_id) REFERENCES mapel(id),
+    FOREIGN KEY (rombel_id) REFERENCES rombel(id)
+  );
+  CREATE UNIQUE INDEX IF NOT EXISTS idx_sesi_kelas_jadwal_tanggal ON sesi_kelas_guru(tenant_id, jadwal_id, tanggal);
+  CREATE INDEX IF NOT EXISTS idx_sesi_kelas_tenant_tanggal ON sesi_kelas_guru(tenant_id, tanggal, status);
+
   CREATE TABLE IF NOT EXISTS posting (
     id TEXT PRIMARY KEY, judul TEXT NOT NULL, isi TEXT NOT NULL,
     kategori TEXT DEFAULT 'berita', penulis_id TEXT NOT NULL,
@@ -2185,7 +2207,7 @@ app.post('/api/settings/reset-data', ADMIN, (req, res) => {
     'absensi_kegiatan', 'kegiatan_khusus',
     'rapor_sync_log', 'catatan_kepribadian', 'rapor', 'penilaian_harian',
     'absensi_ekskul', 'ekskul_anggota', 'ekskul',
-    'absensi_siswa', 'absensi_guru', 'jurnal_mengajar',
+    'absensi_siswa', 'absensi_guru', 'jurnal_mengajar', 'sesi_kelas_guru',
     'tagihan', 'jenis_tagihan', 'tabungan',
     'modul_ajar', 'pengajar', 'jadwal', 'template_jadwal', 'kalender_kbm',
     'siswa', 'rombel', 'mapel', 'gtk', 'tahun_ajaran'
@@ -2293,10 +2315,10 @@ app.delete('/api/siswa/:id', ADMIN, (req, res) => {
 // Cascade: ikut hapus data turunan yang bergantung, biar tidak kena FOREIGN KEY.
 const BULK_DELETE_MAP = {
   siswa: { label: 'Siswa', main: 'siswa', cascade: ['absensi_siswa', 'tagihan', 'tabungan', 'ekskul_anggota', 'absensi_ekskul', 'penilaian_harian', 'catatan_kepribadian', 'rapor'] },
-  gtk: { label: 'GTK', main: 'gtk', cascade: ['jadwal', 'pengajar', 'modul_ajar', 'absensi_guru', 'jurnal_mengajar'] },
+  gtk: { label: 'GTK', main: 'gtk', cascade: ['sesi_kelas_guru', 'jadwal', 'pengajar', 'modul_ajar', 'absensi_guru', 'jurnal_mengajar'] },
   mapel: { label: 'Mapel', main: 'mapel', cascade: ['jadwal', 'pengajar', 'modul_ajar', 'penilaian_harian'] },
   rombel: { label: 'Rombel', main: 'rombel', cascade: ['jadwal', 'siswa'] },
-  jadwal: { label: 'Jadwal', main: 'jadwal', cascade: [] },
+  jadwal: { label: 'Jadwal', main: 'jadwal', cascade: ['sesi_kelas_guru'] },
   absensi_siswa: { label: 'Absensi Siswa', main: 'absensi_siswa', cascade: [] },
   absensi_guru: { label: 'Absensi Guru', main: 'absensi_guru', cascade: [] },
   jurnal_mengajar: { label: 'Jurnal Mengajar', main: 'jurnal_mengajar', cascade: [] },
@@ -2781,7 +2803,99 @@ app.get('/api/guru/dashboard', authMiddleware, (req, res) => {
   const ekskulDiampu = db.prepare('SELECT id,nama,hari,jam_mulai,jam_selesai FROM ekskul WHERE pembina_id=? AND tenant_id=? ORDER BY nama').all(gtkId, req.tenantId)
 
   const tugas = db.prepare(`SELECT t.*, m.nama mapel_nama, r.nama rombel_nama FROM tugas_siswa t LEFT JOIN mapel m ON m.id=t.mapel_id AND m.tenant_id=t.tenant_id LEFT JOIN rombel r ON r.id=t.rombel_id AND r.tenant_id=t.tenant_id WHERE t.guru_id=? AND t.tenant_id=? ORDER BY t.created_at DESC LIMIT 20`).all(gtkId, req.tenantId)
-  res.json({ jadwal_hari_ini: jadwal, mapel_diampu: mapelDiampu, ekskul_diampu: ekskulDiampu, tugas, rekap_jurnal: { total: totalJurnal }, absensi_hari_ini: absensiHariIni, catatan_count: catatanCount, siswa_rombel_count: siswaRombelCount, nilai_siswa_count: siswaRombelCount, rombel_count: rombelCount, wali_rombel: waliRombel, gtk: { ...gtk, nama_tampilan: honorificTeacherName(gtk.nama, gtk.jenis_kelamin) } })
+  const sesiKelasAktif = db.prepare(`SELECT sk.*,m.nama AS mapel_nama,r.nama AS rombel_nama,j.jam_mulai,j.jam_selesai,j.ruangan
+    FROM sesi_kelas_guru sk
+    JOIN mapel m ON m.id=sk.mapel_id AND m.tenant_id=sk.tenant_id
+    JOIN rombel r ON r.id=sk.rombel_id AND r.tenant_id=sk.tenant_id
+    JOIN jadwal j ON j.id=sk.jadwal_id AND j.tenant_id=sk.tenant_id
+    WHERE sk.tenant_id=? AND sk.guru_id=? AND sk.tanggal=? AND sk.status='aktif'
+    ORDER BY sk.waktu_masuk DESC LIMIT 1`).get(req.tenantId, gtkId, todayDate) || null
+  if (sesiKelasAktif && timeJakarta() > sesiKelasAktif.jam_selesai) {
+    db.prepare("UPDATE sesi_kelas_guru SET status='selesai',waktu_selesai=COALESCE(waktu_selesai,?),updated_at=datetime('now') WHERE id=? AND tenant_id=?")
+      .run(sesiKelasAktif.jam_selesai, sesiKelasAktif.id, req.tenantId)
+  }
+  const sesiAktifSekarang = sesiKelasAktif && timeJakarta() <= sesiKelasAktif.jam_selesai ? sesiKelasAktif : null
+  res.json({ jadwal_hari_ini: jadwal, sesi_kelas_aktif: sesiAktifSekarang, mapel_diampu: mapelDiampu, ekskul_diampu: ekskulDiampu, tugas, rekap_jurnal: { total: totalJurnal }, absensi_hari_ini: absensiHariIni, catatan_count: catatanCount, siswa_rombel_count: siswaRombelCount, nilai_siswa_count: siswaRombelCount, rombel_count: rombelCount, wali_rombel: waliRombel, gtk: { ...gtk, nama_tampilan: honorificTeacherName(gtk.nama, gtk.jenis_kelamin) } })
+})
+
+function clockToMinutes(value) {
+  const [hour, minute] = String(value || '0:0').split(':').map(Number)
+  return (Number.isFinite(hour) ? hour : 0) * 60 + (Number.isFinite(minute) ? minute : 0)
+}
+
+function currentTeacherClassSession(tenantId, gtkId, tanggal) {
+  return db.prepare(`SELECT sk.*,m.nama AS mapel_nama,r.nama AS rombel_nama,j.jam_mulai,j.jam_selesai,j.ruangan
+    FROM sesi_kelas_guru sk
+    JOIN mapel m ON m.id=sk.mapel_id AND m.tenant_id=sk.tenant_id
+    JOIN rombel r ON r.id=sk.rombel_id AND r.tenant_id=sk.tenant_id
+    JOIN jadwal j ON j.id=sk.jadwal_id AND j.tenant_id=sk.tenant_id
+    WHERE sk.tenant_id=? AND sk.guru_id=? AND sk.tanggal=? AND sk.status='aktif'
+    ORDER BY sk.waktu_masuk DESC LIMIT 1`).get(tenantId, gtkId, tanggal) || null
+}
+
+app.post('/api/guru/sesi-kelas/masuk', TEACHER, (req, res) => {
+  const gtk = resolveGtkForUser(req.user.id, req.tenantId)
+  if (!gtk) return res.status(400).json({ error: 'Akun guru belum terhubung GTK' })
+  const jadwalId = String(req.body?.jadwal_id || '').trim()
+  if (!jadwalId) return res.status(400).json({ error: 'Jadwal wajib dipilih' })
+  const today = todayJakarta()
+  const day = require('./attendance-rules.cjs').hariJakarta()
+  const jadwal = db.prepare(`SELECT jadwal.* FROM jadwal WHERE jadwal.id=? AND jadwal.gtk_id=? AND jadwal.tenant_id=? AND lower(jadwal.hari)=? AND jadwal.jenis_kegiatan='mapel'`)
+    .get(jadwalId, gtk.id, req.tenantId, day)
+  if (!jadwal) return res.status(403).json({ error: 'Jadwal bukan jadwal mengajar Anda hari ini' })
+  const active = currentTeacherClassSession(req.tenantId, gtk.id, today)
+  if (active && active.jadwal_id !== jadwal.id) return res.status(409).json({ error: `Selesaikan dahulu kelas ${active.rombel_nama} - ${active.mapel_nama}` })
+  if (active) return res.json(active)
+  const now = timeJakarta()
+  const nowMinutes = clockToMinutes(now)
+  const startMinutes = clockToMinutes(jadwal.jam_mulai)
+  const endMinutes = clockToMinutes(jadwal.jam_selesai)
+  if (nowMinutes < startMinutes - 30 || nowMinutes > endMinutes + 60) {
+    return res.status(400).json({ error: `Masuk kelas hanya tersedia 30 menit sebelum sampai 60 menit sesudah jadwal ${jadwal.jam_mulai}-${jadwal.jam_selesai}` })
+  }
+  const graceMinutes = 10
+  const menitTerlambat = Math.max(0, nowMinutes - startMinutes - graceMinutes)
+  const id = uuidv4()
+  db.prepare(`INSERT INTO sesi_kelas_guru (id,jadwal_id,guru_id,mapel_id,rombel_id,tanggal,waktu_masuk,waktu_selesai,status,menit_terlambat,tenant_id,updated_at)
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,datetime('now'))
+    ON CONFLICT(tenant_id,jadwal_id,tanggal) DO UPDATE SET
+      guru_id=excluded.guru_id,mapel_id=excluded.mapel_id,rombel_id=excluded.rombel_id,
+      waktu_masuk=excluded.waktu_masuk,waktu_selesai=NULL,status='aktif',
+      menit_terlambat=excluded.menit_terlambat,updated_at=datetime('now')`)
+    .run(id, jadwal.id, gtk.id, jadwal.mapel_id, jadwal.rombel_id, today, now, null, 'aktif', menitTerlambat, req.tenantId)
+  res.json(currentTeacherClassSession(req.tenantId, gtk.id, today))
+})
+
+app.post('/api/guru/sesi-kelas/selesai', TEACHER, (req, res) => {
+  const gtk = resolveGtkForUser(req.user.id, req.tenantId)
+  if (!gtk) return res.status(400).json({ error: 'Akun guru belum terhubung GTK' })
+  const today = todayJakarta()
+  const active = currentTeacherClassSession(req.tenantId, gtk.id, today)
+  if (!active) return res.status(404).json({ error: 'Tidak ada sesi kelas aktif' })
+  db.prepare("UPDATE sesi_kelas_guru SET status='selesai',waktu_selesai=?,updated_at=datetime('now') WHERE id=? AND tenant_id=? AND guru_id=?")
+    .run(timeJakarta(), active.id, req.tenantId, gtk.id)
+  res.json(db.prepare('SELECT * FROM sesi_kelas_guru WHERE id=? AND tenant_id=?').get(active.id, req.tenantId))
+})
+
+app.get('/api/admin/sesi-kelas/hari-ini', DASHBOARD_ROLES, (req, res) => {
+  const tanggal = /^\d{4}-\d{2}-\d{2}$/.test(String(req.query.tanggal || '')) ? String(req.query.tanggal) : todayJakarta()
+  if (tanggal === todayJakarta()) db.prepare("UPDATE sesi_kelas_guru SET status='selesai',waktu_selesai=COALESCE(waktu_selesai,(SELECT jam_selesai FROM jadwal WHERE jadwal.id=sesi_kelas_guru.jadwal_id AND jadwal.tenant_id=sesi_kelas_guru.tenant_id)),updated_at=datetime('now') WHERE tenant_id=? AND tanggal=? AND status='aktif' AND EXISTS (SELECT 1 FROM jadwal WHERE jadwal.id=sesi_kelas_guru.jadwal_id AND jadwal.tenant_id=sesi_kelas_guru.tenant_id AND jadwal.jam_selesai<?)")
+    .run(req.tenantId, tanggal, timeJakarta())
+  const sessions = db.prepare(`SELECT sk.*,g.nama AS guru_nama,m.nama AS mapel_nama,r.nama AS rombel_nama,
+    j.jam_mulai,j.jam_selesai,j.ruangan
+    FROM sesi_kelas_guru sk
+    JOIN gtk g ON g.id=sk.guru_id AND g.tenant_id=sk.tenant_id
+    JOIN mapel m ON m.id=sk.mapel_id AND m.tenant_id=sk.tenant_id
+    JOIN rombel r ON r.id=sk.rombel_id AND r.tenant_id=sk.tenant_id
+    JOIN jadwal j ON j.id=sk.jadwal_id AND j.tenant_id=sk.tenant_id
+    WHERE sk.tenant_id=? AND sk.tanggal=?
+    ORDER BY CASE sk.status WHEN 'aktif' THEN 0 ELSE 1 END,sk.waktu_masuk DESC`).all(req.tenantId, tanggal)
+  res.json({ tanggal, sessions, summary: {
+    aktif: sessions.filter(row => row.status === 'aktif').length,
+    selesai: sessions.filter(row => row.status === 'selesai').length,
+    terlambat: sessions.filter(row => Number(row.menit_terlambat) > 0).length,
+    total: sessions.length
+  } })
 })
 
 app.get('/api/guru/jadwal-context', authMiddleware, (req, res) => {

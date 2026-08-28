@@ -9,7 +9,7 @@ const S=(label,tables,optional=[])=>({label,tables,optional})
 const SECTIONS=Object.freeze({
  settings:S('Pengaturan Lembaga',['settings']), notif:S('Pengaturan Notifikasi',['notif_settings']),
  gtk:S('Data GTK',['gtk']), mapel:S('Mata Pelajaran',['mapel']), tahun_ajaran:S('Tahun Ajaran',['tahun_ajaran']), rombel:S('Rombongan Belajar',['rombel']), siswa:S('Data Siswa',['siswa']),
- jadwal:S('Jadwal & Pengajar',['template_jadwal','pengajar','jadwal']),
+ jadwal:S('Jadwal & Pengajar',['template_jadwal','pengajar','jadwal','sesi_kelas_guru']),
  jurnal:S('Jurnal & Nilai',['jurnal_mengajar','penilaian_harian','rapor','catatan_kepribadian','rapor_sync_log'],['rapor_sync_log']),
  absensi:S('Absensi',['absensi_siswa','absensi_guru','kegiatan_khusus','absensi_kegiatan']),
  ekskul:S('Ekstrakurikuler',['ekskul','ekskul_anggota','absensi_ekskul']), tagihan:S('Tagihan',['jenis_tagihan','tagihan']),

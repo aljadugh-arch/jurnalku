@@ -5,10 +5,39 @@ const path = require('node:path')
 
 const read = file => fs.readFileSync(path.join(__dirname, '..', file), 'utf8')
 
-test('dashboard guru menyediakan tombol Masuk Kelas yang membuka jurnal mengajar', () => {
-  const source = read('src/pages/guru/GuruDashboard.tsx')
-  assert.match(source, />\s*Masuk Kelas\s*</)
-  assert.match(source, /onClick=\{\(\) => navigate\('\/guru\/jurnal'\)\}/)
+test('Masuk Kelas mencatat sesi jadwal guru ke backend dan bisa diselesaikan', () => {
+  const dashboard = read('src/pages/guru/GuruDashboard.tsx')
+  const server = read('server/index.cjs')
+  assert.match(dashboard, /api\.post\('\/guru\/sesi-kelas\/masuk'/)
+  assert.match(dashboard, /api\.post\('\/guru\/sesi-kelas\/selesai'/)
+  assert.match(dashboard, /jadwal_id/)
+  assert.match(dashboard, />\s*Masuk Kelas\s*</)
+  assert.match(dashboard, />\s*Selesai Kelas\s*</)
+  assert.match(dashboard, /enterClass\(j\)/)
+  assert.match(server, /CREATE TABLE IF NOT EXISTS sesi_kelas_guru/)
+  assert.match(server, /app\.post\('\/api\/guru\/sesi-kelas\/masuk'/)
+  assert.match(server, /app\.post\('\/api\/guru\/sesi-kelas\/selesai'/)
+  assert.match(server, /jadwal\.gtk_id=\?/)
+  assert.match(server, /tenant_id=\?/)
+  assert.match(server, /startMinutes - 30/)
+  assert.match(server, /endMinutes \+ 60/)
+  assert.match(server, /status='selesai',waktu_selesai=COALESCE/)
+})
+
+test('dashboard admin memantau sesi kelas dari sumber backend yang sama', () => {
+  const dashboard = read('src/pages/admin/AdminDashboard.tsx')
+  const server = read('server/index.cjs')
+  assert.match(server, /app\.get\('\/api\/admin\/sesi-kelas\/hari-ini'/)
+  assert.match(server, /FROM sesi_kelas_guru sk/)
+  assert.match(server, /guru_nama/)
+  assert.match(server, /rombel_nama/)
+  assert.match(server, /mapel_nama/)
+  assert.match(server, /waktu_masuk/)
+  assert.match(server, /waktu_selesai/)
+  assert.match(server, /menit_terlambat/)
+  assert.match(dashboard, /api\.get\('\/admin\/sesi-kelas\/hari-ini'/)
+  assert.match(dashboard, /Pemantauan Guru Masuk Kelas/)
+  assert.match(dashboard, /menit_terlambat/)
 })
 
 test('landing page memakai istilah lembaga dan tidak memakai sekolah pada copy publik', () => {

@@ -64,7 +64,7 @@ function setupTenantTables(db) {
 
   // Add tenant_id to all data tables if not exists
   const tables = [
-    'users', 'siswa', 'gtk', 'mapel', 'rombel', 'jadwal',
+    'users', 'siswa', 'gtk', 'mapel', 'rombel', 'jadwal', 'sesi_kelas_guru',
     'jurnal_mengajar', 'absensi_siswa', 'absensi_guru',
     'ekskul', 'absensi_ekskul', 'tahun_ajaran',
     'jenis_tagihan', 'tagihan', 'tabungan',
@@ -252,7 +252,7 @@ function registerTenantRoutes(app, db, authMiddleware, uuidv4, SUPER) {
     if (!tenant) return res.status(404).json({ error: 'Tenant tidak ditemukan' })
     try {
       const tables = [
-        'absensi_ekskul', 'absensi_siswa', 'absensi_guru', 'absensi_kegiatan',
+        'absensi_ekskul', 'absensi_siswa', 'absensi_guru', 'absensi_kegiatan', 'sesi_kelas_guru',
         'ekskul_anggota', 'tagihan', 'tabungan', 'jadwal', 'pengajar',
         'siswa', 'gtk', 'mapel', 'rombel', 'ekskul', 'jenis_tagihan',
         'tahun_ajaran', 'kalender_kbm', 'modul_ajar', 'kegiatan_khusus',

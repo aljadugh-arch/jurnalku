@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import {
   Users, GraduationCap, BookOpen,
-  ClipboardList, UserCheck, TrendingUp, DollarSign, Layers
+  ClipboardList, UserCheck, TrendingUp, DollarSign, Layers, DoorOpen, Clock
 } from 'lucide-react'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line } from 'recharts'
 import api from '../../services/api'
@@ -13,6 +13,7 @@ const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899'
 
 export default function AdminDashboard() {
   const [stats, setStats] = useState<any>(null)
+  const [classMonitor, setClassMonitor] = useState<any>({ sessions: [], summary: { aktif: 0, selesai: 0, terlambat: 0, total: 0 } })
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -20,6 +21,10 @@ export default function AdminDashboard() {
       setStats(res.data)
       setLoading(false)
     }).catch(() => setLoading(false))
+    const loadClassMonitor = () => api.get('/admin/sesi-kelas/hari-ini').then(res => setClassMonitor(res.data)).catch(() => {})
+    loadClassMonitor()
+    const timer = window.setInterval(loadClassMonitor, 30000)
+    return () => window.clearInterval(timer)
   }, [])
 
   if (loading) return <div className="flex items-center justify-center py-20 text-gray-400">Memuat dashboard...</div>
@@ -55,6 +60,33 @@ export default function AdminDashboard() {
           </Link>
         ))}
       </div>
+
+      <Card title="Pemantauan Guru Masuk Kelas" icon={<DoorOpen size={18} className="text-emerald-600" />}>
+        <div className="mb-3 grid grid-cols-3 gap-2 text-center text-xs">
+          <div className="rounded-lg bg-emerald-50 p-2"><p className="text-lg font-bold text-emerald-700">{classMonitor.summary?.aktif || 0}</p><p className="text-gray-500">Aktif</p></div>
+          <div className="rounded-lg bg-blue-50 p-2"><p className="text-lg font-bold text-blue-700">{classMonitor.summary?.selesai || 0}</p><p className="text-gray-500">Selesai</p></div>
+          <div className="rounded-lg bg-amber-50 p-2"><p className="text-lg font-bold text-amber-700">{classMonitor.summary?.terlambat || 0}</p><p className="text-gray-500">Terlambat</p></div>
+        </div>
+        {classMonitor.sessions?.length === 0 ? (
+          <p className="py-4 text-center text-sm text-gray-400">Belum ada guru yang menekan Masuk Kelas hari ini</p>
+        ) : (
+          <div className="space-y-2">
+            {classMonitor.sessions.map((session: any) => (
+              <div key={session.id} className="flex flex-col gap-2 rounded-xl border border-gray-100 p-3 sm:flex-row sm:items-center sm:justify-between">
+                <div className="min-w-0">
+                  <p className="font-semibold text-gray-800">{session.guru_nama}</p>
+                  <p className="text-sm text-gray-500">{session.rombel_nama} • {session.mapel_nama} • {session.jam_mulai}–{session.jam_selesai}</p>
+                  <p className="mt-1 flex items-center gap-1 text-xs text-gray-500"><Clock size={12} /> Masuk {session.waktu_masuk}{session.waktu_selesai ? ` • Selesai ${session.waktu_selesai}` : ''}</p>
+                </div>
+                <div className="flex shrink-0 gap-1.5">
+                  {Number(session.menit_terlambat) > 0 && <Badge tone="yellow">Terlambat {session.menit_terlambat} menit</Badge>}
+                  <Badge tone={session.status === 'aktif' ? 'green' : 'blue'}>{session.status === 'aktif' ? 'Di Kelas' : 'Selesai'}</Badge>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </Card>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
         {/* Kehadiran Hari Ini */}
