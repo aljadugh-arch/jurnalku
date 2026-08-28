@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react'
-import { Plus, X, Clock, Check, FileText, Send } from 'lucide-react'
+import { useState, useEffect, useRef } from 'react'
+import { Plus, X, Clock, FileText, Send, PenLine, Upload, Eraser } from 'lucide-react'
 import toast from 'react-hot-toast'
 import api from '../../services/api'
 import { todayWib } from '../../lib/dateFormat'
@@ -12,6 +12,12 @@ export default function GuruJurnalPage() {
   const [mapels, setMapels] = useState<any[]>([])
   const [rombels, setRombels] = useState<any[]>([])
   const [form, setForm] = useState({ mapel_id: '', rombel_id: '', tanggal: todayWib(), jam_ke: 1, materi: '', kegiatan: '', catatan: '' })
+  const [signatureType, setSignatureType] = useState<'drawn' | 'upload'>('drawn')
+  const [signatureData, setSignatureData] = useState('')
+  const [signatureFile, setSignatureFile] = useState<File | null>(null)
+  const canvasRef = useRef<HTMLCanvasElement>(null)
+  const drawingRef = useRef(false)
+  const hasSignatureRef = useRef(false)
 
   const [jadwalHariIni, setJadwalHariIni] = useState<any[]>([])
 
@@ -44,14 +50,66 @@ export default function GuruJurnalPage() {
     setData(res.data)
   }
 
+  const canvasPoint = (event: React.PointerEvent<HTMLCanvasElement>) => {
+    const canvas = canvasRef.current
+    if (!canvas) return null
+    const rect = canvas.getBoundingClientRect()
+    return { x: (event.clientX - rect.left) * canvas.width / rect.width, y: (event.clientY - rect.top) * canvas.height / rect.height }
+  }
+
+  const startDrawing = (event: React.PointerEvent<HTMLCanvasElement>) => {
+    const point = canvasPoint(event)
+    const canvas = canvasRef.current
+    if (!point || !canvas) return
+    drawingRef.current = true
+    hasSignatureRef.current = true
+    canvas.setPointerCapture(event.pointerId)
+    const ctx = canvas.getContext('2d')
+    if (ctx) { ctx.lineWidth = 2.5; ctx.lineCap = 'round'; ctx.strokeStyle = '#111827'; ctx.beginPath(); ctx.moveTo(point.x, point.y) }
+  }
+
+  const drawSignature = (event: React.PointerEvent<HTMLCanvasElement>) => {
+    if (!drawingRef.current) return
+    const point = canvasPoint(event)
+    const ctx = canvasRef.current?.getContext('2d')
+    if (point && ctx) { ctx.lineTo(point.x, point.y); ctx.stroke() }
+  }
+
+  const stopDrawing = () => {
+    drawingRef.current = false
+    const canvas = canvasRef.current
+    if (canvas) setSignatureData(canvas.toDataURL('image/png'))
+  }
+
+  const clearSignature = () => {
+    const canvas = canvasRef.current
+    if (canvas) canvas.getContext('2d')?.clearRect(0, 0, canvas.width, canvas.height)
+    hasSignatureRef.current = false
+    setSignatureData('')
+  }
+
+  const handleSignatureFile = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (!file) return
+    if (!/^image\/(png|jpeg|webp)$/.test(file.type)) { toast.error('Format harus PNG, JPG, atau WEBP'); event.target.value = ''; return }
+    if (file.size > 5 * 1024 * 1024) { toast.error('Ukuran file maksimal 5 MB'); event.target.value = ''; return }
+    setSignatureFile(file)
+  }
+
   const handleSubmit = async (status: string) => {
     if (!form.mapel_id || !form.rombel_id) { toast.error('Pilih mapel dan rombel'); return }
     if (!form.materi.trim()) { toast.error('Materi wajib diisi'); return }
+    if ((signatureType === 'drawn' && !hasSignatureRef.current) || (signatureType === 'upload' && !signatureFile)) { toast.error('Tanda tangan wajib diisi'); return }
     try {
-      await api.post('/jurnal', { ...form, status })
+      const payload = new FormData()
+      Object.entries({ ...form, status, signature_type: signatureType, signature_data: signatureType === 'drawn' ? signatureData : '' }).forEach(([key, value]) => payload.append(key, String(value)))
+      if (signatureFile) payload.append('signature', signatureFile)
+      await api.post('/jurnal', payload)
       toast.success(status === 'submitted' ? 'Jurnal dikirim' : 'Draft disimpan')
       setShowForm(false)
       setForm({ mapel_id: '', rombel_id: '', tanggal: todayWib(), jam_ke: 1, materi: '', kegiatan: '', catatan: '' })
+      setSignatureFile(null)
+      clearSignature()
       loadData()
     } catch { toast.error('Gagal menyimpan') }
   }
@@ -192,6 +250,27 @@ export default function GuruJurnalPage() {
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1">Catatan</label>
                 <textarea value={form.catatan} onChange={e => setForm({...form, catatan: e.target.value})} className="w-full px-3 py-2 border rounded-lg text-sm" rows={2} placeholder="Catatan tambahan (opsional)" />
+              </div>
+              <div className="border-t pt-3">
+                <div className="flex items-center justify-between mb-2">
+                  <label className="block text-xs font-medium text-gray-600">Tanda Tangan Guru <span className="text-red-500">*</span></label>
+                  <div className="flex gap-1">
+                    <button type="button" onClick={() => setSignatureType('drawn')} className={`inline-flex items-center gap-1 px-2 py-1 rounded text-xs ${signatureType === 'drawn' ? 'bg-primary text-white' : 'bg-gray-100 text-gray-600'}`}><PenLine size={12} /> Gambar di layar</button>
+                    <button type="button" onClick={() => setSignatureType('upload')} className={`inline-flex items-center gap-1 px-2 py-1 rounded text-xs ${signatureType === 'upload' ? 'bg-primary text-white' : 'bg-gray-100 text-gray-600'}`}><Upload size={12} /> Upload foto</button>
+                  </div>
+                </div>
+                {signatureType === 'drawn' ? (
+                  <>
+                    <canvas ref={canvasRef} width={640} height={220} onPointerDown={startDrawing} onPointerMove={drawSignature} onPointerUp={stopDrawing} onPointerCancel={stopDrawing} className="w-full h-28 border border-dashed border-gray-300 rounded-lg bg-white touch-none cursor-crosshair" aria-label="Area gambar tanda tangan" />
+                    <button type="button" onClick={clearSignature} className="inline-flex items-center gap-1 mt-1 px-2 py-1 text-xs text-gray-500 hover:text-red-600"><Eraser size={12} /> Bersihkan</button>
+                  </>
+                ) : (
+                  <>
+                    <input type="file" accept="image/png,image/jpeg,image/webp" onChange={handleSignatureFile} className="w-full text-xs text-gray-600 file:mr-2 file:px-3 file:py-1.5 file:border-0 file:rounded file:bg-gray-100" />
+                    <p className="text-[11px] text-gray-400 mt-1">PNG, JPG, atau WEBP. Ukuran file maksimal 5 MB.</p>
+                    {signatureFile && <p className="text-xs text-green-600 mt-1">{signatureFile.name}</p>}
+                  </>
+                )}
               </div>
             </div>
             <div className="flex gap-2 mt-5">

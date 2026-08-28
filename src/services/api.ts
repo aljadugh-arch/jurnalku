@@ -9,6 +9,7 @@ const api = axios.create({
 
 // Interceptor to add auth token
 api.interceptors.request.use((config) => {
+  if (typeof FormData !== 'undefined' && config.data instanceof FormData && config.headers) delete config.headers['Content-Type']
   const token = localStorage.getItem('jurnalku_token')
   if (token) {
     config.headers.Authorization = `Bearer ${token}`

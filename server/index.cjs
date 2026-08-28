@@ -97,6 +97,8 @@ const storage = multer.diskStorage({
 })
 const upload = multer({ storage })
 const UPLOAD_DIR = path.join(__dirname, 'uploads')
+const SIGNATURE_DIR = path.join(UPLOAD_DIR, 'signatures')
+fs.mkdirSync(SIGNATURE_DIR, { recursive: true })
 const ktsStorage = multer.diskStorage({
   destination: (_req, _file, cb) => cb(null, UPLOAD_DIR),
   filename: (req, file, cb) => {
@@ -107,6 +109,11 @@ const ktsStorage = multer.diskStorage({
 const ktsUpload = multer({
   storage: ktsStorage,
   limits: { fileSize: 5 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => cb(null, /^image\/(png|jpeg|webp)$/.test(file.mimetype))
+})
+const signatureUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 5 * 1024 * 1024, files: 1 },
   fileFilter: (_req, file, cb) => cb(null, /^image\/(png|jpeg|webp)$/.test(file.mimetype))
 })
 
@@ -252,6 +259,8 @@ db.exec(`
     kegiatan TEXT,
     catatan TEXT,
     status TEXT DEFAULT 'draft',
+    signature_type TEXT,
+    signature_path TEXT,
     created_at TEXT DEFAULT (datetime('now')),
     FOREIGN KEY (guru_id) REFERENCES gtk(id),
     FOREIGN KEY (mapel_id) REFERENCES mapel(id),
@@ -759,7 +768,9 @@ for (const col of [
   ['settings', 'ceklok_masuk_selesai', "TEXT DEFAULT '07:30'"],
   ['settings', 'ceklok_pulang_mulai', "TEXT DEFAULT '13:00'"],
     ['settings', 'ceklok_pulang_selesai', "TEXT DEFAULT '16:00'"],
-    ['tenants', 'foundation_id', 'TEXT']
+    ['tenants', 'foundation_id', 'TEXT'],
+    ['jurnal_mengajar', 'signature_type', 'TEXT'],
+    ['jurnal_mengajar', 'signature_path', 'TEXT']
   ]) {
   try { db.prepare(`ALTER TABLE ${col[0]} ADD COLUMN ${col[1]} ${col[2]}`).run() } catch {}
 }
@@ -4465,6 +4476,36 @@ app.get('/api/jurnal/me', authMiddleware, (req, res) => {
   res.json(rows)
 })
 
+function saveDrawnSignature(dataUrl, tenantId) {
+  const match = /^data:image\/(png|jpeg|webp);base64,([A-Za-z0-9+/=\r\n]+)$/.exec(String(dataUrl || ''))
+  if (!match) return null
+  const ext = { png: '.png', jpeg: '.jpg', webp: '.webp' }[match[1]]
+  const buffer = Buffer.from(match[2].replace(/\s/g, ''), 'base64')
+  if (!isValidSignatureImage(buffer, match[1]) || buffer.length > 5 * 1024 * 1024) return null
+  const tenant = String(tenantId).replace(/[^a-z0-9_-]/gi, '_')
+  const filename = `sig-${tenant}-${crypto.randomBytes(16).toString('hex')}${ext}`
+  fs.writeFileSync(path.join(SIGNATURE_DIR, filename), buffer, { flag: 'wx' })
+  return `/uploads/signatures/${filename}`
+}
+
+function isValidSignatureImage(buffer, mimeOrExt) {
+  if (!buffer?.length) return false
+  if (mimeOrExt === 'image/png' || mimeOrExt === 'png') return buffer.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]))
+  if (mimeOrExt === 'image/jpeg' || mimeOrExt === 'jpeg') return buffer.subarray(0, 3).equals(Buffer.from([255, 216, 255]))
+  if (mimeOrExt === 'image/webp' || mimeOrExt === 'webp') return buffer.subarray(0, 4).toString('ascii') === 'RIFF' && buffer.subarray(8, 12).toString('ascii') === 'WEBP'
+  return false
+}
+
+function saveUploadedSignature(file, tenantId) {
+  if (!file) return null
+  const ext = { 'image/png': '.png', 'image/jpeg': '.jpg', 'image/webp': '.webp' }[file.mimetype]
+  if (!ext || !isValidSignatureImage(file.buffer, file.mimetype) || file.buffer.length > 5 * 1024 * 1024) return null
+  const tenant = String(tenantId).replace(/[^a-z0-9_-]/gi, '_')
+  const filename = `sig-${tenant}-${crypto.randomBytes(16).toString('hex')}${ext}`
+  fs.writeFileSync(path.join(SIGNATURE_DIR, filename), file.buffer, { flag: 'wx' })
+  return `/uploads/signatures/${filename}`
+}
+
 app.get('/api/jurnal', requireRole('admin', 'super_admin', 'kepala', 'operator', 'bendahara', 'tata_usaha', 'tu'), (req, res) => {
   const { tanggal, gtk_id, guru_id, status } = req.query
   let sql = `SELECT j.*, COALESCE((
@@ -4529,9 +4570,9 @@ app.get('/api/supervisi/rekap', JOURNAL_REVIEWER, (req, res) => {
   res.json(rows)
 })
 
-app.post('/api/jurnal', STAFF, (req, res) => {
+app.post('/api/jurnal', STAFF, signatureUpload.single('signature'), (req, res) => {
   const id = uuidv4()
-  let { guru_id, mapel_id, rombel_id, tanggal, jam_ke, materi, kegiatan, catatan, status } = req.body
+  let { guru_id, mapel_id, rombel_id, tanggal, jam_ke, materi, kegiatan, catatan, status, signature_type, signature_data } = req.body
   const teacher = ['guru', 'wali_kelas'].includes(req.user.role)
   if (teacher) {
     const gtk = resolveGtkForUser(req.user.id, req.tenantId)
@@ -4542,6 +4583,8 @@ app.post('/api/jurnal', STAFF, (req, res) => {
   if (!tanggal || !mapel_id || !rombel_id) return res.status(400).json({ error: 'mapel_id, rombel_id, dan tanggal wajib' })
   status = status || 'submitted'
   if (!['draft', 'submitted'].includes(status)) return res.status(400).json({ error: 'Status jurnal tidak valid' })
+  if (signature_type && !['drawn', 'upload'].includes(signature_type)) return res.status(400).json({ error: 'Metode tanda tangan tidak valid' })
+  if (!signature_type) return res.status(400).json({ error: 'Tanda tangan wajib diisi' })
   const gtk = db.prepare('SELECT id FROM gtk WHERE id = ? AND tenant_id = ?').get(guru_id, req.tenantId)
   const mapel = db.prepare('SELECT id FROM mapel WHERE id = ? AND tenant_id = ?').get(mapel_id, req.tenantId)
   const rombel = db.prepare('SELECT id FROM rombel WHERE id = ? AND tenant_id = ?').get(rombel_id, req.tenantId)
@@ -4554,7 +4597,11 @@ app.post('/api/jurnal', STAFF, (req, res) => {
     )
     if (!assigned) return res.status(403).json({ error: 'Jadwal/rombel tidak sesuai dengan penugasan guru' })
   }
-  db.prepare('INSERT INTO jurnal_mengajar (id, guru_id, mapel_id, rombel_id, tanggal, jam_ke, materi, kegiatan, catatan, status, tenant_id) VALUES (?,?,?,?,?,?,?,?,?,?,?)').run(id, guru_id, mapel_id, rombel_id, tanggal, jam_ke||1, materi||'', kegiatan||'', catatan||'', status, req.tenantId)
+  let signature_path = null
+  if (signature_type === 'drawn') signature_path = saveDrawnSignature(signature_data, req.tenantId)
+  if (signature_type === 'upload') signature_path = saveUploadedSignature(req.file, req.tenantId)
+  if (!signature_path) return res.status(400).json({ error: 'Tanda tangan tidak valid atau gagal disimpan' })
+  db.prepare('INSERT INTO jurnal_mengajar (id, guru_id, mapel_id, rombel_id, tanggal, jam_ke, materi, kegiatan, catatan, status, signature_type, signature_path, tenant_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)').run(id, guru_id, mapel_id, rombel_id, tanggal, jam_ke||1, materi||'', kegiatan||'', catatan||'', status, signature_type || null, signature_path, req.tenantId)
   res.json({ id })
 })
 
@@ -4568,7 +4615,7 @@ app.put('/api/jurnal/:id', STAFF, (req, res) => {
     if (!['guru','wali_kelas'].includes(req.user.role) || !['draft','submitted'].includes(status)) return res.status(403).json({ error: 'Status jurnal tidak diizinkan' })
     const gtk = resolveGtkForUser(req.user.id, req.tenantId)
     if (!gtk) return res.status(403).json({ error: 'Akun guru belum terhubung ke GTK' })
-    const result = db.prepare("UPDATE jurnal_mengajar SET materi=?, kegiatan=?, catatan=?, status=? WHERE id=? AND guru_id=? AND tenant_id=? AND status IN ('draft','rejected')").run(materi||'', kegiatan||'', catatan||'', status, req.params.id, gtk.id, req.tenantId)
+    const result = db.prepare("UPDATE jurnal_mengajar SET materi=?, kegiatan=?, catatan=?, status=? WHERE id=? AND guru_id=? AND tenant_id=? AND status IN ('draft','rejected') AND (? != 'submitted' OR signature_path IS NOT NULL)").run(materi||'', kegiatan||'', catatan||'', status, req.params.id, gtk.id, req.tenantId, status)
     return res.status(result.changes ? 200 : 404).json(result.changes ? { success: true } : { error: 'Jurnal tidak ditemukan atau tidak dapat diubah' })
   }
 })
