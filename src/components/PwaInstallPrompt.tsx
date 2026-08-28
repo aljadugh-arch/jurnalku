@@ -33,19 +33,30 @@ export default function PwaInstallPrompt() {
       event.preventDefault()
       setDeferredPrompt(event as BeforeInstallPromptEvent)
       setDismissed(false)
+      setInstalling(false)
+      setInstallError(false)
     }
     const onInstalled = () => {
       setInstalled(true)
       setInstalling(false)
       setDeferredPrompt(null)
     }
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'visible' && installing && !isStandalone()) {
+        setDeferredPrompt(null)
+        setInstalling(false)
+        setInstallError(true)
+      }
+    }
     window.addEventListener('beforeinstallprompt', onBeforeInstallPrompt)
     window.addEventListener('appinstalled', onInstalled)
+    document.addEventListener('visibilitychange', onVisibilityChange)
     return () => {
       window.removeEventListener('beforeinstallprompt', onBeforeInstallPrompt)
       window.removeEventListener('appinstalled', onInstalled)
+      document.removeEventListener('visibilitychange', onVisibilityChange)
     }
-  }, [])
+  }, [installing])
 
   if (!enabled || installed || dismissed || (!deferredPrompt && !isIos)) return null
 
@@ -55,17 +66,23 @@ export default function PwaInstallPrompt() {
     setInstallError(false)
     try {
       await deferredPrompt.prompt()
-      const choice = await deferredPrompt.userChoice
+      const choice = await Promise.race([
+        deferredPrompt.userChoice,
+        new Promise<never>((_, reject) => window.setTimeout(() => reject(new Error('install prompt timeout')), 10000)),
+      ])
       if (choice.outcome === 'accepted') {
         setInstalled(true)
       } else {
         setDismissed(true)
-        setInstalling(false)
       }
       setDeferredPrompt(null)
+      setInstalling(false)
     } catch {
+      setDeferredPrompt(null)
       setInstalling(false)
       setInstallError(true)
+    } finally {
+      setInstalling(false)
     }
   }
 

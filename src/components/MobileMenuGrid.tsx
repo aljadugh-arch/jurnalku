@@ -3,6 +3,8 @@ import { Link } from 'react-router-dom'
 import { Grid3X3 } from 'lucide-react'
 import PortalSheet from './ui/PortalSheet'
 import { useAuthStore } from '../stores/authStore'
+import { useSubscriptionStore } from '../stores/subscriptionStore'
+import { pathEnabled } from '../lib/featureAccess'
 import { flattenMenu, menuForRole, primaryGridForRole, type FlatMenu } from '../lib/menuItems'
 
 const colors = [
@@ -28,9 +30,10 @@ function MenuLink({ item, index, onClick }: { item: FlatMenu; index: number; onC
 /** Mobile/tablet: 7 menu utama + Lainnya dalam grid tetap 4x2. */
 export default function MobileMenuGrid() {
   const { user } = useAuthStore()
+  const features = useSubscriptionStore(s => s.subscription?.features)
   const [showAll, setShowAll] = useState(false)
-  const items = flattenMenu(menuForRole(user?.role)).filter(item => !['/admin', '/guru', '/siswa'].includes(item.path))
-  const primary = primaryGridForRole(user?.role)
+  const items = flattenMenu(menuForRole(user?.role)).filter(item => !['/admin', '/guru', '/siswa'].includes(item.path) && pathEnabled(item.path, features))
+  const primary = primaryGridForRole(user?.role).filter(item => pathEnabled(item.path, features))
 
   return (
     <>

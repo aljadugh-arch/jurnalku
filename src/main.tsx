@@ -36,7 +36,8 @@ async function configurePwa() {
     favicons.forEach(el => { el.setAttribute('href', iconUrl) })
 
     if ('serviceWorker' in navigator) {
-      await navigator.serviceWorker.register('/sw.js')
+      const registration = await navigator.serviceWorker.register('/sw.js', { updateViaCache: 'none' })
+      await registration.update()
     }
   } catch {
     // Keep the application usable when PWA discovery is temporarily unavailable.
