@@ -1,8 +1,7 @@
 import { useAuthStore } from '../../stores/authStore'
 import { useThemeStore } from '../../stores/themeStore'
-import { Bell, Search, LogOut, Lock, ChevronDown, User, Moon, Sun } from 'lucide-react'
-import { useEffect, useState } from 'react'
-import api from '../../services/api'
+import { Search, LogOut, Lock, ChevronDown, User, Moon, Sun } from 'lucide-react'
+import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { roleLabel } from '../../lib/roles'
 
@@ -11,12 +10,6 @@ export default function Header() {
   const { dark, toggle: toggleDark } = useThemeStore()
   const navigate = useNavigate()
   const [showDropdown, setShowDropdown] = useState(false)
-  const [showNotif, setShowNotif] = useState(false)
-  const [notifs, setNotifs] = useState<any[]>([])
-
-  useEffect(() => {
-    api.get('/notifications').then(res => setNotifs(res.data || [])).catch(() => setNotifs([]))
-  }, [])
 
   const base = user?.role === 'admin' || user?.role === 'super_admin' || user?.role === 'kepala' || user?.role === 'bendahara' || user?.role === 'operator' || user?.role === 'tata_usaha' || user?.role === 'tu' ? '/admin'
     : user?.role === 'guru' || user?.role === 'wali_kelas' ? '/guru' : '/siswa'
@@ -48,24 +41,6 @@ export default function Header() {
           >
             {dark ? <Sun size={18} /> : <Moon size={18} />}
           </button>
-          <div className="relative">
-            <button onClick={() => setShowNotif(v => !v)} className="relative text-gray-500 hover:text-gray-700 dark:text-gray-500" aria-label="Notifikasi">
-              <Bell size={20} />
-              {notifs.length > 0 && <span className="absolute -top-1 -right-1 min-w-4 h-4 px-1 bg-danger text-white text-[10px] rounded-full flex items-center justify-center">{Math.min(notifs.length, 9)}</span>}
-            </button>
-            {showNotif && (
-              <>
-                <div className="fixed inset-0 z-40" onClick={() => setShowNotif(false)} />
-                <div className="absolute right-0 mt-3 w-80 max-w-[calc(100vw-1.5rem)] rounded-2xl bg-white border border-gray-100 shadow-2xl z-50 p-3">
-                  <p className="font-bold text-gray-800 mb-2">Notifikasi</p>
-                  <div className="space-y-2 max-h-80 overflow-y-auto">
-                    {notifs.length === 0 && <p className="text-sm text-gray-500 py-4 text-center">Belum ada info dari admin</p>}
-                    {notifs.map(n => <div key={n.id} className="rounded-xl bg-slate-50 p-3"><p className="text-sm font-semibold text-gray-800">{n.judul}</p><p className="text-xs text-gray-500 mt-1">{n.isi}</p></div>)}
-                  </div>
-                </div>
-              </>
-            )}
-          </div>
           <div className="relative">
             <button onClick={() => setShowDropdown(!showDropdown)} className="flex items-center gap-2 hover:bg-gray-50 dark:hover:bg-gray-800 rounded-lg px-2 py-1">
               <div className="w-8 h-8 bg-primary rounded-full flex items-center justify-center overflow-hidden">
