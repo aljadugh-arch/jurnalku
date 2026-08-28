@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Download, Share2, X } from 'lucide-react'
+import { Download, Loader2, Share2, X } from 'lucide-react'
 import { useSettingsStore } from '../stores/settingsStore'
 
 type BeforeInstallPromptEvent = Event & {
@@ -23,6 +23,8 @@ export default function PwaInstallPrompt() {
   const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null)
   const [installed, setInstalled] = useState(() => typeof window !== 'undefined' && isStandalone())
   const [dismissed, setDismissed] = useState(false)
+  const [installing, setInstalling] = useState(false)
+  const [installError, setInstallError] = useState(false)
 
   const isIos = useMemo(() => /iphone|ipad|ipod/i.test(navigator.userAgent), [])
 
@@ -34,6 +36,7 @@ export default function PwaInstallPrompt() {
     }
     const onInstalled = () => {
       setInstalled(true)
+      setInstalling(false)
       setDeferredPrompt(null)
     }
     window.addEventListener('beforeinstallprompt', onBeforeInstallPrompt)
@@ -47,12 +50,23 @@ export default function PwaInstallPrompt() {
   if (!enabled || installed || dismissed || (!deferredPrompt && !isIos)) return null
 
   const install = async () => {
-    if (!deferredPrompt) return
-    await deferredPrompt.prompt()
-    const choice = await deferredPrompt.userChoice
-    if (choice.outcome === 'accepted') setInstalled(true)
-    else setDismissed(true)
-    setDeferredPrompt(null)
+    if (!deferredPrompt || installing) return
+    setInstalling(true)
+    setInstallError(false)
+    try {
+      await deferredPrompt.prompt()
+      const choice = await deferredPrompt.userChoice
+      if (choice.outcome === 'accepted') {
+        setInstalled(true)
+      } else {
+        setDismissed(true)
+        setInstalling(false)
+      }
+      setDeferredPrompt(null)
+    } catch {
+      setInstalling(false)
+      setInstallError(true)
+    }
   }
 
   return (
@@ -71,9 +85,11 @@ export default function PwaInstallPrompt() {
           ) : (
             <>
               <p className="mt-1 text-xs leading-5 text-gray-600 dark:text-gray-300">Pasang shortcut aplikasi agar dapat dibuka dari layar utama.</p>
-              <button type="button" onClick={install} className="mt-3 inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white hover:opacity-90">
-                <Download size={16} /> Install aplikasi
+              <button type="button" onClick={install} disabled={installing} className="mt-3 inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white hover:opacity-90 disabled:cursor-wait disabled:opacity-70">
+                {installing ? <><Loader2 size={16} className="animate-spin" /> Menginstall…</> : <><Download size={16} /> Install aplikasi</>}
               </button>
+              {installing && <p className="mt-2 text-xs text-amber-700 dark:text-amber-300">Dialog pemasangan browser sedang diproses. Jika tidak muncul dalam beberapa detik, tutup dialog browser lalu coba lagi dari menu browser.</p>}
+              {installError && <p className="mt-2 text-xs text-red-600 dark:text-red-400">Pemasangan tidak dapat dimulai. Coba menu browser → Tambahkan ke layar utama.</p>}
             </>
           )}
         </div>

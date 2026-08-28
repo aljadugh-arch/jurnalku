@@ -19,6 +19,8 @@ test('aplikasi menangkap event instalasi dan menyediakan tombol install yang dip
   assert.match(installPrompt, /beforeinstallprompt/)
   assert.match(installPrompt, /appinstalled/)
   assert.match(installPrompt, /deferredPrompt\.prompt\(\)/)
+  assert.match(installPrompt, /Menginstall/)
+  assert.match(installPrompt, /disabled=\{installing\}/)
   assert.match(installPrompt, /Tambah ke Layar Utama/)
   assert.match(installPrompt, /navigator\.standalone/)
   assert.match(app, /<PwaInstallPrompt\s*\/>/)
