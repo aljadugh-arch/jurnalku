@@ -74,15 +74,26 @@ test('foundation picker and cross-tenant lists have matching scoped contracts', 
   const fs = require('fs')
   const path = require('path')
   const tenant = fs.readFileSync(path.join(__dirname, '..', 'server', 'tenant.cjs'), 'utf8')
+  const picker = fs.readFileSync(path.join(__dirname, '..', 'src', 'components', 'FoundationTenantPicker.tsx'), 'utf8')
   const siswaPage = fs.readFileSync(path.join(__dirname, '..', 'src', 'pages', 'admin', 'DataSiswaPage.tsx'), 'utf8')
   const gtkPage = fs.readFileSync(path.join(__dirname, '..', 'src', 'pages', 'admin', 'DataGTKPage.tsx'), 'utf8')
   assert.match(tenant, /app\.get\('\/api\/foundations\/tenants', authMiddleware/)
   assert.match(tenant, /app\.get\('\/api\/foundation\/students', authMiddleware/)
   assert.match(tenant, /app\.get\('\/api\/foundation\/gtk', authMiddleware/)
+  assert.match(picker, /onClick=\{\(\) => handleSelect\(null\)\}/)
+  assert.match(picker, />\{placeholder\}<\/span>/)
   assert.doesNotMatch(siswaPage, /api\.post\(foundationTenantId \? '\/foundation\/students'/)
   assert.doesNotMatch(gtkPage, /api\.post\(foundationTenantId \? '\/foundation\/gtk'/)
-  assert.match(siswaPage, /const isLocalTenant = !foundationTenantId/)
-  assert.match(gtkPage, /const isLocalTenant = !foundationTenantId/)
+  for (const page of [siswaPage, gtkPage]) {
+    assert.match(page, /const isLocalTenant = !foundationTenantId/)
+    assert.match(page, /\{isLocalTenant && <button[\s\S]*?setShowImport\(true\)[\s\S]*?<\/button>\}/)
+    assert.match(page, /\{isLocalTenant && <button[\s\S]*?setShowModal\(true\)[\s\S]*?<\/button>\}/)
+    assert.match(page, /\{isLocalTenant && showModal && \(/)
+    assert.match(page, /\{isLocalTenant && showImport && \(/)
+  }
+  assert.match(siswaPage, /\{isLocalTenant && <label[\s\S]*?handleFoto\(s\.id/)
+  assert.match(siswaPage, /\{isLocalTenant && <>[\s\S]*?handleEdit\(selectedSiswa\)[\s\S]*?handleDelete\(selectedSiswa\.id/)
+  assert.match(gtkPage, /\{isLocalTenant && <div[\s\S]*?handleEdit\(selected\)[\s\S]*?handleDelete\(selected\.id/)
 })
 
 test('admin report actions use the registered report endpoints', () => {

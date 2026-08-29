@@ -74,6 +74,18 @@ export default function FoundationTenantPicker({
 
       {open && (
         <div className="absolute z-50 mt-1 w-full max-h-64 overflow-auto bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg">
+          <button
+            type="button"
+            onClick={() => handleSelect(null)}
+            className={`w-full px-3 py-2 text-left flex items-center gap-2 text-sm ${
+              selectedTenantId === null
+                ? 'bg-primary/10 text-primary'
+                : 'text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800'
+            }`}
+          >
+            <Building2 className={selectedTenantId === null ? 'text-primary' : 'text-gray-400'} size={16} />
+            <span>{placeholder}</span>
+          </button>
           {showAllOption && (
             <button
               onClick={() => handleSelect('all')}
