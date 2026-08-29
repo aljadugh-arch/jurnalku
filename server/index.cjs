@@ -81,7 +81,24 @@ app.use('/uploads', express.static(UPLOAD_DIR, {
 }))
 // Missing media must stay a real 404; never serve SPA HTML as an image.
 app.use('/uploads', (_req, res) => res.status(404).type('text/plain').send('Media not found'))
-app.use(express.static(path.join(__dirname, '..', 'dist')))
+app.use(express.static(path.join(__dirname, '..', 'dist'), {
+  fallthrough: true,
+  redirect: false,
+  setHeaders: (res, filePath) => {
+    if (/\/assets\//.test(filePath)) res.setHeader('Cache-Control', 'public, max-age=31536000, immutable')
+    else res.setHeader('Cache-Control', 'no-cache, must-revalidate')
+    res.setHeader('X-Content-Type-Options', 'nosniff')
+  }
+}))
+
+// A missing static asset must not be disguised as SPA HTML. This avoids stale or
+// mistyped JS/CSS URLs producing a blank page with HTTP 200.
+app.use((req, res, next) => {
+  if (req.method === 'GET' && (req.path.startsWith('/assets/') || /\.(?:js|css|map|woff2?|ttf)$/.test(req.path))) {
+    return res.status(404).type('text/plain').send('Asset not found')
+  }
+  next()
+})
 
 // Rate limiter: strict on auth (brute-force), lenient global
 const authLimiter = rateLimit({
@@ -2272,13 +2289,23 @@ app.get('/api/siswa', authMiddleware, (req, res) => {
   res.json(db.prepare(sql).all(...params))
 })
 
+app.get('/api/siswa/:id', authMiddleware, (req, res) => {
+  const siswa = db.prepare(`SELECT s.*, r.nama rombel_nama FROM siswa s LEFT JOIN rombel r ON r.id=s.rombel_id AND r.tenant_id=s.tenant_id WHERE s.id=? AND s.tenant_id=?`).get(req.params.id, req.tenantId)
+  if (!siswa) return res.status(404).json({ error: 'Siswa tidak ditemukan' })
+  res.json(siswa)
+})
+
 app.post('/api/siswa', ADMIN, (req, res) => {
   const id = uuidv4()
   const { nik, nis, nisn, nama, jenis_kelamin, tempat_lahir, tanggal_lahir, alamat, no_hp, nama_ortu, rombel_id } = req.body
   if (nik && !/^\d{16}$/.test(String(nik))) return res.status(400).json({ error: 'NIK harus berupa 16 digit angka.' })
+  if (rombel_id) {
+    const rombel = db.prepare('SELECT id FROM rombel WHERE id=? AND tenant_id=?').get(rombel_id, req.tenantId)
+    if (!rombel) return res.status(400).json({ error: 'Rombel tidak ditemukan pada lembaga ini.' })
+  }
   try {
     db.prepare('INSERT INTO siswa (id, nik, nis, nisn, nama, jenis_kelamin, tempat_lahir, tanggal_lahir, alamat, no_hp, nama_ortu, rombel_id, tenant_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)')
-      .run(id, nik || null, nis, nisn, nama, jenis_kelamin, tempat_lahir, tanggal_lahir, alamat, no_hp, nama_ortu, rombel_id, req.tenantId)
+      .run(id, nik || null, nis, nisn, nama, jenis_kelamin, tempat_lahir, tanggal_lahir, alamat, no_hp, nama_ortu, rombel_id || null, req.tenantId)
     const siswa = db.prepare('SELECT * FROM siswa WHERE id = ? AND tenant_id = ?').get(id, req.tenantId)
     ensureStudentUser(siswa, req.tenantId)
     res.json({ id, akun_siswa: true })
@@ -2289,16 +2316,31 @@ app.post('/api/siswa', ADMIN, (req, res) => {
 })
 
 app.put('/api/siswa/:id', ADMIN, (req, res) => {
-  const { nik, nis, nisn, nama, jenis_kelamin, tempat_lahir, tanggal_lahir, alamat, no_hp, nama_ortu, rombel_id, status } = req.body
-  if (nik && !/^\d{16}$/.test(String(nik))) return res.status(400).json({ error: 'NIK harus berupa 16 digit angka.' })
+  const current = db.prepare('SELECT * FROM siswa WHERE id=? AND tenant_id=?').get(req.params.id, req.tenantId)
+  if (!current) return res.status(404).json({ error: 'Siswa tidak ditemukan' })
+  const body = req.body || {}
+  const fields = ['nik', 'nis', 'nisn', 'nama', 'jenis_kelamin', 'tempat_lahir', 'tanggal_lahir', 'alamat', 'no_hp', 'nama_ortu', 'rombel_id', 'status']
+  const updates = fields.filter(field => Object.prototype.hasOwnProperty.call(body, field))
+  if (updates.length === 0) return res.status(400).json({ error: 'Tidak ada data yang diubah' })
+  const values = { ...current }
+  for (const field of updates) values[field] = body[field]
+  if (values.nik && !/^\d{16}$/.test(String(values.nik))) return res.status(400).json({ error: 'NIK harus berupa 16 digit angka.' })
+  if (updates.includes('rombel_id')) {
+    values.rombel_id = values.rombel_id || null
+    if (values.rombel_id) {
+      const rombel = db.prepare('SELECT id FROM rombel WHERE id=? AND tenant_id=?').get(values.rombel_id, req.tenantId)
+      if (!rombel) return res.status(400).json({ error: 'Rombel tujuan tidak ditemukan pada lembaga ini.' })
+    }
+  }
   try {
-    db.prepare('UPDATE siswa SET nik=?, nis=?, nisn=?, nama=?, jenis_kelamin=?, tempat_lahir=?, tanggal_lahir=?, alamat=?, no_hp=?, nama_ortu=?, rombel_id=?, status=? WHERE id=? AND tenant_id=?')
-      .run(nik || null, nis, nisn, nama, jenis_kelamin, tempat_lahir, tanggal_lahir, alamat, no_hp, nama_ortu, rombel_id, status, req.params.id, req.tenantId)
+    const setClause = updates.map(field => `${field}=?`).join(', ')
+    db.prepare(`UPDATE siswa SET ${setClause} WHERE id=? AND tenant_id=?`)
+      .run(...updates.map(field => field === 'nik' ? (values[field] || null) : values[field]), req.params.id, req.tenantId)
     const siswa = db.prepare('SELECT * FROM siswa WHERE id = ? AND tenant_id = ?').get(req.params.id, req.tenantId)
     if (siswa && siswa.status === 'aktif') ensureStudentUser(siswa, req.tenantId)
     res.json({ success: true })
   } catch (e) {
-    if (e.code === 'SQLITE_CONSTRAINT_UNIQUE' || e.code === 'SQLITE_CONSTRAINT') return res.status(400).json({ error: 'NIS ' + nis + ' sudah dipakai siswa lain.' })
+    if (e.code === 'SQLITE_CONSTRAINT_UNIQUE' || e.code === 'SQLITE_CONSTRAINT') return res.status(400).json({ error: 'NIS ' + (values.nis || '') + ' sudah dipakai siswa lain.' })
     throw e
   }
 })
@@ -2325,12 +2367,29 @@ app.post('/api/siswa/generate-akun', ADMIN, (req, res) => {
 })
 
 app.delete('/api/siswa/:id', ADMIN, (req, res) => {
+  const force = req.query.force === '1' || req.query.force === 'true'
   try {
-    db.prepare('DELETE FROM users WHERE siswa_id = ? AND tenant_id = ? AND role = ?').run(req.params.id, req.tenantId, 'siswa')
-    db.prepare('DELETE FROM siswa WHERE id = ? AND tenant_id=?').run(req.params.id, req.tenantId)
+    const remove = db.transaction(() => {
+      const siswa = db.prepare('SELECT id FROM siswa WHERE id=? AND tenant_id=?').get(req.params.id, req.tenantId)
+      if (!siswa) return false
+      if (force) {
+        const historyTables = ['absensi_siswa', 'absensi_ekskul', 'absensi_kegiatan', 'beasiswa', 'catatan_kepribadian', 'ekskul_anggota', 'penilaian_harian', 'rapor', 'tabungan', 'tagihan']
+        for (const table of historyTables) {
+          db.prepare(`DELETE FROM ${table} WHERE siswa_id=? AND tenant_id=?`).run(req.params.id, req.tenantId)
+        }
+      }
+      db.prepare('DELETE FROM siswa WHERE id = ? AND tenant_id=?').run(req.params.id, req.tenantId)
+      db.prepare('DELETE FROM users WHERE siswa_id = ? AND tenant_id = ? AND role = ?').run(req.params.id, req.tenantId, 'siswa')
+      return true
+    })
+    if (!remove()) return res.status(404).json({ error: 'Siswa tidak ditemukan' })
     res.json({ success: true })
   } catch (e) {
-    if (e.code === 'SQLITE_CONSTRAINT_FOREIGNKEY') return res.status(400).json({ error: 'Siswa masih digunakan di data lain (absensi/tagihan/tabungan/ekskul). Hapus data terkait dulu.' })
+    if (e.code === 'SQLITE_CONSTRAINT_FOREIGNKEY') return res.status(409).json({
+      error: 'Siswa memiliki riwayat absensi/keuangan/nilai. Konfirmasi hapus permanen untuk menghapus seluruh data terkait.',
+      code: 'SISWA_HAS_HISTORY',
+      can_force: true,
+    })
     throw e
   }
 })
@@ -2557,14 +2616,25 @@ app.get('/api/rombel/:id/siswa', ADMIN, (req, res) => {
 app.post('/api/rombel', ADMIN, (req, res) => {
   const id = uuidv4()
   const { nama, tingkat, tahun_ajaran, wali_kelas_id, kapasitas } = req.body
-  db.prepare('INSERT INTO rombel (id, nama, tingkat, tahun_ajaran, wali_kelas_id, kapasitas, tenant_id) VALUES (?,?,?,?,?,?,?)').run(id, nama, tingkat, tahun_ajaran, wali_kelas_id, kapasitas, req.tenantId)
+  if (!nama || !tingkat) return res.status(400).json({ error: 'Nama dan tingkat wajib diisi.' })
+  const waliKelasId = wali_kelas_id || null
+  if (waliKelasId && !db.prepare('SELECT id FROM gtk WHERE id=? AND tenant_id=?').get(waliKelasId, req.tenantId)) {
+    return res.status(400).json({ error: 'Wali kelas tidak ditemukan pada lembaga ini.' })
+  }
+  db.prepare('INSERT INTO rombel (id, nama, tingkat, tahun_ajaran, wali_kelas_id, kapasitas, tenant_id) VALUES (?,?,?,?,?,?,?)').run(id, nama, tingkat, tahun_ajaran, waliKelasId, kapasitas, req.tenantId)
   res.json({ id })
 })
 
 app.put('/api/rombel/:id', ADMIN, (req, res) => {
   const { nama, tingkat, tahun_ajaran, wali_kelas_id, kapasitas } = req.body
-  db.prepare('UPDATE rombel SET nama=?, tingkat=?, tahun_ajaran=?, wali_kelas_id=?, kapasitas=? WHERE id=? AND tenant_id=?')
-    .run(nama, tingkat, tahun_ajaran, wali_kelas_id, kapasitas, req.params.id, req.tenantId)
+  if (!nama || !tingkat) return res.status(400).json({ error: 'Nama dan tingkat wajib diisi.' })
+  const waliKelasId = wali_kelas_id || null
+  if (waliKelasId && !db.prepare('SELECT id FROM gtk WHERE id=? AND tenant_id=?').get(waliKelasId, req.tenantId)) {
+    return res.status(400).json({ error: 'Wali kelas tidak ditemukan pada lembaga ini.' })
+  }
+  const result = db.prepare('UPDATE rombel SET nama=?, tingkat=?, tahun_ajaran=?, wali_kelas_id=?, kapasitas=? WHERE id=? AND tenant_id=?')
+    .run(nama, tingkat, tahun_ajaran, waliKelasId, kapasitas, req.params.id, req.tenantId)
+  if (!result.changes) return res.status(404).json({ error: 'Rombel tidak ditemukan.' })
   res.json({ success: true })
 })
 
@@ -3095,6 +3165,7 @@ app.post('/api/guru/ceklok', STAFF, (req, res) => {
     if (!gtk) return res.status(400).json({ error: 'Akun Anda belum terhubung ke data GTK. Minta admin buatkan akun dari menu Data GTK (Buat Akun Guru).' })
   }
   const { type, latitude, longitude } = req.body
+  if (!['masuk', 'pulang'].includes(type)) return res.status(400).json({ error: 'Jenis ceklok tidak valid' })
   // Selalu baca baris canonical. Tenant lama bisa punya baris settings duplikat tanpa koordinat.
   const geo = db.prepare('SELECT geo_latitude, geo_longitude, geo_radius FROM settings WHERE id = ?').get('main_' + req.tenantId)
     || db.prepare('SELECT geo_latitude, geo_longitude, geo_radius FROM settings WHERE tenant_id = ? ORDER BY updated_at DESC, id DESC').get(req.tenantId)
@@ -3111,7 +3182,7 @@ app.post('/api/guru/ceklok', STAFF, (req, res) => {
   const today = todayJakarta()
   const now = timeJakarta()
   // Batas waktu ceklok GTK. Ceklok pulang tetap dibatasi window; ceklok masuk boleh telat (ditandai 'terlambat').
-  const tcfg = db.prepare('SELECT ceklok_masuk_mulai, ceklok_masuk_selesai, ceklok_pulang_mulai, ceklok_pulang_selesai FROM settings WHERE tenant_id = ? ORDER BY updated_at DESC LIMIT 1').get(req.tenantId) || {}
+  const tcfg = db.prepare('SELECT ceklok_masuk_mulai, ceklok_masuk_selesai, ceklok_pulang_mulai, ceklok_pulang_selesai FROM settings WHERE tenant_id = ? ORDER BY updated_at DESC, id DESC LIMIT 1').get(req.tenantId) || {}
   let statusMasuk = 'hadir'
   if (type === 'masuk' && tcfg.ceklok_masuk_selesai && now > tcfg.ceklok_masuk_selesai) {
     statusMasuk = 'terlambat' // lewat batas jam masuk: tetap boleh, ditandai terlambat

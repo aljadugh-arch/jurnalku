@@ -13,9 +13,10 @@ test('schema migrates NIK columns for existing tenant databases', () => {
 })
 
 test('student API accepts, searches, and persists tenant-scoped NIK', () => {
-  assert.match(server, /s\.nik LIKE \?/) 
+  assert.match(server, /s\.nik LIKE \?/)
   assert.match(server, /INSERT INTO siswa \(id, nik, nis, nisn/)
-  assert.match(server, /UPDATE siswa SET nik=\?, nis=\?/)
+  assert.match(server, /UPDATE siswa SET/)
+  assert.match(server, /nik/)
 })
 
 test('GTK API accepts, searches, and persists tenant-scoped NIK', () => {

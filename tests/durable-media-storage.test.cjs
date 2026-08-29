@@ -42,6 +42,9 @@ test('favicon is a real tenant image and broken student or branding images have 
   assert.match(server, /app\.get\('\/favicon\.ico'/)
   assert.match(server, /sendTenantIcon/)
   assert.match(server, /ORDER BY updated_at DESC, id DESC LIMIT 1/)
+  assert.match(server, /if \(!\['masuk', 'pulang'\]\.includes\(type\)\)/)
+  assert.match(server, /Asset not found/)
+  assert.match(server, /Cache-Control', 'public, max-age=31536000, immutable'/)
   assert.match(siswa, /onError/)
   assert.match(settings, /onError/)
   assert.match(sidebar, /onError/)
@@ -52,4 +55,38 @@ test('favicon is a real tenant image and broken student or branding images have 
 test('media responses disable MIME sniffing and cache successful immutable uploads', () => {
   assert.match(server, /immutable: true/)
   assert.match(server, /X-Content-Type-Options', 'nosniff'/)
+})
+
+test('student partial updates preserve omitted fields and validate rombel within the tenant', () => {
+  const route = server.match(/app\.put\('\/api\/siswa\/:id'[\s\S]*?\n}\)\n/)?.[0] || ''
+  assert.match(route, /SELECT \* FROM siswa WHERE id[= ]+\? AND tenant_id[= ]+\?/)
+
+  assert.match(route, /Object\.prototype\.hasOwnProperty\.call\(body, field\)/)
+  assert.match(route, /updates\.includes\('rombel_id'\)/)
+  assert.match(route, /SELECT id FROM rombel WHERE id[= ]+\? AND tenant_id[= ]+\?/)
+  assert.match(route, /UPDATE siswa SET/)
+  assert.match(server, /app\.get\('\/api\/siswa\/:id', authMiddleware/)
+  assert.match(server, /app\.get\('\/api\/rombel\/:id\/siswa', ADMIN/)
+  assert.match(server, /app\.put\('\/api\/siswa\/:id', ADMIN/)
+})
+
+test('foundation tenant picker has a matching tenant-list route', () => {
+  assert.match(require('fs').readFileSync(require('path').join(__dirname, '..', 'server', 'tenant.cjs'), 'utf8'), /app\.get\('\/api\/foundations\/tenants', authMiddleware/)
+})
+
+test('rombel create and update normalize empty wali kelas and validate tenant ownership', () => {
+  const create = server.match(/app\.post\('\/api\/rombel'[\s\S]*?\n}\)\n/)?.[0] || ''
+  const update = server.match(/app\.put\('\/api\/rombel\/:id'[\s\S]*?\n}\)\n/)?.[0] || ''
+  for (const route of [create, update]) {
+    assert.match(route, /wali_kelas_id \|\| null/)
+    assert.match(route, /SELECT id FROM gtk WHERE id=\? AND tenant_id=\?/)
+  }
+})
+
+test('student delete is atomic and supports an explicit tenant-scoped cascade', () => {
+  const route = server.match(/app\.delete\('\/api\/siswa\/:id'[\s\S]*?\n}\)\n/)?.[0] || ''
+  assert.match(route, /db\.transaction\(/)
+  assert.match(route, /req\.query\.force/)
+  assert.match(route, /DELETE FROM users WHERE siswa_id = \? AND tenant_id = \? AND role = \?/)
+  assert.match(route, /DELETE FROM .* WHERE siswa_id=\? AND tenant_id=\?/)
 })

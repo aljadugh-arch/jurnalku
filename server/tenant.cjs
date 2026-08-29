@@ -326,6 +326,14 @@ function registerTenantRoutes(app, db, authMiddleware, uuidv4, SUPER) {
   })
 
   // Get tenants in a foundation (admin/super_admin of any tenant in that foundation)
+  app.get('/api/foundations/tenants', authMiddleware, (req, res) => {
+    const foundationId = db.prepare('SELECT foundation_id FROM tenants WHERE id=?').get(req.tenantId)?.foundation_id
+    if (!foundationId) return res.json([])
+    if (!['admin', 'super_admin', 'operator', 'kepala'].includes(req.user.role)) return res.status(403).json({ error: 'Forbidden' })
+    const tenants = db.prepare('SELECT id, slug, nama, domain_custom, aktif FROM tenants WHERE foundation_id=? AND aktif=1 ORDER BY nama').all(foundationId)
+    res.json(tenants)
+  })
+
   app.get('/api/foundations/:id/tenants', authMiddleware, (req, res) => {
     const foundationId = req.params.id
     const userFoundationId = db.prepare('SELECT foundation_id FROM tenants WHERE id = ?').get(req.tenantId)?.foundation_id

@@ -145,7 +145,21 @@ export default function DataSiswaPage() {
       toast.success('Siswa berhasil dihapus')
       if (selectedSiswa?.id === id) setSelectedSiswa(null)
       fetchData()
-    } catch { toast.error('Gagal menghapus') }
+    } catch (err: any) {
+      if (err.response?.data?.code === 'SISWA_HAS_HISTORY' && confirm(`${err.response.data.error}\n\nLanjutkan hapus permanen?`)) {
+        try {
+          await api.delete('/siswa/' + id, { params: { force: 1 } })
+          toast.success('Siswa dan seluruh data terkait berhasil dihapus')
+          if (selectedSiswa?.id === id) setSelectedSiswa(null)
+          fetchData()
+          return
+        } catch (forceErr: any) {
+          toast.error(forceErr.response?.data?.error || 'Gagal menghapus permanen')
+          return
+        }
+      }
+      toast.error(err.response?.data?.error || 'Gagal menghapus')
+    }
   }
 
   const handleExport = () => {

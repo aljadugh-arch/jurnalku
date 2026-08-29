@@ -31,6 +31,7 @@ export default function RombelPage() {
   const [pindahTo, setPindahTo] = useState('')
   const [showEditSiswa, setShowEditSiswa] = useState<Siswa | null>(null)
   const [editSiswaForm, setEditSiswaForm] = useState({ nama: '', nis: '', nisn: '' })
+  const [busySiswaId, setBusySiswaId] = useState<string | null>(null)
 
   const fetchData = async () => {
     try {
@@ -105,37 +106,43 @@ export default function RombelPage() {
   // Hapus siswa dari rombel (keluarkan dari rombel, bukan hapus siswa)
   const handleKeluarkan = async (s: Siswa) => {
     if (!confirm(`Keluarkan ${s.nama} dari rombel ini?`)) return
+    setBusySiswaId(s.id)
     try {
       await api.put('/siswa/' + s.id, { rombel_id: null })
       toast.success(s.nama + ' dikeluarkan dari rombel')
       setSiswas(prev => prev.filter(x => x.id !== s.id))
       if (selectedRombel) fetchData()
-    } catch { toast.error('Gagal') }
+    } catch (err: any) { toast.error(err.response?.data?.error || 'Gagal mengeluarkan siswa') }
+    finally { setBusySiswaId(null) }
   }
 
   // Pindah siswa ke rombel lain
   const handlePindah = async () => {
     if (!pindahTo) { toast.error('Pilih rombel tujuan'); return }
     if (!showPindah) return
+    setBusySiswaId(showPindah.id)
     try {
       await api.put('/siswa/' + showPindah.id, { rombel_id: pindahTo })
       toast.success(showPindah.nama + ' dipindah ke ' + (data.find(r => r.id === pindahTo)?.nama || pindahTo))
       setSiswas(prev => prev.filter(x => x.id !== showPindah.id))
       setShowPindah(null); setPindahTo('')
       fetchData()
-    } catch { toast.error('Gagal memindah siswa') }
+    } catch (err: any) { toast.error(err.response?.data?.error || 'Gagal memindah siswa') }
+    finally { setBusySiswaId(null) }
   }
 
   // Edit data siswa
   const handleEditSiswa = async () => {
     if (!showEditSiswa) return
     if (!editSiswaForm.nama) { toast.error('Nama wajib diisi'); return }
+    setBusySiswaId(showEditSiswa.id)
     try {
       await api.put('/siswa/' + showEditSiswa.id, editSiswaForm)
       toast.success('Data siswa diperbarui')
       setSiswas(prev => prev.map(s => s.id === showEditSiswa.id ? { ...s, ...editSiswaForm } : s))
       setShowEditSiswa(null)
-    } catch { toast.error('Gagal update siswa') }
+    } catch (err: any) { toast.error(err.response?.data?.error || 'Gagal update siswa') }
+    finally { setBusySiswaId(null) }
   }
 
   return (
@@ -253,21 +260,24 @@ export default function RombelPage() {
                 <div className="flex items-center gap-1 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
                   <button
                     onClick={() => { setShowEditSiswa(s); setEditSiswaForm({ nama: s.nama, nis: s.nis || '', nisn: s.nisn || '' }) }}
-                    className="p-1.5 text-blue-500 bg-blue-50 sm:bg-transparent hover:bg-blue-50 rounded-lg"
+                    disabled={busySiswaId === s.id}
+                    className="p-1.5 text-blue-500 bg-blue-50 sm:bg-transparent hover:bg-blue-50 rounded-lg disabled:opacity-50"
                     title="Edit data siswa"
                   >
                     <Pencil size={14} />
                   </button>
                   <button
                     onClick={() => { setShowPindah(s); setPindahTo('') }}
-                    className="p-1.5 text-amber-500 bg-amber-50 sm:bg-transparent hover:bg-amber-50 rounded-lg"
+                    disabled={busySiswaId === s.id}
+                    className="p-1.5 text-amber-500 bg-amber-50 sm:bg-transparent hover:bg-amber-50 rounded-lg disabled:opacity-50"
                     title="Pindah rombel"
                   >
                     <ArrowRightLeft size={14} />
                   </button>
                   <button
                     onClick={() => handleKeluarkan(s)}
-                    className="inline-flex items-center gap-1 px-2 py-1.5 text-red-500 bg-red-50 sm:bg-transparent hover:bg-red-50 rounded-lg text-xs"
+                    disabled={busySiswaId === s.id}
+                    className="inline-flex items-center gap-1 px-2 py-1.5 text-red-500 bg-red-50 sm:bg-transparent hover:bg-red-50 rounded-lg text-xs disabled:opacity-50"
                     title="Keluarkan dari rombel"
                   >
                     <Trash2 size={14} /> <span>Keluarkan</span>
