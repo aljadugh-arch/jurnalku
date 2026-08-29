@@ -70,8 +70,48 @@ test('student partial updates preserve omitted fields and validate rombel within
   assert.match(server, /app\.put\('\/api\/siswa\/:id', ADMIN/)
 })
 
-test('foundation tenant picker has a matching tenant-list route', () => {
-  assert.match(require('fs').readFileSync(require('path').join(__dirname, '..', 'server', 'tenant.cjs'), 'utf8'), /app\.get\('\/api\/foundations\/tenants', authMiddleware/)
+test('foundation picker and cross-tenant lists have matching scoped contracts', () => {
+  const fs = require('fs')
+  const path = require('path')
+  const tenant = fs.readFileSync(path.join(__dirname, '..', 'server', 'tenant.cjs'), 'utf8')
+  const siswaPage = fs.readFileSync(path.join(__dirname, '..', 'src', 'pages', 'admin', 'DataSiswaPage.tsx'), 'utf8')
+  const gtkPage = fs.readFileSync(path.join(__dirname, '..', 'src', 'pages', 'admin', 'DataGTKPage.tsx'), 'utf8')
+  assert.match(tenant, /app\.get\('\/api\/foundations\/tenants', authMiddleware/)
+  assert.match(tenant, /app\.get\('\/api\/foundation\/students', authMiddleware/)
+  assert.match(tenant, /app\.get\('\/api\/foundation\/gtk', authMiddleware/)
+  assert.doesNotMatch(siswaPage, /api\.post\(foundationTenantId \? '\/foundation\/students'/)
+  assert.doesNotMatch(gtkPage, /api\.post\(foundationTenantId \? '\/foundation\/gtk'/)
+  assert.match(siswaPage, /const isLocalTenant = !foundationTenantId/)
+  assert.match(gtkPage, /const isLocalTenant = !foundationTenantId/)
+})
+
+test('admin report actions use the registered report endpoints', () => {
+  const fs = require('fs')
+  const path = require('path')
+  const raporPage = fs.readFileSync(path.join(__dirname, '..', 'src', 'pages', 'admin', 'RaporPage.tsx'), 'utf8')
+  assert.match(server, /app\.post\('\/api\/rapor\/generate', STAFF/)
+  assert.match(server, /app\.post\('\/api\/rapor\/sync-rdm', ADMIN/)
+  assert.match(raporPage, /api\.post\('\/rapor\/generate'/)
+  assert.match(raporPage, /api\.post\('\/rapor\/sync-rdm'/)
+  assert.doesNotMatch(raporPage, /api\.get\('\/rapor\/(generate|sync-rdm)'/)
+})
+
+test('Excel import modal does not expose a fake readonly foundation picker or unused API contract', () => {
+  const fs = require('fs')
+  const path = require('path')
+  const component = fs.readFileSync(path.join(__dirname, '..', 'src', 'components', 'ImportExcel.tsx'), 'utf8')
+  assert.doesNotMatch(component, /apiEndpoint/)
+  assert.doesNotMatch(component, /onSelectTenant=\{\(\) => \{\}\}/)
+})
+
+test('cashless landing links to implemented admin modules instead of showing a placeholder', () => {
+  const fs = require('fs')
+  const path = require('path')
+  const page = fs.readFileSync(path.join(__dirname, '..', 'src', 'pages', 'admin', 'CashlessPage.tsx'), 'utf8')
+  for (const route of ['/admin/cashless-topup', '/admin/cashless-bank-config', '/admin/kantin-menu', '/admin/kantin-orders', '/admin/kantin-scanner']) {
+    assert.match(page, new RegExp(route.replaceAll('/', '\\/')))
+  }
+  assert.doesNotMatch(page, /Fitur Sedang Dikembangkan/)
 })
 
 test('rombel create and update normalize empty wali kelas and validate tenant ownership', () => {

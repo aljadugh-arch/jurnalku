@@ -55,7 +55,7 @@ export default function DataSiswaPage() {
   const [showImport, setShowImport] = useState(false)
   const [uploadingFoto, setUploadingFoto] = useState(false)
   const [foundationTenantId, setFoundationTenantId] = useState<string | null>(null)
-  const [showFoundationPicker, setShowFoundationPicker] = useState(false)
+  const isLocalTenant = !foundationTenantId
 
   // Detail panel
   const [selectedSiswa, setSelectedSiswa] = useState<Siswa | null>(null)
@@ -191,24 +191,29 @@ export default function DataSiswaPage() {
           <p className="text-gray-500 text-sm mt-1">Kelola data peserta didik ({data.length} siswa)</p>
         </div>
         <div className="flex gap-2 flex-wrap">
-          <button onClick={() => setShowImport(true)} className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg text-sm hover:bg-green-700">
+          {isLocalTenant && <button onClick={() => setShowImport(true)} className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg text-sm hover:bg-green-700">
             <Upload size={16} /> Import Excel
-          </button>
+          </button>}
           <button onClick={handleExport} className="flex items-center gap-2 px-4 py-2 bg-gray-600 text-white rounded-lg text-sm hover:bg-gray-700">
             <Download size={16} /> Export
           </button>
-          <button
+          {isLocalTenant && <button
             onClick={() => { setForm(emptyForm); setEditId(null); setShowModal(true) }}
             className="flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-lg text-sm hover:bg-primary-dark"
           >
             <Plus size={16} /> Tambah Siswa
-          </button>
+          </button>}
         </div>
       </div>
       {/* Foundation Tenant Picker (Cross-tenant data) */}
       <FoundationTenantPicker
         selectedTenantId={foundationTenantId}
-        onSelectTenant={setFoundationTenantId}
+        onSelectTenant={(tenantId) => {
+          setFoundationTenantId(tenantId)
+          setSelectedSiswa(null)
+          setShowModal(false)
+          setShowImport(false)
+        }}
         placeholder="Data lokal (lembaga ini)"
         allOptionLabel="Semua lembaga yayasan (gabungan)"
       />
@@ -244,7 +249,7 @@ export default function DataSiswaPage() {
               <div className="relative flex-shrink-0">
                 <SiswaPhoto foto={s.foto} nama={s.nama} />
                 {/* Upload foto overlay */}
-                <label
+                {isLocalTenant && <label
                   className="absolute -bottom-0.5 -right-0.5 w-5 h-5 bg-white border border-gray-200 rounded-full flex items-center justify-center cursor-pointer hover:bg-primary/10"
                   title="Upload foto"
                   onClick={(e) => e.stopPropagation()}
@@ -257,7 +262,7 @@ export default function DataSiswaPage() {
                     onChange={(e) => handleFoto(s.id, e.target.files?.[0])}
                     className="hidden"
                   />
-                </label>
+                </label>}
               </div>
               <div className="min-w-0 flex-1">
                 <p className="font-semibold text-gray-800 text-sm truncate">{s.nama}</p>
@@ -291,18 +296,20 @@ export default function DataSiswaPage() {
               </div>
             </div>
             <div className="flex items-center gap-2">
-              <button
-                onClick={() => handleEdit(selectedSiswa)}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-blue-600 hover:bg-blue-50 rounded-lg border border-blue-200"
-              >
-                <Edit size={14} /> Edit
-              </button>
-              <button
-                onClick={() => handleDelete(selectedSiswa.id, selectedSiswa.nama)}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-red-600 hover:bg-red-50 rounded-lg border border-red-200"
-              >
-                <Trash2 size={14} /> Hapus
-              </button>
+              {isLocalTenant && <>
+                <button
+                  onClick={() => handleEdit(selectedSiswa)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-blue-600 hover:bg-blue-50 rounded-lg border border-blue-200"
+                >
+                  <Edit size={14} /> Edit
+                </button>
+                <button
+                  onClick={() => handleDelete(selectedSiswa.id, selectedSiswa.nama)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-red-600 hover:bg-red-50 rounded-lg border border-red-200"
+                >
+                  <Trash2 size={14} /> Hapus
+                </button>
+              </>}
               <button
                 onClick={() => setSelectedSiswa(null)}
                 className="p-1.5 hover:bg-gray-100 rounded-lg text-gray-400 ml-1"
@@ -338,7 +345,7 @@ export default function DataSiswaPage() {
       )}
 
       {/* Modal Tambah/Edit */}
-      {showModal && (
+      {isLocalTenant && showModal && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto p-6">
             <div className="flex items-center justify-between mb-4">
@@ -424,25 +431,22 @@ export default function DataSiswaPage() {
       )}
 
       {/* Modal Import Excel */}
-      {showImport && (
+      {isLocalTenant && showImport && (
         <ImportExcel
           title="Import Data Siswa"
           templateName="master-siswa-v2.xls"
           headerRow={0}
           columnMap={{ 'Nama': 'nama', 'NAMA': 'nama', 'NIK': 'nik', 'NIS': 'nis', 'NISN': 'nisn', 'JK': 'jenis_kelamin', 'Jenis Kelamin': 'jenis_kelamin', 'Tempat Lahir': 'tempat_lahir', 'Tanggal Lahir': 'tanggal_lahir', 'Alamat': 'alamat', 'No HP': 'no_hp', 'Nama Ortu': 'nama_ortu' }}
-          foundationTenantId={foundationTenantId}
-          apiEndpoint={foundationTenantId ? 'foundation/students' : 'siswa'}
           onImport={async (rows) => {
             for (const row of rows) {
               if (!row.nama) continue
               const jk = (row.jenis_kelamin || 'L').toString().charAt(0).toUpperCase()
-              await api.post(foundationTenantId ? '/foundation/students' : '/siswa', {
+              await api.post('/siswa', {
                 nis: String(row.nis || ''), nisn: String(row.nisn || ''), nama: row.nama,
                 jenis_kelamin: jk, tempat_lahir: row.tempat_lahir || '',
                 nik: String(row.nik || ''), tanggal_lahir: row.tanggal_lahir || '', alamat: row.alamat || '',
                 no_hp: String(row.no_hp || ''), nama_ortu: row.nama_ortu || '',
-                rombel_id: '', status: 'aktif',
-                tenant_id: foundationTenantId && foundationTenantId !== 'all' ? foundationTenantId : undefined
+                rombel_id: '', status: 'aktif'
               })
             }
             fetchData()

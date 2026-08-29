@@ -44,6 +44,7 @@ export default function DataGTKPage() {
   const [selected, setSelected] = useState<GTK | null>(null)
   const [foundationTenantId, setFoundationTenantId] = useState<string | null>(null)
   const fotoRef = useRef<HTMLInputElement>(null)
+  const isLocalTenant = !foundationTenantId
 
   const fetchData = async () => {
     try {
@@ -132,21 +133,26 @@ export default function DataGTKPage() {
           <p className="text-gray-500 text-sm mt-1">Guru dan Tenaga Kependidikan ({data.length} orang)</p>
         </div>
         <div className="flex gap-2 flex-wrap">
-          <button onClick={() => setShowImport(true)} className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg text-sm hover:bg-green-700">
+          {isLocalTenant && <button onClick={() => setShowImport(true)} className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg text-sm hover:bg-green-700">
             <Upload size={16} /> Import
-          </button>
+          </button>}
           <button onClick={handleExport} className="flex items-center gap-2 px-4 py-2 bg-gray-600 text-white rounded-lg text-sm hover:bg-gray-700">
             <Download size={16} /> Export
           </button>
-          <button onClick={() => { setForm(emptyForm); setEditId(null); setShowModal(true) }} className="flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-lg text-sm hover:bg-primary-dark">
+          {isLocalTenant && <button onClick={() => { setForm(emptyForm); setEditId(null); setShowModal(true) }} className="flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-lg text-sm hover:bg-primary-dark">
             <Plus size={16} /> Tambah GTK
-          </button>
+          </button>}
         </div>
       </div>
       {/* Foundation Tenant Picker (Cross-tenant data) */}
       <FoundationTenantPicker
         selectedTenantId={foundationTenantId}
-        onSelectTenant={setFoundationTenantId}
+        onSelectTenant={(tenantId) => {
+          setFoundationTenantId(tenantId)
+          setSelected(null)
+          setShowModal(false)
+          setShowImport(false)
+        }}
         placeholder="Data lokal (lembaga ini)"
         allOptionLabel="Semua lembaga yayasan (gabungan)"
       />
@@ -231,7 +237,7 @@ export default function DataGTKPage() {
             ))}
           </div>
 
-          <div className="px-5 py-4 flex gap-2 flex-wrap border-t border-gray-50">
+          {isLocalTenant && <div className="px-5 py-4 flex gap-2 flex-wrap border-t border-gray-50">
             <button onClick={() => handleEdit(selected)} className="flex items-center gap-1.5 px-3 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700">
               <Edit size={14} /> Edit
             </button>
@@ -242,13 +248,13 @@ export default function DataGTKPage() {
             <button onClick={() => handleDelete(selected.id, selected.nama)} className="flex items-center gap-1.5 px-3 py-2 bg-red-50 text-red-600 rounded-lg text-sm hover:bg-red-100">
               <Trash2 size={14} /> Hapus
             </button>
-          </div>
+          </div>}
           </div>
         </div>
       )}
 
       {/* Modal Tambah/Edit */}
-      {showModal && (
+      {isLocalTenant && showModal && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto p-6">
             <div className="flex items-center justify-between mb-4">
@@ -284,23 +290,20 @@ export default function DataGTKPage() {
       )}
 
       {/* Import Excel */}
-      {showImport && (
+      {isLocalTenant && showImport && (
         <ImportExcel
           title="Import Data GTK"
           templateName="master-gtk-v2.xls"
           headerRow={2}
           columnMap={{ 'NIK': 'nik', 'Kode GTK': 'nip', 'Nama Lengkap': 'nama', 'TGL Lahir': 'tanggal_lahir', 'NIP/NUPTK': 'nuptk', 'No. HP': 'no_hp' }}
-          foundationTenantId={foundationTenantId}
-          apiEndpoint={foundationTenantId ? 'foundation/gtk' : 'gtk'}
           onImport={async (rows) => {
             for (const row of rows) {
-              await api.post(foundationTenantId ? '/foundation/gtk' : '/gtk', { 
-                ...row, 
+              await api.post('/gtk', {
+                ...row,
                 nik: String(row.nik || ''), jenis_kelamin: 'L',
-                jabatan: 'guru', 
-                status_kepegawaian: 'honorer', 
-                status: 'aktif',
-                tenant_id: foundationTenantId && foundationTenantId !== 'all' ? foundationTenantId : undefined
+                jabatan: 'guru',
+                status_kepegawaian: 'honorer',
+                status: 'aktif'
               })
             }
             fetchData()

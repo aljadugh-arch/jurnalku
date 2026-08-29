@@ -1,24 +1,19 @@
 import { useState, useRef } from 'react'
-import { Upload, FileSpreadsheet, X, Download } from 'lucide-react'
+import { Upload, FileSpreadsheet, X } from 'lucide-react'
 import * as XLSX from 'xlsx'
 import toast from 'react-hot-toast'
-import FoundationTenantPicker from './FoundationTenantPicker'
 
 interface ImportExcelProps {
   title: string
-  templateUrl?: string
   templateName?: string
   headerRow: number // 0-indexed row where headers are
   columnMap: Record<string, string> // excel column name -> api field name
   onImport: (data: Record<string, any>[]) => Promise<void>
   onClose: () => void
-  foundationTenantId?: string | null
-  apiEndpoint?: string // default: 'siswa', for cross-tenant: 'foundation/students'
 }
 
-export default function ImportExcel({ title, templateUrl, templateName, headerRow, columnMap, onImport, onClose, foundationTenantId, apiEndpoint = 'siswa' }: ImportExcelProps) {
+export default function ImportExcel({ title, templateName, headerRow, columnMap, onImport, onClose }: ImportExcelProps) {
   const [preview, setPreview] = useState<Record<string, any>[]>([])
-  const [headers, setHeaders] = useState<string[]>([])
   const [loading, setLoading] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
 
@@ -35,8 +30,6 @@ export default function ImportExcel({ title, templateUrl, templateName, headerRo
       if (rows.length <= headerRow) { toast.error('File kosong atau format tidak sesuai'); return }
       
       const hdrs = (rows[headerRow] as string[]).map(h => (h || '').toString().trim())
-      setHeaders(hdrs)
-      
       const mapped: Record<string, any>[] = []
       for (let i = headerRow + 1; i < rows.length; i++) {
         const row = rows[i]
@@ -59,16 +52,7 @@ export default function ImportExcel({ title, templateUrl, templateName, headerRo
     if (preview.length === 0) { toast.error('Tidak ada data untuk diimport'); return }
     setLoading(true)
     try {
-      if (foundationTenantId && foundationTenantId !== 'all') {
-        // For cross-tenant, we need to add tenant_id to each row
-        const dataWithTenant = preview.map(row => ({
-          ...row,
-          tenant_id: foundationTenantId
-        }))
-        await onImport(dataWithTenant)
-      } else {
-        await onImport(preview)
-      }
+      await onImport(preview)
       toast.success(`${preview.length} data berhasil diimport`)
       onClose()
     } catch (err: any) { toast.error(err.message || 'Gagal import') }
@@ -82,15 +66,6 @@ export default function ImportExcel({ title, templateUrl, templateName, headerRo
           <h2 className="text-lg font-bold flex items-center gap-2"><FileSpreadsheet size={20} /> {title}</h2>
           <button onClick={onClose} className="p-1 hover:bg-gray-100 rounded"><X size={20} /></button>
         </div>
-
-        {foundationTenantId !== undefined && (
-          <FoundationTenantPicker
-            selectedTenantId={foundationTenantId}
-            onSelectTenant={() => {}} // readonly in import modal
-            placeholder="Data lokal (lembaga ini)"
-            allOptionLabel="Semua lembaga yayasan (gabungan)"
-          />
-        )}
 
         {templateName && (
           <div className="bg-blue-50 border border-blue-100 rounded-lg p-3 mb-4">
