@@ -3190,7 +3190,7 @@ app.get('/api/pwa/icon/:size', async (req, res) => {
   }
 })
 async function sendTenantIcon(req, res, size = 64) {
-  const s = db.prepare('SELECT pwa_icon,logo FROM settings WHERE tenant_id=? ORDER BY updated_at DESC LIMIT 1').get(req.tenantId) || {}
+  const s = db.prepare('SELECT pwa_icon,logo FROM settings WHERE tenant_id=? ORDER BY updated_at DESC, id DESC LIMIT 1').get(req.tenantId) || {}
   const fallback = path.join(__dirname, '..', 'public', 'logo-jurnalku-256.png')
   try {
     const configured = s.pwa_icon || s.logo || '/logo-jurnalku-256.png'

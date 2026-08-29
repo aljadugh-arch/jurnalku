@@ -40,6 +40,7 @@ test('database is only updated when the target tenant record exists', () => {
 test('favicon is a real tenant image and broken student or branding images have fallbacks', () => {
   assert.match(server, /app\.get\('\/favicon\.ico'/)
   assert.match(server, /sendTenantIcon/)
+  assert.match(server, /ORDER BY updated_at DESC, id DESC LIMIT 1/)
   assert.match(siswa, /onError/)
   assert.match(settings, /onError/)
   assert.match(sidebar, /onError/)
