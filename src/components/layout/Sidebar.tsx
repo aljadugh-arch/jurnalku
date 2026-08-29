@@ -217,10 +217,7 @@ export default function Sidebar() {
         {/* Logo */}
         <div className="flex items-center gap-3 px-4 py-4 border-b border-white/10">
           <div className="w-9 h-9 bg-white rounded-lg flex items-center justify-center overflow-hidden flex-shrink-0">
-            {settings.logo
-              ? <img src={settings.logo} alt="Logo" className="w-full h-full object-contain" />
-              : <img src="/logo-jurnalku-256.png" alt="Logo" className="w-full h-full object-contain" />
-            }
+            <img src={(settings.logo as string) || '/logo-jurnalku-256.png'} onError={e => { e.currentTarget.src = '/logo-jurnalku-256.png' }} alt="Logo" className="w-full h-full object-contain" />
           </div>
           {isOpen && (
             <div className="min-w-0">

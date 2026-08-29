@@ -233,7 +233,7 @@ export default function SettingsPage() {
           <div>
             <label className="block text-sm font-medium text-gray-600 mb-1">Logo Lembaga</label>
             <div className="flex items-start gap-4">
-              <img src={logo || '/logo-jurnalku-256.png'} alt="Logo" className="w-16 h-16 rounded-lg object-contain border bg-gray-50 shrink-0" />
+              <img src={logo || '/logo-jurnalku-256.png'} onError={e => { e.currentTarget.src = '/logo-jurnalku-256.png' }} alt="Logo" className="w-16 h-16 rounded-lg object-contain border bg-gray-50 shrink-0" />
               <div className="flex flex-col gap-2 min-w-0">
                 <label className="inline-flex items-center gap-2 px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-600 hover:bg-gray-50 cursor-pointer transition w-fit">
                   <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>

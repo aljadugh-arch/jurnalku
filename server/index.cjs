@@ -71,7 +71,16 @@ app.use(cors({
 }))
 
 app.use(express.json({ limit: '2mb', verify: (req, _res, buf) => { req.rawBody = Buffer.from(buf) } }))
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')))
+const UPLOAD_DIR = path.resolve(process.env.MEDIA_ROOT || path.join(__dirname, 'uploads'))
+fs.mkdirSync(UPLOAD_DIR, { recursive: true })
+app.use('/uploads', express.static(UPLOAD_DIR, {
+  immutable: true,
+  maxAge: '1y',
+  fallthrough: true,
+  setHeaders: res => res.setHeader('X-Content-Type-Options', 'nosniff')
+}))
+// Missing media must stay a real 404; never serve SPA HTML as an image.
+app.use('/uploads', (_req, res) => res.status(404).type('text/plain').send('Media not found'))
 app.use(express.static(path.join(__dirname, '..', 'dist')))
 
 // Rate limiter: strict on auth (brute-force), lenient global
@@ -91,13 +100,29 @@ const apiLimiter = rateLimit({
 })
 app.use('/api/', apiLimiter)
 
-// Multer for file uploads
+// Generic uploads are retained for documents. User-visible images use the
+// stricter imageUpload so database URLs always point at safe image files.
 const storage = multer.diskStorage({
-  destination: (req, file, cb) => cb(null, path.join(__dirname, 'uploads')),
-  filename: (req, file, cb) => cb(null, `${Date.now()}-${file.originalname}`)
+  destination: (_req, _file, cb) => cb(null, UPLOAD_DIR),
+  filename: (_req, file, cb) => {
+    const ext = path.extname(file.originalname || '').toLowerCase().slice(0, 10)
+    cb(null, `${Date.now()}-${crypto.randomBytes(16).toString('hex')}${ext}`)
+  }
 })
-const upload = multer({ storage })
-const UPLOAD_DIR = path.join(__dirname, 'uploads')
+const upload = multer({ storage, limits: { fileSize: 10 * 1024 * 1024, files: 1 } })
+const imageStorage = multer.diskStorage({
+  destination: (_req, _file, cb) => cb(null, UPLOAD_DIR),
+  filename: (req, file, cb) => {
+    const ext = { 'image/png': '.png', 'image/jpeg': '.jpg', 'image/webp': '.webp' }[file.mimetype]
+    const tenant = String(req.tenantId || 'unknown').replace(/[^a-z0-9_-]/gi, '_')
+    cb(null, `media-${tenant}-${Date.now()}-${crypto.randomBytes(16).toString('hex')}${ext}`)
+  }
+})
+const imageUpload = multer({
+  storage: imageStorage,
+  limits: { fileSize: 5 * 1024 * 1024, files: 1 },
+  fileFilter: (_req, file, cb) => cb(null, /^image\/(png|jpeg|webp)$/.test(file.mimetype))
+})
 const SIGNATURE_DIR = path.join(UPLOAD_DIR, 'signatures')
 fs.mkdirSync(SIGNATURE_DIR, { recursive: true })
 const ktsStorage = multer.diskStorage({
@@ -1880,7 +1905,7 @@ app.put('/api/auth/profile', authMiddleware, (req, res) => {
 })
 
 // Upload own avatar
-app.post('/api/auth/avatar', authMiddleware, upload.single('avatar'), (req, res) => {
+app.post('/api/auth/avatar', authMiddleware, imageUpload.single('avatar'), (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'No file' })
   const avatarPath = `/uploads/${req.file.filename}`
   db.prepare('UPDATE users SET avatar = ? WHERE id = ?').run(avatarPath, req.user.id)
@@ -2119,7 +2144,7 @@ app.put('/api/settings', ADMIN, (req, res) => {
   res.json({ success: true })
 })
 
-app.post('/api/settings/logo', ADMIN, upload.single('logo'), (req, res) => {
+app.post('/api/settings/logo', ADMIN, imageUpload.single('logo'), (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'No file' })
   const logoPath = `/uploads/${req.file.filename}`
   const id = 'main_' + req.tenantId
@@ -2183,7 +2208,7 @@ app.put('/api/settings/jam-absensi', ADMIN, (req, res) => {
   const saved = db.prepare('SELECT * FROM settings WHERE id=?').get(id)
   res.json({ success: true, settings: saved })
 })
-app.post('/api/settings/background', ADMIN, upload.single('background'), (req, res) => {
+app.post('/api/settings/background', ADMIN, imageUpload.single('background'), (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'No file' })
   const bgPath = `/uploads/${req.file.filename}`
   const id = 'main_' + req.tenantId
@@ -2455,17 +2480,25 @@ app.delete('/api/gtk/:id', ADMIN, (req, res) => {
   }
 })
 
-app.post('/api/siswa/:id/foto', ADMIN, upload.single('foto'), (req, res) => {
+app.post('/api/siswa/:id/foto', ADMIN, imageUpload.single('foto'), (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'No file' })
   const foto = '/uploads/' + req.file.filename
-  db.prepare('UPDATE siswa SET foto=? WHERE id=? AND tenant_id=?').run(foto, req.params.id, req.tenantId)
+  const changes = db.prepare('UPDATE siswa SET foto=? WHERE id=? AND tenant_id=?').run(foto, req.params.id, req.tenantId).changes
+  if (!changes) {
+    fs.rmSync(req.file.path, { force: true })
+    return res.status(404).json({ error: 'Siswa tidak ditemukan' })
+  }
   res.json({ foto })
 })
 
-app.post('/api/gtk/:id/foto', ADMIN, upload.single('foto'), (req, res) => {
+app.post('/api/gtk/:id/foto', ADMIN, imageUpload.single('foto'), (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'No file' })
   const foto = '/uploads/' + req.file.filename
-  db.prepare('UPDATE gtk SET foto=? WHERE id=? AND tenant_id=?').run(foto, req.params.id, req.tenantId)
+  const changes = db.prepare('UPDATE gtk SET foto=? WHERE id=? AND tenant_id=?').run(foto, req.params.id, req.tenantId).changes
+  if (!changes) {
+    fs.rmSync(req.file.path, { force: true })
+    return res.status(404).json({ error: 'GTK tidak ditemukan' })
+  }
   res.json({ foto })
 })
 
@@ -3156,6 +3189,25 @@ app.get('/api/pwa/icon/:size', async (req, res) => {
     res.status(500).json({ error: 'Ikon PWA gagal diproses' })
   }
 })
+async function sendTenantIcon(req, res, size = 64) {
+  const s = db.prepare('SELECT pwa_icon,logo FROM settings WHERE tenant_id=? ORDER BY updated_at DESC LIMIT 1').get(req.tenantId) || {}
+  const fallback = path.join(__dirname, '..', 'public', 'logo-jurnalku-256.png')
+  try {
+    const configured = s.pwa_icon || s.logo || '/logo-jurnalku-256.png'
+    const relative = decodeURIComponent(String(configured).split('?')[0]).replace(/^\/+/, '')
+    const source = relative.startsWith('uploads/')
+      ? path.join(UPLOAD_DIR, path.basename(relative))
+      : path.join(__dirname, '..', 'public', path.basename(relative))
+    const image = await sharp(fs.existsSync(source) ? source : fallback).resize(size, size, { fit: 'contain', background: { r: 255, g: 255, b: 255, alpha: 0 } }).png().toBuffer()
+    res.type('image/png').set({ 'Cache-Control': 'no-cache, must-revalidate', 'X-Content-Type-Options': 'nosniff' }).send(image)
+  } catch (error) {
+    console.error('[Tenant icon]', error.message)
+    res.sendFile(fallback)
+  }
+}
+app.get('/favicon.ico', (req, res) => sendTenantIcon(req, res, 64))
+app.get('/apple-touch-icon.png', (req, res) => sendTenantIcon(req, res, 192))
+
 app.put('/api/settings/pwa', ADMIN, (req, res) => {
   const id = 'main_' + req.tenantId
   db.prepare(`INSERT INTO settings (id,tenant_id,updated_at) VALUES (?,?,datetime('now')) ON CONFLICT(id) DO NOTHING`).run(id, req.tenantId)

@@ -37,6 +37,13 @@ function getInitials(nama: string): string {
     .join('')
 }
 
+function SiswaPhoto({ foto, nama, size = 'w-12 h-12' }: { foto?: string; nama: string; size?: string }) {
+  const [failed, setFailed] = useState(false)
+  useEffect(() => setFailed(false), [foto])
+  if (foto && !failed) return <img src={encodeURI(foto)} alt={nama} onError={() => setFailed(true)} className={`${size} rounded-full object-cover border border-gray-200`} />
+  return <div className={`${size} rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold text-sm`}>{getInitials(nama)}</div>
+}
+
 export default function DataSiswaPage() {
   const [data, setData] = useState<Siswa[]>([])
   const [search, setSearch] = useState('')
@@ -221,13 +228,7 @@ export default function DataSiswaPage() {
             {/* Avatar + nama */}
             <div className="flex items-center gap-3">
               <div className="relative flex-shrink-0">
-                {s.foto ? (
-                  <img src={s.foto} alt={s.nama} className="w-12 h-12 rounded-full object-cover border border-gray-200" />
-                ) : (
-                  <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold text-sm">
-                    {getInitials(s.nama)}
-                  </div>
-                )}
+                <SiswaPhoto foto={s.foto} nama={s.nama} />
                 {/* Upload foto overlay */}
                 <label
                   className="absolute -bottom-0.5 -right-0.5 w-5 h-5 bg-white border border-gray-200 rounded-full flex items-center justify-center cursor-pointer hover:bg-primary/10"
@@ -269,13 +270,7 @@ export default function DataSiswaPage() {
           {/* Panel header */}
           <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
             <div className="flex items-center gap-3">
-              {selectedSiswa.foto ? (
-                <img src={selectedSiswa.foto} alt={selectedSiswa.nama} className="w-11 h-11 rounded-full object-cover border border-gray-200" />
-              ) : (
-                <div className="w-11 h-11 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold">
-                  {getInitials(selectedSiswa.nama)}
-                </div>
-              )}
+              <SiswaPhoto foto={selectedSiswa.foto} nama={selectedSiswa.nama} size="w-11 h-11" />
               <div>
                 <h2 className="font-bold text-gray-800">{selectedSiswa.nama}</h2>
                 <p className="text-xs text-gray-500">{selectedSiswa.nis || 'NIS belum diisi'}</p>

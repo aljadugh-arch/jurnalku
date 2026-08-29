@@ -17,6 +17,11 @@ async function configurePwa() {
     const response = await fetch('/api/pwa/manifest')
     if (!response.ok) {
       linkEl.removeAttribute('href')
+      // PWA may be disabled, but favicon remains tenant-scoped and server-backed.
+      const favicons = document.querySelectorAll('link[rel="icon"], link[rel="shortcut icon"]')
+      favicons.forEach(el => { el.setAttribute('href', `/favicon.ico?v=${Date.now()}`) })
+      const appleIcon = document.querySelector('link[rel="apple-touch-icon"]')
+      if (appleIcon) appleIcon.setAttribute('href', `/apple-touch-icon.png?v=${Date.now()}`)
       if ('serviceWorker' in navigator) {
         const registrations = await navigator.serviceWorker.getRegistrations()
         await Promise.all(registrations.map(registration => registration.unregister()))
