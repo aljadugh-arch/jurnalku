@@ -116,8 +116,8 @@ function setupTenantTables(db) {
  */
 function tenantMiddleware(db) {
   return (req, res, next) => {
-    // Skip for static files
-    if (!req.path.startsWith('/api')) return next()
+    // Tenant icons are dynamic too; resolve their host just like API routes.
+    if (!req.path.startsWith('/api') && !['/favicon.ico', '/apple-touch-icon.png'].includes(req.path)) return next()
 
     const host = (req.headers.host || '').split(':')[0].toLowerCase()
 
@@ -133,7 +133,7 @@ function tenantMiddleware(db) {
     }
 
     // 2. Check custom domain mapping
-    if (!tenant && host !== BASE_DOMAIN && host !== 'localhost') {
+    if (!tenant && host !== 'localhost') {
       tenant = db.prepare("SELECT * FROM tenants WHERE lower(trim(domain_custom, '.')) = ? AND aktif = 1").get(host.replace(/\.$/, ''))
     }
 

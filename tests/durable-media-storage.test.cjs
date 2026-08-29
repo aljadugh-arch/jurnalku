@@ -5,6 +5,7 @@ const path = require('node:path')
 
 const read = file => fs.readFileSync(path.join(__dirname, '..', file), 'utf8')
 const server = read('server/index.cjs')
+const tenant = read('server/tenant.cjs')
 const siswa = read('src/pages/admin/DataSiswaPage.tsx')
 const settings = read('src/pages/admin/SettingsPage.tsx')
 const sidebar = read('src/components/layout/Sidebar.tsx')
@@ -44,6 +45,8 @@ test('favicon is a real tenant image and broken student or branding images have 
   assert.match(siswa, /onError/)
   assert.match(settings, /onError/)
   assert.match(sidebar, /onError/)
+  assert.match(tenant, /\['\/favicon\.ico', '\/apple-touch-icon\.png'\]/)
+  assert.doesNotMatch(tenant, /host !== BASE_DOMAIN && host !== 'localhost'/)
 })
 
 test('media responses disable MIME sniffing and cache successful immutable uploads', () => {
