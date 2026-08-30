@@ -14,8 +14,10 @@ function greetingByHour() {
 }
 
 function nowMinutes() {
-  const d = new Date()
-  return d.getHours() * 60 + d.getMinutes()
+  // Jadwal disimpan dalam waktu lokal sekolah (WIB), jadi "sekarang" juga harus WIB.
+  const wib = new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Jakarta', hour: '2-digit', minute: '2-digit', hour12: false }).format(new Date())
+  const [h, m] = wib.split(':').map(Number)
+  return (Number.isFinite(h) ? h : 0) * 60 + (Number.isFinite(m) ? m : 0)
 }
 
 function toMinutes(t: string) {
@@ -84,6 +86,11 @@ export default function GuruDashboard() {
     const s = toMinutes(j.jam_mulai)
     const e = toMinutes(j.jam_selesai)
     return s >= 0 && e >= 0 && cur >= s && cur <= e
+  }
+  // Jadwal yang jam selesainya sudah lewat: tidak bisa "Masuk" lagi, tampil "Selesai".
+  const isFinished = (j: any) => {
+    const e = toMinutes(j.jam_selesai)
+    return e >= 0 && cur > e
   }
 
   const tanggal = new Date().toLocaleDateString('id-ID', { timeZone: 'Asia/Jakarta', weekday: 'long', day: 'numeric', month: 'long' })
@@ -201,12 +208,23 @@ export default function GuruDashboard() {
                   <div className="flex items-center gap-2">
                     <p className="font-semibold text-gray-800 truncate">{j.mapel_nama}</p>
                     {active && <Badge tone="blue">Sekarang</Badge>}
+                    {!active && isFinished(j) && <Badge tone="gray">Berakhir</Badge>}
                   </div>
                   <p className="text-sm text-gray-500 truncate flex items-center gap-1">
                     <Clock size={12} /> {j.rombel_nama} • {j.ruangan || '-'}
                   </p>
                 </div>
-                {!data.sesi_kelas_aktif && (
+                {data.sesi_kelas_aktif?.jadwal_id === j.id ? (
+                  <span
+                    role="button"
+                    tabIndex={0}
+                    onClick={event => { event.stopPropagation(); finishClass() }}
+                    onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); event.stopPropagation(); finishClass() } }}
+                    className="shrink-0 rounded-lg bg-red-600 px-2.5 py-1.5 text-xs font-bold text-white"
+                  >Selesai Kelas</span>
+                ) : isFinished(j) ? (
+                  <span className="shrink-0 rounded-lg bg-gray-100 px-2.5 py-1.5 text-xs font-bold text-gray-500">Selesai</span>
+                ) : !data.sesi_kelas_aktif && !isFinished(j) ? (
                   <span
                     role="button"
                     tabIndex={0}
@@ -214,7 +232,7 @@ export default function GuruDashboard() {
                     onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); event.stopPropagation(); enterClass(j) } }}
                     className="shrink-0 rounded-lg bg-emerald-600 px-2.5 py-1.5 text-xs font-bold text-white"
                   >Masuk</span>
-                )}
+                ) : null}
                 <ChevronRight size={18} className="text-gray-400 shrink-0" />
               </button>
             )
