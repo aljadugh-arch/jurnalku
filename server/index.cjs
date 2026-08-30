@@ -3272,8 +3272,14 @@ app.post('/api/guru/ceklok', STAFF, (req, res) => {
     statusMasuk = 'terlambat' // lewat batas jam masuk: tetap boleh, ditandai terlambat
   }
   if (type === 'pulang' && tcfg.ceklok_pulang_mulai && tcfg.ceklok_pulang_selesai) {
-    if (now < tcfg.ceklok_pulang_mulai || now > tcfg.ceklok_pulang_selesai)
-      return res.status(400).json({ error: `Di luar jam ceklok pulang (${tcfg.ceklok_pulang_mulai}–${tcfg.ceklok_pulang_selesai})` })
+    // Guru yang jadwal mengajarnya sudah berakhir boleh ceklok pulang lebih awal:
+    // batas bawah window = min(ceklok_pulang_mulai global, jam_selesai jadwal terakhir hari ini).
+    const dayName = require('./attendance-rules.cjs').hariJakarta()
+    const lastEnd = db.prepare(`SELECT MAX(jam_selesai) AS last_end FROM jadwal WHERE gtk_id=? AND tenant_id=? AND lower(hari)=? AND jam_selesai != ''`)
+      .get(gtk.id, req.tenantId, dayName)?.last_end || null
+    const pulangMulai = lastEnd && lastEnd < tcfg.ceklok_pulang_mulai ? lastEnd : tcfg.ceklok_pulang_mulai
+    if (now < pulangMulai || now > tcfg.ceklok_pulang_selesai)
+      return res.status(400).json({ error: `Di luar jam ceklok pulang (${pulangMulai}–${tcfg.ceklok_pulang_selesai})` })
   }
   const exists = db.prepare('SELECT * FROM absensi_guru WHERE gtk_id = ? AND tanggal = ? AND tenant_id = ?').get(gtk.id, today, req.tenantId)
   if (type === 'masuk') {
@@ -5001,7 +5007,9 @@ for (const [name, definition] of [
   ['link_url', 'TEXT DEFAULT \'\''],
   ['lokasi', 'TEXT DEFAULT \'\''],
   ['sticker', 'TEXT DEFAULT \'\''],
-  ['emoticon', 'TEXT DEFAULT \'\'']
+  ['emoticon', 'TEXT DEFAULT \'\''],
+  ['author_user_id', 'TEXT DEFAULT \'\''],
+  ['konten', 'TEXT DEFAULT \'\'']
 ]) if (!db.prepare('PRAGMA table_info(posting)').all().some(c => c.name === name)) db.exec(`ALTER TABLE posting ADD COLUMN ${name} ${definition}`)
 
 app.get('/api/notifications', authMiddleware, (req, res) => {
