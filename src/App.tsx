@@ -1,4 +1,4 @@
-import { useEffect, type ReactNode } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { Toaster } from 'react-hot-toast'
 import { useAuthStore } from './stores/authStore'
@@ -79,6 +79,7 @@ import CashlessBankConfigPage from './pages/admin/CashlessBankConfigPage'
 import KantinScannerPage from './pages/admin/KantinScannerPage'
 import DeveloperApiPage from './pages/admin/DeveloperApiPage'
 import PwaInstallPrompt from './components/PwaInstallPrompt'
+import api from './services/api'
 
 function AdminIndexRoute() {
   const { user } = useAuthStore()
@@ -98,6 +99,20 @@ function ProtectedRoute({ children, allowedRoles }: { children: ReactNode, allow
   return <>{children}</>
 }
 
+function RootRoute() {
+  const { isAuthenticated, user } = useAuthStore()
+  const [registeredHost, setRegisteredHost] = useState<boolean | null>(null)
+  useEffect(() => {
+    api.get('/tenant/info').then(({ data }) => setRegisteredHost(Boolean(data.registered_host))).catch(() => setRegisteredHost(false))
+  }, [])
+  if (registeredHost === null) return null
+  if (!registeredHost) return <LandingPage />
+  if (!isAuthenticated) return <Navigate to="/login" replace />
+  const role = user?.role || ''
+  const destination = ['admin', 'super_admin', 'kepala', 'bendahara', 'operator', 'tata_usaha', 'tu'].includes(role) ? '/admin' : ['guru', 'wali_kelas'].includes(role) ? '/guru' : '/siswa'
+  return <Navigate to={destination} replace />
+}
+
 export default function App() {
   const { checkAuth, isAuthenticated } = useAuthStore()
   const { loadSettings } = useSettingsStore()
@@ -111,7 +126,7 @@ export default function App() {
       <Toaster position="top-right" />
       <PwaInstallPrompt />
       <Routes>
-        <Route path="/" element={<LandingPage />} />
+        <Route path="/" element={<RootRoute />} />
         <Route path="/login" element={<LoginPage />} />
         <Route path="/register" element={<RegisterPage />} />
         <Route path="/forgot-password" element={<ForgotPasswordPage />} />

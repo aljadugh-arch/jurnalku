@@ -15,12 +15,13 @@ const { v4: uuidv4 } = require('uuid')
 const multer = require('multer')
 const { execSync } = require('child_process')
 const { setupTenantTables, tenantMiddleware, registerTenantRoutes } = require('./tenant.cjs')
+const { normalizeHolidayDays } = require('./holiday-rules.cjs')
 const { parseGuruHariRules, guruBolehMengajar } = require('./jadwal-rules.cjs')
 const { intervalTumpangTindih } = require('./jadwal-time-rules.cjs')
 const { bulkAssignGuru } = require('./jadwal-guru-repair.cjs')
 const { detectJadwalConflicts } = require('./jadwal-conflicts.cjs')
 const { importJadwalRows } = require('./jadwal-import.cjs')
-const { setupPortalCashless, registerPortalRoutes, registerKantinRoutes, selectPenilaianStudentId } = require('./portal-cashless.cjs')
+const { setupPortalCashless, registerPortalRoutes, registerKantinRoutes, selectPenilaianStudentId, normalizeStoredImageDataUrl } = require('./portal-cashless.cjs')
 const waQueue = require('./wa-queue.cjs')
 const { isDriveFolderUrl } = require('./library-config.cjs')
 const { getLateDashboard } = require('./dashboard-late.cjs')
@@ -151,30 +152,61 @@ const compressedImageFilename = (prefix, tenantId) => `${prefix}-${String(tenant
 const writeCompressedImage = async (buffer, directory, filename, options) => {
   const output = await compressImageBuffer(buffer, options)
   const destination = path.join(directory, filename)
-  await fs.promises.writeFile(destination, output, { flag: 'wx' })
-  return { destination, size: output.length }
+  try {
+    await fs.promises.writeFile(destination, output, { flag: 'wx' })
+    return { destination, size: output.length }
+  } catch (error) {
+    await fs.promises.rm(destination, { force: true }).catch(() => {})
+    throw error
+  }
 }
 const compressUploadedImages = (fields = [], prefix = 'media') => async (req, _res, next) => {
+  const savedPaths = []
   try {
     const files = req.files ? Object.values(req.files).flat() : req.file ? [req.file] : []
     for (const file of files) {
       if (fields.length && !fields.includes(file.fieldname)) continue
       const filename = compressedImageFilename(prefix, req.tenantId)
       const saved = await writeCompressedImage(file.buffer, UPLOAD_DIR, filename)
+      savedPaths.push(saved.destination)
       Object.assign(file, { filename, path: saved.destination, size: saved.size, mimetype: 'image/webp' })
       delete file.buffer
     }
     next()
-  } catch (error) { next(error) }
+  } catch (error) {
+    await Promise.all(savedPaths.map(file => fs.promises.rm(file, { force: true }).catch(() => {})))
+    next(error)
+  }
 }
-const compressDiskUploadIfImage = async (file, tenantId) => {
-  if (!file?.path || !String(file.mimetype || '').startsWith('image/')) return file
-  const buffer = await fs.promises.readFile(file.path)
-  const filename = compressedImageFilename('post', tenantId)
-  const saved = await writeCompressedImage(buffer, UPLOAD_DIR, filename)
-  await fs.promises.rm(file.path, { force: true })
-  Object.assign(file, { filename, path: saved.destination, size: saved.size, mimetype: 'image/webp' })
+const postingUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024, files: 1 }
+})
+const savePostingUpload = async (file, tenantId) => {
+  if (!file?.buffer?.length) throw Error('File wajib diunggah')
+  if (String(file.mimetype || '').startsWith('image/')) {
+    if (!/^image\/(png|jpeg|webp)$/.test(file.mimetype)) throw Error('Gambar posting harus PNG, JPG, atau WEBP')
+    const filename = compressedImageFilename('post', tenantId)
+    const saved = await writeCompressedImage(file.buffer, UPLOAD_DIR, filename)
+    Object.assign(file, { filename, path: saved.destination, size: saved.size, mimetype: 'image/webp' })
+  } else {
+    const ext = path.extname(file.originalname || '').toLowerCase().slice(0, 10)
+    const filename = `${Date.now()}-${crypto.randomBytes(16).toString('hex')}${ext}`
+    const destination = path.join(UPLOAD_DIR, filename)
+    await fs.promises.writeFile(destination, file.buffer, { flag: 'wx' })
+    Object.assign(file, { filename, path: destination })
+  }
+  delete file.buffer
   return file
+}
+
+const removeManagedUpload = (url) => {
+  if (!url || typeof url !== 'string' || !url.startsWith('/uploads/')) return
+  const relative = url.slice('/uploads/'.length).split(/[?#]/)[0]
+  if (!relative || relative.includes('..')) return
+  const target = path.resolve(UPLOAD_DIR, relative)
+  const inside = path.relative(UPLOAD_DIR, target)
+  if (!inside.startsWith('..') && !path.isAbsolute(inside)) fs.rmSync(target, { force: true })
 }
 
 // Database setup
@@ -1942,7 +1974,10 @@ app.put('/api/auth/profile', authMiddleware, (req, res) => {
 app.post('/api/auth/avatar', authMiddleware, imageUpload.single('avatar'), compressUploadedImages(['avatar']), (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'No file' })
   const avatarPath = `/uploads/${req.file.filename}`
-  db.prepare('UPDATE users SET avatar = ? WHERE id = ?').run(avatarPath, req.user.id)
+  const current = db.prepare('SELECT avatar FROM users WHERE id = ?').get(req.user.id)
+  try { db.prepare('UPDATE users SET avatar = ? WHERE id = ?').run(avatarPath, req.user.id) }
+  catch (error) { removeManagedUpload(avatarPath); throw error }
+  removeManagedUpload(current?.avatar)
   res.json({ avatar: avatarPath })
 })
 
@@ -2184,10 +2219,12 @@ app.post('/api/settings/logo', ADMIN, imageUpload.single('logo'), compressUpload
   const id = 'main_' + req.tenantId
   const current = db.prepare('SELECT logo, pwa_icon FROM settings WHERE id=? AND tenant_id=?').get(id, req.tenantId) || {}
   const pwaIcon = (!current.pwa_icon || current.pwa_icon === current.logo) ? logoPath : current.pwa_icon
-  db.prepare(`INSERT INTO settings (id, tenant_id, logo, pwa_icon, updated_at) VALUES (?,?,?,?,datetime('now'))
+  try { db.prepare(`INSERT INTO settings (id, tenant_id, logo, pwa_icon, updated_at) VALUES (?,?,?,?,datetime('now'))
     ON CONFLICT(id) DO UPDATE SET logo=excluded.logo,
       pwa_icon=CASE WHEN settings.pwa_icon IS NULL OR settings.pwa_icon='' OR settings.pwa_icon=settings.logo THEN excluded.logo ELSE settings.pwa_icon END,
-      updated_at=datetime('now')`).run(id, req.tenantId, logoPath, pwaIcon)
+      updated_at=datetime('now')`).run(id, req.tenantId, logoPath, pwaIcon) }
+  catch (error) { removeManagedUpload(logoPath); throw error }
+  removeManagedUpload(current.logo)
   res.json({ logo: logoPath })
 })
 
@@ -2204,13 +2241,18 @@ app.post('/api/settings/kts-template', ADMIN, ktsUpload.fields([
   const files = req.files || {}
   if (!files.depan?.[0] && !files.belakang?.[0]) return res.status(400).json({ error: 'Pilih gambar depan atau belakang' })
   const id = 'main_' + req.tenantId
-  db.prepare(`INSERT INTO settings (id, tenant_id, updated_at) VALUES (?,?,datetime('now')) ON CONFLICT(id) DO NOTHING`).run(id, req.tenantId)
+  try { db.prepare(`INSERT INTO settings (id, tenant_id, updated_at) VALUES (?,?,datetime('now')) ON CONFLICT(id) DO NOTHING`).run(id, req.tenantId) }
+  catch (error) {
+    for (const list of Object.values(files)) for (const file of list) removeManagedUpload('/uploads/' + file.filename)
+    throw error
+  }
   const current = db.prepare('SELECT kts_depan, kts_belakang FROM settings WHERE id=?').get(id) || {}
   const saved = {}
   for (const side of ['depan', 'belakang']) {
     if (!files[side]?.[0]) continue
     const url = '/uploads/' + files[side][0].filename
-    db.prepare(`UPDATE settings SET kts_${side}=?, updated_at=datetime('now') WHERE id=?`).run(url, id)
+    try { db.prepare(`UPDATE settings SET kts_${side}=?, updated_at=datetime('now') WHERE id=?`).run(url, id) }
+    catch (error) { removeManagedUpload(url); throw error }
     removeTenantUpload(current['kts_' + side])
     saved['kts_' + side] = url
   }
@@ -2246,15 +2288,20 @@ app.post('/api/settings/background', ADMIN, imageUpload.single('background'), co
   if (!req.file) return res.status(400).json({ error: 'No file' })
   const bgPath = `/uploads/${req.file.filename}`
   const id = 'main_' + req.tenantId
-  db.prepare(`INSERT INTO settings (id, tenant_id, background, updated_at) VALUES (?,?,?,datetime('now'))
-    ON CONFLICT(id) DO UPDATE SET background=excluded.background, updated_at=datetime('now')`).run(id, req.tenantId, bgPath)
+  const current = db.prepare('SELECT background FROM settings WHERE id=? AND tenant_id=?').get(id, req.tenantId)
+  try { db.prepare(`INSERT INTO settings (id, tenant_id, background, updated_at) VALUES (?,?,?,datetime('now'))
+    ON CONFLICT(id) DO UPDATE SET background=excluded.background, updated_at=datetime('now')`).run(id, req.tenantId, bgPath) }
+  catch (error) { removeManagedUpload(bgPath); throw error }
+  removeManagedUpload(current?.background)
   res.json({ background: bgPath })
 })
 
 app.delete('/api/settings/background', ADMIN, (req, res) => {
   const id = 'main_' + req.tenantId
+  const current = db.prepare('SELECT background FROM settings WHERE id=? AND tenant_id=?').get(id, req.tenantId)
   db.prepare(`INSERT INTO settings (id, tenant_id, background, updated_at) VALUES (?,?,'',datetime('now'))
     ON CONFLICT(id) DO UPDATE SET background='', updated_at=datetime('now')`).run(id, req.tenantId)
+  removeManagedUpload(current?.background)
   res.json({ success: true })
 })
 
@@ -2559,22 +2606,30 @@ app.delete('/api/gtk/:id', ADMIN, (req, res) => {
 app.post('/api/siswa/:id/foto', ADMIN, imageUpload.single('foto'), compressUploadedImages(['foto']), (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'No file' })
   const foto = '/uploads/' + req.file.filename
-  const changes = db.prepare('UPDATE siswa SET foto=? WHERE id=? AND tenant_id=?').run(foto, req.params.id, req.tenantId).changes
+  const current = db.prepare('SELECT foto FROM siswa WHERE id=? AND tenant_id=?').get(req.params.id, req.tenantId)
+  let changes
+  try { changes = db.prepare('UPDATE siswa SET foto=? WHERE id=? AND tenant_id=?').run(foto, req.params.id, req.tenantId).changes }
+  catch (error) { removeManagedUpload(foto); throw error }
   if (!changes) {
     fs.rmSync(req.file.path, { force: true })
     return res.status(404).json({ error: 'Siswa tidak ditemukan' })
   }
+  removeManagedUpload(current?.foto)
   res.json({ foto })
 })
 
 app.post('/api/gtk/:id/foto', ADMIN, imageUpload.single('foto'), compressUploadedImages(['foto']), (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'No file' })
   const foto = '/uploads/' + req.file.filename
-  const changes = db.prepare('UPDATE gtk SET foto=? WHERE id=? AND tenant_id=?').run(foto, req.params.id, req.tenantId).changes
+  const current = db.prepare('SELECT foto FROM gtk WHERE id=? AND tenant_id=?').get(req.params.id, req.tenantId)
+  let changes
+  try { changes = db.prepare('UPDATE gtk SET foto=? WHERE id=? AND tenant_id=?').run(foto, req.params.id, req.tenantId).changes }
+  catch (error) { removeManagedUpload(foto); throw error }
   if (!changes) {
     fs.rmSync(req.file.path, { force: true })
     return res.status(404).json({ error: 'GTK tidak ditemukan' })
   }
+  removeManagedUpload(current?.foto)
   res.json({ foto })
 })
 
@@ -2870,6 +2925,13 @@ app.post('/api/absensi-kegiatan/bulk', STAFF, (req, res) => {
 
 // ==================== GURU DASHBOARD ====================
 
+// Hari libur tenant (settings.hari_libur + kalender_kbm jenis 'libur') menekan jadwal mengajar.
+function tenantIsHoliday(tenantId, tanggal) {
+  const settings = db.prepare('SELECT hari_libur FROM settings WHERE tenant_id=?').get(tenantId)
+  const events = db.prepare("SELECT jenis FROM kalender_kbm WHERE tenant_id=? AND tanggal=?").all(tenantId, tanggal)
+  return isHoliday({ date: tanggal, holidayDays: settings?.hari_libur || [], calendarEvents: events })
+}
+
 function pengajarAsJadwal(gtkId, tenantId) {
   return db.prepare(`SELECT p.id, p.mapel_id, p.rombel_id, p.gtk_id, '' as hari, '' as jam_mulai, '' as jam_selesai, '' as ruangan,
     m.nama as mapel_nama, m.kode as mapel_kode, r.nama as rombel_nama, g.nama as guru_nama
@@ -2911,13 +2973,14 @@ app.get('/api/guru/dashboard', authMiddleware, (req, res) => {
 
   const today = require('./attendance-rules.cjs').hariJakarta()
   const todayDate = todayJakarta()
-  const jadwal = db.prepare(`SELECT j.*, m.nama as mapel_nama, r.nama as rombel_nama FROM jadwal j JOIN mapel m ON j.mapel_id=m.id AND m.tenant_id=j.tenant_id LEFT JOIN rombel r ON j.rombel_id=r.id AND r.tenant_id=j.tenant_id WHERE j.gtk_id=? AND lower(j.hari)=? AND j.tenant_id=? AND j.jenis_kegiatan = 'mapel' ORDER BY j.jam_mulai`).all(gtkId, today, req.tenantId)
+  const holidayToday = tenantIsHoliday(req.tenantId, todayDate)
+  const jadwal = holidayToday ? [] : db.prepare(`SELECT j.*, m.nama as mapel_nama, r.nama as rombel_nama FROM jadwal j JOIN mapel m ON j.mapel_id=m.id AND m.tenant_id=j.tenant_id LEFT JOIN rombel r ON j.rombel_id=r.id AND r.tenant_id=j.tenant_id WHERE j.gtk_id=? AND lower(j.hari)=? AND j.tenant_id=? AND j.jenis_kegiatan = 'mapel' ORDER BY j.jam_mulai`).all(gtkId, today, req.tenantId)
 
   const totalJurnal = db.prepare("SELECT COUNT(*) as c FROM jurnal_mengajar WHERE guru_id=? AND tenant_id=?").get(gtkId, req.tenantId).c
   const rombelCount = db.prepare("SELECT COUNT(DISTINCT rombel_id) as c FROM pengajar WHERE gtk_id=? AND tenant_id=?").get(gtkId, req.tenantId).c
-  const absensiHariIni = db.prepare(`SELECT COUNT(DISTINCT a.siswa_id) c FROM absensi_siswa a WHERE a.tenant_id=? AND a.tanggal=? AND a.rombel_id IN (SELECT DISTINCT rombel_id FROM jadwal WHERE gtk_id=? AND tenant_id=? AND lower(hari)=? AND jenis_kegiatan='mapel')`).get(req.tenantId, todayDate, gtkId, req.tenantId, today).c
-  const catatanCount = db.prepare(`SELECT COUNT(*) c FROM catatan_kepribadian c JOIN siswa s ON s.id=c.siswa_id AND s.tenant_id=c.tenant_id WHERE c.tenant_id=? AND s.rombel_id IN (SELECT DISTINCT rombel_id FROM jadwal WHERE gtk_id=? AND tenant_id=? AND lower(hari)=? AND jenis_kegiatan='mapel')`).get(req.tenantId, gtkId, req.tenantId, today).c
-  const siswaRombelCount = db.prepare(`SELECT COUNT(*) c FROM siswa s WHERE s.tenant_id=? AND COALESCE(s.status,'aktif')='aktif' AND s.rombel_id IN (SELECT DISTINCT rombel_id FROM jadwal WHERE gtk_id=? AND tenant_id=? AND lower(hari)=? AND jenis_kegiatan='mapel')`).get(req.tenantId, gtkId, req.tenantId, today).c
+  const absensiHariIni = holidayToday ? 0 : db.prepare(`SELECT COUNT(DISTINCT a.siswa_id) c FROM absensi_siswa a WHERE a.tenant_id=? AND a.tanggal=? AND a.rombel_id IN (SELECT DISTINCT rombel_id FROM jadwal WHERE gtk_id=? AND tenant_id=? AND lower(hari)=? AND jenis_kegiatan='mapel')`).get(req.tenantId, todayDate, gtkId, req.tenantId, today).c
+  const catatanCount = holidayToday ? 0 : db.prepare(`SELECT COUNT(*) c FROM catatan_kepribadian c JOIN siswa s ON s.id=c.siswa_id AND s.tenant_id=c.tenant_id WHERE c.tenant_id=? AND s.rombel_id IN (SELECT DISTINCT rombel_id FROM jadwal WHERE gtk_id=? AND tenant_id=? AND lower(hari)=? AND jenis_kegiatan='mapel')`).get(req.tenantId, gtkId, req.tenantId, today).c
+  const siswaRombelCount = holidayToday ? 0 : db.prepare(`SELECT COUNT(*) c FROM siswa s WHERE s.tenant_id=? AND COALESCE(s.status,'aktif')='aktif' AND s.rombel_id IN (SELECT DISTINCT rombel_id FROM jadwal WHERE gtk_id=? AND tenant_id=? AND lower(hari)=? AND jenis_kegiatan='mapel')`).get(req.tenantId, gtkId, req.tenantId, today).c
   const waliRombel = db.prepare(`SELECT r.*, (SELECT COUNT(*) FROM siswa s WHERE s.rombel_id=r.id AND s.tenant_id=?) as jumlah_siswa FROM rombel r WHERE r.wali_kelas_id=? AND r.tenant_id=? ORDER BY r.tingkat, r.nama`).all(req.tenantId, gtkId, req.tenantId)
   const mapelDiampu = db.prepare(`SELECT DISTINCT m.id, m.nama, m.kode, m.kelompok FROM pengajar p JOIN mapel m ON m.id=p.mapel_id AND m.tenant_id=p.tenant_id WHERE p.gtk_id=? AND p.tenant_id=? ORDER BY m.kelompok, m.nama`).all(gtkId, req.tenantId)
   const ekskulDiampu = db.prepare('SELECT id,nama,hari,jam_mulai,jam_selesai FROM ekskul WHERE pembina_id=? AND tenant_id=? ORDER BY nama').all(gtkId, req.tenantId)
@@ -2935,7 +2998,7 @@ app.get('/api/guru/dashboard', authMiddleware, (req, res) => {
       .run(sesiKelasAktif.jam_selesai, sesiKelasAktif.id, req.tenantId)
   }
   const sesiAktifSekarang = sesiKelasAktif && timeJakarta() <= sesiKelasAktif.jam_selesai ? sesiKelasAktif : null
-  res.json({ jadwal_hari_ini: jadwal, sesi_kelas_aktif: sesiAktifSekarang, mapel_diampu: mapelDiampu, ekskul_diampu: ekskulDiampu, tugas, rekap_jurnal: { total: totalJurnal }, absensi_hari_ini: absensiHariIni, catatan_count: catatanCount, siswa_rombel_count: siswaRombelCount, nilai_siswa_count: siswaRombelCount, rombel_count: rombelCount, wali_rombel: waliRombel, gtk: { ...gtk, nama_tampilan: honorificTeacherName(gtk.nama, gtk.jenis_kelamin) } })
+  res.json({ jadwal_hari_ini: jadwal, hari_libur: holidayToday, sesi_kelas_aktif: sesiAktifSekarang, mapel_diampu: mapelDiampu, ekskul_diampu: ekskulDiampu, tugas, rekap_jurnal: { total: totalJurnal }, absensi_hari_ini: absensiHariIni, catatan_count: catatanCount, siswa_rombel_count: siswaRombelCount, nilai_siswa_count: siswaRombelCount, rombel_count: rombelCount, wali_rombel: waliRombel, gtk: { ...gtk, nama_tampilan: honorificTeacherName(gtk.nama, gtk.jenis_kelamin) } })
 })
 
 function clockToMinutes(value) {
@@ -2959,6 +3022,7 @@ app.post('/api/guru/sesi-kelas/masuk', TEACHER, (req, res) => {
   const jadwalId = String(req.body?.jadwal_id || '').trim()
   if (!jadwalId) return res.status(400).json({ error: 'Jadwal wajib dipilih' })
   const today = todayJakarta()
+  if (tenantIsHoliday(req.tenantId, today)) return res.status(400).json({ error: 'Hari ini hari libur, tidak ada sesi kelas' })
   const day = require('./attendance-rules.cjs').hariJakarta()
   const jadwal = db.prepare(`SELECT jadwal.* FROM jadwal WHERE jadwal.id=? AND jadwal.gtk_id=? AND jadwal.tenant_id=? AND lower(jadwal.hari)=? AND jadwal.jenis_kegiatan='mapel'`)
     .get(jadwalId, gtk.id, req.tenantId, day)
@@ -3024,6 +3088,9 @@ app.get('/api/guru/jadwal-context', authMiddleware, (req, res) => {
   const requested = typeof req.query.tanggal === 'string' ? req.query.tanggal : ''
   const tanggal = /^\d{4}-\d{2}-\d{2}$/.test(requested) ? requested : todayJakarta()
   const day = HARI_ID[new Date(`${tanggal}T12:00:00+07:00`).getUTCDay()]
+  if (tenantIsHoliday(req.tenantId, tanggal)) {
+    return res.json({ gtk: { ...gtk, nama_tampilan: honorificTeacherName(gtk.nama, gtk.jenis_kelamin) }, tanggal, hari_libur: true, jadwal: [], siswa: [] })
+  }
   const jadwal = db.prepare(`SELECT DISTINCT j.id AS jadwal_id,j.mapel_id,j.rombel_id,j.hari,j.jam_mulai,j.jam_selesai,j.ruangan,m.nama AS mapel_nama,m.kode AS mapel_kode,r.nama AS rombel_nama
     FROM jadwal j JOIN mapel m ON m.id=j.mapel_id AND m.tenant_id=j.tenant_id LEFT JOIN rombel r ON r.id=j.rombel_id AND r.tenant_id=j.tenant_id
     WHERE j.gtk_id=? AND j.tenant_id=? AND lower(j.hari)=? AND j.jenis_kegiatan='mapel' ORDER BY j.jam_mulai`).all(gtk.id, req.tenantId, day)
@@ -4681,15 +4748,17 @@ app.get('/api/absensi-guru', authMiddleware, (req, res) => {
   res.json(db.prepare(sql).all(...params))
 })
 
-app.post('/api/absensi-guru', STAFF, (req, res) => {
+app.post('/api/absensi-guru', STAFF, async (req, res) => {
   const { gtk_id, tanggal, status, waktu_masuk, waktu_pulang, latitude, longitude, foto_selfie, keterangan } = req.body
+  let normalizedSelfie = null
+  try { normalizedSelfie = await normalizeStoredImageDataUrl(foto_selfie, 'foto selfie') } catch (e) { return res.status(400).json({ error: e.message }) }
   const id = uuidv4()
   const exists = db.prepare('SELECT id FROM absensi_guru WHERE gtk_id = ? AND tanggal = ? AND tenant_id = ?').get(gtk_id, tanggal, req.tenantId)
   if (exists) {
-    db.prepare('UPDATE absensi_guru SET status=?, waktu_masuk=?, waktu_pulang=?, latitude=?, longitude=?, foto_selfie=?, keterangan=? WHERE id=? AND tenant_id=?').run(status, waktu_masuk||null, waktu_pulang||null, latitude||null, longitude||null, foto_selfie||null, keterangan||'', exists.id, req.tenantId)
+    db.prepare('UPDATE absensi_guru SET status=?, waktu_masuk=?, waktu_pulang=?, latitude=?, longitude=?, foto_selfie=?, keterangan=? WHERE id=? AND tenant_id=?').run(status, waktu_masuk||null, waktu_pulang||null, latitude||null, longitude||null, normalizedSelfie||null, keterangan||'', exists.id, req.tenantId)
     return res.json({ id: exists.id, updated: true })
   }
-  db.prepare('INSERT INTO absensi_guru (id, gtk_id, tanggal, status, waktu_masuk, waktu_pulang, latitude, longitude, foto_selfie, tenant_id) VALUES (?,?,?,?,?,?,?,?,?,?)').run(id, gtk_id, tanggal, status, waktu_masuk||null, waktu_pulang||null, latitude||null, longitude||null, foto_selfie||null, req.tenantId)
+  db.prepare('INSERT INTO absensi_guru (id, gtk_id, tanggal, status, waktu_masuk, waktu_pulang, latitude, longitude, foto_selfie, tenant_id) VALUES (?,?,?,?,?,?,?,?,?,?)').run(id, gtk_id, tanggal, status, waktu_masuk||null, waktu_pulang||null, latitude||null, longitude||null, normalizedSelfie||null, req.tenantId)
   res.json({ id })
 })
 
@@ -4732,6 +4801,9 @@ app.get('/api/jurnal/jadwal-hari-ini', authMiddleware, (req, res) => {
   const hari = validTanggal
     ? HARI_ID[new Date(`${tgl}T12:00:00+07:00`).getUTCDay()]
     : require('./attendance-rules.cjs').hariJakarta()
+  if (tenantIsHoliday(req.tenantId, tgl)) {
+    return res.json({ gtk_id: gtk.id, tanggal: tgl, hari, hari_libur: true, jadwal: [] })
+  }
   const rows = db.prepare(`SELECT j.id as jadwal_id, j.mapel_id, j.rombel_id, j.jam_mulai, j.jam_selesai, j.ruangan,
     m.nama as mapel_nama, m.kode as mapel_kode, r.nama as rombel_nama
     FROM jadwal j
@@ -4858,17 +4930,18 @@ app.post('/api/jurnal', STAFF, signatureUpload.single('signature'), async (req, 
   if (!['draft', 'submitted'].includes(status)) return res.status(400).json({ error: 'Status jurnal tidak valid' })
   if (signature_type && !['drawn', 'upload'].includes(signature_type)) return res.status(400).json({ error: 'Metode tanda tangan tidak valid' })
   if (!signature_type) return res.status(400).json({ error: 'Tanda tangan wajib diisi' })
+  const discardSignatureUpload = () => { if (req.file?.buffer) delete req.file.buffer }
   const gtk = db.prepare('SELECT id FROM gtk WHERE id = ? AND tenant_id = ?').get(guru_id, req.tenantId)
   const mapel = db.prepare('SELECT id FROM mapel WHERE id = ? AND tenant_id = ?').get(mapel_id, req.tenantId)
   const rombel = db.prepare('SELECT id FROM rombel WHERE id = ? AND tenant_id = ?').get(rombel_id, req.tenantId)
-  if (!gtk || !mapel || !rombel) return res.status(400).json({ error: 'GTK, mapel, atau rombel tidak valid untuk lembaga ini' })
+  if (!gtk || !mapel || !rombel) { discardSignatureUpload(); return res.status(400).json({ error: 'GTK, mapel, atau rombel tidak valid untuk lembaga ini' }) }
   if (teacher) {
     const assigned = db.prepare(`SELECT 1 FROM jadwal WHERE gtk_id=? AND mapel_id=? AND rombel_id=? AND tenant_id=? AND jenis_kegiatan='mapel'
       UNION SELECT 1 FROM pengajar WHERE gtk_id=? AND mapel_id=? AND rombel_id=? AND tenant_id=?`).get(
       guru_id, mapel_id, rombel_id, req.tenantId,
       guru_id, mapel_id, rombel_id, req.tenantId
     )
-    if (!assigned) return res.status(403).json({ error: 'Jadwal/rombel tidak sesuai dengan penugasan guru' })
+    if (!assigned) { discardSignatureUpload(); return res.status(403).json({ error: 'Jadwal/rombel tidak sesuai dengan penugasan guru' }) }
   }
   let signature_path = null
   try {
@@ -4876,7 +4949,8 @@ app.post('/api/jurnal', STAFF, signatureUpload.single('signature'), async (req, 
     if (signature_type === 'upload') signature_path = await saveUploadedSignature(req.file, req.tenantId)
   } catch (error) { return next(error) }
   if (!signature_path) return res.status(400).json({ error: 'Tanda tangan tidak valid atau gagal disimpan' })
-  db.prepare('INSERT INTO jurnal_mengajar (id, guru_id, mapel_id, rombel_id, tanggal, jam_ke, materi, kegiatan, catatan, status, signature_type, signature_path, tenant_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)').run(id, guru_id, mapel_id, rombel_id, tanggal, jam_ke||1, materi||'', kegiatan||'', catatan||'', status, signature_type || null, signature_path, req.tenantId)
+  try { db.prepare('INSERT INTO jurnal_mengajar (id, guru_id, mapel_id, rombel_id, tanggal, jam_ke, materi, kegiatan, catatan, status, signature_type, signature_path, tenant_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)').run(id, guru_id, mapel_id, rombel_id, tanggal, jam_ke||1, materi||'', kegiatan||'', catatan||'', status, signature_type || null, signature_path, req.tenantId) }
+  catch (error) { removeManagedUpload(signature_path); return next(error) }
   res.json({ id })
 })
 
@@ -4952,36 +5026,43 @@ app.get('/api/posting', authMiddleware, (req, res) => {
 app.post('/api/posting', STAFF, (req, res) => {
   const { judul, isi, kategori, media, activity_type, location_lat, location_lng, location_name, poll_data, tags } = req.body
   if (!judul?.trim() || !isi?.trim()) return res.status(400).json({ error: 'Judul dan isi wajib diisi.' })
+  const safeMedia = Array.isArray(media) ? media.filter(item => item && typeof item === 'object' && typeof item.media_url === 'string' && item.media_url.startsWith('/uploads/')) : []
   const id = uuidv4()
   db.prepare(`INSERT INTO posting (id, tenant_id, author_user_id, konten, judul, isi, kategori, penulis_id, penulis_nama, media, activity_type, location_lat, location_lng, location_name, poll_data, tags) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
-    .run(id, req.tenantId, req.user.id, isi.trim(), judul.trim(), isi.trim(), kategori || 'berita', req.user.id, req.user.nama || req.user.username || '', JSON.stringify(media || []), activity_type || '', location_lat || null, location_lng || null, location_name || '', JSON.stringify(poll_data || []), JSON.stringify(tags || []))
+    .run(id, req.tenantId, req.user.id, isi.trim(), judul.trim(), isi.trim(), kategori || 'berita', req.user.id, req.user.nama || req.user.username || '', JSON.stringify(safeMedia), activity_type || '', location_lat || null, location_lng || null, location_name || '', JSON.stringify(poll_data || []), JSON.stringify(tags || []))
   res.json({ id })
 })
 
-app.post('/api/posting/upload', STAFF, upload.single('file'), async (req, res, next) => {
+app.post('/api/posting/upload', STAFF, postingUpload.single('file'), async (req, res, next) => {
   if (!req.file) return res.status(400).json({ error: 'File wajib diunggah' })
-  try { await compressDiskUploadIfImage(req.file, req.tenantId) } catch (error) { return next(error) }
+  try { await savePostingUpload(req.file, req.tenantId) } catch (error) { return next(error) }
   const mime = req.file.mimetype || ''
   const mediaType = mime.startsWith('image/') ? 'image' : mime.startsWith('video/') ? 'video' : mime.startsWith('audio/') ? 'audio' : 'file'
   res.json({ media_url: '/uploads/' + req.file.filename, media_type: mediaType, filename: req.file.originalname })
 })
 
 app.delete('/api/posting/:id', STAFF, (req, res) => {
-  const row = db.prepare('SELECT penulis_id FROM posting WHERE id=? AND tenant_id=?').get(req.params.id, req.tenantId)
+  const row = db.prepare('SELECT penulis_id, media FROM posting WHERE id=? AND tenant_id=?').get(req.params.id, req.tenantId)
   if (!row) return res.status(404).json({ error: 'Posting tidak ditemukan.' })
   if (!['admin','super_admin'].includes(req.user.role) && row.penulis_id !== req.user.id) return res.status(403).json({ error: 'Tidak boleh menghapus posting pengguna lain.' })
   db.prepare('DELETE FROM posting WHERE id=? AND tenant_id=?').run(req.params.id, req.tenantId)
+  try { for (const item of JSON.parse(row.media || '[]')) removeManagedUpload(item?.media_url) } catch {}
   res.json({ success: true })
 })
 
 app.put('/api/posting/:id', STAFF, (req, res) => {
-  const row = db.prepare('SELECT penulis_id FROM posting WHERE id=? AND tenant_id=?').get(req.params.id, req.tenantId)
+  const row = db.prepare('SELECT penulis_id, media FROM posting WHERE id=? AND tenant_id=?').get(req.params.id, req.tenantId)
   if (!row) return res.status(404).json({ error: 'Posting tidak ditemukan.' })
   if (!['admin','super_admin'].includes(req.user.role) && row.penulis_id !== req.user.id) return res.status(403).json({ error: 'Tidak boleh mengedit posting pengguna lain.' })
   const { judul, isi, kategori, media, activity_type, location_lat, location_lng, location_name, poll_data, tags } = req.body
   if (!judul?.trim() || !isi?.trim()) return res.status(400).json({ error: 'Judul dan isi wajib diisi.' })
+  const safeMedia = Array.isArray(media) ? media.filter(item => item && typeof item === 'object' && typeof item.media_url === 'string' && item.media_url.startsWith('/uploads/')) : []
   db.prepare(`UPDATE posting SET judul=?, isi=?, konten=?, kategori=?, media=?, activity_type=?, location_lat=?, location_lng=?, location_name=?, poll_data=?, tags=? WHERE id=? AND tenant_id=?`)
-    .run(judul.trim(), isi.trim(), isi.trim(), kategori || 'berita', JSON.stringify(media || []), activity_type || '', location_lat || null, location_lng || null, location_name || '', JSON.stringify(poll_data || []), JSON.stringify(tags || []), req.params.id, req.tenantId)
+    .run(judul.trim(), isi.trim(), isi.trim(), kategori || 'berita', JSON.stringify(safeMedia), activity_type || '', location_lat || null, location_lng || null, location_name || '', JSON.stringify(poll_data || []), JSON.stringify(tags || []), req.params.id, req.tenantId)
+  try {
+    const retained = new Set(safeMedia.map(item => item.media_url))
+    for (const item of JSON.parse(row.media || '[]')) if (!retained.has(item?.media_url)) removeManagedUpload(item?.media_url)
+  } catch {}
   res.json({ success: true })
 })
 
@@ -5527,7 +5608,6 @@ registerTenantRoutes(app, db, authMiddleware, uuidv4, requireRole('super_admin')
 app.use((req, res, next) => {
   if (req.path.startsWith('/api')) return res.status(404).json({ error: 'Not found' })
   if (req.method !== 'GET') return next()
-  if (req.path === '/' && req.isRegisteredTenantHost) return res.redirect(302, '/login')
   res.sendFile(path.join(__dirname, '..', 'dist', 'index.html'))
 })
 

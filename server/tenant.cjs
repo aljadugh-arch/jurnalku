@@ -133,8 +133,10 @@ function tenantMiddleware(db) {
       }
     }
 
-    // 2. Check custom domain mapping
-    if (!tenant && host !== 'localhost') {
+    // 2. Check custom domain mapping. Canonical platform hosts are reserved
+    // even if bad legacy data accidentally maps one as a custom domain.
+    const canonicalHost = host === BASE_DOMAIN || host === `www.${BASE_DOMAIN}`
+    if (!tenant && !canonicalHost && host !== 'localhost') {
       tenant = db.prepare("SELECT * FROM tenants WHERE lower(trim(domain_custom, '.')) = ? AND aktif = 1").get(host.replace(/\.$/, ''))
     }
 
@@ -273,23 +275,13 @@ function registerTenantRoutes(app, db, authMiddleware, uuidv4, SUPER) {
     }
   })
 
-  // Get tenant info (for current tenant - public)
+  // Get only public fields from the tenant already resolved by tenantMiddleware.
   app.get('/api/tenant/info', (req, res) => {
-    const host = (req.headers.host || '').split(':')[0].toLowerCase()
-    let tenant = null
-
-    if (host.endsWith('.' + BASE_DOMAIN)) {
-      const slug = host.replace('.' + BASE_DOMAIN, '')
-      tenant = db.prepare('SELECT slug, nama, logo, plan FROM tenants WHERE slug = ? AND aktif = 1').get(slug)
-    }
-    if (!tenant && host !== BASE_DOMAIN) {
-      tenant = db.prepare('SELECT slug, nama, logo, plan FROM tenants WHERE domain_custom = ? AND aktif = 1').get(host)
-    }
-    if (!tenant) {
-      tenant = db.prepare('SELECT slug, nama, logo, plan FROM tenants WHERE id = ?').get('default')
-    }
-
-    res.json(tenant || { slug: 'default', nama: 'JURNALKU', logo: null, plan: 'free' })
+    const resolved = req.tenant || db.prepare('SELECT slug, nama, logo, plan FROM tenants WHERE id = ?').get('default')
+    const tenant = resolved
+      ? { slug: resolved.slug, nama: resolved.nama, logo: resolved.logo || null, plan: resolved.plan || 'free' }
+      : { slug: 'default', nama: 'JURNALKU', logo: null, plan: 'free' }
+    res.json({ ...tenant, registered_host: Boolean(req.isRegisteredTenantHost) })
   })
 
   // ==================== FOUNDATION ROUTES (Cross-tenant sharing) ====================

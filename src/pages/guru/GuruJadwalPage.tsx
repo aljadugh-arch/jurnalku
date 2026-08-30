@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { Calendar } from 'lucide-react'
 import api from '../../services/api'
 
-const hariList = ['Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu']
+const hariList = ['Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu', 'Minggu']
 const sameHari = (a?: string, b?: string) => String(a || '').toLocaleLowerCase('id-ID') === String(b || '').toLocaleLowerCase('id-ID')
 
 export default function GuruJadwalPage() {

@@ -1,4 +1,5 @@
 const crypto = require('node:crypto')
+const { compressImageBuffer } = require('./image-media.cjs')
 
 function setupPortalCashless(db) {
   db.exec(`CREATE TABLE IF NOT EXISTS user_students(tenant_id TEXT NOT NULL,user_id TEXT NOT NULL,student_id TEXT NOT NULL,PRIMARY KEY(tenant_id,user_id,student_id));
@@ -63,22 +64,28 @@ function processWebhook(db, { tenantId, provider, payload, signature, secret }) 
 }
 
 const opaqueQr = () => crypto.randomBytes(32).toString('base64url')
-const MAX_QRIS_DATA_URL = 1_500_000
-const normalizeStoredImageDataUrl = (value, label = 'gambar') => {
+const MAX_IMAGE_INPUT_BYTES = 5 * 1024 * 1024
+async function normalizeStoredImageDataUrl(value, label = 'gambar') {
   const text = String(value || '')
   if (!text) return ''
-  if (!/^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/.test(text)) throw Error(`Harus berupa ${label} PNG, JPG, atau WEBP`)
-  if (text.length > MAX_QRIS_DATA_URL) throw Error(`Ukuran ${label} maksimal 1,5 MB`)
-  return text
+  const match = /^data:image\/(png|jpeg|webp);base64,([A-Za-z0-9+/=]+)$/.exec(text)
+  if (!match) throw Error(`Harus berupa ${label} PNG, JPG, atau WEBP`)
+  const buffer = Buffer.from(match[2], 'base64')
+  if (!buffer.length || buffer.length > MAX_IMAGE_INPUT_BYTES) throw Error(`Ukuran ${label} maksimal 5 MB`)
+  try {
+    const output = await compressImageBuffer(buffer)
+    return `data:image/webp;base64,${output.toString('base64')}`
+  } catch {
+    throw Error(`${label} tidak valid atau gagal diproses`)
+  }
 }
-const normalizeStaticQrisConfig = input => {
-  const image = value => normalizeStoredImageDataUrl(value, 'gambar QRIS')
-  const shopee_qris = image(input?.shopee_qris)
-  const gopay_qris = image(input?.gopay_qris)
+const normalizeStaticQrisConfig = async input => {
+  const shopee_qris = await normalizeStoredImageDataUrl(input?.shopee_qris, 'gambar QRIS')
+  const gopay_qris = await normalizeStoredImageDataUrl(input?.gopay_qris, 'gambar QRIS')
   return { enabled: input?.enabled !== false, shopee_qris, gopay_qris, providers: [shopee_qris && 'shopee', gopay_qris && 'gopay'].filter(Boolean) }
 }
-const normalizeBankTransferConfig = input => {
-  const qris = normalizeStaticQrisConfig(input)
+const normalizeBankTransferConfig = async input => {
+  const qris = await normalizeStaticQrisConfig(input)
   const va_prefix = String(input?.va_prefix || '').trim().toUpperCase()
   const bank_code = String(input?.bank_code || '').trim()
   const admin_fee = Number(input?.admin_fee ?? 0)
@@ -94,7 +101,7 @@ const normalizeBankTransferConfig = input => {
     gopay_qris: qris.gopay_qris
   }
 }
-const validateStaticQrisSubmission = input => {
+const validateStaticQrisSubmission = async input => {
   const provider = String(input?.provider || '').toLowerCase()
   if (!['shopee', 'gopay'].includes(provider)) throw Error('Metode QRIS harus ShopeePay atau GoPay')
   const amount = Number(input?.amount)
@@ -105,10 +112,9 @@ const validateStaticQrisSubmission = input => {
   if (!Number.isSafeInteger(transfer_amount) || transfer_amount !== amount + Number(unique_code)) throw Error('Nominal transfer tidak sesuai dengan nominal top-up dan kode unik')
   const atas_nama = String(input?.atas_nama || '').trim()
   const no_rek_dari = String(input?.no_rek_dari || '').trim()
-  const bukti_transfer = String(input?.bukti_transfer || '')
   if (!atas_nama || !no_rek_dari) throw Error('Nama dan identitas pengirim wajib diisi')
-  if (!/^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/.test(bukti_transfer)) throw Error('Bukti transfer berupa gambar wajib diunggah')
-  if (bukti_transfer.length > MAX_QRIS_DATA_URL) throw Error('Ukuran bukti transfer maksimal 1,5 MB')
+  if (!input?.bukti_transfer) throw Error('Bukti transfer berupa gambar wajib diunggah')
+  const bukti_transfer = await normalizeStoredImageDataUrl(input.bukti_transfer, 'bukti transfer')
   return { provider, amount, unique_code, transfer_amount, atas_nama, no_rek_dari, bank_dari: provider === 'shopee' ? 'ShopeePay' : 'GoPay', bukti_transfer }
 }
 const assertStaticQrisSubmissionAvailable = (db, tenantId, declaration) => {
@@ -268,13 +274,13 @@ function registerKantinRoutes(app, db, { requireRole, uuid, bcrypt }) {
     res.json(db.prepare(sql).all(...params))
   })
 
-  app.post('/api/kantin/menu', kadmin, (req, res) => {
+  app.post('/api/kantin/menu', kadmin, async (req, res) => {
     const { kategori, nama, deskripsi, harga, stok, foto, aktif, urut } = req.body
     if (!kategori || !nama || !Number.isInteger(harga) || harga <= 0) {
       return res.status(400).json({ error: 'kategori, nama, harga (integer > 0) wajib' })
     }
     let fotoValue
-    try { fotoValue = normalizeStoredImageDataUrl(foto) } catch (e) { return res.status(400).json({ error: e.message }) }
+    try { fotoValue = await normalizeStoredImageDataUrl(foto) } catch (e) { return res.status(400).json({ error: e.message }) }
     const id = uuid()
     db.prepare('INSERT INTO kantin_menu (id, tenant_id, kategori, nama, deskripsi, harga, stok, foto, aktif, urut) VALUES (?,?,?,?,?,?,?,?,?,?)')
       .run(id, req.tenantId, kategori, nama, deskripsi || '', harga, stok || 0, fotoValue || null, aktif ? 1 : 0, urut || 0)
@@ -282,13 +288,13 @@ function registerKantinRoutes(app, db, { requireRole, uuid, bcrypt }) {
   })
 
   // Batch create menu items (bulk add / spreadsheet paste / CSV import)
-  app.post('/api/kantin/menu/batch', kadmin, (req, res) => {
+  app.post('/api/kantin/menu/batch', kadmin, async (req, res) => {
     const items = Array.isArray(req.body?.items) ? req.body.items : null
     if (!items || !items.length) return res.status(400).json({ error: 'items (array non-kosong) wajib' })
     if (items.length > 1000) return res.status(400).json({ error: 'maksimal 1000 item per batch' })
 
     const errors = []
-    const clean = items.map((it, i) => {
+    const clean = await Promise.all(items.map(async (it, i) => {
       const row = i + 1
       const kategori = String(it.kategori ?? '').trim()
       const nama = String(it.nama ?? '').trim()
@@ -299,8 +305,10 @@ function registerKantinRoutes(app, db, { requireRole, uuid, bcrypt }) {
       const stok = Number.isInteger(Number(it.stok)) && Number(it.stok) >= 0 ? Number(it.stok) : 0
       const urut = Number.isInteger(Number(it.urut)) ? Number(it.urut) : 0
       const aktif = (it.aktif === undefined || it.aktif === null) ? 1 : (it.aktif ? 1 : 0)
-      return { kategori, nama, deskripsi: String(it.deskripsi ?? '').trim(), harga, stok, foto: it.foto || null, aktif, urut }
-    })
+      let foto = null
+      try { foto = await normalizeStoredImageDataUrl(it.foto, `gambar menu baris ${row}`) } catch (e) { errors.push(`Baris ${row}: ${e.message}`) }
+      return { kategori, nama, deskripsi: String(it.deskripsi ?? '').trim(), harga, stok, foto: foto || null, aktif, urut }
+    }))
     if (errors.length) return res.status(400).json({ error: 'Validasi gagal', details: errors.slice(0, 50) })
 
     const stmt = db.prepare('INSERT INTO kantin_menu (id, tenant_id, kategori, nama, deskripsi, harga, stok, foto, aktif, urut) VALUES (?,?,?,?,?,?,?,?,?,?)')
@@ -317,13 +325,13 @@ function registerKantinRoutes(app, db, { requireRole, uuid, bcrypt }) {
     res.json({ inserted: ids.length, ids })
   })
 
-  app.put('/api/kantin/menu/:id', kadmin, (req, res) => {
+  app.put('/api/kantin/menu/:id', kadmin, async (req, res) => {
     const { kategori, nama, deskripsi, harga, stok, foto, aktif, urut } = req.body
     if (!kategori || !nama || !Number.isInteger(harga) || harga <= 0) {
       return res.status(400).json({ error: 'kategori, nama, harga (integer > 0) wajib' })
     }
     let fotoValue
-    try { fotoValue = normalizeStoredImageDataUrl(foto) } catch (e) { return res.status(400).json({ error: e.message }) }
+    try { fotoValue = await normalizeStoredImageDataUrl(foto) } catch (e) { return res.status(400).json({ error: e.message }) }
     db.prepare('UPDATE kantin_menu SET kategori=?, nama=?, deskripsi=?, harga=?, stok=?, foto=?, aktif=?, urut=? WHERE id=? AND tenant_id=?')
       .run(kategori, nama, deskripsi || '', harga, stok || 0, fotoValue || null, aktif ? 1 : 0, urut || 0, req.params.id, req.tenantId)
     res.json({ success: true })
@@ -416,19 +424,19 @@ function registerKantinRoutes(app, db, { requireRole, uuid, bcrypt }) {
     const cfg = db.prepare('SELECT * FROM cashless_provider_config WHERE tenant_id = ? AND provider = ?').get(req.tenantId, 'bank_transfer')
     if (!cfg) return res.json({ enabled: 0, config: { va_prefix: '', bank_code: '', admin_fee: 0, manual_verify: true } })
     const config = JSON.parse(cfg.config_json || '{}')
-    res.json({ enabled: cfg.enabled, config: { ...config, shopee_qris: config.shopee_qris || '', gopay_qris: config.gopay_qris || '', providers: normalizeStaticQrisConfig(config).providers } })
+    res.json({ enabled: cfg.enabled, config: { ...config, shopee_qris: config.shopee_qris || '', gopay_qris: config.gopay_qris || '', providers: [config.shopee_qris && 'shopee', config.gopay_qris && 'gopay'].filter(Boolean) } })
   })
 
   app.get('/api/cashless/provider/bank_transfer/static-qris', portal, (req, res) => {
     const cfg = db.prepare('SELECT enabled, config_json FROM cashless_provider_config WHERE tenant_id=? AND provider=?').get(req.tenantId, 'bank_transfer')
     const config = cfg ? JSON.parse(cfg.config_json || '{}') : {}
-    res.json({ enabled: Boolean(cfg?.enabled), shopee_qris: config.shopee_qris || '', gopay_qris: config.gopay_qris || '', providers: normalizeStaticQrisConfig(config).providers, unique_code_required: true })
+    res.json({ enabled: Boolean(cfg?.enabled), shopee_qris: config.shopee_qris || '', gopay_qris: config.gopay_qris || '', providers: [config.shopee_qris && 'shopee', config.gopay_qris && 'gopay'].filter(Boolean), unique_code_required: true })
   })
 
-  app.put('/api/cashless/provider/bank_transfer', kadmin, (req, res) => {
+  app.put('/api/cashless/provider/bank_transfer', kadmin, async (req, res) => {
     const { enabled } = req.body
     let config
-    try { config = normalizeBankTransferConfig(req.body) } catch (e) { return res.status(400).json({ error: e.message }) }
+    try { config = await normalizeBankTransferConfig(req.body) } catch (e) { return res.status(400).json({ error: e.message }) }
     db.prepare('INSERT INTO cashless_provider_config (tenant_id, provider, enabled, config_json) VALUES (?,?,?,?) ON CONFLICT(tenant_id,provider) DO UPDATE SET enabled=excluded.enabled, config_json=excluded.config_json')
       .run(req.tenantId, 'bank_transfer', enabled ? 1 : 0, JSON.stringify(config))
     res.json({ success: true })
@@ -568,7 +576,7 @@ function registerKantinRoutes(app, db, { requireRole, uuid, bcrypt }) {
   app.post('/api/cashless/topup/manual', portal, async (req, res) => {
     const { student_id } = req.body
     let declaration
-    try { declaration = validateStaticQrisSubmission(req.body) } catch (e) { return res.status(400).json({ error: e.message }) }
+    try { declaration = await validateStaticQrisSubmission(req.body) } catch (e) { return res.status(400).json({ error: e.message }) }
     if (!student_id) return res.status(400).json({ error: 'student_id wajib' })
     const ids = linkedStudentIds(db, req.tenantId, req.user.id)
     if (!ids.includes(student_id)) return res.status(403).json({ error: 'Bukan siswa/anak tertaut' })

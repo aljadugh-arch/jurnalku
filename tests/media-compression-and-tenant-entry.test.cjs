@@ -42,34 +42,38 @@ test('every server-side raster upload path passes through compression', () => {
     assert.match(server, new RegExp(`app\\.post\\('${route.replaceAll('/', '\\/')}'.*compressUploadedImages`))
   }
   assert.match(server, /app\.post\('\/api\/settings\/kts-template'[\s\S]*?compressUploadedImages\(\['depan', 'belakang'\], 'kts'\)/)
-  assert.match(server, /compressDiskUploadIfImage\(req\.file/)
+  assert.match(server, /await savePostingUpload\(req\.file/)
   assert.match(server, /await saveDrawnSignature/)
   assert.match(server, /await saveUploadedSignature/)
 })
 
-test('database-backed image data URLs are compressed and bounded before submission', () => {
+test('database-backed image data URLs are compressed and bounded before submission', async () => {
   assert.match(clientImage, /export function imageFileToDataUrl/)
   for (const source of [kantinPage, qrisAdmin, qrisStudent]) assert.match(source, /imageFileToDataUrl\(/)
   assert.doesNotMatch(kantinPage, /readAsDataURL\(file\)/)
   assert.doesNotMatch(qrisAdmin, /readAsDataURL\(file\)/)
   assert.doesNotMatch(qrisStudent, /readAsDataURL\(file\)/)
-  const tiny = 'data:image/webp;base64,UklGRg=='
-  assert.equal(normalizeStoredImageDataUrl(tiny), tiny)
-  assert.throws(() => normalizeStoredImageDataUrl('https://example.test/image.jpg'), /gambar/i)
-  assert.throws(() => normalizeStoredImageDataUrl('data:image/webp;base64,' + 'A'.repeat(1_600_000)), /maksimal/i)
+  const input = await sharp({ create: { width: 12, height: 12, channels: 4, background: { r: 20, g: 80, b: 160, alpha: 1 } } }).png().toBuffer()
+  const normalized = await normalizeStoredImageDataUrl(`data:image/png;base64,${input.toString('base64')}`)
+  assert.match(normalized, /^data:image\/webp;base64,/)
+  await assert.rejects(() => normalizeStoredImageDataUrl('https://example.test/image.jpg'), /gambar/i)
+  await assert.rejects(() => normalizeStoredImageDataUrl('data:image/webp;base64,UklGRg=='), /valid|diproses/i)
+  await assert.rejects(() => normalizeStoredImageDataUrl('data:image/webp;base64,' + 'A'.repeat(7_100_000)), /maksimal/i)
 })
 
-test('registered tenant hosts resolve explicitly and root/PWA open login', () => {
+test('registered tenant hosts resolve explicitly and SPA/PWA open login', () => {
   assert.match(tenant, /req\.isRegisteredTenantHost = Boolean\(tenant\)/)
   assert.match(server, /start_url: req\.isRegisteredTenantHost \? '\/login' : '\/'/)
-  assert.match(server, /req\.path === '\/' && req\.isRegisteredTenantHost/)
-  assert.match(server, /return res\.redirect\(302, '\/login'\)/)
-  assert.match(app, /<Route path="\/" element=\{<LandingPage \/>\}/)
+
+  assert.match(app, /<Route path="\/" element=\{<RootRoute \/>\}/)
+  assert.match(app, /api\.get\('\/tenant\/info'\)/)
+  assert.match(app, /if \(!registeredHost\) return <LandingPage \/>/)
+  assert.match(tenant, /registered_host: Boolean\(req\.isRegisteredTenantHost\)/)
   assert.match(pwaTests, /start_url: req\\\.isRegisteredTenantHost/)
 })
 
 test('unknown and main hosts retain the public landing-page fallback', () => {
   assert.match(tenant, /req\.isRegisteredTenantHost = false/)
   assert.match(tenant, /Fallback to default tenant/)
-  assert.match(app, /<Route path="\/" element=\{<LandingPage \/>\}/)
+  assert.match(app, /if \(!registeredHost\) return <LandingPage \/>/)
 })
