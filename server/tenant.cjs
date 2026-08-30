@@ -116,12 +116,13 @@ function setupTenantTables(db) {
  */
 function tenantMiddleware(db) {
   return (req, res, next) => {
-    // Tenant icons are dynamic too; resolve their host just like API routes.
-    if (!req.path.startsWith('/api') && !['/favicon.ico', '/apple-touch-icon.png'].includes(req.path)) return next()
+    // API, tenant icons, and the SPA root all need host-aware resolution.
+    if (!req.path.startsWith('/api') && !['/', '/favicon.ico', '/apple-touch-icon.png'].includes(req.path)) return next()
 
     const host = (req.headers.host || '').split(':')[0].toLowerCase()
 
     let tenant = null
+    req.isRegisteredTenantHost = false
 
     // 1. Check if it's a subdomain of BASE_DOMAIN
     if (host.endsWith('.' + BASE_DOMAIN)) {
@@ -137,7 +138,9 @@ function tenantMiddleware(db) {
       tenant = db.prepare("SELECT * FROM tenants WHERE lower(trim(domain_custom, '.')) = ? AND aktif = 1").get(host.replace(/\.$/, ''))
     }
 
-    // 3. Fallback to default tenant (main domain or localhost)
+    req.isRegisteredTenantHost = Boolean(tenant)
+
+    // 3. Fallback to default tenant (main domain, localhost, or an unknown host)
     if (!tenant) {
       tenant = db.prepare('SELECT * FROM tenants WHERE id = ?').get('default')
     }

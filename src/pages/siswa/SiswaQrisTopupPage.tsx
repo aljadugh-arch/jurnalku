@@ -2,10 +2,11 @@ import { useEffect, useState } from 'react'
 import { Loader2, Upload, Send } from 'lucide-react'
 import toast from 'react-hot-toast'
 import api from '../../services/api'
+import { imageFileToDataUrl } from '../../lib/image'
 
 type Qris = { enabled: boolean; shopee_qris: string; gopay_qris: string; providers: string[] }
 const empty: Qris = { enabled: false, shopee_qris: '', gopay_qris: '', providers: [] }
-const imageData = (file: File, set: (x: string) => void) => { if (!['image/png','image/jpeg','image/webp'].includes(file.type) || file.size > 1024 * 1024) return toast.error('Upload gambar PNG/JPG/WEBP maksimal 1 MB'); const r = new FileReader(); r.onload = () => set(String(r.result || '')); r.readAsDataURL(file) }
+const imageData = async (file: File, set: (x: string) => void) => { if (!['image/png','image/jpeg','image/webp'].includes(file.type) || file.size > 5 * 1024 * 1024) return toast.error('Upload gambar PNG/JPG/WEBP maksimal 5 MB'); try { set(await imageFileToDataUrl(file, { maxSize: 1600 })) } catch { toast.error('Gagal memproses bukti transfer') } }
 export default function SiswaQrisTopupPage() {
   const [qris, setQris] = useState(empty); const [studentId, setStudentId] = useState(''); const [children, setChildren] = useState<any[]>([]); const [provider, setProvider] = useState(''); const [amount, setAmount] = useState(''); const [uniqueCode, setUniqueCode] = useState(() => String(Math.floor(100 + Math.random() * 900))); const [name, setName] = useState(''); const [sender, setSender] = useState(''); const [proof, setProof] = useState(''); const [saving, setSaving] = useState(false)
   useEffect(() => { Promise.all([api.get('/cashless/provider/bank_transfer/static-qris'), api.get('/portal/children')]).then(([q, c]) => { setQris(q.data); setChildren(c.data); if (c.data.length === 1) setStudentId(c.data[0].id); setProvider(q.data.providers[0] || '') }).catch(() => toast.error('Gagal memuat QRIS')) }, [])

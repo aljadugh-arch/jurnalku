@@ -44,6 +44,21 @@ export async function compressImage(
   // Kalau hasil malah lebih besar (mis. foto sudah kecil), pakai asli.
   if (blob.size >= file.size) return file
 
-  const name = file.name.replace(/\.\w+$/, '') + '.jpg'
+  const ext = mime === 'image/webp' ? '.webp' : mime === 'image/png' ? '.png' : '.jpg'
+  const name = file.name.replace(/\.\w+$/, '') + ext
   return new File([blob], name, { type: mime })
+}
+
+export function imageFileToDataUrl(
+  file: File,
+  opts: { maxSize?: number; quality?: number; mime?: string } = {}
+): Promise<string> {
+  return compressImage(file, { maxSize: 1600, quality: 0.78, mime: 'image/webp', ...opts }).then(compressed =>
+    new Promise<string>((resolve, reject) => {
+      const reader = new FileReader()
+      reader.onload = () => resolve(String(reader.result || ''))
+      reader.onerror = reject
+      reader.readAsDataURL(compressed)
+    })
+  )
 }

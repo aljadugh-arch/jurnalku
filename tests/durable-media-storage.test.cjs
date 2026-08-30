@@ -48,7 +48,7 @@ test('favicon is a real tenant image and broken student or branding images have 
   assert.match(siswa, /onError/)
   assert.match(settings, /onError/)
   assert.match(sidebar, /onError/)
-  assert.match(tenant, /\['\/favicon\.ico', '\/apple-touch-icon\.png'\]/)
+  assert.match(tenant, /\['\/', '\/favicon\.ico', '\/apple-touch-icon\.png'\]/)
   assert.doesNotMatch(tenant, /host !== BASE_DOMAIN && host !== 'localhost'/)
 })
 

@@ -8,6 +8,7 @@ const path = require('path')
 const fs = require('fs')
 const crypto = require('crypto')
 const sharp = require('sharp')
+const { compressImageBuffer } = require('./image-media.cjs')
 const bcrypt = require('bcryptjs')
 const jwt = require('jsonwebtoken')
 const { v4: uuidv4 } = require('uuid')
@@ -82,6 +83,7 @@ app.use('/uploads', express.static(UPLOAD_DIR, {
 // Missing media must stay a real 404; never serve SPA HTML as an image.
 app.use('/uploads', (_req, res) => res.status(404).type('text/plain').send('Media not found'))
 app.use(express.static(path.join(__dirname, '..', 'dist'), {
+  index: false,
   fallthrough: true,
   redirect: false,
   setHeaders: (res, filePath) => {
@@ -127,31 +129,16 @@ const storage = multer.diskStorage({
   }
 })
 const upload = multer({ storage, limits: { fileSize: 10 * 1024 * 1024, files: 1 } })
-const imageStorage = multer.diskStorage({
-  destination: (_req, _file, cb) => cb(null, UPLOAD_DIR),
-  filename: (req, file, cb) => {
-    const ext = { 'image/png': '.png', 'image/jpeg': '.jpg', 'image/webp': '.webp' }[file.mimetype]
-    const tenant = String(req.tenantId || 'unknown').replace(/[^a-z0-9_-]/gi, '_')
-    cb(null, `media-${tenant}-${Date.now()}-${crypto.randomBytes(16).toString('hex')}${ext}`)
-  }
-})
 const imageUpload = multer({
-  storage: imageStorage,
+  storage: multer.memoryStorage(),
   limits: { fileSize: 5 * 1024 * 1024, files: 1 },
   fileFilter: (_req, file, cb) => cb(null, /^image\/(png|jpeg|webp)$/.test(file.mimetype))
 })
 const SIGNATURE_DIR = path.join(UPLOAD_DIR, 'signatures')
 fs.mkdirSync(SIGNATURE_DIR, { recursive: true })
-const ktsStorage = multer.diskStorage({
-  destination: (_req, _file, cb) => cb(null, UPLOAD_DIR),
-  filename: (req, file, cb) => {
-    const ext = { 'image/png': '.png', 'image/jpeg': '.jpg', 'image/webp': '.webp' }[file.mimetype]
-    cb(null, `kts-${String(req.tenantId).replace(/[^a-z0-9_-]/gi, '_')}-${crypto.randomBytes(16).toString('hex')}${ext}`)
-  }
-})
 const ktsUpload = multer({
-  storage: ktsStorage,
-  limits: { fileSize: 5 * 1024 * 1024 },
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 5 * 1024 * 1024, files: 2 },
   fileFilter: (_req, file, cb) => cb(null, /^image\/(png|jpeg|webp)$/.test(file.mimetype))
 })
 const signatureUpload = multer({
@@ -159,6 +146,36 @@ const signatureUpload = multer({
   limits: { fileSize: 5 * 1024 * 1024, files: 1 },
   fileFilter: (_req, file, cb) => cb(null, /^image\/(png|jpeg|webp)$/.test(file.mimetype))
 })
+
+const compressedImageFilename = (prefix, tenantId) => `${prefix}-${String(tenantId || 'unknown').replace(/[^a-z0-9_-]/gi, '_')}-${Date.now()}-${crypto.randomBytes(16).toString('hex')}.webp`
+const writeCompressedImage = async (buffer, directory, filename, options) => {
+  const output = await compressImageBuffer(buffer, options)
+  const destination = path.join(directory, filename)
+  await fs.promises.writeFile(destination, output, { flag: 'wx' })
+  return { destination, size: output.length }
+}
+const compressUploadedImages = (fields = [], prefix = 'media') => async (req, _res, next) => {
+  try {
+    const files = req.files ? Object.values(req.files).flat() : req.file ? [req.file] : []
+    for (const file of files) {
+      if (fields.length && !fields.includes(file.fieldname)) continue
+      const filename = compressedImageFilename(prefix, req.tenantId)
+      const saved = await writeCompressedImage(file.buffer, UPLOAD_DIR, filename)
+      Object.assign(file, { filename, path: saved.destination, size: saved.size, mimetype: 'image/webp' })
+      delete file.buffer
+    }
+    next()
+  } catch (error) { next(error) }
+}
+const compressDiskUploadIfImage = async (file, tenantId) => {
+  if (!file?.path || !String(file.mimetype || '').startsWith('image/')) return file
+  const buffer = await fs.promises.readFile(file.path)
+  const filename = compressedImageFilename('post', tenantId)
+  const saved = await writeCompressedImage(buffer, UPLOAD_DIR, filename)
+  await fs.promises.rm(file.path, { force: true })
+  Object.assign(file, { filename, path: saved.destination, size: saved.size, mimetype: 'image/webp' })
+  return file
+}
 
 // Database setup
 const dbPath = process.env.DB_PATH ? path.resolve(__dirname, process.env.DB_PATH) : path.join(__dirname, 'jurnalku.db')
@@ -1922,7 +1939,7 @@ app.put('/api/auth/profile', authMiddleware, (req, res) => {
 })
 
 // Upload own avatar
-app.post('/api/auth/avatar', authMiddleware, imageUpload.single('avatar'), (req, res) => {
+app.post('/api/auth/avatar', authMiddleware, imageUpload.single('avatar'), compressUploadedImages(['avatar']), (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'No file' })
   const avatarPath = `/uploads/${req.file.filename}`
   db.prepare('UPDATE users SET avatar = ? WHERE id = ?').run(avatarPath, req.user.id)
@@ -2161,7 +2178,7 @@ app.put('/api/settings', ADMIN, (req, res) => {
   res.json({ success: true })
 })
 
-app.post('/api/settings/logo', ADMIN, imageUpload.single('logo'), (req, res) => {
+app.post('/api/settings/logo', ADMIN, imageUpload.single('logo'), compressUploadedImages(['logo']), (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'No file' })
   const logoPath = `/uploads/${req.file.filename}`
   const id = 'main_' + req.tenantId
@@ -2183,7 +2200,7 @@ const removeTenantUpload = (url) => {
 
 app.post('/api/settings/kts-template', ADMIN, ktsUpload.fields([
   { name: 'depan', maxCount: 1 }, { name: 'belakang', maxCount: 1 }
-]), (req, res) => {
+]), compressUploadedImages(['depan', 'belakang'], 'kts'), (req, res) => {
   const files = req.files || {}
   if (!files.depan?.[0] && !files.belakang?.[0]) return res.status(400).json({ error: 'Pilih gambar depan atau belakang' })
   const id = 'main_' + req.tenantId
@@ -2225,7 +2242,7 @@ app.put('/api/settings/jam-absensi', ADMIN, (req, res) => {
   const saved = db.prepare('SELECT * FROM settings WHERE id=?').get(id)
   res.json({ success: true, settings: saved })
 })
-app.post('/api/settings/background', ADMIN, imageUpload.single('background'), (req, res) => {
+app.post('/api/settings/background', ADMIN, imageUpload.single('background'), compressUploadedImages(['background']), (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'No file' })
   const bgPath = `/uploads/${req.file.filename}`
   const id = 'main_' + req.tenantId
@@ -2539,7 +2556,7 @@ app.delete('/api/gtk/:id', ADMIN, (req, res) => {
   }
 })
 
-app.post('/api/siswa/:id/foto', ADMIN, imageUpload.single('foto'), (req, res) => {
+app.post('/api/siswa/:id/foto', ADMIN, imageUpload.single('foto'), compressUploadedImages(['foto']), (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'No file' })
   const foto = '/uploads/' + req.file.filename
   const changes = db.prepare('UPDATE siswa SET foto=? WHERE id=? AND tenant_id=?').run(foto, req.params.id, req.tenantId).changes
@@ -2550,7 +2567,7 @@ app.post('/api/siswa/:id/foto', ADMIN, imageUpload.single('foto'), (req, res) =>
   res.json({ foto })
 })
 
-app.post('/api/gtk/:id/foto', ADMIN, imageUpload.single('foto'), (req, res) => {
+app.post('/api/gtk/:id/foto', ADMIN, imageUpload.single('foto'), compressUploadedImages(['foto']), (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'No file' })
   const foto = '/uploads/' + req.file.filename
   const changes = db.prepare('UPDATE gtk SET foto=? WHERE id=? AND tenant_id=?').run(foto, req.params.id, req.tenantId).changes
@@ -3238,7 +3255,7 @@ app.get('/api/pwa/manifest', (req, res) => {
   const t = req.tenant || db.prepare('SELECT nama FROM tenants WHERE id=?').get(req.tenantId) || {}
   const name = s.pwa_name || (t.nama ? t.nama + ' Apps' : 'Jurnalku')
   const version = String(s.updated_at || Date.now()).replace(/[^0-9]/g, '')
-  res.type('application/manifest+json').set('Cache-Control', 'no-store').json({ name, short_name: name.slice(0, 24), id: '/', start_url: '/', scope: '/', display: 'standalone', background_color: s.pwa_bg_color || '#ffffff', theme_color: s.pwa_theme_color || s.primary_color || '#2563eb', version, icons: [{ src: `/api/pwa/icon/192?v=${version}`, sizes: '192x192', type: 'image/png', purpose: 'any maskable' }, { src: `/api/pwa/icon/512?v=${version}`, sizes: '512x512', type: 'image/png', purpose: 'any maskable' }] })
+  res.type('application/manifest+json').set('Cache-Control', 'no-store').json({ name, short_name: name.slice(0, 24), id: '/', start_url: req.isRegisteredTenantHost ? '/login' : '/', scope: '/', display: 'standalone', background_color: s.pwa_bg_color || '#ffffff', theme_color: s.pwa_theme_color || s.primary_color || '#2563eb', version, icons: [{ src: `/api/pwa/icon/192?v=${version}`, sizes: '192x192', type: 'image/png', purpose: 'any maskable' }, { src: `/api/pwa/icon/512?v=${version}`, sizes: '512x512', type: 'image/png', purpose: 'any maskable' }] })
 })
 app.get('/api/pwa/icon/:size', async (req, res) => {
   const size = Number(req.params.size)
@@ -3293,7 +3310,7 @@ app.post('/api/settings/pwa-manifest', ADMIN, (req, res) => {
   const s = db.prepare('SELECT pwa_name,pwa_icon,nama_lembaga,logo,primary_color,pwa_bg_color,pwa_theme_color FROM settings WHERE tenant_id=? ORDER BY updated_at DESC LIMIT 1').get(req.tenantId) || {}
   const t = req.tenant || db.prepare('SELECT nama FROM tenants WHERE id=?').get(req.tenantId) || {}
   const name = s.pwa_name || (t.nama ? t.nama + ' Apps' : 'Jurnalku')
-  res.type('application/manifest+json').set('Cache-Control', 'no-store').json({ name, short_name: name.slice(0, 24), id: '/', start_url: '/', scope: '/', display: 'standalone', background_color: s.pwa_bg_color || '#ffffff', theme_color: s.pwa_theme_color || s.primary_color || '#2563eb', icons: [{ src: '/api/pwa/icon/192', sizes: '192x192', type: 'image/png', purpose: 'any maskable' }, { src: '/api/pwa/icon/512', sizes: '512x512', type: 'image/png', purpose: 'any maskable' }] })
+  res.type('application/manifest+json').set('Cache-Control', 'no-store').json({ name, short_name: name.slice(0, 24), id: '/', start_url: req.isRegisteredTenantHost ? '/login' : '/', scope: '/', display: 'standalone', background_color: s.pwa_bg_color || '#ffffff', theme_color: s.pwa_theme_color || s.primary_color || '#2563eb', icons: [{ src: '/api/pwa/icon/192', sizes: '192x192', type: 'image/png', purpose: 'any maskable' }, { src: '/api/pwa/icon/512', sizes: '512x512', type: 'image/png', purpose: 'any maskable' }] })
 })
 
 app.post('/api/jamaah/sesi', ADMIN, (req, res) => {
@@ -4732,15 +4749,15 @@ app.get('/api/jurnal/me', authMiddleware, (req, res) => {
   res.json(rows)
 })
 
-function saveDrawnSignature(dataUrl, tenantId) {
+async function saveDrawnSignature(dataUrl, tenantId) {
   const match = /^data:image\/(png|jpeg|webp);base64,([A-Za-z0-9+/=\r\n]+)$/.exec(String(dataUrl || ''))
   if (!match) return null
-  const ext = { png: '.png', jpeg: '.jpg', webp: '.webp' }[match[1]]
   const buffer = Buffer.from(match[2].replace(/\s/g, ''), 'base64')
   if (!isValidSignatureImage(buffer, match[1]) || buffer.length > 5 * 1024 * 1024) return null
   const tenant = String(tenantId).replace(/[^a-z0-9_-]/gi, '_')
-  const filename = `sig-${tenant}-${crypto.randomBytes(16).toString('hex')}${ext}`
-  fs.writeFileSync(path.join(SIGNATURE_DIR, filename), buffer, { flag: 'wx' })
+  const filename = `sig-${tenant}-${crypto.randomBytes(16).toString('hex')}.webp`
+  const output = await compressImageBuffer(buffer, { maxDimension: 1024, quality: 80 })
+  await fs.promises.writeFile(path.join(SIGNATURE_DIR, filename), output, { flag: 'wx' })
   return `/uploads/signatures/${filename}`
 }
 
@@ -4752,13 +4769,13 @@ function isValidSignatureImage(buffer, mimeOrExt) {
   return false
 }
 
-function saveUploadedSignature(file, tenantId) {
+async function saveUploadedSignature(file, tenantId) {
   if (!file) return null
-  const ext = { 'image/png': '.png', 'image/jpeg': '.jpg', 'image/webp': '.webp' }[file.mimetype]
-  if (!ext || !isValidSignatureImage(file.buffer, file.mimetype) || file.buffer.length > 5 * 1024 * 1024) return null
+  if (!isValidSignatureImage(file.buffer, file.mimetype) || file.buffer.length > 5 * 1024 * 1024) return null
   const tenant = String(tenantId).replace(/[^a-z0-9_-]/gi, '_')
-  const filename = `sig-${tenant}-${crypto.randomBytes(16).toString('hex')}${ext}`
-  fs.writeFileSync(path.join(SIGNATURE_DIR, filename), file.buffer, { flag: 'wx' })
+  const filename = `sig-${tenant}-${crypto.randomBytes(16).toString('hex')}.webp`
+  const output = await compressImageBuffer(file.buffer, { maxDimension: 1024, quality: 80 })
+  await fs.promises.writeFile(path.join(SIGNATURE_DIR, filename), output, { flag: 'wx' })
   return `/uploads/signatures/${filename}`
 }
 
@@ -4826,7 +4843,7 @@ app.get('/api/supervisi/rekap', JOURNAL_REVIEWER, (req, res) => {
   res.json(rows)
 })
 
-app.post('/api/jurnal', STAFF, signatureUpload.single('signature'), (req, res) => {
+app.post('/api/jurnal', STAFF, signatureUpload.single('signature'), async (req, res, next) => {
   const id = uuidv4()
   let { guru_id, mapel_id, rombel_id, tanggal, jam_ke, materi, kegiatan, catatan, status, signature_type, signature_data } = req.body
   const teacher = ['guru', 'wali_kelas'].includes(req.user.role)
@@ -4854,8 +4871,10 @@ app.post('/api/jurnal', STAFF, signatureUpload.single('signature'), (req, res) =
     if (!assigned) return res.status(403).json({ error: 'Jadwal/rombel tidak sesuai dengan penugasan guru' })
   }
   let signature_path = null
-  if (signature_type === 'drawn') signature_path = saveDrawnSignature(signature_data, req.tenantId)
-  if (signature_type === 'upload') signature_path = saveUploadedSignature(req.file, req.tenantId)
+  try {
+    if (signature_type === 'drawn') signature_path = await saveDrawnSignature(signature_data, req.tenantId)
+    if (signature_type === 'upload') signature_path = await saveUploadedSignature(req.file, req.tenantId)
+  } catch (error) { return next(error) }
   if (!signature_path) return res.status(400).json({ error: 'Tanda tangan tidak valid atau gagal disimpan' })
   db.prepare('INSERT INTO jurnal_mengajar (id, guru_id, mapel_id, rombel_id, tanggal, jam_ke, materi, kegiatan, catatan, status, signature_type, signature_path, tenant_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)').run(id, guru_id, mapel_id, rombel_id, tanggal, jam_ke||1, materi||'', kegiatan||'', catatan||'', status, signature_type || null, signature_path, req.tenantId)
   res.json({ id })
@@ -4939,8 +4958,9 @@ app.post('/api/posting', STAFF, (req, res) => {
   res.json({ id })
 })
 
-app.post('/api/posting/upload', STAFF, upload.single('file'), (req, res) => {
+app.post('/api/posting/upload', STAFF, upload.single('file'), async (req, res, next) => {
   if (!req.file) return res.status(400).json({ error: 'File wajib diunggah' })
+  try { await compressDiskUploadIfImage(req.file, req.tenantId) } catch (error) { return next(error) }
   const mime = req.file.mimetype || ''
   const mediaType = mime.startsWith('image/') ? 'image' : mime.startsWith('video/') ? 'video' : mime.startsWith('audio/') ? 'audio' : 'file'
   res.json({ media_url: '/uploads/' + req.file.filename, media_type: mediaType, filename: req.file.originalname })
@@ -5507,6 +5527,7 @@ registerTenantRoutes(app, db, authMiddleware, uuidv4, requireRole('super_admin')
 app.use((req, res, next) => {
   if (req.path.startsWith('/api')) return res.status(404).json({ error: 'Not found' })
   if (req.method !== 'GET') return next()
+  if (req.path === '/' && req.isRegisteredTenantHost) return res.redirect(302, '/login')
   res.sendFile(path.join(__dirname, '..', 'dist', 'index.html'))
 })
 

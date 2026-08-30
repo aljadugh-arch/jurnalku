@@ -64,14 +64,15 @@ function processWebhook(db, { tenantId, provider, payload, signature, secret }) 
 
 const opaqueQr = () => crypto.randomBytes(32).toString('base64url')
 const MAX_QRIS_DATA_URL = 1_500_000
+const normalizeStoredImageDataUrl = (value, label = 'gambar') => {
+  const text = String(value || '')
+  if (!text) return ''
+  if (!/^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/.test(text)) throw Error(`Harus berupa ${label} PNG, JPG, atau WEBP`)
+  if (text.length > MAX_QRIS_DATA_URL) throw Error(`Ukuran ${label} maksimal 1,5 MB`)
+  return text
+}
 const normalizeStaticQrisConfig = input => {
-  const image = value => {
-    const text = String(value || '')
-    if (!text) return ''
-    if (!/^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/.test(text)) throw Error('Harus berupa gambar QRIS PNG, JPG, atau WEBP')
-    if (text.length > MAX_QRIS_DATA_URL) throw Error('Ukuran gambar QRIS maksimal 1,5 MB')
-    return text
-  }
+  const image = value => normalizeStoredImageDataUrl(value, 'gambar QRIS')
   const shopee_qris = image(input?.shopee_qris)
   const gopay_qris = image(input?.gopay_qris)
   return { enabled: input?.enabled !== false, shopee_qris, gopay_qris, providers: [shopee_qris && 'shopee', gopay_qris && 'gopay'].filter(Boolean) }
@@ -272,9 +273,11 @@ function registerKantinRoutes(app, db, { requireRole, uuid, bcrypt }) {
     if (!kategori || !nama || !Number.isInteger(harga) || harga <= 0) {
       return res.status(400).json({ error: 'kategori, nama, harga (integer > 0) wajib' })
     }
+    let fotoValue
+    try { fotoValue = normalizeStoredImageDataUrl(foto) } catch (e) { return res.status(400).json({ error: e.message }) }
     const id = uuid()
     db.prepare('INSERT INTO kantin_menu (id, tenant_id, kategori, nama, deskripsi, harga, stok, foto, aktif, urut) VALUES (?,?,?,?,?,?,?,?,?,?)')
-      .run(id, req.tenantId, kategori, nama, deskripsi || '', harga, stok || 0, foto || null, aktif ? 1 : 0, urut || 0)
+      .run(id, req.tenantId, kategori, nama, deskripsi || '', harga, stok || 0, fotoValue || null, aktif ? 1 : 0, urut || 0)
     res.json({ id })
   })
 
@@ -319,8 +322,10 @@ function registerKantinRoutes(app, db, { requireRole, uuid, bcrypt }) {
     if (!kategori || !nama || !Number.isInteger(harga) || harga <= 0) {
       return res.status(400).json({ error: 'kategori, nama, harga (integer > 0) wajib' })
     }
+    let fotoValue
+    try { fotoValue = normalizeStoredImageDataUrl(foto) } catch (e) { return res.status(400).json({ error: e.message }) }
     db.prepare('UPDATE kantin_menu SET kategori=?, nama=?, deskripsi=?, harga=?, stok=?, foto=?, aktif=?, urut=? WHERE id=? AND tenant_id=?')
-      .run(kategori, nama, deskripsi || '', harga, stok || 0, foto || null, aktif ? 1 : 0, urut || 0, req.params.id, req.tenantId)
+      .run(kategori, nama, deskripsi || '', harga, stok || 0, fotoValue || null, aktif ? 1 : 0, urut || 0, req.params.id, req.tenantId)
     res.json({ success: true })
   })
 
@@ -632,4 +637,4 @@ function registerKantinRoutes(app, db, { requireRole, uuid, bcrypt }) {
   })
 }
 
-module.exports = { setupPortalCashless, balance, credit, debit, processWebhook, opaqueQr, normalizeBankTransferConfig, normalizeStaticQrisConfig, validateStaticQrisSubmission, assertStaticQrisSubmissionAvailable, linkedStudentIds, selectPenilaianStudentId, pesantrenMenu, registerPortalRoutes, registerKantinRoutes }
+module.exports = { setupPortalCashless, balance, credit, debit, processWebhook, opaqueQr, normalizeStoredImageDataUrl, normalizeBankTransferConfig, normalizeStaticQrisConfig, validateStaticQrisSubmission, assertStaticQrisSubmissionAvailable, linkedStudentIds, selectPenilaianStudentId, pesantrenMenu, registerPortalRoutes, registerKantinRoutes }

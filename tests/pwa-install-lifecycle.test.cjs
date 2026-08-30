@@ -22,7 +22,7 @@ test('registrasi PWA menunggu manifest, memperbarui worker, dan memakai scope te
   assert.match(html, /rel="manifest" href="\/api\/pwa\/manifest"/)
   assert.match(main, /navigator\.serviceWorker\.register\('\/sw\.js', \{ updateViaCache: 'none' \}\)/)
   assert.match(main, /registration\.update\(\)/)
-  assert.match(server, /start_url: '\/'/)
+  assert.match(server, /start_url: req\.isRegisteredTenantHost \? '\/login' : '\/'/)
   assert.match(server, /scope: '\/'/)
 })
 

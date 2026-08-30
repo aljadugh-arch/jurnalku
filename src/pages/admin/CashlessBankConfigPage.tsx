@@ -2,16 +2,16 @@ import { useState, useEffect } from 'react'
 import { Save, Loader2, QrCode } from 'lucide-react'
 import toast from 'react-hot-toast'
 import api from '../../services/api'
+import { imageFileToDataUrl } from '../../lib/image'
 
 type Config = { enabled: boolean; va_prefix: string; bank_code: string; admin_fee: number; manual_verify: boolean; shopee_qris: string; gopay_qris: string }
 const empty: Config = { enabled: false, va_prefix: '', bank_code: '', admin_fee: 0, manual_verify: true, shopee_qris: '', gopay_qris: '' }
 
-const readImage = (file: File, set: (value: string) => void) => {
+const readImage = async (file: File, set: (value: string) => void) => {
   if (!['image/png', 'image/jpeg', 'image/webp'].includes(file.type)) return toast.error('QRIS harus PNG, JPG, atau WEBP')
   if (file.size > 1024 * 1024) return toast.error('Ukuran QRIS maksimal 1 MB')
-  const reader = new FileReader()
-  reader.onload = () => set(String(reader.result || ''))
-  reader.readAsDataURL(file)
+  try { set(await imageFileToDataUrl(file, { maxSize: 1200 })) }
+  catch { toast.error('Gagal memproses gambar QRIS') }
 }
 
 export default function CashlessBankTransferConfigPage() {

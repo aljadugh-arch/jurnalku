@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { Plus, Edit, Trash2, X, Image, ChevronUp, ChevronDown, Search, Loader2, Upload } from 'lucide-react'
 import toast from 'react-hot-toast'
 import api from '../../services/api'
+import { imageFileToDataUrl } from '../../lib/image'
 
 interface KantinMenu {
   id: string
@@ -131,12 +132,13 @@ export default function KantinMenuPage() {
     } catch { toast.error('Gagal menghapus') }
   }
 
-  const handleFoto = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFoto = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
-    const reader = new FileReader()
-    reader.onload = (evt) => setForm(prev => ({ ...prev, foto: evt.target?.result as string }))
-    reader.readAsDataURL(file)
+    try {
+      const foto = await imageFileToDataUrl(file, { maxSize: 1024 })
+      setForm(prev => ({ ...prev, foto }))
+    } catch { toast.error('Gagal memproses foto') }
   }
 
   const filteredMenus = menus.filter(m =>
