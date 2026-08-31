@@ -522,8 +522,11 @@ db.exec(`
     metode TEXT DEFAULT 'manual',
     keterangan TEXT,
     waktu_absen TEXT,
+    tenant_id TEXT DEFAULT 'default',
     FOREIGN KEY (siswa_id) REFERENCES siswa(id)
   );
+  CREATE INDEX IF NOT EXISTS idx_absensi_siswa_tenant ON absensi_siswa(tenant_id);
+  CREATE UNIQUE INDEX IF NOT EXISTS idx_absensi_siswa_unique ON absensi_siswa(tenant_id,siswa_id,tanggal);
 
   CREATE TABLE IF NOT EXISTS absensi_mapel (
     id TEXT PRIMARY KEY,
@@ -913,6 +916,10 @@ for (const col of [
     ['jurnal_mengajar', 'signature_path', 'TEXT']
   ]) {
   try { db.prepare(`ALTER TABLE ${col[0]} ADD COLUMN ${col[1]} ${col[2]}`).run() } catch {}
+}
+// duplicate QR reads must converge to one student/day row after tenant_id migration
+try { db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_absensi_siswa_unique ON absensi_siswa(tenant_id,siswa_id,tanggal)') } catch (e) {
+  if (!String(e.message).includes('already exists')) console.error('[migration] absensi siswa unique:', e.message)
 }
 
 function studentInitialPassword(siswa) {
@@ -2379,12 +2386,6 @@ app.get('/api/siswa', authMiddleware, (req, res) => {
   res.json(db.prepare(sql).all(...params))
 })
 
-app.get('/api/siswa/:id', authMiddleware, (req, res) => {
-  const siswa = db.prepare(`SELECT s.*, r.nama rombel_nama FROM siswa s LEFT JOIN rombel r ON r.id=s.rombel_id AND r.tenant_id=s.tenant_id WHERE s.id=? AND s.tenant_id=?`).get(req.params.id, req.tenantId)
-  if (!siswa) return res.status(404).json({ error: 'Siswa tidak ditemukan' })
-  res.json(siswa)
-})
-
 app.post('/api/siswa', ADMIN, (req, res) => {
   const id = uuidv4()
   const { nik, nis, nisn, nama, jenis_kelamin, tempat_lahir, tanggal_lahir, alamat, no_hp, nama_ortu, rombel_id } = req.body
@@ -3797,6 +3798,13 @@ app.get('/api/siswa/ekskul', authMiddleware, (req, res) => {
   res.json(ekskulAll)
 })
 
+// Dynamic student lookup must follow every static /api/siswa/* handler.
+app.get('/api/siswa/:id', authMiddleware, (req, res) => {
+  const siswa = db.prepare(`SELECT s.*, r.nama rombel_nama FROM siswa s LEFT JOIN rombel r ON r.id=s.rombel_id AND r.tenant_id=s.tenant_id WHERE s.id=? AND s.tenant_id=?`).get(req.params.id, req.tenantId)
+  if (!siswa) return res.status(404).json({ error: 'Siswa tidak ditemukan' })
+  res.json(siswa)
+})
+
 // ==================== NOTIFIKASI WA SETTINGS ====================
 db.exec(`CREATE TABLE IF NOT EXISTS notif_settings (
   id TEXT PRIMARY KEY DEFAULT 'main',
@@ -4822,11 +4830,22 @@ app.post('/api/absensi-siswa/qr-scan', STAFF, (req, res) => {
   try { sesi = require('./attendance-rules.cjs').sesiAbsensiSiswa({ waktu, jamPulang: batas?.jam_pulang, fallbackPulang: cfg.sesi_pulang_mulai, explicit: req.body.sesi, aktif: batas && batas.aktif }) }
   catch (e) { return res.status(400).json({ error: e.message }) }
   const sesiPulang = sesi === 'pulang'
-  const exists = db.prepare('SELECT id, status, status_pulang FROM absensi_siswa WHERE siswa_id = ? AND tanggal = ? AND tenant_id = ?').get(siswa.id, tanggal, req.tenantId)
+  let exists = db.prepare('SELECT id, status, status_pulang FROM absensi_siswa WHERE siswa_id = ? AND tanggal = ? AND tenant_id = ?').get(siswa.id, tanggal, req.tenantId)
+  // The unique index is the final concurrency guard. If two scanner callbacks
+  // race, the loser re-reads the row and takes the idempotent update path.
+  const insertOrReload = (sql, params) => {
+    try { db.prepare(sql).run(...params); return null }
+    catch (error) {
+      if (error?.code !== 'SQLITE_CONSTRAINT_UNIQUE') throw error
+      return db.prepare('SELECT id, status, status_pulang FROM absensi_siswa WHERE siswa_id = ? AND tanggal = ? AND tenant_id = ?').get(siswa.id, tanggal, req.tenantId)
+    }
+  }
   if (sesiPulang) {
     // Sesi pulang: catat waktu_pulang & status_pulang
     if (!exists) {
-      db.prepare('INSERT INTO absensi_siswa (id, siswa_id, rombel_id, tanggal, status, status_pulang, waktu_pulang, metode, tenant_id) VALUES (?,?,?,?,?,?,?,?,?)').run(uuidv4(), siswa.id, siswa.rombel_id, tanggal, 'hadir', 'hadir', waktu, 'qr', req.tenantId)
+      exists = insertOrReload('INSERT INTO absensi_siswa (id, siswa_id, rombel_id, tanggal, status, status_pulang, waktu_pulang, metode, tenant_id) VALUES (?,?,?,?,?,?,?,?,?)', [uuidv4(), siswa.id, siswa.rombel_id, tanggal, 'hadir', 'hadir', waktu, 'qr', req.tenantId])
+      if (exists?.status_pulang === 'hadir') return res.json({ siswa: { nama: siswa.nama, nis: siswa.nis }, already: true, sesi: 'pulang' })
+      if (exists) db.prepare('UPDATE absensi_siswa SET status_pulang=?, waktu_pulang=?, metode=? WHERE id=? AND tenant_id=?').run('hadir', waktu, 'qr', exists.id, req.tenantId)
     } else {
       if (exists.status_pulang === 'hadir') return res.json({ siswa: { nama: siswa.nama, nis: siswa.nis }, already: true, sesi: 'pulang' })
       db.prepare('UPDATE absensi_siswa SET status_pulang=?, waktu_pulang=? WHERE id=?').run('hadir', waktu, exists.id)
@@ -4840,7 +4859,9 @@ app.post('/api/absensi-siswa/qr-scan', STAFF, (req, res) => {
     if (exists.status === 'hadir') return res.json({ siswa: { nama: siswa.nama, nis: siswa.nis }, already: true, sesi: 'masuk' })
     db.prepare('UPDATE absensi_siswa SET status=?, waktu_masuk=?, waktu_absen=?, metode=? WHERE id=?').run('hadir', waktu, waktu, 'qr', exists.id)
   } else {
-    db.prepare('INSERT INTO absensi_siswa (id, siswa_id, rombel_id, tanggal, status, waktu_masuk, waktu_absen, metode, tenant_id) VALUES (?,?,?,?,?,?,?,?,?)').run(uuidv4(), siswa.id, siswa.rombel_id, tanggal, 'hadir', waktu, waktu, 'qr', req.tenantId)
+    exists = insertOrReload('INSERT INTO absensi_siswa (id, siswa_id, rombel_id, tanggal, status, waktu_masuk, waktu_absen, metode, tenant_id) VALUES (?,?,?,?,?,?,?,?,?)', [uuidv4(), siswa.id, siswa.rombel_id, tanggal, 'hadir', waktu, waktu, 'qr', req.tenantId])
+    if (exists?.status === 'hadir') return res.json({ siswa: { nama: siswa.nama, nis: siswa.nis }, already: true, sesi: 'masuk' })
+    if (exists) db.prepare('UPDATE absensi_siswa SET status=?, waktu_masuk=?, waktu_absen=?, metode=? WHERE id=? AND tenant_id=?').run('hadir', waktu, waktu, 'qr', exists.id, req.tenantId)
   }
   try { notificationMonitor.logActivity(db, { tenantId: req.tenantId, eventType: 'student_qr_attendance', actorId: null, entityId: siswa.id, metadata: { sesi: 'masuk', metode: 'qr' } }) } catch {}
   sendAbsensiNotifToWali(siswa.id, 'hadir', tanggal).catch(() => {})

@@ -21,7 +21,7 @@ export default function Modal({ open, onClose, title, children, footer, maxWidth
   if (!open) return null
 
   return (
-    <div className="fixed inset-0 bg-black/50 z-50 flex items-start justify-center p-4 overflow-y-auto" onClick={onClose}>
+    <div className="fixed inset-0 bg-black/50 z-[100] flex items-start justify-center p-4 overflow-y-auto" onClick={onClose}>
       <div
         onClick={e => e.stopPropagation()}
         className={

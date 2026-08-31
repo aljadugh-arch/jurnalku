@@ -32,6 +32,9 @@ export default function AbsensiSiswaPage() {
   const [showQr, setShowQr] = useState(false)
   const [foundationTenantId, setFoundationTenantId] = useState<string | null>(null)
   const qrRef = useRef<Html5Qrcode | null>(null)
+  const scanBusyRef = useRef(false)
+  const lastQrRef = useRef('')
+  const cameraStartingRef = useRef(false)
 
   useEffect(() => {
     api.get('/rombel').then(res => {
@@ -85,45 +88,71 @@ export default function AbsensiSiswaPage() {
 
 
   const stopQrCamera = async () => {
+    cameraStartingRef.current = false
+    scanBusyRef.current = false
+    lastQrRef.current = ''
     try { await qrRef.current?.stop() } catch {}
     try { qrRef.current?.clear() } catch {}
     qrRef.current = null
+    setScanBusy(false)
+    setLastQr('')
     setQrOpen(false)
   }
 
   const startQrCamera = async () => {
+    if (qrRef.current || cameraStartingRef.current) return
+    cameraStartingRef.current = true
     setQrOpen(true)
     setTimeout(async () => {
       try {
+        if (!cameraStartingRef.current) return
         const scanner = new Html5Qrcode('qr-reader')
         qrRef.current = scanner
         await scanner.start({ facingMode: 'environment' }, { fps: 10, qrbox: { width: 240, height: 240 } }, async text => {
-          if (scanBusy || text === lastQr) return
-          setScanBusy(true); setLastQr(text); setQrToken(text)
-          try { const r = await api.post('/absensi-siswa/qr-scan', { token: text, sesi }); toast.success(`${r.data.siswa?.nama || 'Siswa'} hadir (${r.data.sesi})`); loadData() }
+          const normalized = text.trim()
+          if (scanBusyRef.current || normalized === lastQrRef.current) return
+          scanBusyRef.current = true
+          lastQrRef.current = normalized
+          setScanBusy(true); setLastQr(normalized); setQrToken(normalized)
+          try { const r = await api.post('/absensi-siswa/qr-scan', { token: normalized, sesi }); toast.success(r.data.already ? `${r.data.siswa?.nama || 'Siswa'} sudah tercatat` : `${r.data.siswa?.nama || 'Siswa'} hadir (${r.data.sesi})`); loadData() }
           catch (err: any) { toast.error(err.response?.data?.error || 'QR gagal') }
-          finally { setTimeout(() => { setScanBusy(false); setLastQr('') }, 1200) }
+          finally { window.setTimeout(() => { scanBusyRef.current = false; lastQrRef.current = ''; setScanBusy(false); setLastQr('') }, 1200) }
         }, () => {})
-      } catch (e: any) { toast.error('Kamera/QR tidak bisa dibuka'); setQrOpen(false) }
+        cameraStartingRef.current = false
+      } catch (e: any) { cameraStartingRef.current = false; qrRef.current = null; toast.error('Kamera/QR tidak bisa dibuka'); setQrOpen(false) }
     }, 100)
   }
 
+  const submitQrToken = async (rawToken: string) => {
+    const token = rawToken.trim()
+    if (!token || scanBusyRef.current || token === lastQrRef.current) return
+    scanBusyRef.current = true
+    lastQrRef.current = token
+    setScanBusy(true)
+    setLastQr(token)
+    setQrToken(token)
+    try {
+      const r = await api.post('/absensi-siswa/qr-scan', { token, sesi })
+      toast.success(r.data.already ? `${r.data.siswa?.nama || 'Siswa'} sudah tercatat` : `${r.data.siswa?.nama || 'Siswa'} hadir (${r.data.sesi})`)
+      await loadData()
+    } catch (err: any) { toast.error(err.response?.data?.error || 'QR gagal') }
+    finally { window.setTimeout(() => { scanBusyRef.current = false; lastQrRef.current = ''; setScanBusy(false); setLastQr('') }, 1200) }
+  }
+
   const scanQrImage = async (file?: File) => {
-    if (!file) return
+    if (!file || scanBusyRef.current) return
     try {
       const scanner = new Html5Qrcode('qr-file-reader')
       const text = await scanner.scanFile(file, true)
-      setQrToken(text)
-      const r = await api.post('/absensi-siswa/qr-scan', { token: text, sesi })
-      toast.success(`${r.data.siswa?.nama || 'Siswa'} hadir (${r.data.sesi})`)
-      loadData()
+      await submitQrToken(text)
+      try { scanner.clear() } catch {}
     } catch (err: any) { toast.error(err.response?.data?.error || 'QR foto gagal dibaca') }
   }
 
   const handleQrScan = async () => {
     if (!qrToken.trim()) return toast.error('Isi/scan token QR')
-    try { const r = await api.post('/absensi-siswa/qr-scan', { token: qrToken.trim(), sesi }); toast.success(`${r.data.siswa?.nama || 'Siswa'} hadir (${r.data.sesi})`); setQrToken(''); loadData() }
-    catch (err: any) { toast.error(err.response?.data?.error || 'QR gagal') }
+    await submitQrToken(qrToken)
+    setQrToken('')
   }
 
   const handleSave = async () => {
@@ -219,9 +248,9 @@ export default function AbsensiSiswaPage() {
         </div>
       </div>
 
-      {qrOpen && <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4"><div className="bg-white rounded-2xl p-4 w-full max-w-sm"><p className="text-sm text-gray-600 mb-3">Kamera tetap terbuka. Arahkan ke QR KTS siswa berikutnya.</p><div id="qr-reader"></div><p className="text-xs text-gray-400 mt-2">Terakhir: {qrToken || '-'}</p><button onClick={stopQrCamera} className="mt-3 w-full px-4 py-2 bg-gray-800 text-white rounded-lg text-sm">Tutup</button></div></div>}
+      {qrOpen && <div className="fixed inset-0 z-[100] bg-black/60 flex items-center justify-center p-4"><div className="bg-white rounded-2xl p-4 w-full max-w-sm"><p className="text-sm text-gray-600 mb-3">Kamera tetap terbuka. Arahkan ke QR KTS siswa berikutnya.</p><div id="qr-reader"></div><p className="text-xs text-gray-400 mt-2">Terakhir: {qrToken || '-'}</p><button onClick={stopQrCamera} className="mt-3 w-full px-4 py-2 bg-gray-800 text-white rounded-lg text-sm">Tutup</button></div></div>}
 
-      {showQr && <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-3"><div className="bg-white rounded-2xl p-4 sm:p-6 w-full max-w-3xl max-h-[90vh] overflow-auto">
+      {showQr && <div className="fixed inset-0 z-[100] bg-black/60 flex items-center justify-center p-3"><div className="bg-white rounded-2xl p-4 sm:p-6 w-full max-w-3xl max-h-[90vh] overflow-auto">
         <div className="flex items-center justify-between gap-3 mb-4"><div><h2 className="font-bold text-gray-800">QR Siswa</h2><p className="text-xs text-gray-500">QR dan login memakai NISN bila tersedia; jika kosong memakai NIS.</p></div><button onClick={() => setShowQr(false)} className="px-3 py-2 bg-gray-100 rounded-lg text-sm">Tutup</button></div>
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">{qrIdentifiers.map(s => <div key={s.id} className="border rounded-xl p-3 text-center"><QRCodeSVG value={s.identifier} size={112} level="M" className="mx-auto max-w-full h-auto"/><p className="font-medium text-sm text-gray-800 mt-2 truncate">{s.nama}</p><p className="text-xs text-gray-500">{s.identifier_type}: {s.identifier}</p></div>)}</div>
         {qrIdentifiers.length === 0 && <p className="py-8 text-center text-sm text-gray-400">Belum ada siswa pada rombel ini.</p>}

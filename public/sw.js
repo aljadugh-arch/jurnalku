@@ -1,4 +1,4 @@
-const CACHE = 'jurnalku-v6'
+const CACHE = 'jurnalku-v7'
 
 self.addEventListener('install', event => event.waitUntil(
   caches.open(CACHE).then(() => self.skipWaiting())
@@ -15,6 +15,8 @@ self.addEventListener('fetch', event => {
   const url = new URL(event.request.url)
   const pathname = url.pathname
   if (pathname.startsWith('/api/') || pathname === '/sw.js' || pathname.includes('/manifest')) return
+  const cacheable = event.request.mode === 'navigate' || event.request.destination === 'script' || event.request.destination === 'style' || event.request.destination === 'image' || event.request.destination === 'font'
+  if (!cacheable) return
   event.respondWith(fetch(event.request).then(response => {
     if (response.ok && response.type !== 'opaque') {
       const copy = response.clone()

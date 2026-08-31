@@ -1,6 +1,6 @@
 const crypto = require('node:crypto')
 
-const FEATURE_KEYS = ['master_data', 'jadwal', 'absensi', 'jurnal', 'penilaian', 'keuangan', 'whatsapp', 'posting', 'modul_ajar', 'backup_drive', 'website', 'cashless', 'ekantin']
+const FEATURE_KEYS = ['master_data', 'jadwal', 'absensi', 'jurnal', 'penilaian', 'keuangan', 'whatsapp', 'posting', 'modul_ajar', 'backup_drive', 'website', 'rest_api', 'cashless', 'ekantin']
 const PLAN_FEATURES = {
   trial: FEATURE_KEYS,
   lite: FEATURE_KEYS.filter(key => !['backup_drive', 'website'].includes(key)),
@@ -20,6 +20,7 @@ const FEATURE_PREFIXES = {
   website: ['/api/tenant/domain', '/api/tenant/domain-status', '/api/tenant/verify-domain', '/api/posting/public'],
   cashless: ['/api/cashless'],
   ekantin: ['/api/kantin'],
+  rest_api: ['/api/external'],
 }
 
 function addMonthsIso(from, months = 1) {

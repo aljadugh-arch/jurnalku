@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { persist } from 'zustand/middleware'
 import api from '../services/api'
 import { applyTheme } from '../lib/applyTheme'
 
@@ -18,7 +19,9 @@ interface SettingsState {
   setSettings: (s: Partial<Settings>) => void
 }
 
-export const useSettingsStore = create<SettingsState>((set, get) => ({
+export const useSettingsStore = create<SettingsState>()(
+  persist(
+    (set, get) => ({
   settings: {},
   loadSettings: async () => {
     try {
@@ -34,4 +37,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     set({ settings })
     applyTheme(settings)
   },
-}))
+    }),
+    { name: 'jurnalku_settings', partialize: (state: SettingsState) => ({ settings: state.settings }) }
+  )
+)
