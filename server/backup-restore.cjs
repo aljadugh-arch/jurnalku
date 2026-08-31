@@ -5,80 +5,386 @@ const zlib = require('node:zlib')
 const Database = require('better-sqlite3')
 
 class ValidationError extends Error {}
-const S=(label,tables,optional=[])=>({label,tables,optional})
-const SECTIONS=Object.freeze({
- settings:S('Pengaturan Lembaga',['settings']), notif:S('Pengaturan Notifikasi',['notif_settings']),
- gtk:S('Data GTK',['gtk']), mapel:S('Mata Pelajaran',['mapel']), tahun_ajaran:S('Tahun Ajaran',['tahun_ajaran']), rombel:S('Rombongan Belajar',['rombel']), siswa:S('Data Siswa',['siswa']),
- jadwal:S('Jadwal & Pengajar',['template_jadwal','pengajar','jadwal','sesi_kelas_guru']),
- jurnal:S('Jurnal & Nilai',['jurnal_mengajar','penilaian_harian','rapor','catatan_kepribadian','rapor_sync_log'],['rapor_sync_log']),
- absensi:S('Absensi',['absensi_siswa','absensi_guru','kegiatan_khusus','absensi_kegiatan']),
- ekskul:S('Ekstrakurikuler',['ekskul','ekskul_anggota','absensi_ekskul']), tagihan:S('Tagihan',['jenis_tagihan','tagihan']),
- tabungan:S('Tabungan',['tabungan']), cashless:S('Cashless',['cashless_accounts','cashless_transactions']),
- kalender:S('Kalender KBM',['kalender_kbm']), modul:S('Modul Ajar',['modul_ajar']),
- keuangan:S('Keuangan',['keuangan_akun','keuangan_kategori','keuangan_transaksi']),
- tahfidz:S('Tahfidz',['tahfidz_kelompok','tahfidz_peserta','tahfidz_pertemuan','tahfidz_absensi']),
- pesantren:S('Pesantren',['rombel_jam_pulang']), perpustakaan:S('Perpustakaan',['library_config'])
+const S = (label, tables, optional = []) => ({ label, tables, optional })
+const SECTIONS = Object.freeze({
+  settings: S('Pengaturan Lembaga', ['settings']),
+  notif: S('Pengaturan Notifikasi', ['notif_settings']),
+  gtk: S('Data GTK', ['gtk']), mapel: S('Mata Pelajaran', ['mapel']),
+  tahun_ajaran: S('Tahun Ajaran', ['tahun_ajaran']), rombel: S('Rombongan Belajar', ['rombel']),
+  siswa: S('Data Siswa', ['siswa']),
+  jadwal: S('Jadwal & Pengajar', ['template_jadwal', 'pengajar', 'jadwal', 'sesi_kelas_guru']),
+  jurnal: S('Jurnal & Nilai', ['jurnal_mengajar', 'penilaian_harian', 'rapor', 'catatan_kepribadian', 'rapor_sync_log'], ['rapor_sync_log']),
+  absensi: S('Absensi', ['absensi_siswa', 'absensi_guru', 'kegiatan_khusus', 'absensi_kegiatan']),
+  jamaah: S('Absensi Jamaah', ['jamaah_sesi', 'jamaah_rekap_manual', 'absensi_kegiatan']),
+  ekskul: S('Ekstrakurikuler', ['ekskul', 'ekskul_anggota', 'absensi_ekskul']),
+  tagihan: S('Tagihan & Pembayaran', ['jenis_tagihan', 'tagihan']),
+  tabungan: S('Tabungan', ['tabungan']),
+  cashless: S('Cashless', ['cashless_accounts', 'cashless_transactions', 'cashless_ledger', 'cashless_invoices', 'cashless_cards', 'cashless_provider_config', 'cashless_topup_manual']),
+  kalender: S('Kalender KBM', ['kalender_kbm']), modul: S('Modul Ajar', ['modul_ajar']),
+  keuangan: S('Laporan Keuangan', ['keuangan_akun', 'keuangan_kategori', 'keuangan_transaksi']),
+  tahfidz: S('Tahfidz', ['tahfidz_kelompok', 'tahfidz_peserta', 'tahfidz_pertemuan', 'tahfidz_absensi']),
+  pesantren: S('Pesantren', ['rombel_jam_pulang']), perpustakaan: S('Perpustakaan', ['library_config']),
+  kantin: S('Kantin', ['kantin_menu', 'kantin_orders']), beasiswa: S('Beasiswa', ['beasiswa']),
+  dokumen: S('Dokumen & Tugas', ['tugas_siswa', 'ai_documents']), peminatan: S('Peminatan', ['peminatan_jenis']),
+  asrama: S('Pesantren & Asrama', ['asrama', 'kamar', 'penempatan_kamar', 'perizinan_santri']),
 })
-const EXCLUDED=Object.freeze({users:'password dan akun',wa_gateway_config:'token, API key, dan sesi WhatsApp',broadcast_log:'log operasional',broadcast_detail:'nomor penerima dan log operasional'})
-const MAX_ROWS=100000, MAX_BYTES=10*1024*1024, DENY=/(password|passwd|secret|token|api[_-]?key|session|credential|private[_-]?key)/i
-const LEGACY_SLUG_TARGETS=Object.freeze({
- 'mts-plus-sunan-drajat-7-palang':'mtsplussd7',
- 'mi-miftahul-huda-ngimbang':'mimifdangimbang',
+const EXCLUDED = Object.freeze({
+  users: 'password dan akun', wa_gateway_config: 'token, API key, dan sesi WhatsApp',
+  broadcast_log: 'log operasional', broadcast_detail: 'nomor penerima dan log operasional',
 })
-const canonical=v=>v===null||typeof v!=='object'?JSON.stringify(v):Array.isArray(v)?`[${v.map(canonical).join(',')}]`:`{${Object.keys(v).sort().map(k=>`${JSON.stringify(k)}:${canonical(v[k])}`).join(',')}}`
-const checksum=v=>crypto.createHash('sha256').update(canonical(v)).digest('hex')
-const q=x=>'"'+String(x).replaceAll('"','""')+'"'
-function createService(db,options={}) {
- const backupDir=options.backupDir||process.env.JURNALKU_BACKUP_DIR||path.resolve(__dirname,'../var/backups')
- const names=new Set(db.prepare("SELECT name FROM sqlite_master WHERE type='table'").all().map(x=>x.name))
- const info=t=>db.pragma(`table_info(${JSON.stringify(t)})`), cols=t=>info(t).map(x=>x.name), tenantTable=t=>names.has(t)&&cols(t).includes('tenant_id')
- const available=k=>{const s=SECTIONS[k];return !!s&&s.tables.filter(t=>!s.optional.includes(t)).every(tenantTable)&&s.tables.some(tenantTable)}
- const selectedKeys=input=>{const list=input===undefined?Object.keys(SECTIONS).filter(available):input;if(!Array.isArray(list)||!list.length||list.some(k=>typeof k!=='string'||!available(k))||new Set(list).size!==list.length)throw new ValidationError('Bagian backup kosong, duplikat, atau tidak didukung');return list}
- const safeCols=t=>cols(t).filter(c=>c==='tenant_id'||!DENY.test(c))
- const rowsFor=(key,tid)=>SECTIONS[key].tables.filter(tenantTable).flatMap(t=>db.prepare(`SELECT ${safeCols(t).map(q)} FROM ${q(t)} WHERE tenant_id=?`).all(tid).map(r=>({__table:t,...r})))
- function exportData(tid,selected){if(!tid)throw new ValidationError('Tenant wajib');const tenant=db.prepare('SELECT id,nama FROM tenants WHERE id=?').get(tid);if(!tenant)throw new ValidationError('Tenant tidak ditemukan');const tables={},sections=[];for(const key of selectedKeys(selected)){tables[key]=rowsFor(key,tid);sections.push({key,count:tables[key].length,checksum:checksum(tables[key])})}return{manifest:{format:'jurnalku-tenant-backup',schema_version:1,created_at:new Date().toISOString(),tenant,users_excluded:true,excluded:EXCLUDED,sections},tables}}
- function legacyArtifact(tid,legacy){
-  if(!legacy||typeof legacy!=='object'||!legacy.data||typeof legacy.data!=='object'||Array.isArray(legacy.data))throw new ValidationError('Format backup Google Drive tidak valid')
-  const expectedTarget=LEGACY_SLUG_TARGETS[String(legacy.slug||'').toLowerCase()]
-  if(!expectedTarget||expectedTarget!==tid)throw new ValidationError('Backup Google Drive bukan milik tenant tujuan')
-  const tenant=db.prepare('SELECT id,nama FROM tenants WHERE id=?').get(tid);if(!tenant)throw new ValidationError('Tenant tidak ditemukan')
-  const tables={},sections=[],includedTables=[]
-  for(const [key,section] of Object.entries(SECTIONS)){
-   if(!available(key))continue
-   const rows=[]
-   let included=false
-   for(const table of section.tables){
-    if(!tenantTable(table)||!Array.isArray(legacy.data[table]))continue
-    included=true
-    includedTables.push(table)
-    const allowed=safeCols(table)
-    for(const source of legacy.data[table]){
-     if(!source||typeof source!=='object'||Array.isArray(source))throw new ValidationError(`Bentuk baris lama tidak valid pada ${table}`)
-     const row={__table:table,tenant_id:tid}
-     for(const column of allowed)if(column!=='tenant_id'&&Object.hasOwn(source,column))row[column]=source[column]
-     rows.push(row)
-    }
-   }
-   if(included){tables[key]=rows;sections.push({key,count:rows.length,checksum:checksum(rows)})}
+const MAX_ROWS = 100000
+const MAX_BYTES = 50 * 1024 * 1024
+const MAX_MEDIA_FILES = 5000
+const MAX_MEDIA_FILE_BYTES = 10 * 1024 * 1024
+const MAX_MEDIA_TOTAL_BYTES = 30 * 1024 * 1024
+const DENY = /(password|passwd|secret|token|api[_-]?key|session|credential|private[_-]?key)/i
+const LEGACY_SLUG_TARGETS = Object.freeze({
+  'mts-plus-sunan-drajat-7-palang': 'mtsplussd7',
+  'mi-miftahul-huda-ngimbang': 'mimifdangimbang',
+})
+const canonical = value => value === null || typeof value !== 'object'
+  ? JSON.stringify(value)
+  : Array.isArray(value)
+    ? `[${value.map(canonical).join(',')}]`
+    : `{${Object.keys(value).sort().map(key => `${JSON.stringify(key)}:${canonical(value[key])}`).join(',')}}`
+const checksum = value => crypto.createHash('sha256').update(canonical(value)).digest('hex')
+const q = value => `"${String(value).replaceAll('"', '""')}"`
+const sha256 = buffer => crypto.createHash('sha256').update(buffer).digest('hex')
+
+function createService(db, options = {}) {
+  const backupDir = options.backupDir || process.env.JURNALKU_BACKUP_DIR || path.resolve(__dirname, '../var/backups')
+  const mediaRoot = path.resolve(options.mediaRoot || process.env.MEDIA_ROOT || path.join(__dirname, 'uploads'))
+  const names = new Set(db.prepare("SELECT name FROM sqlite_master WHERE type='table'").all().map(row => row.name))
+  const info = table => db.pragma(`table_info(${JSON.stringify(table)})`)
+  const cols = table => info(table).map(row => row.name)
+  const tenantTable = table => names.has(table) && cols(table).includes('tenant_id')
+  const available = key => {
+    const section = SECTIONS[key]
+    return Boolean(section) && section.tables.filter(table => !section.optional.includes(table)).every(tenantTable) && section.tables.some(tenantTable)
   }
-  if(!sections.length)throw new ValidationError('Backup Google Drive tidak memiliki bagian data yang didukung')
-  return{manifest:{format:'jurnalku-tenant-backup',schema_version:1,created_at:legacy.exported_at||new Date().toISOString(),tenant,users_excluded:true,excluded:EXCLUDED,legacy_source:{tenant_id:legacy.tenant_id||null,slug:legacy.slug||null},sections,legacy_tables:includedTables},tables}
- }
- function parseArtifact(tid,buffer){
-  if(!Buffer.isBuffer(buffer)||!buffer.length)throw new ValidationError('File backup wajib')
-  let raw=buffer
-  if(buffer[0]===0x1f&&buffer[1]===0x8b){try{raw=zlib.gunzipSync(buffer,{maxOutputLength:MAX_BYTES+1})}catch(e){if(e?.code==='ERR_BUFFER_TOO_LARGE')throw new ValidationError('File backup terlalu besar setelah diekstrak');throw new ValidationError('File GZIP rusak atau tidak valid')}}
-  if(raw.length>MAX_BYTES)throw new ValidationError('File backup terlalu besar setelah diekstrak')
-  let artifact;try{artifact=JSON.parse(raw.toString('utf8'))}catch{throw new ValidationError('JSON backup tidak valid')}
-  return artifact?.manifest?.format==='jurnalku-tenant-backup'?artifact:legacyArtifact(tid,artifact)
- }
- function normalized(tid,artifact){if(!artifact||Buffer.byteLength(JSON.stringify(artifact))>MAX_BYTES||artifact.manifest?.format!=='jurnalku-tenant-backup'||artifact.manifest.schema_version!==1)throw new ValidationError('Format atau versi backup tidak valid');if(artifact.manifest.tenant?.id!==tid)throw new ValidationError('Backup lintas tenant ditolak');const sections=artifact.manifest.sections;if(!Array.isArray(sections)||!sections.length||new Set(sections.map(s=>s.key)).size!==sections.length||Object.keys(artifact.tables||{}).sort().join()!==sections.map(s=>s.key).sort().join())throw new ValidationError('Bagian backup kosong, duplikat, atau tidak cocok');let total=0;const rows=[];for(const s of sections){if(!available(s.key)||Object.keys(s).filter(k=>k!=='label').sort().join()!=='checksum,count,key'||!Array.isArray(artifact.tables[s.key])||s.count!==artifact.tables[s.key].length||checksum(artifact.tables[s.key])!==s.checksum)throw new ValidationError('Manifest, jumlah, atau checksum tidak cocok');for(const row of artifact.tables[s.key]){const t=row?.__table;if(!t||!SECTIONS[s.key].tables.includes(t)||!tenantTable(t))throw new ValidationError('Tabel tidak diizinkan');const expected=new Set(['__table',...safeCols(t)]);if(Object.keys(row).some(c=>!expected.has(c))||!artifact.manifest.legacy_source&&safeCols(t).some(c=>!(c in row)))throw new ValidationError('Bentuk baris tidak valid');rows.push({...row,tenant_id:tid})}total+=artifact.tables[s.key].length}if(total>MAX_ROWS)throw new ValidationError('Jumlah baris melewati batas');return{sections,rows,total,tables:artifact.manifest.legacy_tables||[...new Set(rows.map(r=>r.__table))]}}
- function graph(rows){const tables=[...new Set(rows.map(r=>r.__table))],set=new Set(tables),edges=[];for(const child of tables)for(const fk of db.pragma(`foreign_key_list(${JSON.stringify(child)})`))if(set.has(fk.table))edges.push([fk.table,child]);const out=[],left=new Set(tables);while(left.size){const t=[...left].find(x=>!edges.some(([p,c])=>c===x&&left.has(p)));if(!t)throw new ValidationError('Siklus dependency tidak didukung');out.push(t);left.delete(t)}return out}
- function validateRefs(tid,rows){const incoming=new Map;for(const r of rows){if(!incoming.has(r.__table))incoming.set(r.__table,[]);incoming.get(r.__table).push(r)}for(const r of rows)for(const fk of db.pragma(`foreign_key_list(${JSON.stringify(r.__table)})`)){const value=r[fk.from];if(value==null)continue;if(!tenantTable(fk.table))throw new ValidationError(`FK ${r.__table}.${fk.from} menuju tabel global tidak didukung`);const inFile=(incoming.get(fk.table)||[]).some(x=>x[fk.to]===value&&x.tenant_id===tid);const inDb=db.prepare(`SELECT 1 FROM ${q(fk.table)} WHERE ${q(fk.to)}=? AND tenant_id=?`).get(value,tid);if(!inFile&&!inDb)throw new ValidationError(`FK lintas tenant atau hilang: ${r.__table}.${fk.from}`)}}
- function snapshot(tid){fs.mkdirSync(backupDir,{recursive:true,mode:0o700});fs.chmodSync(backupDir,0o700);const target=path.join(backupDir,`${Date.now()}-${crypto.randomBytes(8).toString('hex')}-${String(tid).replace(/[^a-z0-9_-]/gi,'_')}.sqlite`);db.exec(`VACUUM INTO '${target.replaceAll("'","''")}'`);fs.chmodSync(target,0o600);const check=new Database(target,{readonly:true,fileMustExist:true});try{if(check.pragma('quick_check',{simple:true})!=='ok')throw new Error('Snapshot SQLite rusak')}finally{check.close()}for(const f of fs.readdirSync(backupDir).filter(x=>x.endsWith('.sqlite')).sort((a,b)=>fs.statSync(path.join(backupDir,a)).mtimeMs-fs.statSync(path.join(backupDir,b)).mtimeMs).slice(0,-20))fs.unlinkSync(path.join(backupDir,f));return target}
- function restore(tid,artifact,mode='merge',confirmation,replaceConfirmation){const data=normalized(tid,artifact);if(confirmation!=='RESTORE'||!['merge','replace'].includes(mode)||mode==='replace'&&replaceConfirmation!=='REPLACE DATA')throw new ValidationError('Konfirmasi restore tidak valid');validateRefs(tid,data.rows);const order=graph((data.tables||[...new Set(data.rows.map(r=>r.__table))]).map(__table=>({__table}))),byTable=Object.groupBy(data.rows,r=>r.__table);snapshot(tid);const counts={inserted:0,skipped:0};db.transaction(()=>{if(mode==='replace'){const chosen=new Set(data.tables||order);for(const parent of order)for(const fkRow of db.prepare("SELECT name FROM sqlite_master WHERE type='table'").all())if(tenantTable(fkRow.name)&&!chosen.has(fkRow.name))for(const fk of db.pragma(`foreign_key_list(${JSON.stringify(fkRow.name)})`))if(fk.table===parent&&db.prepare(`SELECT 1 FROM ${q(fkRow.name)} WHERE tenant_id=? LIMIT 1`).get(tid))throw new ValidationError(`Replace ditolak: dependency ${fkRow.name} tidak dipilih`);for(const t of [...order].reverse())db.prepare(`DELETE FROM ${q(t)} WHERE tenant_id=?`).run(tid)}for(const t of order)for(const row of byTable[t]||[]){const pk=info(t).filter(c=>c.pk).sort((a,b)=>a.pk-b.pk);if(mode==='merge'&&pk.length){const where=pk.map(c=>`${q(c.name)}=?`).join(' AND '),hit=db.prepare(`SELECT tenant_id FROM ${q(t)} WHERE ${where}`).get(...pk.map(c=>row[c.name]));if(hit){if(hit.tenant_id!==tid)throw new ValidationError(`Konflik ID lintas tenant pada ${t}`);counts.skipped++;continue}}const cs=safeCols(t).filter(c=>c in row);if(!cs.length)throw new ValidationError(`Baris kosong tidak valid pada ${t}`);db.prepare(`INSERT INTO ${q(t)} (${cs.map(q)}) VALUES (${cs.map(c=>'@'+c)})`).run(row);counts.inserted++}const bad=db.pragma('foreign_key_check');if(bad.length)throw new ValidationError('foreign_key_check gagal')})();return{success:true,...counts}}
- function preview(tid,a){const d=normalized(tid,a);validateRefs(tid,d.rows);return{valid:true,total:d.total,sections:d.sections.map(s=>({key:s.key,label:SECTIONS[s.key].label,count:s.count}))}}
- return{exportData,parseArtifact,preview,restore,checksum,sections:tid=>Object.entries(SECTIONS).filter(([k])=>available(k)).map(([key,v])=>({key,label:v.label,count:rowsFor(key,tid).length})),excluded:EXCLUDED}
+  const selectedKeys = input => {
+    const list = input === undefined ? Object.keys(SECTIONS).filter(available) : input
+    if (!Array.isArray(list) || !list.length || list.some(key => typeof key !== 'string' || !available(key)) || new Set(list).size !== list.length) {
+      throw new ValidationError('Bagian backup kosong, duplikat, atau tidak didukung')
+    }
+    return list
+  }
+  const safeCols = table => cols(table).filter(column => column === 'tenant_id' || !DENY.test(column))
+  const rowsFor = (key, tenantId) => SECTIONS[key].tables.filter(tenantTable).flatMap(table =>
+    db.prepare(`SELECT ${safeCols(table).map(q)} FROM ${q(table)} WHERE tenant_id=?`).all(tenantId).map(row => ({ __table: table, ...row })))
+
+  function mediaRelative(value) {
+    if (typeof value !== 'string' || !value.startsWith('/uploads/')) return null
+    let relative
+    try { relative = decodeURIComponent(value.slice('/uploads/'.length).split(/[?#]/)[0]) } catch { return null }
+    const normalized = path.posix.normalize(relative).replace(/^\/+/, '')
+    if (!normalized || normalized === '.' || normalized.startsWith('../') || path.posix.isAbsolute(normalized)) return null
+    const target = path.resolve(mediaRoot, normalized)
+    const inside = path.relative(mediaRoot, target)
+    return inside.startsWith('..') || path.isAbsolute(inside) ? null : normalized
+  }
+
+  function collectMedia(tables) {
+    const references = new Set()
+    for (const rows of Object.values(tables)) for (const row of rows) {
+      for (const value of Object.values(row)) {
+        if (typeof value !== 'string') continue
+        const direct = mediaRelative(value)
+        if (direct) references.add(direct)
+        if (value.includes('/uploads/') && /^[\[{]/.test(value.trim())) {
+          try {
+            const walk = item => {
+              if (typeof item === 'string') { const rel = mediaRelative(item); if (rel) references.add(rel) }
+              else if (Array.isArray(item)) item.forEach(walk)
+              else if (item && typeof item === 'object') Object.values(item).forEach(walk)
+            }
+            walk(JSON.parse(value))
+          } catch {}
+        }
+      }
+    }
+    if (references.size > MAX_MEDIA_FILES) throw new ValidationError('Jumlah media backup melewati batas')
+    const media = []
+    let total = 0
+    for (const relative of [...references].sort()) {
+      const source = path.resolve(mediaRoot, relative)
+      if (!fs.existsSync(source) || !fs.statSync(source).isFile()) continue
+      const buffer = fs.readFileSync(source)
+      if (buffer.length > MAX_MEDIA_FILE_BYTES) throw new ValidationError(`Media terlalu besar: ${relative}`)
+      total += buffer.length
+      if (total > MAX_MEDIA_TOTAL_BYTES) throw new ValidationError('Total media backup melewati batas')
+      media.push({ path: relative, size: buffer.length, checksum: sha256(buffer), data: buffer.toString('base64') })
+    }
+    return media
+  }
+
+  function exportData(tenantId, selected) {
+    if (!tenantId) throw new ValidationError('Tenant wajib')
+    const tenant = db.prepare('SELECT id,nama FROM tenants WHERE id=?').get(tenantId)
+    if (!tenant) throw new ValidationError('Tenant tidak ditemukan')
+    const tables = {}, sections = []
+    for (const key of selectedKeys(selected)) {
+      tables[key] = rowsFor(key, tenantId)
+      sections.push({ key, count: tables[key].length, checksum: checksum(tables[key]) })
+    }
+    const media = collectMedia(tables)
+    return {
+      manifest: {
+        format: 'jurnalku-tenant-backup', schema_version: 2, created_at: new Date().toISOString(), tenant,
+        users_excluded: true, excluded: EXCLUDED, sections,
+        media: { count: media.length, bytes: media.reduce((sum, item) => sum + item.size, 0), checksum: checksum(media) },
+      },
+      tables, media,
+    }
+  }
+
+  function legacyArtifact(tenantId, legacy) {
+    if (!legacy || typeof legacy !== 'object' || !legacy.data || typeof legacy.data !== 'object' || Array.isArray(legacy.data)) {
+      throw new ValidationError('Format backup Google Drive tidak valid')
+    }
+    const expectedTarget = LEGACY_SLUG_TARGETS[String(legacy.slug || '').toLowerCase()]
+    if (!expectedTarget || expectedTarget !== tenantId) throw new ValidationError('Backup Google Drive bukan milik tenant tujuan')
+    const tenant = db.prepare('SELECT id,nama FROM tenants WHERE id=?').get(tenantId)
+    if (!tenant) throw new ValidationError('Tenant tidak ditemukan')
+    const tables = {}, sections = [], includedTables = []
+    for (const [key, section] of Object.entries(SECTIONS)) {
+      if (!available(key)) continue
+      const rows = []
+      let included = false
+      for (const table of section.tables) {
+        if (!tenantTable(table) || !Array.isArray(legacy.data[table])) continue
+        included = true
+        includedTables.push(table)
+        const allowed = safeCols(table)
+        for (const source of legacy.data[table]) {
+          if (!source || typeof source !== 'object' || Array.isArray(source)) throw new ValidationError(`Bentuk baris lama tidak valid pada ${table}`)
+          const row = { __table: table, tenant_id: tenantId }
+          for (const column of allowed) if (column !== 'tenant_id' && Object.hasOwn(source, column)) row[column] = source[column]
+          rows.push(row)
+        }
+      }
+      if (included) {
+        tables[key] = rows
+        sections.push({ key, count: rows.length, checksum: checksum(rows) })
+      }
+    }
+    if (!sections.length) throw new ValidationError('Backup Google Drive tidak memiliki bagian data yang didukung')
+    return {
+      manifest: {
+        format: 'jurnalku-tenant-backup', schema_version: 1, created_at: legacy.exported_at || new Date().toISOString(), tenant,
+        users_excluded: true, excluded: EXCLUDED, legacy_source: { tenant_id: legacy.tenant_id || null, slug: legacy.slug || null },
+        sections, legacy_tables: includedTables,
+      },
+      tables,
+    }
+  }
+
+  function parseArtifact(tenantId, buffer) {
+    if (!Buffer.isBuffer(buffer) || !buffer.length) throw new ValidationError('File backup wajib')
+    let raw = buffer
+    if (buffer[0] === 0x1f && buffer[1] === 0x8b) {
+      try { raw = zlib.gunzipSync(buffer, { maxOutputLength: MAX_BYTES + 1 }) }
+      catch (error) {
+        if (error?.code === 'ERR_BUFFER_TOO_LARGE') throw new ValidationError('File backup terlalu besar setelah diekstrak')
+        throw new ValidationError('File GZIP rusak atau tidak valid')
+      }
+    }
+    if (raw.length > MAX_BYTES) throw new ValidationError('File backup terlalu besar setelah diekstrak')
+    let artifact
+    try { artifact = JSON.parse(raw.toString('utf8')) } catch { throw new ValidationError('JSON backup tidak valid') }
+    return artifact?.manifest?.format === 'jurnalku-tenant-backup' ? artifact : legacyArtifact(tenantId, artifact)
+  }
+
+  function validateMedia(artifact) {
+    const version = artifact.manifest.schema_version
+    if (version === 1) return []
+    const media = artifact.media
+    const declared = artifact.manifest.media
+    if (!Array.isArray(media) || !declared || declared.count !== media.length || declared.checksum !== checksum(media)) {
+      throw new ValidationError('Manifest media tidak cocok')
+    }
+    if (media.length > MAX_MEDIA_FILES) throw new ValidationError('Jumlah media backup melewati batas')
+    let total = 0
+    const seen = new Set()
+    for (const item of media) {
+      if (!item || typeof item.path !== 'string' || seen.has(item.path) || path.posix.normalize(item.path) !== item.path || item.path.startsWith('../') || path.posix.isAbsolute(item.path)) {
+        throw new ValidationError('Path media tidak valid')
+      }
+      seen.add(item.path)
+      if (typeof item.data !== 'string' || typeof item.checksum !== 'string' || !Number.isInteger(item.size) || item.size < 0 || item.size > MAX_MEDIA_FILE_BYTES) {
+        throw new ValidationError('Bentuk media tidak valid')
+      }
+      const buffer = Buffer.from(item.data, 'base64')
+      if (buffer.length !== item.size || sha256(buffer) !== item.checksum) throw new ValidationError('Checksum media tidak cocok')
+      total += buffer.length
+      if (total > MAX_MEDIA_TOTAL_BYTES) throw new ValidationError('Total media backup melewati batas')
+    }
+    if (declared.bytes !== total) throw new ValidationError('Ukuran media tidak cocok')
+    return media
+  }
+
+  function normalized(tenantId, artifact) {
+    if (!artifact || Buffer.byteLength(JSON.stringify(artifact)) > MAX_BYTES || artifact.manifest?.format !== 'jurnalku-tenant-backup' || ![1, 2].includes(artifact.manifest.schema_version)) {
+      throw new ValidationError('Format atau versi backup tidak valid')
+    }
+    if (artifact.manifest.tenant?.id !== tenantId) throw new ValidationError('Backup lintas tenant ditolak')
+    const sections = artifact.manifest.sections
+    if (!Array.isArray(sections) || !sections.length || new Set(sections.map(section => section.key)).size !== sections.length || Object.keys(artifact.tables || {}).sort().join() !== sections.map(section => section.key).sort().join()) {
+      throw new ValidationError('Bagian backup kosong, duplikat, atau tidak cocok')
+    }
+    let total = 0
+    const rows = []
+    for (const section of sections) {
+      if (!available(section.key) || Object.keys(section).filter(key => key !== 'label').sort().join() !== 'checksum,count,key' || !Array.isArray(artifact.tables[section.key]) || section.count !== artifact.tables[section.key].length || checksum(artifact.tables[section.key]) !== section.checksum) {
+        throw new ValidationError('Manifest, jumlah, atau checksum tidak cocok')
+      }
+      for (const row of artifact.tables[section.key]) {
+        const table = row?.__table
+        if (!table || !SECTIONS[section.key].tables.includes(table) || !tenantTable(table)) throw new ValidationError('Tabel tidak diizinkan')
+        const expected = new Set(['__table', ...safeCols(table)])
+        if (Object.keys(row).some(column => !expected.has(column)) || (!artifact.manifest.legacy_source && safeCols(table).some(column => !(column in row)))) {
+          throw new ValidationError('Bentuk baris tidak valid')
+        }
+        rows.push({ ...row, tenant_id: tenantId })
+      }
+      total += artifact.tables[section.key].length
+    }
+    if (total > MAX_ROWS) throw new ValidationError('Jumlah baris melewati batas')
+    return {
+      sections, rows, total, media: validateMedia(artifact),
+      tables: artifact.manifest.legacy_tables || [...new Set(rows.map(row => row.__table))],
+    }
+  }
+
+  function graph(rows) {
+    const tables = [...new Set(rows.map(row => row.__table))], set = new Set(tables), edges = []
+    for (const child of tables) for (const fk of db.pragma(`foreign_key_list(${JSON.stringify(child)})`)) if (set.has(fk.table)) edges.push([fk.table, child])
+    const out = [], left = new Set(tables)
+    while (left.size) {
+      const table = [...left].find(item => !edges.some(([parent, child]) => child === item && left.has(parent)))
+      if (!table) throw new ValidationError('Siklus dependency tidak didukung')
+      out.push(table); left.delete(table)
+    }
+    return out
+  }
+
+  function validateRefs(tenantId, rows) {
+    const incoming = new Map()
+    for (const row of rows) {
+      if (!incoming.has(row.__table)) incoming.set(row.__table, [])
+      incoming.get(row.__table).push(row)
+    }
+    for (const row of rows) for (const fk of db.pragma(`foreign_key_list(${JSON.stringify(row.__table)})`)) {
+      const value = row[fk.from]
+      if (value == null) continue
+      if (!tenantTable(fk.table)) throw new ValidationError(`FK ${row.__table}.${fk.from} menuju tabel global tidak didukung`)
+      const inFile = (incoming.get(fk.table) || []).some(candidate => candidate[fk.to] === value && candidate.tenant_id === tenantId)
+      const inDb = db.prepare(`SELECT 1 FROM ${q(fk.table)} WHERE ${q(fk.to)}=? AND tenant_id=?`).get(value, tenantId)
+      if (!inFile && !inDb) throw new ValidationError(`FK lintas tenant atau hilang: ${row.__table}.${fk.from}`)
+    }
+  }
+
+  function snapshot(tenantId) {
+    fs.mkdirSync(backupDir, { recursive: true, mode: 0o700 }); fs.chmodSync(backupDir, 0o700)
+    const target = path.join(backupDir, `${Date.now()}-${crypto.randomBytes(8).toString('hex')}-${String(tenantId).replace(/[^a-z0-9_-]/gi, '_')}.sqlite`)
+    db.exec(`VACUUM INTO '${target.replaceAll("'", "''")}'`); fs.chmodSync(target, 0o600)
+    const check = new Database(target, { readonly: true, fileMustExist: true })
+    try { if (check.pragma('quick_check', { simple: true }) !== 'ok') throw new Error('Snapshot SQLite rusak') } finally { check.close() }
+    for (const file of fs.readdirSync(backupDir).filter(name => name.endsWith('.sqlite')).sort((a, b) => fs.statSync(path.join(backupDir, a)).mtimeMs - fs.statSync(path.join(backupDir, b)).mtimeMs).slice(0, -20)) fs.unlinkSync(path.join(backupDir, file))
+    return target
+  }
+
+  function restoreMedia(media) {
+    const created = []
+    let restored = 0, skipped = 0
+    fs.mkdirSync(mediaRoot, { recursive: true, mode: 0o750 })
+    try {
+      for (const item of media) {
+        const target = path.resolve(mediaRoot, item.path)
+        const inside = path.relative(mediaRoot, target)
+        if (inside.startsWith('..') || path.isAbsolute(inside)) throw new ValidationError('Path media tidak valid')
+        if (fs.existsSync(target)) {
+          if (sha256(fs.readFileSync(target)) !== item.checksum) throw new ValidationError(`Media sudah ada tetapi checksum berbeda: ${item.path}`)
+          skipped++; continue
+        }
+        fs.mkdirSync(path.dirname(target), { recursive: true, mode: 0o750 })
+        fs.writeFileSync(target, Buffer.from(item.data, 'base64'), { flag: 'wx', mode: 0o640 })
+        created.push(target); restored++
+      }
+      return { media_restored: restored, media_skipped: skipped }
+    } catch (error) {
+      for (const target of created.reverse()) fs.rmSync(target, { force: true })
+      throw error
+    }
+  }
+
+  function restore(tenantId, artifact, mode = 'merge', confirmation, replaceConfirmation) {
+    const data = normalized(tenantId, artifact)
+    if (confirmation !== 'RESTORE' || !['merge', 'replace'].includes(mode) || (mode === 'replace' && replaceConfirmation !== 'REPLACE DATA')) throw new ValidationError('Konfirmasi restore tidak valid')
+    validateRefs(tenantId, data.rows)
+    const order = graph((data.tables || [...new Set(data.rows.map(row => row.__table))]).map(__table => ({ __table })))
+    const byTable = Object.groupBy(data.rows, row => row.__table)
+    const snapshotPath = snapshot(tenantId)
+    const counts = { inserted: 0, skipped: 0 }
+    db.transaction(() => {
+      if (mode === 'replace') {
+        const chosen = new Set(data.tables || order)
+        for (const parent of order) for (const fkRow of db.prepare("SELECT name FROM sqlite_master WHERE type='table'").all()) {
+          if (!tenantTable(fkRow.name) || chosen.has(fkRow.name)) continue
+          for (const fk of db.pragma(`foreign_key_list(${JSON.stringify(fkRow.name)})`)) {
+            if (fk.table === parent && db.prepare(`SELECT 1 FROM ${q(fkRow.name)} WHERE tenant_id=? LIMIT 1`).get(tenantId)) throw new ValidationError(`Replace ditolak: dependency ${fkRow.name} tidak dipilih`)
+          }
+        }
+        for (const table of [...order].reverse()) db.prepare(`DELETE FROM ${q(table)} WHERE tenant_id=?`).run(tenantId)
+      }
+      for (const table of order) for (const row of byTable[table] || []) {
+        const pk = info(table).filter(column => column.pk).sort((a, b) => a.pk - b.pk)
+        if (mode === 'merge' && pk.length) {
+          const where = pk.map(column => `${q(column.name)}=?`).join(' AND ')
+          const hit = db.prepare(`SELECT tenant_id FROM ${q(table)} WHERE ${where}`).get(...pk.map(column => row[column.name]))
+          if (hit) {
+            if (hit.tenant_id !== tenantId) throw new ValidationError(`Konflik ID lintas tenant pada ${table}`)
+            counts.skipped++; continue
+          }
+        }
+        const columns = safeCols(table).filter(column => column in row)
+        if (!columns.length) throw new ValidationError(`Baris kosong tidak valid pada ${table}`)
+        db.prepare(`INSERT INTO ${q(table)} (${columns.map(q)}) VALUES (${columns.map(column => `@${column}`)})`).run(row)
+        counts.inserted++
+      }
+      if (db.pragma('foreign_key_check').length) throw new ValidationError('foreign_key_check gagal')
+    })()
+    let mediaResult
+    try {
+      mediaResult = restoreMedia(data.media)
+    } catch (error) {
+      throw new ValidationError(`${error.message} (data database sudah di-rollback oleh transaksi; snapshot ${path.basename(snapshotPath)} tersedia)`)
+    }
+    return { success: true, ...counts, ...mediaResult, snapshot: path.basename(snapshotPath) }
+  }
+
+  function preview(tenantId, artifact) {
+    const data = normalized(tenantId, artifact); validateRefs(tenantId, data.rows)
+    return { valid: true, total: data.total, media_count: data.media.length, media_bytes: data.media.reduce((sum, item) => sum + item.size, 0), sections: data.sections.map(section => ({ key: section.key, label: SECTIONS[section.key].label, count: section.count })) }
+  }
+
+  return {
+    exportData, parseArtifact, preview, restore, checksum,
+    sections: tenantId => Object.entries(SECTIONS).filter(([key]) => available(key)).map(([key, value]) => ({ key, label: value.label, count: rowsFor(key, tenantId).length })),
+    excluded: EXCLUDED,
+  }
 }
-function registerRoutes(app,db,{ADMIN,upload,dbPath}){const service=createService(db,{dbPath}),wrap=fn=>(req,res,next)=>{Promise.resolve().then(()=>fn(req,res)).catch(next)},up=(req,res,next)=>upload.single('backup')(req,res,e=>e?next(new ValidationError(e.code==='LIMIT_FILE_SIZE'?'File terlalu besar':e.message)):next()),parse=req=>{if(!req.file)throw new ValidationError('File backup wajib');return service.parseArtifact(req.tenantId,req.file.buffer)};app.get('/api/backup-restore/sections',ADMIN,wrap((req,res)=>res.json(service.sections(req.tenantId))));app.post('/api/backup-restore/export',ADMIN,wrap((req,res)=>res.set({'Content-Type':'application/json','Content-Disposition':`attachment; filename="jurnalku-${Date.now()}.json"`}).send(JSON.stringify(service.exportData(req.tenantId,req.body.sections)))));app.post('/api/backup-restore/preview',ADMIN,up,wrap((req,res)=>res.json(service.preview(req.tenantId,parse(req)))));app.post('/api/backup-restore/restore',ADMIN,up,wrap((req,res)=>res.json(service.restore(req.tenantId,parse(req),req.body.mode,req.body.confirmation,req.body.replace_confirmation))));app.use('/api/backup-restore',(e,req,res,next)=>res.status(e instanceof ValidationError?400:500).json({error:e.message||'Backup/restore gagal'}))}
-module.exports={createService,registerRoutes,SECTIONS,EXCLUDED,ValidationError}
+
+function registerRoutes(app, db, { ADMIN, upload, dbPath, mediaRoot }) {
+  const service = createService(db, { dbPath, mediaRoot })
+  const wrap = fn => (req, res, next) => { Promise.resolve().then(() => fn(req, res)).catch(next) }
+  const up = (req, res, next) => upload.single('backup')(req, res, error => error ? next(new ValidationError(error.code === 'LIMIT_FILE_SIZE' ? 'File terlalu besar' : error.message)) : next())
+  const parse = req => { if (!req.file) throw new ValidationError('File backup wajib'); return service.parseArtifact(req.tenantId, req.file.buffer) }
+  app.get('/api/backup-restore/sections', ADMIN, wrap((req, res) => res.json(service.sections(req.tenantId))))
+  app.post('/api/backup-restore/export', ADMIN, wrap((req, res) => res.set({ 'Content-Type': 'application/json', 'Content-Disposition': `attachment; filename="jurnalku-${Date.now()}.json"` }).send(JSON.stringify(service.exportData(req.tenantId, req.body.sections)))))
+  app.post('/api/backup-restore/preview', ADMIN, up, wrap((req, res) => res.json(service.preview(req.tenantId, parse(req)))))
+  app.post('/api/backup-restore/restore', ADMIN, up, wrap((req, res) => res.json(service.restore(req.tenantId, parse(req), req.body.mode, req.body.confirmation, req.body.replace_confirmation))))
+  app.use('/api/backup-restore', (error, req, res, next) => res.status(error instanceof ValidationError ? 400 : 500).json({ error: error.message || 'Backup/restore gagal' }))
+}
+
+module.exports = { createService, registerRoutes, SECTIONS, EXCLUDED, ValidationError }

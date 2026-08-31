@@ -13,6 +13,7 @@ const zlib = require('node:zlib')
 const fs = require('node:fs')
 
 const path = require('node:path')
+const { createService } = require('./backup-restore.cjs')
 
 // Kredensial dicari per-aplikasi (relatif ke folder server yang berjalan) agar
 // jurnal.cc.cd dan jurnalmadrasah.web.id tidak saling membaca kredensial satu sama lain.
@@ -255,9 +256,15 @@ async function driveUpload(token, { name, folderId, buffer, mimeType }) {
 
 // Export semua tabel yang punya kolom tenant_id, filter tenant → objek {table: rows[]}
 function exportTenantData(db, tenantId) {
+  const excludedTables = new Set([
+    'users', 'wa_gateway_config', 'wa_sessions', 'wa_queue', 'wa_notif_whitelist',
+    'broadcast_log', 'broadcast_detail', 'backup_log', 'backup_config',
+    'google_drive_oauth_state', 'external_api_keys', 'subscription_unlock_keys',
+  ])
   const tables = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'").all()
   const out = {}
   for (const { name } of tables) {
+    if (excludedTables.has(name)) continue
     let cols
     try { cols = db.prepare(`PRAGMA table_info(${name})`).all() } catch { continue }
     if (!cols.some(c => c.name === 'tenant_id')) continue
@@ -274,7 +281,7 @@ function tsStamp() {
   return `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}`
 }
 
-function registerBackupRoutes(app, db, { requireRole, uuid }) {
+function registerBackupRoutes(app, db, { requireRole, uuid, mediaRoot }) {
   const kadmin = requireRole('admin', 'super_admin')
 
   const getConfig = (tenantId) =>
@@ -368,8 +375,8 @@ function registerBackupRoutes(app, db, { requireRole, uuid }) {
       const cfg = getConfig(req.tenantId)
       const folderId = cfg.folder_id || process.env.GOOGLE_DRIVE_BACKUP_FOLDER_ID || null
 
-      const data = exportTenantData(db, req.tenantId)
-      const json = JSON.stringify({ tenant_id: req.tenantId, slug, exported_at: new Date().toISOString(), data })
+      const artifact = createService(db, { mediaRoot: mediaRoot || process.env.MEDIA_ROOT || path.join(APP_ROOT, 'uploads') }).exportData(req.tenantId)
+      const json = JSON.stringify(artifact)
       const gz = zlib.gzipSync(Buffer.from(json, 'utf8'))
 
       const driveFileId = await driveUpload(token, { name: filename, folderId, buffer: gz, mimeType: 'application/gzip' })
@@ -417,4 +424,4 @@ function registerBackupRoutes(app, db, { requireRole, uuid }) {
   })
 }
 
-module.exports = { setupBackupTables, registerBackupRoutes, loadAuth, resolveWorkingAuth }
+module.exports = { setupBackupTables, registerBackupRoutes, loadAuth, resolveWorkingAuth, exportTenantData }

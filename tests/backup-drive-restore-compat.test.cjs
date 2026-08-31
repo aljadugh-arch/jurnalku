@@ -19,7 +19,7 @@ test('gzip expansion beyond the restore limit is rejected', () => {
   const db = database()
   db.prepare('UPDATE tenants SET id=? WHERE id=?').run('mtsplussd7', 'target-tenant')
   const service = createService(db)
-  const compressed = zlib.gzipSync(Buffer.alloc(10 * 1024 * 1024 + 1, 0x20))
+  const compressed = zlib.gzipSync(Buffer.alloc(50 * 1024 * 1024 + 1, 0x20))
   assert.throws(() => service.parseArtifact('mtsplussd7', compressed), /terlalu besar/)
   db.close()
 })

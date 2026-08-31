@@ -1200,12 +1200,12 @@ app.post('/api/tenants/:id/unlock-keys', SUPER, (req, res) => {
   res.status(201).json({ code, plan, months, tenant_id: req.params.id, note: 'Kunci hanya ditampilkan sekali. Simpan dan kirim kepada admin lembaga.' })
 })
 
-const backupUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024, files: 1 } })
-registerBackupRestoreRoutes(app, db, { ADMIN, upload: backupUpload, dbPath: path.join(__dirname, 'jurnalku.db') })
+const backupUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 50 * 1024 * 1024, files: 1 } })
+registerBackupRestoreRoutes(app, db, { ADMIN, upload: backupUpload, dbPath, mediaRoot: UPLOAD_DIR })
 registerFinanceExcelRoutes(app, db, { authorize: requireRole('bendahara', 'admin', 'super_admin', 'operator'), upload: multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024, files: 1 } }) })
 registerPortalRoutes(app, db, { auth: authMiddleware, requireRole, uuid: uuidv4, bcrypt })
 registerKantinRoutes(app, db, { requireRole, uuid: uuidv4, bcrypt })
-registerBackupRoutes(app, db, { requireRole, uuid: uuidv4 })
+registerBackupRoutes(app, db, { requireRole, uuid: uuidv4, mediaRoot: UPLOAD_DIR })
 const BEASISWA_ROLES = requireRole('admin', 'super_admin', 'bendahara')
 const BEASISWA_SELECT = `SELECT b.*, s.nama siswa_nama, s.nis siswa_nis
   FROM beasiswa b JOIN siswa s ON s.id=b.siswa_id AND s.tenant_id=b.tenant_id`
