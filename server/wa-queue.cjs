@@ -101,8 +101,26 @@ function queueDueSchedules(db,{tenantId,date,time}) {
   const rows=db.prepare(`SELECT j.id,j.gtk_id,j.jam_mulai,j.jam_selesai,g.nama nama_guru,g.no_hp,m.nama mapel,r.nama rombel
     FROM jadwal j JOIN gtk g ON g.id=j.gtk_id AND g.tenant_id=j.tenant_id AND g.status='aktif'
     JOIN mapel m ON m.id=j.mapel_id AND m.tenant_id=j.tenant_id JOIN rombel r ON r.id=j.rombel_id AND r.tenant_id=j.tenant_id
-    WHERE j.tenant_id=? AND lower(j.hari)=lower(?) AND time(j.jam_mulai) BETWEEN time(?) AND time(?, '+5 minutes')`).all(tenantId,day,time,time)
-  for(const x of rows){
+    WHERE j.tenant_id=? AND lower(j.hari)=lower(?) ORDER BY j.jam_mulai`).all(tenantId,day)
+  // Dua JTM identik/berurutan untuk guru-mapel-rombel menjadi satu sesi.
+  // Pilih slot pertama dan tampilkan rentang sampai JTM terakhir, sehingga tick berikutnya tidak mengirim ulang.
+  const grouped = new Map()
+  for (const row of rows) {
+    const key = `${row.gtk_id}|${row.mapel}|${row.rombel}|${date}`
+    const current = grouped.get(key)
+    if (!current || String(row.jam_mulai) < String(current.jam_mulai)) grouped.set(key, { ...row, _slots: [row] })
+    else if (String(row.jam_mulai) <= String(current.jam_selesai)) {
+      current.jam_selesai = String(row.jam_selesai) > String(current.jam_selesai) ? row.jam_selesai : current.jam_selesai
+      current._slots.push(row)
+    }
+  }
+  // Hanya proses grup ketika tick berada pada slot pertama atau jendela lima menitnya.
+  for(const x of grouped.values()){
+    const firstStart = String(x.jam_mulai)
+    const firstMinutes = Number(firstStart.slice(0, 2)) * 60 + Number(firstStart.slice(3, 5))
+    const tickMinutes = Number(String(time).slice(0, 2)) * 60 + Number(String(time).slice(3, 5))
+    if (!Number.isFinite(tickMinutes) || tickMinutes < firstMinutes - 5 || tickMinutes > firstMinutes + 5) { out.skipped++; continue }
+    delete x._slots
     if(!normalizePhone(x.no_hp)){out.missing++;continue}
     const defaultTemplate='Assalamu’alaikum {nama_guru}. Pengingat jadwal mengajar {mapel} di kelas {rombel}, pukul {jam_mulai}–{jam_selesai} pada {tanggal}. — {lembaga}'
     const gtkColumns = db.prepare('PRAGMA table_info(gtk)').all()
@@ -110,7 +128,7 @@ function queueDueSchedules(db,{tenantId,date,time}) {
     const gender = hasGender ? db.prepare('SELECT jenis_kelamin FROM gtk WHERE id=? AND tenant_id=?').get(x.gtk_id, tenantId)?.jenis_kelamin : 'L'
     const namaGuru = honorificTeacherName(x.nama_guru, gender)
     const message=render(String(conf.template_jadwal_guru||'').trim()||defaultTemplate,{...x,nama_guru:namaGuru,tanggal:date,lembaga:school?.nama_lembaga||'Sekolah'})
-    const r=enqueue(db,{tenantId,phone:x.no_hp,message,key:`jadwal-guru:${x.id}:${date}:${x.jam_mulai}`,targetType:'gtk',targetId:x.gtk_id})
+    const r=enqueue(db,{tenantId,phone:x.no_hp,message,key:`jadwal-guru:${x.gtk_id}:${x.mapel}:${x.rombel}:${date}:${x.jam_mulai}`,targetType:'gtk',targetId:x.gtk_id})
     if (r.queued) out.queued++
     else out.skipped++
   }

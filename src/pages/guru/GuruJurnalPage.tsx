@@ -111,7 +111,7 @@ export default function GuruJurnalPage() {
       setSignatureFile(null)
       clearSignature()
       loadData()
-    } catch { toast.error('Gagal menyimpan') }
+    } catch (err: any) { toast.error(err.response?.data?.error || 'Gagal menyimpan jurnal') }
   }
 
   const submitDraft = async (id: string) => {

@@ -11,9 +11,26 @@ import MobileMenuGrid from '../../components/MobileMenuGrid'
 
 const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899']
 
+const todayJakarta = () => new Intl.DateTimeFormat('en-CA', {
+  timeZone: 'Asia/Jakarta', year: 'numeric', month: '2-digit', day: '2-digit',
+}).format(new Date())
+
+const ATTENDANCE_CATEGORIES = [
+  ['QR Masuk/Pulang', 'qr_masuk_pulang'], ['Mata Pelajaran', 'mapel'], ['Jamaah', 'jamaah'],
+  ['Kokurikuler', 'kokurikuler'], ['Ekstrakurikuler', 'ekskul'], ['Kegiatan Lain', 'kegiatan_lain'],
+] as const
+
+const ATTENDANCE_STATUSES = [
+  ['Hadir', 'hadir', 'text-emerald-700'], ['Sakit', 'sakit', 'text-amber-700'],
+  ['Izin', 'izin', 'text-blue-700'], ['Alpha', 'alpha', 'text-red-700'], ['Lain', 'lain', 'text-gray-600'],
+] as const
+
 export default function AdminDashboard() {
   const [stats, setStats] = useState<any>(null)
   const [classMonitor, setClassMonitor] = useState<any>({ sessions: [], summary: { aktif: 0, selesai: 0, terlambat: 0, total: 0 } })
+  const [monitoring, setMonitoring] = useState<any>(null)
+  const [attendanceOverview, setAttendanceOverview] = useState<any>(null)
+  const [attendanceDate, setAttendanceDate] = useState(todayJakarta)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -22,10 +39,17 @@ export default function AdminDashboard() {
       setLoading(false)
     }).catch(() => setLoading(false))
     const loadClassMonitor = () => api.get('/admin/sesi-kelas/hari-ini').then(res => setClassMonitor(res.data)).catch(() => {})
+    const loadMonitoring = () => api.get('/admin/monitoring').then(res => setMonitoring(res.data)).catch(() => {})
     loadClassMonitor()
+    loadMonitoring()
     const timer = window.setInterval(loadClassMonitor, 30000)
     return () => window.clearInterval(timer)
   }, [])
+
+  useEffect(() => {
+    api.get('/admin/rekap-kehadiran', { params: { tanggal: attendanceDate } })
+      .then(res => setAttendanceOverview(res.data)).catch(() => setAttendanceOverview(null))
+  }, [attendanceDate])
 
   if (loading) return <div className="flex items-center justify-center py-20 text-gray-400">Memuat dashboard...</div>
   if (!stats) return <div className="text-center py-20 text-gray-400">Gagal memuat data</div>
@@ -86,6 +110,43 @@ export default function AdminDashboard() {
             ))}
           </div>
         )}
+      </Card>
+
+      <Card title="Pemantauan Aktivitas & Penugasan" icon={<ClipboardList size={18} className="text-primary" />}>
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 text-center text-xs">
+          <div className="rounded-lg bg-indigo-50 p-2"><p className="text-lg font-bold text-indigo-700">{monitoring?.assignments?.total || 0}</p><p className="text-gray-500">Penugasan</p></div>
+          <div className="rounded-lg bg-cyan-50 p-2"><p className="text-lg font-bold text-cyan-700">{monitoring?.student_qr?.total || 0}</p><p className="text-gray-500">Siswa QR</p></div>
+          <div className="rounded-lg bg-emerald-50 p-2"><p className="text-lg font-bold text-emerald-700">{monitoring?.teacher_checkins?.total || 0}</p><p className="text-gray-500">Guru Ceklok</p></div>
+          <div className="rounded-lg bg-amber-50 p-2"><p className="text-lg font-bold text-amber-700">{monitoring?.class_sessions?.total || 0}</p><p className="text-gray-500">Masuk Kelas</p></div>
+        </div>
+        {monitoring?.assignments?.rows?.length > 0 && <div className="mt-3 space-y-2">
+          {monitoring.assignments.rows.slice(0, 5).map((task: any) => <div key={task.id} className="flex items-center justify-between gap-2 rounded-lg bg-gray-50 p-2.5">
+            <div className="min-w-0"><p className="truncate text-sm font-medium text-gray-800">{task.judul}</p><p className="truncate text-xs text-gray-500">{task.guru_nama || '-'} • {task.rombel_nama || '-'} • {task.students || 0} siswa</p></div>
+            <Badge tone="blue">{task.deadline ? `Batas ${task.deadline}` : 'Tanpa batas'}</Badge>
+          </div>)}
+        </div>}
+      </Card>
+
+      <Card title="Rekap Kehadiran Siswa" icon={<UserCheck size={18} className="text-primary" />}>
+        <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <p className="text-xs text-gray-500">Setiap scan masuk dan pulang dihitung sebagai satu kejadian.</p>
+          <label className="flex items-center gap-2 text-xs text-gray-500">
+            Tanggal
+            <input type="date" value={attendanceDate} onChange={event => setAttendanceDate(event.target.value)} className="rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-sm text-gray-700" />
+          </label>
+        </div>
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
+          {ATTENDANCE_CATEGORIES.map(([label, key]) => {
+            const recap = attendanceOverview?.[key] || {}
+            return <div key={key} className="rounded-xl border border-gray-100 p-2.5">
+              <p className="text-xs font-medium text-gray-600">{label}</p>
+              <p className="mb-1.5 text-lg font-bold text-gray-800">{recap.hadir || 0}<span className="ml-1 text-xs font-normal text-gray-400">/{recap.total || 0}</span></p>
+              <div className="grid grid-cols-2 gap-x-2 gap-y-0.5 text-[11px]">
+                {ATTENDANCE_STATUSES.map(([statusLabel, statusKey, color]) => <span key={statusKey} className={color}>{statusLabel} {recap[statusKey] || 0}</span>)}
+              </div>
+            </div>
+          })}
+        </div>
       </Card>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">

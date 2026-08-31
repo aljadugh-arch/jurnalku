@@ -65,7 +65,8 @@ export default function GuruDashboard() {
   const finishClass = async () => {
     setClassBusy(true)
     try {
-      await api.post('/guru/sesi-kelas/selesai')
+      await api.post('/guru/sesi-kelas/selesai', { sesi_id: data.sesi_kelas_aktif?.id })
+      setData((current: any) => ({ ...current, sesi_kelas_aktif: null }))
       toast.success('Sesi kelas diselesaikan')
       await loadDashboard()
     } catch (err: any) {
@@ -90,7 +91,7 @@ export default function GuruDashboard() {
   // Jadwal yang jam selesainya sudah lewat: tidak bisa "Masuk" lagi, tampil "Selesai".
   const isFinished = (j: any) => {
     const e = toMinutes(j.jam_selesai)
-    return e >= 0 && cur > e
+    return j.sesi_status === 'selesai' || (e >= 0 && cur > e)
   }
 
   const tanggal = new Date().toLocaleDateString('id-ID', { timeZone: 'Asia/Jakarta', weekday: 'long', day: 'numeric', month: 'long' })

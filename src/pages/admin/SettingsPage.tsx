@@ -3,6 +3,7 @@ import { AlertTriangle, Save, Trash2, Smartphone } from 'lucide-react'
 import toast from 'react-hot-toast'
 import api from '../../services/api'
 import { applyTheme } from '../../lib/applyTheme'
+import { clearLocalTheme } from '../../stores/themeStore'
 import { useSettingsStore } from '../../stores/settingsStore'
 import { JENJANG_OPTIONS } from '../../lib/jenjang'
 import MapPicker from '../../components/MapPicker'
@@ -74,7 +75,10 @@ export default function SettingsPage() {
     setSaving(true)
     try {
       await api.put('/settings', { ...form, bg_blur: form.bg_blur || 0, pwa_enabled: form.pwa_enabled })
-      applyTheme(form)
+      // Tema lembaga yang baru disimpan menjadi acuan: hapus override lokal
+      // agar admin melihat hasilnya, termasuk setelah refresh.
+      clearLocalTheme()
+      applyTheme(form, true)
       setSettings(form)
       toast.success('Pengaturan berhasil disimpan')
     } catch { toast.error('Gagal menyimpan') }

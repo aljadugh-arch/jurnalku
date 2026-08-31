@@ -21,9 +21,13 @@ api.interceptors.response.use(
   (res) => res,
   (err) => {
     const url = err.config?.url || ''
-    if (err.response?.status === 401 && !url.includes('/auth/login')) {
-      sessionStorage.removeItem('jurnalku_token')
+    // Hanya token yang benar-benar ditolak server yang mengakhiri sesi.
+    // /auth/login dan /auth/me punya penanganan sendiri, dan kegagalan
+    // jaringan/5xx (err.response undefined) tidak boleh memaksa logout.
+    const authRoute = url.includes('/auth/login') || url.includes('/auth/me')
+    if (err.response?.status === 401 && !authRoute && !window.location.pathname.startsWith('/login')) {
       localStorage.removeItem('jurnalku_token')
+      sessionStorage.removeItem('jurnalku_token')
       window.location.href = '/login'
     }
     return Promise.reject(err)

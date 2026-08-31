@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Calendar, CheckCircle, BookOpen, Activity, ChevronRight, Clock, ClipboardCheck, Wallet, Receipt, NotebookPen, Users } from 'lucide-react'
+import { Calendar, CheckCircle, BookOpen, Activity, ChevronRight, Clock, ClipboardCheck, Wallet, Receipt, NotebookPen } from 'lucide-react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import api from '../../services/api'
 import { Card, StatCard, Badge, Avatar } from '../../components/ui'
@@ -28,8 +28,13 @@ function toMinutes(t: string) {
   return h * 60 + m
 }
 
+const ATTENDANCE_STATUSES = [
+  ['Hadir', 'hadir', 'text-emerald-700'], ['Sakit', 'sakit', 'text-amber-700'],
+  ['Izin', 'izin', 'text-blue-700'], ['Alpha', 'alpha', 'text-red-700'], ['Lain', 'lain', 'text-gray-600'],
+] as const
+
 export default function SiswaDashboard() {
-  const [data, setData] = useState<any>({ siswa: null, jadwal_hari_ini: [], rekap: { hadir: 0, sakit: 0, izin: 0, alpha: 0 } })
+  const [data, setData] = useState<any>({ siswa: null, jadwal_hari_ini: [], rekap: { hadir: 0, sakit: 0, izin: 0, alpha: 0 }, rekap_kehadiran: {} })
   const navigate = useNavigate()
   const location = useLocation()
 
@@ -103,13 +108,13 @@ export default function SiswaDashboard() {
 
       <div className="lg:hidden grid grid-cols-3 gap-3">
         {[
-          ['Kehadiran', '#kehadiran', <Activity size={18} />],
-          ['Tabungan', '#tabungan', <Wallet size={18} />],
-          ['Tagihan', '#tagihan', <Receipt size={18} />],
-          ['Nilai', '#nilai', <BookOpen size={18} />],
-          ['Jadwal', '#jadwal', <Calendar size={18} />],
-          ['Tugas', '#tugas', <ClipboardCheck size={18} />],
-          ['Catatan', '#catatan', <NotebookPen size={18} />],
+          ['Kehadiran', '#kehadiran', <Activity key="kehadiran" size={18} />],
+          ['Tabungan', '#tabungan', <Wallet key="tabungan" size={18} />],
+          ['Tagihan', '#tagihan', <Receipt key="tagihan" size={18} />],
+          ['Nilai', '#nilai', <BookOpen key="nilai" size={18} />],
+          ['Jadwal', '#jadwal', <Calendar key="jadwal" size={18} />],
+          ['Tugas', '#tugas', <ClipboardCheck key="tugas" size={18} />],
+          ['Catatan', '#catatan', <NotebookPen key="catatan" size={18} />],
         ].map(([label, hash, icon]: any) => (
           <button key={label} type="button" onClick={() => goSection(String(hash).slice(1))} className="rounded-2xl bg-white border border-gray-100 p-3 text-center shadow-sm active:scale-95 transition">
             <span className="mx-auto mb-2 flex h-10 w-10 items-center justify-center rounded-xl bg-primary text-white">{icon}</span>
@@ -132,18 +137,34 @@ export default function SiswaDashboard() {
 
 
       <div id="kehadiran"></div><Card title="Rekap Kehadiran Lengkap" icon={<Activity size={18} className="text-primary" />}>
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-2.5 mb-3 text-sm">
+          {[
+            ['QR Masuk/Pulang', data.rekap_kehadiran?.qr_masuk_pulang],
+            ['Mata Pelajaran', data.rekap_kehadiran?.mapel],
+            ['Jamaah', data.rekap_kehadiran?.jamaah],
+            ['Kokurikuler', data.rekap_kehadiran?.kokurikuler],
+            ['Ekstrakurikuler', data.rekap_kehadiran?.ekskul],
+            ['Kegiatan Lain', data.rekap_kehadiran?.kegiatan_lain],
+          ].map(([label, recap]: any) => <div key={label} className="rounded-xl border border-gray-100 p-2.5">
+            <p className="text-xs font-medium text-gray-600">{label}</p>
+            <p className="mb-1.5 text-lg font-bold text-gray-800">{recap?.hadir || 0}<span className="ml-1 text-xs font-normal text-gray-400">/{recap?.total || 0}</span></p>
+            <div className="grid grid-cols-2 gap-x-2 gap-y-0.5 text-[11px]">
+              {ATTENDANCE_STATUSES.map(([statusLabel, statusKey, color]) => <span key={statusKey} className={color}>{statusLabel} {recap?.[statusKey] || 0}</span>)}
+            </div>
+          </div>)}
+        </div>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
           {[
-            ['KBM', data.absensi_detail || []],
+            ['QR Masuk/Pulang', data.qr_masuk_pulang_detail || []],
+            ['Mata Pelajaran', data.mapel_detail || []],
             ['Jamaah', data.jamaah_detail || []],
-            ['Ekstrakurikuler', data.ekskul_detail || []],
             ['Kokurikuler', data.kokurikuler_detail || []],
-            ['Kegiatan', data.kegiatan_detail || []],
+            ['Ekstrakurikuler', data.ekskul_detail || []],
             ['Kegiatan Lain', data.kegiatan_lain_detail || []],
-          ].filter(([,rows]: any) => rows.length > 0 || ['KBM','Jamaah'].includes(String(''))).map(([label, rows]: any) => (
+          ].map(([label, rows]: any) => (
             <div key={label} className="rounded-xl border border-gray-100 p-3">
               <div className="flex justify-between mb-2"><b>{label}</b><span className="text-gray-400">{rows.length} data</span></div>
-              {rows.slice(0,4).map((r: any, i: number) => <div key={i} className="flex justify-between py-1 border-t border-gray-50"><span>{r.tanggal}</span><span className="capitalize">{r.status || '-'}</span></div>)}
+              {rows.slice(0,4).map((r: any, i: number) => <div key={i} className="flex justify-between gap-2 py-1 border-t border-gray-50"><span>{r.tanggal}</span><span className="text-right capitalize">{r.status || '-'}{label === 'QR Masuk/Pulang' && r.status_pulang ? ` / ${r.status_pulang}` : ''}</span></div>)}
               {rows.length === 0 && <p className="text-gray-400">Belum ada data</p>}
             </div>
           ))}

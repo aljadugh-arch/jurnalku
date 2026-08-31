@@ -17,12 +17,14 @@ import Gapcursor from '@tiptap/extension-gapcursor'
 import Focus from '@tiptap/extension-focus'
 import CharacterCount from '@tiptap/extension-character-count'
 import EmojiPicker from 'emoji-picker-react'
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef } from 'react'
+import api from '../services/api'
+import toast from 'react-hot-toast'
 import {
   Bold, Italic, Strikethrough, Code, Heading1, Heading2, Heading3,
   List, ListOrdered, Quote, Image as ImageIcon, Link as LinkIcon,
-  Undo, Redo, Smile, Camera, Video, MapPin, Hash, Circle, Plus,
-  Minus, CheckSquare, X, Loader2, Type, Superscript as SuperscriptIcon, Subscript as SubscriptIcon, Underline as UnderlineIcon
+  Undo, Redo, Smile, Camera, MapPin, Hash, Plus,
+  CheckSquare, X, Loader2, Superscript as SuperscriptIcon, Subscript as SubscriptIcon, Underline as UnderlineIcon
 } from 'lucide-react'
 
 interface RichEditorProps {
@@ -50,10 +52,7 @@ export default function RichEditor({ content, onChange, placeholder = 'Tulis pos
   const [showActivity, setShowActivity] = useState(false)
   const [activityType, setActivityType] = useState('')
   const [charCount, setCharCount] = useState(0)
-  const [media, setMedia] = useState<any[]>([])
   const [uploading, setUploading] = useState(false)
-  const editorRef = useRef<HTMLDivElement>(null)
-  const emojiPickerRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const editor = useEditor({
@@ -96,7 +95,6 @@ export default function RichEditor({ content, onChange, placeholder = 'Tulis pos
   const addImage = () => {
     if (imageUrl.trim()) {
       editor?.chain().focus().setImage({ src: imageUrl.trim(), alt: imageAlt.trim() }).run()
-      setMedia(prev => [...prev, { url: imageUrl.trim(), alt: imageAlt.trim(), type: 'image' }])
       setImageUrl('')
       setImageAlt('')
       setShowImage(false)
@@ -144,23 +142,26 @@ export default function RichEditor({ content, onChange, placeholder = 'Tulis pos
   const handleFileUpload = async (files: FileList) => {
     if (!files.length) return
     setUploading(true)
-    const formData = new FormData()
-    Array.from(files).forEach(f => formData.append('file', f))
     try {
-      const res = await fetch('/api/posting/upload', { method: 'POST', body: formData })
-      const data = await res.json()
-      if (data.media_url) {
+      // Backend menerima satu file per request. Kirim berurutan supaya pilihan
+      // beberapa file tidak ditolak Multer dan semua media tetap tersimpan.
+      for (const file of Array.from(files)) {
+        const formData = new FormData()
+        formData.append('file', file)
+        const response = await api.post('/posting/upload', formData)
+        const data = response.data
+        if (!data.media_url) throw new Error('Respons upload tidak valid')
         if (data.media_type === 'image') {
           editor?.chain().focus().setImage({ src: data.media_url, alt: data.filename }).run()
         } else if (data.media_type === 'video') {
           editor?.chain().focus().insertContent(`<video src="${data.media_url}" controls class="max-w-full rounded-lg my-2" />`).run()
         }
-        setMedia(prev => [...prev, { url: data.media_url, type: data.media_type, filename: data.filename }])
       }
-    } catch (e) {
-      console.error('Upload failed', e)
+    } catch (error: any) {
+      toast.error(error.response?.data?.error || error.message || 'Gagal mengunggah media')
     } finally {
       setUploading(false)
+      if (fileInputRef.current) fileInputRef.current.value = ''
     }
   }
 

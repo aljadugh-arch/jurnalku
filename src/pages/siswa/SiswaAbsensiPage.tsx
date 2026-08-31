@@ -4,17 +4,13 @@ import api from '../../services/api'
 
 export default function SiswaAbsensiPage() {
   const [absensi, setAbsensi] = useState<any[]>([])
-  const [tab, setTab] = useState<'kbm'|'jamaah'|'ekskul'|'kegiatan'>('kbm')
-  const [jamaah, setJamaah] = useState<any[]>([])
-  const [ekskul, setEkskul] = useState<any[]>([])
-  const [kegiatan, setKegiatan] = useState<any[]>([])
+  const [tab, setTab] = useState<'qr'|'mapel'|'jamaah'|'kokurikuler'|'ekskul'|'kegiatan'>('qr')
+  const [category, setCategory] = useState<Record<string, any[]>>({ mapel: [], jamaah: [], kokurikuler: [], ekskul: [], kegiatan: [] })
 
   useEffect(() => {
     api.get('/siswa/absensi').then(res => setAbsensi(res.data)).catch(() => {})
     api.get('/siswa/dashboard').then(res => {
-      setJamaah(res.data.jamaah_detail || [])
-      setEkskul(res.data.ekskul_detail || [])
-      setKegiatan([...(res.data.kokurikuler_detail || []), ...(res.data.kegiatan_detail || []), ...(res.data.kegiatan_lain_detail || [])])
+      setCategory({ mapel: res.data.mapel_detail || [], jamaah: res.data.jamaah_detail || [], kokurikuler: res.data.kokurikuler_detail || [], ekskul: res.data.ekskul_detail || [], kegiatan: res.data.kegiatan_lain_detail || [] })
     }).catch(() => {})
   }, [])
 
@@ -25,10 +21,12 @@ export default function SiswaAbsensiPage() {
   const icon = (s: string) => s==='hadir' ? <CheckCircle size={14} className="text-green-600"/> : s==='sakit' ? <AlertTriangle size={14} className="text-yellow-600"/> : s==='izin' ? <Clock size={14} className="text-blue-600"/> : <XCircle size={14} className="text-red-600"/>
 
   const tabs = [
-    { key:'kbm', label:'KBM', data: absensi },
-    { key:'jamaah', label:'Jamaah', data: jamaah },
-    { key:'ekskul', label:'Ekskul', data: ekskul },
-    { key:'kegiatan', label:'Kegiatan', data: kegiatan },
+    { key:'qr', label:'QR Masuk/Pulang', data: absensi },
+    { key:'mapel', label:'Mata Pelajaran', data: category.mapel },
+    { key:'jamaah', label:'Jamaah', data: category.jamaah },
+    { key:'kokurikuler', label:'Kokurikuler', data: category.kokurikuler },
+    { key:'ekskul', label:'Ekstrakurikuler', data: category.ekskul },
+    { key:'kegiatan', label:'Kegiatan Lain', data: category.kegiatan },
   ] as const
 
   const current = tabs.find(t => t.key === tab)!
@@ -49,8 +47,8 @@ export default function SiswaAbsensiPage() {
               <tr>
                 <th className="text-left px-4 py-3 font-medium text-gray-600">Tanggal</th>
                 <th className="text-left px-4 py-3 font-medium text-gray-600">Status</th>
-                {tab==='kbm' && <><th className="text-left px-4 py-3 font-medium text-gray-600">Masuk</th><th className="text-left px-4 py-3 font-medium text-gray-600">Pulang</th></>}
-                {tab!=='kbm' && <th className="text-left px-4 py-3 font-medium text-gray-600">{tab==='jamaah' ? 'Sesi' : tab==='ekskul' ? 'Ekskul' : 'Kegiatan'}</th>}
+                {tab==='qr' && <><th className="text-left px-4 py-3 font-medium text-gray-600">Masuk</th><th className="text-left px-4 py-3 font-medium text-gray-600">Pulang</th></>}
+                {tab!=='qr' && <th className="text-left px-4 py-3 font-medium text-gray-600">Konteks</th>}
                 <th className="text-left px-4 py-3 font-medium text-gray-600">Keterangan</th>
               </tr>
             </thead>
@@ -59,9 +57,9 @@ export default function SiswaAbsensiPage() {
               {current.data.map((a: any, i: number) => (
                 <tr key={a.id || i} className="hover:bg-gray-50">
                   <td className="px-4 py-3 text-gray-700">{a.tanggal}</td>
-                  <td className="px-4 py-3"><span className={"inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium " + badge(a.status)}>{icon(a.status)} {a.status||'-'}</span></td>
-                  {tab==='kbm' && <><td className="px-4 py-3 text-gray-600">{a.waktu_masuk || a.waktu_absen || '-'}</td><td className="px-4 py-3 text-gray-600">{a.waktu_pulang || '-'}</td></>}
-                  {tab!=='kbm' && <td className="px-4 py-3 text-gray-600">{a.sesi_nama || a.ekskul_nama || a.kegiatan_nama || '-'}</td>}
+                  <td className="px-4 py-3"><div className="flex flex-wrap gap-1.5"><span className={"inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium " + badge(a.status)}>{icon(a.status)} {tab === 'qr' ? `Masuk: ${a.status || '-'}` : (a.status || '-')}</span>{tab === 'qr' && a.status_pulang && <span className={"inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium " + badge(a.status_pulang)}>{icon(a.status_pulang)} Pulang: {a.status_pulang}</span>}</div></td>
+                  {tab==='qr' && <><td className="px-4 py-3 text-gray-600">{a.waktu_masuk || a.waktu_absen || '-'}</td><td className="px-4 py-3 text-gray-600">{a.waktu_pulang || '-'}</td></>}
+                  {tab!=='qr' && <td className="px-4 py-3 text-gray-600">{a.mapel_nama || a.sesi_nama || a.ekskul_nama || a.kegiatan_nama || '-'}</td>}
                   <td className="px-4 py-3 text-gray-500">{a.keterangan || '-'}</td>
                 </tr>
               ))}

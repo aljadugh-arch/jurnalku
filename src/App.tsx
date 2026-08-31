@@ -89,7 +89,10 @@ function AdminIndexRoute() {
 }
 
 function ProtectedRoute({ children, allowedRoles }: { children: ReactNode, allowedRoles?: string[] }) {
-  const { isAuthenticated, user } = useAuthStore()
+  const { isAuthenticated, user, authReady } = useAuthStore()
+  // Tunggu hidrasi /auth/me selesai supaya refresh tidak melempar ke /login
+  // dan halaman tidak memanggil API sebelum peran diketahui.
+  if (!authReady || (isAuthenticated && !user)) return <div className="flex items-center justify-center py-20 text-sm text-gray-400">Memuat sesi...</div>
   if (!isAuthenticated) return <Navigate to="/login" replace />
   if (allowedRoles && user && !allowedRoles.includes(user.role)) {
     const path = user.role === 'admin' || user.role === 'super_admin' || user.role === 'kepala' || user.role === 'bendahara' || user.role === 'operator' || user.role === 'tata_usaha' || user.role === 'tu' ? '/admin' :
@@ -100,11 +103,12 @@ function ProtectedRoute({ children, allowedRoles }: { children: ReactNode, allow
 }
 
 function RootRoute() {
-  const { isAuthenticated, user } = useAuthStore()
+  const { isAuthenticated, user, authReady } = useAuthStore()
   const [registeredHost, setRegisteredHost] = useState<boolean | null>(null)
   useEffect(() => {
     api.get('/tenant/info').then(({ data }) => setRegisteredHost(Boolean(data.registered_host))).catch(() => setRegisteredHost(false))
   }, [])
+  if (!authReady || (isAuthenticated && !user)) return <div className="flex items-center justify-center py-20 text-sm text-gray-400">Memuat sesi...</div>
   if (registeredHost === null) return null
   if (!registeredHost) return <LandingPage />
   if (!isAuthenticated) return <Navigate to="/login" replace />
@@ -114,12 +118,22 @@ function RootRoute() {
 }
 
 export default function App() {
-  const { checkAuth, isAuthenticated } = useAuthStore()
+  const { checkAuth, isAuthenticated, authReady } = useAuthStore()
   const { loadSettings } = useSettingsStore()
   const { load: loadSubscription } = useSubscriptionStore()
-  useEffect(() => { checkAuth() }, [])
-  useEffect(() => { loadSettings() }, [])
-  useEffect(() => { if (isAuthenticated) loadSubscription() }, [isAuthenticated])
+
+  // Auth harus selesai dulu. Sebelumnya settings/subscription ikut menembak API
+  // ketika user masih null; satu 401 dari request bootstrap itu menghapus token.
+  useEffect(() => { checkAuth() }, [checkAuth])
+  useEffect(() => {
+    if (authReady && isAuthenticated) {
+      loadSettings()
+      loadSubscription()
+    }
+  }, [authReady, isAuthenticated, loadSettings, loadSubscription])
+  useEffect(() => {
+    if (authReady && !isAuthenticated) useSettingsStore.setState({ settings: {} })
+  }, [authReady, isAuthenticated])
 
   return (
     <BrowserRouter>

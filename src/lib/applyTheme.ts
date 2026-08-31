@@ -1,3 +1,5 @@
+import { readLocalDark, setResolvedDark } from '../stores/themeStore'
+
 interface ThemeSettings {
   primary_color?: string
   accent_color?: string
@@ -18,11 +20,16 @@ function shade(hex: string, percent: number): string {
   return '#' + ((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1)
 }
 
-export function applyTheme(s: ThemeSettings) {
+/**
+ * Terapkan warna & tema lembaga. Preferensi terang/gelap yang dipilih
+ * pengguna sendiri tetap menang, kecuali `force` (admin baru menyimpan
+ * pengaturan lembaga) sehingga tema tidak berbalik saat halaman direfresh.
+ */
+export function applyTheme(s: ThemeSettings, force = false) {
   if (!s) return
-  const dark = s.theme === 'dark'
-  document.documentElement.classList.toggle('dark', dark)
-  document.documentElement.style.colorScheme = dark ? 'dark' : 'light'
+  const local = readLocalDark()
+  const dark = force || local === null ? s.theme === 'dark' : local
+  setResolvedDark(dark)
   const root = document.documentElement.style
   if (s.primary_color) {
     root.setProperty('--color-primary', s.primary_color)
