@@ -25,6 +25,7 @@ const { setupPortalCashless, registerPortalRoutes, registerKantinRoutes, selectP
 const waQueue = require('./wa-queue.cjs')
 const notificationMonitor = require('./notification-monitor.cjs')
 const { getAttendanceOverview, studentAttendance } = require('./attendance-summary.cjs')
+const { getCategoryRecap } = require('./attendance-recap.cjs')
 const { isDriveFolderUrl } = require('./library-config.cjs')
 const { getLateDashboard } = require('./dashboard-late.cjs')
 const { registerRoutes: registerBackupRestoreRoutes } = require('./backup-restore.cjs')
@@ -3948,6 +3949,15 @@ app.get('/api/rekap-absensi', authMiddleware, (req, res) => {
   res.json({ mode, from, to, label, detail, summary })
 })
 
+app.get('/api/rekap-absensi/kategori', authMiddleware, (req, res) => {
+  const { kategori = 'mapel', mulai, selesai } = req.query
+  if (!mulai || !selesai) return res.status(400).json({ error: 'Parameter mulai dan selesai wajib diisi' })
+  try {
+    return res.json(getCategoryRecap(db, req.tenantId, kategori, mulai, selesai))
+  } catch (error) {
+    return res.status(400).json({ error: error.message })
+  }
+})
 
 const { dayNameForDate, isHoliday } = require('./holiday-rules.cjs')
 

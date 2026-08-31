@@ -1,7 +1,7 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { escapeHtml } from '../../utils/escapeHtml'
 import { Download, FileSpreadsheet, Users, GraduationCap } from 'lucide-react'
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
 import toast from 'react-hot-toast'
 import api from '../../services/api'
 import { todayWib, yearWib, addDaysWib } from '../../lib/dateFormat'
@@ -16,10 +16,31 @@ export default function RekapAbsensiPage() {
   const [rekapSiswa, setRekapSiswa] = useState<any[]>([])
   const [rekapGtk, setRekapGtk] = useState<any[]>([])
   const [summary, setSummary] = useState<any>({ hadir: 0, sakit: 0, izin: 0, alpha: 0 })
+  const [category, setCategory] = useState<'kehadiran' | 'mapel' | 'kokurikuler' | 'ekskul' | 'jamaah' | 'kegiatan_lain'>('kehadiran')
+  const [categoryData, setCategoryData] = useState<any>({ summary: { total: 0, hadir: 0, sakit: 0, izin: 0, alpha: 0, lain: 0 }, detail: [] })
 
-  useEffect(() => { loadRekap() }, [bulan, tab, mode, from, to])
+  const reportRange = useCallback(() => {
+    if (mode === 'bulanan') {
+      const [year, month] = bulan.split('-').map(Number)
+      const lastDay = new Date(year, month, 0).getDate()
+      return { mulai: `${bulan}-01`, selesai: `${bulan}-${String(lastDay).padStart(2, '0')}` }
+    }
+    if (mode === 'semester') {
+      const year = yearWib()
+      return { mulai: `${year}-07-01`, selesai: `${year}-12-31` }
+    }
+    return { mulai: from, selesai: to }
+  }, [bulan, mode, from, to])
 
-  const loadRekap = async () => {
+  const loadCategoryRecap = useCallback(async () => {
+    try {
+      const range = reportRange()
+      const res = await api.get('/rekap-absensi/kategori', { params: { kategori: category, ...range } })
+      setCategoryData(res.data)
+    } catch { setCategoryData({ summary: { total: 0, hadir: 0, sakit: 0, izin: 0, alpha: 0, lain: 0 }, detail: [] }) }
+  }, [reportRange, category])
+
+  const loadRekap = useCallback(async () => {
     try {
       const apiMode = mode === 'harian' ? 'daily' : mode === 'mingguan' ? 'weekly' : mode === 'bulanan' ? 'monthly' : 'semester'
       const year = yearWib()
@@ -28,36 +49,37 @@ export default function RekapAbsensiPage() {
       else setRekapGtk(res.data.detail)
       setSummary(res.data.summary)
     } catch { /* empty */ }
-  }
+  }, [bulan, tab, mode, from, to])
 
-  const data = tab === 'siswa' ? rekapSiswa : rekapGtk
+  useEffect(() => { void loadRekap() }, [loadRekap])
+  useEffect(() => { if (category !== 'kehadiran') void loadCategoryRecap() }, [category, loadCategoryRecap])
 
+  const data = category === 'kehadiran' ? (tab === 'siswa' ? rekapSiswa : rekapGtk) : categoryData.detail
+  const activeSummary = category === 'kehadiran' ? summary : categoryData.summary
   const chartData = [
-    { name: 'Hadir', value: summary.hadir, fill: '#3b82f6' },
-    { name: 'Sakit', value: summary.sakit, fill: '#f59e0b' },
-    { name: 'Izin', value: summary.izin, fill: '#8b5cf6' },
-    { name: 'Alpha', value: summary.alpha, fill: '#ef4444' },
+    { name: 'Hadir', value: activeSummary.hadir, fill: '#3b82f6' },
+    { name: 'Sakit', value: activeSummary.sakit, fill: '#f59e0b' },
+    { name: 'Izin', value: activeSummary.izin, fill: '#8b5cf6' },
+    { name: 'Alpha', value: activeSummary.alpha, fill: '#ef4444' },
   ]
 
+  const categoryLabel = { kehadiran: 'Kehadiran Masuk & Pulang', mapel: 'Mata Pelajaran', kokurikuler: 'Kokurikuler', ekskul: 'Ekstrakurikuler', jamaah: 'Jamaah', kegiatan_lain: 'Kegiatan Lain' }[category]
+
   const exportExcel = () => {
-    const header = tab === 'siswa'
-      ? ['No', 'Nama', 'NIS', 'Rombel', 'Hadir', 'Sakit', 'Izin', 'Alpha', '% Hadir']
-      : ['No', 'Nama', 'NIP', 'Jabatan', 'Hadir', 'Sakit', 'Izin', 'Alpha', '% Hadir']
-    const rows = data.map((d: any, i: number) => [
-      i + 1, d.nama, d.nis || d.nip || '', d.rombel_nama || d.jabatan || '',
-      d.hadir, d.sakit, d.izin, d.alpha,
-      d.total > 0 ? Math.round(d.hadir / d.total * 100) + '%' : '0%'
-    ])
-    const ws = XLSX.utils.aoa_to_sheet([
-      [`Rekapitulasi Absensi ${tab === 'siswa' ? 'Siswa' : 'GTK'} - ${bulan}`],
-      [],
-      header,
-      ...rows
-    ])
+    const isCategory = category !== 'kehadiran'
+    const header = isCategory
+      ? ['No', 'Nama', 'NIS/NISN', 'Rombel', 'Kegiatan/Mapel', 'Hadir', 'Sakit', 'Izin', 'Alpha', 'Lain', 'Total', '% Hadir']
+      : tab === 'siswa'
+        ? ['No', 'Nama', 'NIS', 'Rombel', 'Hadir', 'Sakit', 'Izin', 'Alpha', '% Hadir']
+        : ['No', 'Nama', 'NIP', 'Jabatan', 'Hadir', 'Sakit', 'Izin', 'Alpha', '% Hadir']
+    const rows = data.map((d: any, i: number) => isCategory
+      ? [i + 1, d.nama, d.nisn || d.nis || '', d.rombel_nama || '', d.kegiatan_nama || '', d.hadir, d.sakit, d.izin, d.alpha, d.lain, d.total, d.total > 0 ? Math.round(d.hadir / d.total * 100) + '%' : '0%']
+      : [i + 1, d.nama, d.nis || d.nip || '', d.rombel_nama || d.jabatan || '', d.hadir, d.sakit, d.izin, d.alpha, d.total > 0 ? Math.round(d.hadir / d.total * 100) + '%' : '0%'])
+    const ws = XLSX.utils.aoa_to_sheet([[`Rekapitulasi Absensi ${categoryLabel} - ${bulan}`], [], header, ...rows])
     ws['!cols'] = header.map(() => ({ wch: 15 }))
     const wb = XLSX.utils.book_new()
     XLSX.utils.book_append_sheet(wb, ws, 'Rekap')
-    XLSX.writeFile(wb, `Rekap_Absensi_${tab}_${bulan}.xlsx`)
+    XLSX.writeFile(wb, `Rekap_Absensi_${category}_${bulan}.xlsx`)
     toast.success('Excel diunduh')
   }
 
@@ -90,7 +112,15 @@ export default function RekapAbsensiPage() {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-gray-800 font-display">Rekapitulasi Absensi</h1>
-          <p className="text-gray-500 text-sm mt-1">Rekap kehadiran siswa dan GTK per bulan</p>
+          <p className="text-gray-500 text-sm mt-1">Rekap kehadiran siswa, GTK, mapel, kegiatan, ekstrakurikuler, dan jamaah</p>
+          <select value={category} onChange={e => setCategory(e.target.value as typeof category)} className="mt-3 px-3 py-2 border rounded-lg text-sm">
+            <option value="kehadiran">Kehadiran Masuk & Pulang</option>
+            <option value="mapel">Absensi Mapel</option>
+            <option value="kokurikuler">Absensi Kokurikuler</option>
+            <option value="ekskul">Absensi Ekstrakurikuler</option>
+            <option value="jamaah">Absensi Jamaah</option>
+            <option value="kegiatan_lain">Absensi Kegiatan Lain</option>
+          </select>
         </div>
         <div className="flex gap-2">
           <button onClick={exportExcel} className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg text-sm hover:bg-green-700">
@@ -105,12 +135,14 @@ export default function RekapAbsensiPage() {
       {/* Filter */}
       <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100 flex flex-wrap gap-4 items-center">
         <div className="flex bg-gray-100 rounded-lg p-1">
-          <button onClick={() => setTab('siswa')} className={`px-4 py-1.5 rounded-md text-sm font-medium transition flex items-center gap-1 ${tab === 'siswa' ? 'bg-white shadow text-primary' : 'text-gray-600'}`}>
-            <GraduationCap size={16} /> Siswa
-          </button>
-          <button onClick={() => setTab('gtk')} className={`px-4 py-1.5 rounded-md text-sm font-medium transition flex items-center gap-1 ${tab === 'gtk' ? 'bg-white shadow text-primary' : 'text-gray-600'}`}>
-            <Users size={16} /> GTK
-          </button>
+          {category === 'kehadiran' && <>
+            <button onClick={() => setTab('siswa')} className={`px-4 py-1.5 rounded-md text-sm font-medium transition flex items-center gap-1 ${tab === 'siswa' ? 'bg-white shadow text-primary' : 'text-gray-600'}`}>
+              <GraduationCap size={16} /> Siswa
+            </button>
+            <button onClick={() => setTab('gtk')} className={`px-4 py-1.5 rounded-md text-sm font-medium transition flex items-center gap-1 ${tab === 'gtk' ? 'bg-white shadow text-primary' : 'text-gray-600'}`}>
+              <Users size={16} /> GTK
+            </button>
+          </>}
         </div>
         <select value={mode} onChange={e => setMode(e.target.value as any)} className="px-3 py-2 border rounded-lg text-sm"><option value="harian">Harian</option><option value="mingguan">Mingguan</option><option value="bulanan">Bulanan</option><option value="semester">Semester</option></select><input type="month" value={bulan} onChange={e => setBulan(e.target.value)} className="px-3 py-2 border rounded-lg text-sm" />{mode !== 'bulanan' && mode !== 'semester' && <><input type="date" value={from} onChange={e => setFrom(e.target.value)} className="px-3 py-2 border rounded-lg text-sm" /><input type="date" value={to} onChange={e => setTo(e.target.value)} className="px-3 py-2 border rounded-lg text-sm" /></>}
       </div>
@@ -119,19 +151,19 @@ export default function RekapAbsensiPage() {
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
         <div className="bg-blue-50 rounded-xl p-4 border border-blue-100">
           <p className="text-xs text-blue-600 font-medium">Hadir</p>
-          <p className="text-2xl font-bold text-blue-800 mt-1">{summary.hadir}</p>
+          <p className="text-2xl font-bold text-blue-800 mt-1">{activeSummary.hadir}</p>
         </div>
         <div className="bg-yellow-50 rounded-xl p-4 border border-yellow-100">
           <p className="text-xs text-yellow-600 font-medium">Sakit</p>
-          <p className="text-2xl font-bold text-yellow-800 mt-1">{summary.sakit}</p>
+          <p className="text-2xl font-bold text-yellow-800 mt-1">{activeSummary.sakit}</p>
         </div>
         <div className="bg-purple-50 rounded-xl p-4 border border-purple-100">
           <p className="text-xs text-purple-600 font-medium">Izin</p>
-          <p className="text-2xl font-bold text-purple-800 mt-1">{summary.izin}</p>
+          <p className="text-2xl font-bold text-purple-800 mt-1">{activeSummary.izin}</p>
         </div>
         <div className="bg-red-50 rounded-xl p-4 border border-red-100">
           <p className="text-xs text-red-600 font-medium">Alpha</p>
-          <p className="text-2xl font-bold text-red-800 mt-1">{summary.alpha}</p>
+          <p className="text-2xl font-bold text-red-800 mt-1">{activeSummary.alpha}</p>
         </div>
       </div>
 
@@ -160,7 +192,8 @@ export default function RekapAbsensiPage() {
                 <th className="text-left px-4 py-3 font-medium text-gray-600">No</th>
                 <th className="text-left px-4 py-3 font-medium text-gray-600">Nama</th>
                 <th className="text-left px-4 py-3 font-medium text-gray-600">{tab === 'siswa' ? 'NIS' : 'NIP'}</th>
-                <th className="text-left px-4 py-3 font-medium text-gray-600">{tab === 'siswa' ? 'Rombel' : 'Jabatan'}</th>
+                <th className="text-left px-4 py-3 font-medium text-gray-600">{category === 'kehadiran' ? (tab === 'siswa' ? 'Rombel' : 'Jabatan') : 'Rombel'}</th>
+                {category !== 'kehadiran' && <th className="text-left px-4 py-3 font-medium text-gray-600">Kegiatan/Mapel</th>}
                 <th className="text-center px-4 py-3 font-medium text-blue-600">Hadir</th>
                 <th className="text-center px-4 py-3 font-medium text-yellow-600">Sakit</th>
                 <th className="text-center px-4 py-3 font-medium text-purple-600">Izin</th>
@@ -170,7 +203,7 @@ export default function RekapAbsensiPage() {
             </thead>
             <tbody className="divide-y divide-gray-100">
               {data.length === 0 && (
-                <tr><td colSpan={9} className="px-4 py-8 text-center text-gray-400">Belum ada data absensi untuk periode ini</td></tr>
+                <tr><td colSpan={category === 'kehadiran' ? 9 : 10} className="px-4 py-8 text-center text-gray-400">Belum ada data absensi untuk periode ini</td></tr>
               )}
               {data.map((d: any, i: number) => (
                 <tr key={d.id || i} className="hover:bg-gray-50">
@@ -178,6 +211,7 @@ export default function RekapAbsensiPage() {
                   <td className="px-4 py-3 font-medium text-gray-800">{d.nama}</td>
                   <td className="px-4 py-3 text-gray-600 text-xs">{d.nis || d.nip || '-'}</td>
                   <td className="px-4 py-3 text-gray-600">{d.rombel_nama || d.jabatan || '-'}</td>
+                  {category !== 'kehadiran' && <td className="px-4 py-3 text-gray-600">{d.kegiatan_nama || '-'}</td>}
                   <td className="px-4 py-3 text-center font-medium text-blue-600">{d.hadir}</td>
                   <td className="px-4 py-3 text-center font-medium text-yellow-600">{d.sakit}</td>
                   <td className="px-4 py-3 text-center font-medium text-purple-600">{d.izin}</td>
