@@ -1,15 +1,8 @@
 import { useState, useEffect } from 'react'
-import { MapPin, Camera, Save, CheckCircle, XCircle, Clock } from 'lucide-react'
+import { Save } from 'lucide-react'
 import toast from 'react-hot-toast'
 import api from '../../services/api'
 import { todayWib } from '../../lib/dateFormat'
-
-const statusColors: Record<string, string> = {
-  hadir: 'bg-green-100 text-green-700',
-  sakit: 'bg-yellow-100 text-yellow-700',
-  izin: 'bg-blue-100 text-blue-700',
-  alpha: 'bg-red-100 text-red-700',
-}
 
 export default function AbsensiGuruPage() {
   const [tanggal, setTanggal] = useState(todayWib())
@@ -18,6 +11,8 @@ export default function AbsensiGuruPage() {
   const [form, setForm] = useState<Record<string, { status: string; waktu_masuk: string; waktu_pulang: string }>>({})
   const [loading, setLoading] = useState(false)
 
+  // loadData is intentionally recreated so the selected date is always current.
+  // oxlint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { loadData() }, [tanggal])
 
   const loadData = async () => {
@@ -51,9 +46,9 @@ export default function AbsensiGuruPage() {
       for (const g of rows) {
         const existing = absensi.find((a: any) => a.gtk_id === g.id)
         map[g.id] = {
-          status: existing?.status || 'hadir',
-          waktu_masuk: existing?.waktu_masuk || g.waktu_masuk || '',
-          waktu_pulang: existing?.waktu_pulang || g.waktu_pulang || '',
+          status: existing?.status || '',
+          waktu_masuk: existing?.waktu_masuk || '',
+          waktu_pulang: existing?.waktu_pulang || '',
         }
       }
       setGtkList(rows)
@@ -79,7 +74,7 @@ export default function AbsensiGuruPage() {
       }
       toast.success('Absensi guru tersimpan')
       loadData()
-    } catch (err: any) { toast.error('Gagal simpan') }
+    } catch { toast.error('Gagal simpan') }
     finally { setLoading(false) }
   }
 

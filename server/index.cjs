@@ -3407,9 +3407,14 @@ app.post('/api/guru/ceklok', STAFF, (req, res) => {
   }
   const exists = db.prepare('SELECT * FROM absensi_guru WHERE gtk_id = ? AND tanggal = ? AND tenant_id = ?').get(gtk.id, today, req.tenantId)
   if (type === 'masuk') {
-    if (exists) return res.status(400).json({ error: 'Sudah ceklok masuk hari ini' })
-    const id = uuidv4()
-    db.prepare('INSERT INTO absensi_guru (id, gtk_id, tanggal, waktu_masuk, latitude, longitude, status, tenant_id) VALUES (?,?,?,?,?,?,?,?)').run(id, gtk.id, today, now, latitude || null, longitude || null, statusMasuk, req.tenantId)
+    if (exists?.waktu_masuk) return res.status(400).json({ error: 'Sudah ceklok masuk hari ini' })
+    const id = exists?.id || uuidv4()
+    if (exists) {
+      db.prepare('UPDATE absensi_guru SET waktu_masuk=?, status=?, latitude=?, longitude=? WHERE id=? AND tenant_id=?')
+        .run(now, statusMasuk, latitude || null, longitude || null, id, req.tenantId)
+    } else {
+      db.prepare('INSERT INTO absensi_guru (id, gtk_id, tanggal, waktu_masuk, latitude, longitude, status, tenant_id) VALUES (?,?,?,?,?,?,?,?)').run(id, gtk.id, today, now, latitude || null, longitude || null, statusMasuk, req.tenantId)
+    }
     try { notificationMonitor.logActivity(db, { tenantId: req.tenantId, eventType: 'teacher_checkin', actorId: gtk.id, entityId: id, metadata: { type, status: statusMasuk } }) } catch {}
     res.json({ id, waktu_masuk: now, status: statusMasuk })
   } else {
@@ -4950,9 +4955,11 @@ app.post('/api/absensi-guru/batch-jadwal', STAFF, (req, res) => {
   if (!Array.isArray(data)) return res.status(400).json({ error: 'Data harus array' })
   let count=0
   for (const d of data) {
+    if (!d.gtk_id || !d.status) continue
     const exists = db.prepare('SELECT id FROM absensi_guru WHERE gtk_id=? AND tanggal=? AND tenant_id=?').get(d.gtk_id, tanggal, req.tenantId)
-    if (exists) db.prepare('UPDATE absensi_guru SET status=?, waktu_masuk=?, waktu_pulang=?, keterangan=? WHERE id=? AND tenant_id=?').run(d.status||'hadir', d.waktu_masuk||null, d.waktu_pulang||null, d.keterangan||'', exists.id, req.tenantId)
-    else db.prepare('INSERT INTO absensi_guru (id,gtk_id,tanggal,status,waktu_masuk,waktu_pulang,keterangan,tenant_id) VALUES (?,?,?,?,?,?,?,?)').run(uuidv4(), d.gtk_id, tanggal, d.status||'hadir', d.waktu_masuk||null, d.waktu_pulang||null, d.keterangan||'', req.tenantId)
+    if (exists) db.prepare('UPDATE absensi_guru SET status=?, keterangan=? WHERE id=? AND tenant_id=?').run(d.status, d.keterangan||'', exists.id, req.tenantId)
+    else if (d.status !== 'hadir') db.prepare('INSERT INTO absensi_guru (id,gtk_id,tanggal,status,keterangan,tenant_id) VALUES (?,?,?,?,?,?)').run(uuidv4(), d.gtk_id, tanggal, d.status, d.keterangan||'', req.tenantId)
+    else continue
     count++
   }
   res.json({ count })
