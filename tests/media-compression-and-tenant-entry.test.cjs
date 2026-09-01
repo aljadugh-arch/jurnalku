@@ -42,7 +42,7 @@ test('every server-side raster upload path passes through compression', () => {
     assert.match(server, new RegExp(`app\\.post\\('${route.replaceAll('/', '\\/')}'.*compressUploadedImages`))
   }
   assert.match(server, /app\.post\('\/api\/settings\/kts-template'[\s\S]*?compressUploadedImages\(\['depan', 'belakang'\], 'kts'\)/)
-  assert.match(server, /await savePostingUpload\(req\.file/)
+  assert.match(server, /for \(const file of files\)[\s\S]*?await savePostingUpload\(file/)
   assert.match(server, /await saveDrawnSignature/)
   assert.match(server, /await saveUploadedSignature/)
 })
