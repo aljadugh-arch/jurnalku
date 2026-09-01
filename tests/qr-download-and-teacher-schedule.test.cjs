@@ -15,6 +15,12 @@ test('modal QR siswa menyediakan unduh PNG satuan dan semua siswa', () => {
   assert.match(studentPage, /Unduh PNG/)
   assert.match(studentPage, /Unduh Semua/)
   assert.match(studentPage, /canvas\.toBlob/)
+  assert.match(studentPage, /QRCode\.toCanvas/)
+  assert.match(studentPage, /width: 1600/)
+  assert.match(studentPage, /output\.width = 1800/)
+  assert.match(studentPage, /imageSmoothingEnabled = false/)
+  assert.match(studentPage, /const source = document\.createElement\('canvas'\)/)
+  assert.match(studentPage, /student-qr-preview-/)
 })
 
 test('Muat Jadwal mengganti daftar GTK dengan GTK terjadwal saja', () => {

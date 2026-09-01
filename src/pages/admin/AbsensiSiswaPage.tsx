@@ -6,6 +6,7 @@ import { todayWib } from '../../lib/dateFormat'
 import { Html5Qrcode } from 'html5-qrcode'
 import JSZip from 'jszip'
 import { QRCodeCanvas } from 'qrcode.react'
+import QRCode from 'qrcode'
 import FoundationTenantPicker from '../../components/FoundationTenantPicker'
 
 const statusColors: Record<string, string> = {
@@ -22,27 +23,37 @@ const canvasToBlob = (canvas: HTMLCanvasElement) => new Promise<Blob>((resolve, 
 })
 
 const buildStudentQrPng = async (student: any) => {
-  const source = document.getElementById(`student-qr-${student.id}`) as HTMLCanvasElement | null
-  if (!source) throw new Error('QR belum selesai dimuat')
+  // Generate directly from the identifier at a large native resolution; never upscale a preview canvas.
+  const source = document.createElement('canvas')
+  await QRCode.toCanvas(source, student.identifier, {
+    width: 1600,
+    margin: 4,
+    errorCorrectionLevel: 'M',
+    color: { dark: '#000000', light: '#ffffff' },
+  })
+  if (!source.width) throw new Error('QR belum selesai dimuat')
+  // 1800 x 2200 px is print-friendly at roughly 6 x 7.3 inches / 300 DPI.
   const output = document.createElement('canvas')
-  output.width = 720
-  output.height = 880
+  output.width = 1800
+  output.height = 2200
   const context = output.getContext('2d')
   if (!context) throw new Error('Browser tidak mendukung unduh QR')
+  context.imageSmoothingEnabled = false
   context.fillStyle = '#ffffff'
   context.fillRect(0, 0, output.width, output.height)
   context.fillStyle = '#111827'
   context.textAlign = 'center'
-  context.font = '700 38px sans-serif'
-  context.fillText('QR SISWA', output.width / 2, 62)
-  context.drawImage(source, 80, 100, 560, 560)
-  context.font = '700 32px sans-serif'
-  context.fillText(String(student.nama || 'Siswa').slice(0, 38), output.width / 2, 720)
+  context.font = '700 72px sans-serif'
+  context.fillText('QR SISWA', output.width / 2, 125)
+  // Keep the QR's native modules crisp: no interpolation from the small preview.
+  context.drawImage(source, 100, 220, 1600, 1600)
+  context.font = '700 64px sans-serif'
+  context.fillText(String(student.nama || 'Siswa').slice(0, 38), output.width / 2, 1940)
   context.fillStyle = '#4b5563'
-  context.font = '24px sans-serif'
-  context.fillText(`${student.identifier_type}: ${student.identifier}`, output.width / 2, 768)
-  context.font = '20px sans-serif'
-  context.fillText('Gunakan QR ini untuk absensi siswa', output.width / 2, 818)
+  context.font = '48px sans-serif'
+  context.fillText(`${student.identifier_type}: ${student.identifier}`, output.width / 2, 2020)
+  context.font = '40px sans-serif'
+  context.fillText('Gunakan QR ini untuk absensi siswa', output.width / 2, 2100)
   return canvasToBlob(output)
 }
 
@@ -337,7 +348,7 @@ export default function AbsensiSiswaPage() {
 
       {showQr && <div className="fixed inset-0 z-[100] bg-black/60 flex items-center justify-center p-3"><div className="bg-white rounded-2xl p-4 sm:p-6 w-full max-w-3xl max-h-[90vh] overflow-auto">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4"><div><h2 className="font-bold text-gray-800">QR Siswa</h2><p className="text-xs text-gray-500">QR dan login memakai NISN bila tersedia; jika kosong memakai NIS.</p></div><div className="flex gap-2"><button onClick={downloadAllStudentQr} disabled={loading || qrIdentifiers.length === 0} className="inline-flex items-center justify-center gap-2 px-3 py-2 bg-purple-600 text-white rounded-lg text-sm disabled:opacity-50"><Download size={15}/>{loading ? 'Menyiapkan...' : 'Unduh Semua'}</button><button onClick={() => setShowQr(false)} className="px-3 py-2 bg-gray-100 rounded-lg text-sm">Tutup</button></div></div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">{qrIdentifiers.map(s => <div key={s.id} className="border rounded-xl p-3 text-center"><QRCodeCanvas id={`student-qr-${s.id}`} value={s.identifier} size={160} level="M" marginSize={2} className="mx-auto max-w-full h-auto"/><p className="font-medium text-sm text-gray-800 mt-2 truncate">{s.nama}</p><p className="text-xs text-gray-500 break-all">{s.identifier_type}: {s.identifier}</p><button onClick={() => downloadStudentQr(s)} className="mt-3 inline-flex w-full items-center justify-center gap-2 px-3 py-2 bg-purple-50 text-purple-700 rounded-lg text-xs font-medium hover:bg-purple-100"><Download size={14}/>Unduh PNG</button></div>)}</div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">{qrIdentifiers.map(s => <div key={s.id} className="border rounded-xl p-3 text-center"><QRCodeCanvas id={`student-qr-preview-${s.id}`} value={s.identifier} size={240} level="M" marginSize={2} className="mx-auto max-w-full h-auto"/><p className="font-medium text-sm text-gray-800 mt-2 truncate">{s.nama}</p><p className="text-xs text-gray-500 break-all">{s.identifier_type}: {s.identifier}</p><button onClick={() => downloadStudentQr(s)} className="mt-3 inline-flex w-full items-center justify-center gap-2 px-3 py-2 bg-purple-50 text-purple-700 rounded-lg text-xs font-medium hover:bg-purple-100"><Download size={14}/>Unduh PNG</button></div>)}</div>
         {qrIdentifiers.length === 0 && <p className="py-8 text-center text-sm text-gray-400">Belum ada siswa pada rombel ini.</p>}
       </div></div>}
 
