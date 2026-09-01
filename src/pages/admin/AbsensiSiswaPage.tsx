@@ -129,7 +129,10 @@ export default function AbsensiSiswaPage() {
       setSiswaList(siswaRes.data)
       setExisting(absensiRes.data)
       const map: Record<string, string> = {}
-      for (const a of absensiRes.data) { map[a.siswa_id] = sesi === 'pulang' ? (a.status_pulang || a.status || 'hadir') : a.status }
+      for (const a of absensiRes.data) {
+        const saved = sesi === 'pulang' ? a.status_pulang : a.status
+        if (saved) map[a.siswa_id] = saved
+      }
       setAbsensi(map)
     } catch { toast.error('Gagal memuat data absensi') }
   }
@@ -223,11 +226,12 @@ export default function AbsensiSiswaPage() {
   const handleSave = async () => {
     if (!kbmStatus.aktif) return toast.error(kbmStatus.libur ? 'Hari libur: absensi nonaktif' : 'Aktifkan KBM tanggal ini di Kalender KBM terlebih dahulu')
     if (!selectedRombel || siswaList.length === 0) return toast.error('Pilih rombel yang memiliki siswa')
-    const data = siswaList.map(s => ({
-      siswa_id: s.id,
-      status: absensi[s.id] || 'alpha',
+    const data = Object.entries(absensi).map(([siswa_id, status]) => ({
+      siswa_id,
+      status,
       metode: 'manual',
     }))
+    if (!data.length) return toast.error('Pilih status kehadiran minimal satu siswa')
     setLoading(true)
     try {
       await api.post('/absensi-siswa/bulk', { tanggal, rombel_id: selectedRombel, jenis: sesi, data })

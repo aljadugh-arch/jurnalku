@@ -9,7 +9,7 @@ const jurnal = fs.readFileSync(path.join(root, 'src/pages/guru/GuruJurnalPage.ts
 const server = fs.readFileSync(path.join(root, 'server/index.cjs'), 'utf8')
 
 test('dashboard schedule opens journal with the exact selected schedule', () => {
-  assert.match(dashboard, /navigate\(`\/guru\/jurnal\?jadwal_id=\$\{encodeURIComponent\(j\.id\)\}`\)/)
+  assert.match(dashboard, /isAcademicSchedule\(j\) \? `\/guru\/jurnal\?jadwal_id=\$\{encodeURIComponent\(j\.id\)\}`/)
   assert.match(jurnal, /useSearchParams/)
   assert.match(jurnal, /searchParams\.get\('jadwal_id'\)/)
   assert.match(jurnal, /x\.jadwal_id === requestedJadwalId/)

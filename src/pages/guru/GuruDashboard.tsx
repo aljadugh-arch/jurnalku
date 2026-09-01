@@ -93,6 +93,7 @@ export default function GuruDashboard() {
     const e = toMinutes(j.jam_selesai)
     return j.sesi_status === 'selesai' || (e >= 0 && cur > e)
   }
+  const isAcademicSchedule = (j: any) => !j.jenis_kegiatan || j.jenis_kegiatan === 'mapel'
 
   const tanggal = new Date().toLocaleDateString('id-ID', { timeZone: 'Asia/Jakarta', weekday: 'long', day: 'numeric', month: 'long' })
 
@@ -198,7 +199,7 @@ export default function GuruDashboard() {
             return (
               <button
                 key={j.id || i}
-                onClick={() => navigate(`/guru/jurnal?jadwal_id=${encodeURIComponent(j.id)}`)}
+                onClick={() => navigate(isAcademicSchedule(j) ? `/guru/jurnal?jadwal_id=${encodeURIComponent(j.id)}` : '/guru/absensi-ekskul')}
                 className={rowCls + ' w-full text-left'}
               >
                 <div className={tileCls}>
@@ -208,6 +209,7 @@ export default function GuruDashboard() {
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
                     <p className="font-semibold text-gray-800 truncate">{j.mapel_nama}</p>
+                    {!isAcademicSchedule(j) && <Badge tone="purple">Ekstrakurikuler</Badge>}
                     {active && <Badge tone="blue">Sekarang</Badge>}
                     {!active && isFinished(j) && <Badge tone="gray">Berakhir</Badge>}
                   </div>
@@ -215,7 +217,7 @@ export default function GuruDashboard() {
                     <Clock size={12} /> {j.rombel_nama} • {j.ruangan || '-'}
                   </p>
                 </div>
-                {data.sesi_kelas_aktif?.jadwal_id === j.id ? (
+                {isAcademicSchedule(j) && data.sesi_kelas_aktif?.jadwal_id === j.id ? (
                   <span
                     role="button"
                     tabIndex={0}
@@ -223,6 +225,8 @@ export default function GuruDashboard() {
                     onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); event.stopPropagation(); finishClass() } }}
                     className="shrink-0 rounded-lg bg-red-600 px-2.5 py-1.5 text-xs font-bold text-white"
                   >Selesai Kelas</span>
+                ) : !isAcademicSchedule(j) ? (
+                  <span className="shrink-0 rounded-lg bg-purple-100 px-2.5 py-1.5 text-xs font-bold text-purple-700">Lihat</span>
                 ) : isFinished(j) ? (
                   <span className="shrink-0 rounded-lg bg-gray-100 px-2.5 py-1.5 text-xs font-bold text-gray-500">Selesai</span>
                 ) : !data.sesi_kelas_aktif && !isFinished(j) ? (

@@ -10,10 +10,13 @@ const avatar = read('src/components/ui/Avatar.tsx')
 const gtkPage = read('src/pages/admin/DataGTKPage.tsx')
 const main = read('src/main.tsx')
 
-test('dashboard guru hanya memakai jadwal mapel hari Jakarta tanpa fallback hari lain', () => {
+test('dashboard guru memakai jadwal hari Jakarta tanpa fallback hari lain', () => {
   const route = server.match(/app\.get\('\/api\/guru\/dashboard'[\s\S]*?\n}\)\n/)?.[0] || ''
-  assert.match(route, /lower\(j\.hari\)=\?/) 
-  assert.match(route, /j\.jenis_kegiatan = 'mapel'/)
+  const helper = server.slice(server.indexOf('function teacherScheduleForDay'), server.indexOf("app.get('/api/guru/dashboard'"))
+  assert.match(route, /teacherScheduleForDay\(gtkId, req\.tenantId, today, todayDate\)/)
+  assert.match(helper, /lower\(j\.hari\)=\?/)
+  assert.match(helper, /j\.jenis_kegiatan='mapel'/)
+  assert.match(helper, /FROM ekskul e/)
   assert.doesNotMatch(route, /if \(!jadwal\.length\)/)
   assert.match(route, /absensi_hari_ini/)
   assert.match(route, /catatan_count/)

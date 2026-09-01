@@ -3019,6 +3019,20 @@ function teacherCanAccessStudentOnDate(req, siswaId, tanggal) {
     .get(siswaId, req.tenantId, gtk.id, req.tenantId, day)
 }
 
+function teacherScheduleForDay(gtkId, tenantId, day, date) {
+  const academic = db.prepare(`SELECT j.*,m.nama mapel_nama,r.nama rombel_nama,
+    sk.status sesi_status,sk.waktu_masuk sesi_waktu_masuk,sk.waktu_selesai sesi_waktu_selesai
+    FROM jadwal j JOIN mapel m ON m.id=j.mapel_id AND m.tenant_id=j.tenant_id
+    LEFT JOIN rombel r ON r.id=j.rombel_id AND r.tenant_id=j.tenant_id
+    LEFT JOIN sesi_kelas_guru sk ON sk.jadwal_id=j.id AND sk.guru_id=? AND sk.tanggal=? AND sk.tenant_id=j.tenant_id
+    WHERE j.gtk_id=? AND lower(j.hari)=? AND j.tenant_id=? AND j.jenis_kegiatan='mapel'`).all(gtkId, date, gtkId, day, tenantId)
+  const extracurricular = db.prepare(`SELECT e.id,NULL mapel_id,NULL rombel_id,e.hari,e.jam_mulai,e.jam_selesai,'' ruangan,
+    e.nama mapel_nama,e.nama rombel_nama,'ekskul' jenis_kegiatan,NULL sesi_status
+    FROM ekskul e WHERE e.pembina_id=? AND e.tenant_id=? AND lower(e.hari)=?`).all(gtkId, tenantId, day)
+  return [...academic.map(row => ({ ...row, jenis_kegiatan: 'mapel' })), ...extracurricular]
+    .sort((a, b) => String(a.jam_mulai || '').localeCompare(String(b.jam_mulai || '')))
+}
+
 app.get('/api/guru/dashboard', authMiddleware, (req, res) => {
   const gtk = resolveGtkForUser(req.user.id, req.tenantId)
   const gtkId = gtk?.id
@@ -3027,12 +3041,7 @@ app.get('/api/guru/dashboard', authMiddleware, (req, res) => {
   const today = require('./attendance-rules.cjs').hariJakarta()
   const todayDate = todayJakarta()
   const holidayToday = tenantIsHoliday(req.tenantId, todayDate)
-  const jadwal = holidayToday ? [] : db.prepare(`SELECT j.*, m.nama as mapel_nama, r.nama as rombel_nama,
-    sk.status AS sesi_status, sk.waktu_masuk AS sesi_waktu_masuk, sk.waktu_selesai AS sesi_waktu_selesai
-    FROM jadwal j JOIN mapel m ON j.mapel_id=m.id AND m.tenant_id=j.tenant_id
-    LEFT JOIN rombel r ON j.rombel_id=r.id AND r.tenant_id=j.tenant_id
-    LEFT JOIN sesi_kelas_guru sk ON sk.jadwal_id=j.id AND sk.guru_id=? AND sk.tanggal=? AND sk.tenant_id=j.tenant_id
-    WHERE j.gtk_id=? AND lower(j.hari)=? AND j.tenant_id=? AND j.jenis_kegiatan = 'mapel' ORDER BY j.jam_mulai`).all(gtkId, todayDate, gtkId, today, req.tenantId)
+  const jadwal = holidayToday ? [] : teacherScheduleForDay(gtkId, req.tenantId, today, todayDate)
 
   const totalJurnal = db.prepare("SELECT COUNT(*) as c FROM jurnal_mengajar WHERE guru_id=? AND tenant_id=?").get(gtkId, req.tenantId).c
   const rombelCount = db.prepare("SELECT COUNT(DISTINCT rombel_id) as c FROM pengajar WHERE gtk_id=? AND tenant_id=?").get(gtkId, req.tenantId).c
@@ -4442,11 +4451,17 @@ app.post('/api/tagihan/generate', BENDAHARA, (req, res) => {
   const { rombel_id, bulan, tahun, siswa_ids, siswa_id } = req.body
   const jenis_nama = (req.body.jenis_nama || '').trim()
   const nominalRaw = req.body.nominal
+  const monthNames = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember']
+  const monthIndex = monthNames.findIndex(name => name.toLowerCase() === String(bulan || '').trim().toLowerCase())
   if (!jenis_nama) return res.status(400).json({ error: 'Nama jenis tagihan wajib diisi' })
+  if (monthIndex < 0) return res.status(400).json({ error: 'Bulan wajib diisi dengan satu bulan yang valid' })
+  const normalizedBulan = monthNames[monthIndex]
+  const normalizedTahun = String(tahun || '').trim()
+  if (!/^\d{4}$/.test(normalizedTahun)) return res.status(400).json({ error: 'Tahun wajib diisi dengan 4 angka' })
   if (!nominalRaw || isNaN(Number(nominalRaw)) || Number(nominalRaw) <= 0) return res.status(400).json({ error: 'Nominal wajib diisi (angka > 0)' })
   const nominal = Number(nominalRaw)
-  // Auto-find or create jenis_tagihan
-  let jenis = db.prepare('SELECT id FROM jenis_tagihan WHERE nama = ? AND tenant_id = ?').get(jenis_nama, req.tenantId)
+  // Auto-find or create jenis_tagihan (nama tidak dibedakan huruf besar/kecil).
+  let jenis = db.prepare('SELECT id FROM jenis_tagihan WHERE lower(nama) = lower(?) AND tenant_id = ? ORDER BY rowid LIMIT 1').get(jenis_nama, req.tenantId)
   if (!jenis) {
     const jid = uuidv4()
     db.prepare('INSERT INTO jenis_tagihan (id, nama, nominal, tenant_id) VALUES (?,?,?,?)').run(jid, jenis_nama, nominal, req.tenantId)
@@ -4469,18 +4484,18 @@ app.post('/api/tagihan/generate', BENDAHARA, (req, res) => {
       : db.prepare("SELECT id FROM siswa WHERE rombel_id = ? AND status = 'aktif' AND tenant_id = ?").all(rombel_id, req.tenantId)
   }
   // Cegah duplikat: skip siswa yg sudah punya tagihan jenis+bulan+tahun sama
-  const dupChk = db.prepare('SELECT 1 FROM tagihan WHERE siswa_id=? AND jenis_tagihan_id=? AND bulan=? AND tahun=? AND tenant_id=?')
+  const dupChk = db.prepare('SELECT 1 FROM tagihan WHERE siswa_id=? AND jenis_tagihan_id=? AND lower(bulan)=lower(?) AND tahun=? AND tenant_id=?')
   const ins = db.prepare('INSERT INTO tagihan (id, siswa_id, jenis_tagihan_id, bulan, tahun, nominal, status, tenant_id) VALUES (?,?,?,?,?,?,?,?)')
   let created = 0, skipped = 0
   const trx = db.transaction((items) => {
     for (const s of items) {
-      if (dupChk.get(s.id, jenis_tagihan_id, bulan, tahun, req.tenantId)) { skipped++; continue }
-      ins.run(uuidv4(), s.id, jenis_tagihan_id, bulan, tahun, nominal, 'belum_bayar', req.tenantId)
+      if (dupChk.get(s.id, jenis_tagihan_id, normalizedBulan, normalizedTahun, req.tenantId)) { skipped++; continue }
+      ins.run(uuidv4(), s.id, jenis_tagihan_id, normalizedBulan, normalizedTahun, nominal, 'belum_bayar', req.tenantId)
       created++
     }
   })
   trx(siswaList)
-  res.json({ success: true, count: created, skipped })
+  res.json({ success: true, count: created, skipped, target_count: siswaList.length, periode: { bulan: normalizedBulan, tahun: normalizedTahun } })
 })
 
 app.put('/api/tagihan/:id/bayar', BENDAHARA, (req, res) => {
@@ -4800,7 +4815,14 @@ app.post('/api/absensi-siswa/bulk', STAFF, (req, res) => {
   // jenis: 'masuk' (default) | 'pulang' — bulk seragam untuk 1 sesi
   const { tanggal, rombel_id, data, jenis } = req.body
   const isPulang = jenis === 'pulang'
-  if (!data || !Array.isArray(data)) return res.status(400).json({ error: 'Data harus array' })
+  if (!data || !Array.isArray(data) || !data.length) return res.status(400).json({ error: 'Data harus berupa array yang tidak kosong' })
+  const validAttendanceStatuses = new Set(['hadir', 'sakit', 'izin', 'alpha'])
+  for (const d of data) {
+    if (!d?.siswa_id || !validAttendanceStatuses.has(d.status)) return res.status(400).json({ error: 'Status absensi tidak valid' })
+    const studentExists = db.prepare("SELECT id FROM siswa WHERE id=? AND tenant_id=? AND COALESCE(status,'aktif')='aktif'").get(d.siswa_id, req.tenantId)
+    if (!studentExists) return res.status(400).json({ error: 'Siswa tidak valid untuk tenant aktif' })
+    if (isTeacherContext(req) && !teacherCanAccessStudentOnDate(req, d.siswa_id, tanggal)) return res.status(403).json({ error: 'Siswa bukan dalam akses mengajar Anda' })
+  }
   try { assertKbmActive(req, tanggal) } catch (e) { return res.status(400).json({ error: e.message }) }
   let count = 0
   for (const d of data) {

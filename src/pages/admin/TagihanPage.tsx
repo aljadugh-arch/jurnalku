@@ -14,6 +14,8 @@ interface Tagihan {
 
 interface Siswa { id: string; nama: string; nis: string; rombel_id?: string; rombel_nama?: string }
 
+const BULAN = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember']
+
 // Komponen SearchSiswa — combobox dengan live search
 function SearchSiswa({ value, onChange, placeholder = 'Cari nama atau NIS...' }: {
   value: string; onChange: (id: string, siswa?: Siswa) => void; placeholder?: string
@@ -151,6 +153,8 @@ export default function TagihanPage() {
     if (!genForm.jenis_nama.trim()) { toast.error('Isi nama jenis tagihan'); return }
     if (!genForm.nominal || Number(genForm.nominal) <= 0) { toast.error('Isi nominal tagihan'); return }
     if (!genForm.rombel_id && !genForm.siswa_id) { toast.error('Pilih rombel atau siswa'); return }
+    if (!genForm.bulan) { toast.error('Pilih satu bulan tagihan'); return }
+    if (!genForm.tahun || !/^\d{4}$/.test(genForm.tahun)) { toast.error('Isi tahun dengan 4 angka'); return }
     try {
       const payload: any = { ...genForm }
       if (genForm.siswa_id) {
@@ -159,7 +163,7 @@ export default function TagihanPage() {
       }
       const res = await api.post('/tagihan/generate', payload)
       const skip = res.data.skipped ? `, ${res.data.skipped} dilewati (duplikat)` : ''
-      toast.success(`${res.data.count} tagihan digenerate${skip}`)
+      toast.success(`${res.data.count} tagihan ${res.data.periode?.bulan || genForm.bulan} ${res.data.periode?.tahun || genForm.tahun} digenerate${skip}`)
       setShowGenerate(false)
       setGenForm({ jenis_nama: '', rombel_id: '', siswa_id: '', bulan: '', tahun: '2026', nominal: '' })
       fetchData()
@@ -343,8 +347,8 @@ export default function TagihanPage() {
                 )}
               </div>
               <div className="grid grid-cols-2 gap-3">
-                <div><label className="block text-xs font-medium text-gray-600 mb-1">Bulan</label><input value={genForm.bulan} onChange={e => setGenForm({...genForm, bulan: e.target.value})} placeholder="Januari" className="w-full px-3 py-2 border rounded-lg text-sm" /></div>
-                <div><label className="block text-xs font-medium text-gray-600 mb-1">Tahun</label><input value={genForm.tahun} onChange={e => setGenForm({...genForm, tahun: e.target.value})} className="w-full px-3 py-2 border rounded-lg text-sm" /></div>
+                <div><label className="block text-xs font-medium text-gray-600 mb-1">Bulan *</label><select value={genForm.bulan} onChange={e => setGenForm({...genForm, bulan: e.target.value})} className="w-full px-3 py-2 border rounded-lg text-sm"><option value="">-- Pilih Bulan --</option>{BULAN.map(bulan => <option key={bulan} value={bulan}>{bulan}</option>)}</select></div>
+                <div><label className="block text-xs font-medium text-gray-600 mb-1">Tahun *</label><input type="number" min="2000" max="2100" value={genForm.tahun} onChange={e => setGenForm({...genForm, tahun: e.target.value})} className="w-full px-3 py-2 border rounded-lg text-sm" /></div>
               </div>
             </div>
             <div className="flex gap-3 mt-6">
