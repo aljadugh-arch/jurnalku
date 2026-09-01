@@ -1,0 +1,42 @@
+const test = require('node:test')
+const assert = require('node:assert/strict')
+const fs = require('node:fs')
+const path = require('node:path')
+
+const root = path.resolve(__dirname, '..')
+const studentPage = fs.readFileSync(path.join(root, 'src/pages/admin/AbsensiSiswaPage.tsx'), 'utf8')
+const teacherPage = fs.readFileSync(path.join(root, 'src/pages/admin/AbsensiGuruPage.tsx'), 'utf8')
+const server = fs.readFileSync(path.join(root, 'server/index.cjs'), 'utf8')
+
+test('modal QR siswa menyediakan unduh PNG satuan dan semua siswa', () => {
+  assert.match(studentPage, /QRCodeCanvas/)
+  assert.match(studentPage, /downloadStudentQr/)
+  assert.match(studentPage, /downloadAllStudentQr/)
+  assert.match(studentPage, /Unduh PNG/)
+  assert.match(studentPage, /Unduh Semua/)
+  assert.match(studentPage, /canvas\.toBlob/)
+})
+
+test('Muat Jadwal mengganti daftar GTK dengan GTK terjadwal saja', () => {
+  const start = teacherPage.indexOf('const loadJadwalHarian')
+  const end = teacherPage.indexOf('const handleBatchJadwal', start)
+  assert.notEqual(start, -1)
+  assert.notEqual(end, -1)
+  const body = teacherPage.slice(start, end)
+  assert.match(body, /setGtkList\(rows\)/)
+  assert.match(body, /setForm\(map\)/)
+  assert.doesNotMatch(body, /setForm\(prev\s*=>\s*\(\{\s*\.\.\.prev/)
+})
+
+test('endpoint jadwal harian memakai hari Jakarta dan hanya jadwal mapel tenant aktif', () => {
+  const start = server.indexOf("app.get('/api/absensi-guru/jadwal-harian'")
+  const end = server.indexOf("app.post('/api/absensi-guru/batch-jadwal'", start)
+  assert.notEqual(start, -1)
+  assert.notEqual(end, -1)
+  const body = server.slice(start, end)
+  assert.match(body, /T12:00:00\+07:00/)
+  assert.match(body, /getUTCDay\(\)/)
+  assert.match(body, /j\.tenant_id=g\.tenant_id/)
+  assert.match(body, /j\.jenis_kegiatan='mapel'/)
+  assert.match(body, /status_kepegawaian.*Nonaktif/)
+})

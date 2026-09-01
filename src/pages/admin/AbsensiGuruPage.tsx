@@ -46,10 +46,19 @@ export default function AbsensiGuruPage() {
   const loadJadwalHarian = async () => {
     try {
       const r = await api.get('/absensi-guru/jadwal-harian', { params: { tanggal } })
+      const rows = r.data.rows || []
       const map: Record<string, any> = {}
-      for (const g of r.data.rows || []) map[g.id] = { status: 'hadir', waktu_masuk: g.waktu_masuk || '', waktu_pulang: g.waktu_pulang || '' }
-      setForm(prev => ({ ...prev, ...map }))
-      toast.success(`${(r.data.rows || []).length} GTK dari jadwal dimuat`)
+      for (const g of rows) {
+        const existing = absensi.find((a: any) => a.gtk_id === g.id)
+        map[g.id] = {
+          status: existing?.status || 'hadir',
+          waktu_masuk: existing?.waktu_masuk || g.waktu_masuk || '',
+          waktu_pulang: existing?.waktu_pulang || g.waktu_pulang || '',
+        }
+      }
+      setGtkList(rows)
+      setForm(map)
+      toast.success(rows.length ? `${rows.length} GTK yang memiliki jadwal dimuat` : 'Tidak ada GTK yang memiliki jadwal pada tanggal ini')
     } catch (err: any) { toast.error(err.response?.data?.error || 'Gagal muat jadwal') }
   }
 

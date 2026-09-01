@@ -1,10 +1,11 @@
 import { useState, useEffect, useRef } from 'react'
-import { QrCode, CheckCircle, XCircle, AlertCircle, Clock, Save } from 'lucide-react'
+import { QrCode, CheckCircle, XCircle, AlertCircle, Clock, Download, Save } from 'lucide-react'
 import toast from 'react-hot-toast'
 import api from '../../services/api'
 import { todayWib } from '../../lib/dateFormat'
 import { Html5Qrcode } from 'html5-qrcode'
-import { QRCodeSVG } from 'qrcode.react'
+import JSZip from 'jszip'
+import { QRCodeCanvas } from 'qrcode.react'
 import FoundationTenantPicker from '../../components/FoundationTenantPicker'
 
 const statusColors: Record<string, string> = {
@@ -12,6 +13,48 @@ const statusColors: Record<string, string> = {
   sakit: 'bg-yellow-100 text-yellow-700',
   izin: 'bg-blue-100 text-blue-700',
   alpha: 'bg-red-100 text-red-700',
+}
+
+const safeFilePart = (value: string) => value.trim().replace(/[^a-z0-9._-]+/gi, '-').replace(/^-+|-+$/g, '') || 'siswa'
+
+const canvasToBlob = (canvas: HTMLCanvasElement) => new Promise<Blob>((resolve, reject) => {
+  canvas.toBlob(blob => blob ? resolve(blob) : reject(new Error('PNG QR gagal dibuat')), 'image/png')
+})
+
+const buildStudentQrPng = async (student: any) => {
+  const source = document.getElementById(`student-qr-${student.id}`) as HTMLCanvasElement | null
+  if (!source) throw new Error('QR belum selesai dimuat')
+  const output = document.createElement('canvas')
+  output.width = 720
+  output.height = 880
+  const context = output.getContext('2d')
+  if (!context) throw new Error('Browser tidak mendukung unduh QR')
+  context.fillStyle = '#ffffff'
+  context.fillRect(0, 0, output.width, output.height)
+  context.fillStyle = '#111827'
+  context.textAlign = 'center'
+  context.font = '700 38px sans-serif'
+  context.fillText('QR SISWA', output.width / 2, 62)
+  context.drawImage(source, 80, 100, 560, 560)
+  context.font = '700 32px sans-serif'
+  context.fillText(String(student.nama || 'Siswa').slice(0, 38), output.width / 2, 720)
+  context.fillStyle = '#4b5563'
+  context.font = '24px sans-serif'
+  context.fillText(`${student.identifier_type}: ${student.identifier}`, output.width / 2, 768)
+  context.font = '20px sans-serif'
+  context.fillText('Gunakan QR ini untuk absensi siswa', output.width / 2, 818)
+  return canvasToBlob(output)
+}
+
+const saveBlob = (blob: Blob, filename: string) => {
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = filename
+  document.body.appendChild(link)
+  link.click()
+  link.remove()
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000)
 }
 
 export default function AbsensiSiswaPage() {
@@ -183,6 +226,29 @@ export default function AbsensiSiswaPage() {
     finally { setLoading(false) }
   }
 
+  const downloadStudentQr = async (student: any) => {
+    try {
+      const blob = await buildStudentQrPng(student)
+      saveBlob(blob, `qr-${safeFilePart(student.nama)}-${safeFilePart(student.identifier)}.png`)
+    } catch (err: any) { toast.error(err.message || 'Gagal mengunduh QR') }
+  }
+
+  const downloadAllStudentQr = async () => {
+    if (!qrIdentifiers.length) return toast.error('Belum ada QR siswa untuk diunduh')
+    const zip = new JSZip()
+    setLoading(true)
+    try {
+      for (const student of qrIdentifiers) {
+        const blob = await buildStudentQrPng(student)
+        zip.file(`qr-${safeFilePart(student.nama)}-${safeFilePart(student.identifier)}.png`, blob)
+      }
+      const rombel = rombels.find(r => r.id === selectedRombel)?.nama || 'rombel'
+      saveBlob(await zip.generateAsync({ type: 'blob' }), `qr-siswa-${safeFilePart(rombel)}.zip`)
+      toast.success(`${qrIdentifiers.length} QR siswa berhasil diunduh`)
+    } catch (err: any) { toast.error(err.message || 'Gagal mengunduh semua QR') }
+    finally { setLoading(false) }
+  }
+
   const summary = {
     hadir: Object.values(absensi).filter(s => s === 'hadir').length,
     sakit: Object.values(absensi).filter(s => s === 'sakit').length,
@@ -270,8 +336,8 @@ export default function AbsensiSiswaPage() {
       {qrOpen && <div className="fixed inset-0 z-[100] bg-black/60 flex items-center justify-center p-4"><div className="bg-white rounded-2xl p-4 w-full max-w-sm"><p className="text-sm text-gray-600 mb-3">Kamera tetap terbuka. Arahkan ke QR KTS siswa berikutnya.</p><div id="qr-reader"></div><p className="text-xs text-gray-400 mt-2">Terakhir: {qrToken || '-'}</p><button onClick={stopQrCamera} className="mt-3 w-full px-4 py-2 bg-gray-800 text-white rounded-lg text-sm">Tutup</button></div></div>}
 
       {showQr && <div className="fixed inset-0 z-[100] bg-black/60 flex items-center justify-center p-3"><div className="bg-white rounded-2xl p-4 sm:p-6 w-full max-w-3xl max-h-[90vh] overflow-auto">
-        <div className="flex items-center justify-between gap-3 mb-4"><div><h2 className="font-bold text-gray-800">QR Siswa</h2><p className="text-xs text-gray-500">QR dan login memakai NISN bila tersedia; jika kosong memakai NIS.</p></div><button onClick={() => setShowQr(false)} className="px-3 py-2 bg-gray-100 rounded-lg text-sm">Tutup</button></div>
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">{qrIdentifiers.map(s => <div key={s.id} className="border rounded-xl p-3 text-center"><QRCodeSVG value={s.identifier} size={112} level="M" className="mx-auto max-w-full h-auto"/><p className="font-medium text-sm text-gray-800 mt-2 truncate">{s.nama}</p><p className="text-xs text-gray-500">{s.identifier_type}: {s.identifier}</p></div>)}</div>
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4"><div><h2 className="font-bold text-gray-800">QR Siswa</h2><p className="text-xs text-gray-500">QR dan login memakai NISN bila tersedia; jika kosong memakai NIS.</p></div><div className="flex gap-2"><button onClick={downloadAllStudentQr} disabled={loading || qrIdentifiers.length === 0} className="inline-flex items-center justify-center gap-2 px-3 py-2 bg-purple-600 text-white rounded-lg text-sm disabled:opacity-50"><Download size={15}/>{loading ? 'Menyiapkan...' : 'Unduh Semua'}</button><button onClick={() => setShowQr(false)} className="px-3 py-2 bg-gray-100 rounded-lg text-sm">Tutup</button></div></div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">{qrIdentifiers.map(s => <div key={s.id} className="border rounded-xl p-3 text-center"><QRCodeCanvas id={`student-qr-${s.id}`} value={s.identifier} size={160} level="M" marginSize={2} className="mx-auto max-w-full h-auto"/><p className="font-medium text-sm text-gray-800 mt-2 truncate">{s.nama}</p><p className="text-xs text-gray-500 break-all">{s.identifier_type}: {s.identifier}</p><button onClick={() => downloadStudentQr(s)} className="mt-3 inline-flex w-full items-center justify-center gap-2 px-3 py-2 bg-purple-50 text-purple-700 rounded-lg text-xs font-medium hover:bg-purple-100"><Download size={14}/>Unduh PNG</button></div>)}</div>
         {qrIdentifiers.length === 0 && <p className="py-8 text-center text-sm text-gray-400">Belum ada siswa pada rombel ini.</p>}
       </div></div>}
 

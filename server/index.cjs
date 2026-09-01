@@ -4905,13 +4905,15 @@ app.post('/api/absensi-guru', STAFF, async (req, res) => {
 })
 
 app.get('/api/absensi-guru/jadwal-harian', STAFF, (req, res) => {
-  const tanggal = req.query.tanggal || todayJakarta()
+  const requested = String(req.query.tanggal || '')
+  const tanggal = /^\d{4}-\d{2}-\d{2}$/.test(requested) ? requested : todayJakarta()
   if (isHolidayDate(tanggal, req.tenantId)) return res.json({ tanggal, libur: true, rows: [] })
-  const d = new Date(tanggal + 'T00:00:00+07:00')
-  const hari = HARI_ID[isNaN(d.getTime()) ? new Date().getDay() : d.getDay()]
+  const hari = HARI_ID[new Date(`${tanggal}T12:00:00+07:00`).getUTCDay()]
   const rows = db.prepare(`SELECT g.id,g.nama,g.nip,MIN(j.jam_mulai) waktu_masuk,MAX(j.jam_selesai) waktu_pulang,COUNT(j.id) jam
     FROM gtk g JOIN jadwal j ON j.gtk_id=g.id AND j.tenant_id=g.tenant_id
-    WHERE g.tenant_id=? AND lower(j.hari)=? AND j.jenis_kegiatan='mapel' GROUP BY g.id ORDER BY g.nama`).all(req.tenantId, hari)
+    WHERE g.tenant_id=? AND lower(j.hari)=? AND j.jenis_kegiatan='mapel'
+      AND COALESCE(g.status_kepegawaian,'')!='Nonaktif'
+    GROUP BY g.id ORDER BY g.nama`).all(req.tenantId, hari)
   res.json({ tanggal, hari, libur: false, rows })
 })
 app.post('/api/absensi-guru/batch-jadwal', STAFF, (req, res) => {
