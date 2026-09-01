@@ -132,14 +132,14 @@ export default function App() {
   // ketika user masih null; satu 401 dari request bootstrap itu menghapus token.
   useEffect(() => { checkAuth() }, [checkAuth])
   useEffect(() => {
-    if (authReady && isAuthenticated) {
-      loadSettings()
-      loadSubscription()
-    }
+    if (!authReady) return
+    // Branding harus tersedia sebelum login: /api/settings bersifat publik dan
+    // sudah tenant-aware dari hostname. Sebelumnya settings hanya dimuat
+    // setelah autentikasi, sehingga LoginPage selalu memakai logo fallback.
+    if (!isAuthenticated) useSettingsStore.setState({ settings: {} })
+    void loadSettings()
+    if (isAuthenticated) void loadSubscription()
   }, [authReady, isAuthenticated, loadSettings, loadSubscription])
-  useEffect(() => {
-    if (authReady && !isAuthenticated) useSettingsStore.setState({ settings: {} })
-  }, [authReady, isAuthenticated])
 
   return (
     <BrowserRouter>

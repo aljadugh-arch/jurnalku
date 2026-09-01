@@ -25,7 +25,7 @@ export const useSettingsStore = create<SettingsState>()(
   settings: {},
   loadSettings: async () => {
     try {
-      const res = await api.get('/settings')
+      const res = await api.get('/settings', { headers: { 'Cache-Control': 'no-cache' } })
       set({ settings: res.data || {} })
       applyTheme(res.data || {})
     } catch {
