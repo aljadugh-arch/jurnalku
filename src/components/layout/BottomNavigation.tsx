@@ -143,14 +143,16 @@ function isActive(current: string, path: string) {
 }
 
 export default function BottomNavigation() {
-  const role = useAuthStore(s => s.user?.role)
+  const user = useAuthStore(s => s.user)
+  const role = user?.role
   const settings = useSettingsStore(s => s.settings)
   const features = useSubscriptionStore(s => s.subscription?.features)
   const location = useLocation()
   const [open, setOpen] = useState(false)
   // Demo tenant (demo.jurnalmadrasah.web.id): ceklok hanya untuk guru, sembunyikan dari admin/kepala.
   const isDemo = typeof window !== 'undefined' && window.location.hostname.startsWith('demo.')
-  const items = useMemo(() => roleItems(role, isDemo).filter(item => pathEnabled(item.path, features)), [role, isDemo, features])
+  const navigationRole = role === 'kepala' && user?.can_teach && location.pathname.startsWith('/guru') ? 'guru' : role
+  const items = useMemo(() => roleItems(navigationRole, isDemo).filter(item => pathEnabled(item.path, features)), [navigationRole, isDemo, features])
   const primary = items.slice(0, 4)
   const more = items.slice(4)
   const activeMore = more.some(item => isActive(location.pathname, item.path))

@@ -48,7 +48,7 @@ test('journal create validates tenant-owned references and teacher ownership', (
 test('journal delete is reviewer-any or teacher-own, never unrestricted STAFF delete', () => {
   const block = routeBlock("app.delete('/api/jurnal/:id', STAFF")
   assert.match(block, /reviewer/)
-  assert.match(block, /!\['guru', 'wali_kelas'\]\.includes\(req\.user\.role\)/)
+  assert.match(block, /!isTeacherContext\(req\)/)
   assert.match(block, /guru_id=\? AND tenant_id=\?/) 
   assert.match(block, /result\.changes \? 200 : 404/)
 })

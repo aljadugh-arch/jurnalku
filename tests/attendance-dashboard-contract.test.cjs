@@ -25,7 +25,7 @@ test('riwayat absensi mapel tidak dapat dibaca siswa dan guru dibatasi ke jadwal
   const end = server.indexOf("app.post('/api/absensi-mapel/bulk'", start)
   const route = server.slice(start, end)
   assert.match(route, /app\.get\('\/api\/absensi-mapel', STAFF/)
-  assert.match(route, /\['guru','wali_kelas'\]\.includes\(req\.user\.role\)/)
+  assert.match(route, /isTeacherContext\(req\)/)
   assert.match(route, /teacherCanTeachPair/)
   assert.match(route, /Jadwal bukan yang Anda ampu/)
 })

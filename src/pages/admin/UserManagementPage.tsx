@@ -15,7 +15,7 @@ const CREATABLE = [
 
 export default function UserManagementPage() {
   const [users, setUsers] = useState<User[]>([])
-  const [form, setForm] = useState({ nama: '', email: '', password: '', role: 'kepala' })
+  const [form, setForm] = useState({ nama: '', email: '', password: '', role: 'kepala', can_teach: false })
   const [saving, setSaving] = useState(false)
   const [gtk, setGtk] = useState<any[]>([])
   const [siswa, setSiswa] = useState<any[]>([])
@@ -30,7 +30,7 @@ export default function UserManagementPage() {
   const filteredGtk = gtk.filter(g => g.nama?.toLowerCase().includes(gtkSearch.toLowerCase()) || (g.nip||'').includes(gtkSearch)).slice(0,8)
   const filteredSiswa = siswa.filter(s => s.nama?.toLowerCase().includes(siswaSearch.toLowerCase()) || (s.nis||'').includes(siswaSearch)).slice(0,8)
 
-  const pickGtk = (g: any) => { setForm(f => ({ ...f, nama: g.nama, email: g.email || f.email, role: 'guru' })); setGtkSearch('') }
+  const pickGtk = (g: any) => { setForm(f => ({ ...f, nama: g.nama, email: g.email || f.email, role: f.role === 'kepala' ? 'kepala' : 'guru', can_teach: f.role === 'kepala' || f.can_teach })); setGtkSearch('') }
   const pickSiswa = (s: any) => { setForm(f => ({ ...f, nama: s.nama, email: f.email, role: 'siswa' })); setSiswaSearch('') }
 
   const exportUsers = () => {
@@ -57,7 +57,7 @@ export default function UserManagementPage() {
     try {
       await api.post('/users', form)
       toast.success('Pengguna dibuat')
-      setForm({ nama: '', email: '', password: '', role: 'kepala' })
+      setForm({ nama: '', email: '', password: '', role: 'kepala', can_teach: false })
       load()
     } catch (e: any) { toast.error(e.response?.data?.error || 'Gagal membuat pengguna') }
     finally { setSaving(false) }
@@ -107,6 +107,12 @@ export default function UserManagementPage() {
           <select value={form.role} onChange={e => setForm({ ...form, role: e.target.value })} className="w-full min-w-0 h-11 px-4 py-2 border rounded-lg text-sm">
             {CREATABLE.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
           </select>
+          {form.role === 'kepala' && (
+            <label className="sm:col-span-2 flex items-center gap-3 rounded-lg border bg-blue-50 px-4 py-3 text-sm text-blue-900">
+              <input type="checkbox" checked={form.can_teach} onChange={e => setForm({ ...form, can_teach: e.target.checked })} className="h-4 w-4" />
+              Kepala ini juga mengajar — gunakan satu akun dan satu profil GTK untuk dashboard Manajemen dan Guru.
+            </label>
+          )}
         </div>
         <button onClick={create} disabled={saving} className="mt-4 px-4 py-2 bg-primary text-white rounded-lg text-sm hover:bg-primary-dark disabled:opacity-50">
           {saving ? 'Menyimpan...' : 'Tambah'}

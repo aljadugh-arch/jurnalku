@@ -25,8 +25,8 @@ test('deleting an activity only deletes attendance in the current tenant', () =>
   assert.match(block, /run\(req\.params\.id, req\.tenantId\)/)
 })
 
-test('assignment writes require an explicit teacher role', () => {
-  assert.match(server, /const TEACHER = requireRole\([^\n]*'guru'[^\n]*'wali_kelas'[^\n]*\)/)
+test('assignment writes require an explicit teacher capability', () => {
+  assert.match(server, /const TEACHER = requireCapability\('teacher'\)/)
   assert.match(server, /app\.post\('\/api\/guru\/tugas', TEACHER,/)
   assert.match(server, /app\.delete\('\/api\/guru\/tugas\/:id', TEACHER,/)
 })

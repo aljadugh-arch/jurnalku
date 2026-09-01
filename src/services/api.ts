@@ -14,6 +14,7 @@ api.interceptors.request.use((config) => {
   if (token) {
     config.headers.Authorization = `Bearer ${token}`
   }
+  if (window.location.pathname.startsWith('/guru')) config.headers['X-Access-Mode'] = 'teacher'
   return config
 })
 

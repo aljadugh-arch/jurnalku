@@ -1,6 +1,6 @@
 import { useAuthStore } from '../../stores/authStore'
 import { useThemeStore } from '../../stores/themeStore'
-import { Search, LogOut, Lock, ChevronDown, User, Moon, Sun } from 'lucide-react'
+import { Search, LogOut, Lock, ChevronDown, User, Moon, Sun, Repeat2 } from 'lucide-react'
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { roleLabel } from '../../lib/roles'
@@ -13,6 +13,7 @@ export default function Header() {
 
   const base = user?.role === 'admin' || user?.role === 'super_admin' || user?.role === 'kepala' || user?.role === 'bendahara' || user?.role === 'operator' || user?.role === 'tata_usaha' || user?.role === 'tu' ? '/admin'
     : user?.role === 'guru' || user?.role === 'wali_kelas' ? '/guru' : '/siswa'
+  const teacherMode = window.location.pathname.startsWith('/guru')
 
   const handleLogout = () => {
     logout()
@@ -33,6 +34,16 @@ export default function Header() {
           </div>
         </div>
         <div className="flex items-center gap-3">
+          {user?.role === 'kepala' && user.can_teach && (
+            <button
+              onClick={() => navigate(teacherMode ? '/admin' : '/guru')}
+              className="inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-xs font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-200 dark:hover:bg-gray-800"
+              title={teacherMode ? 'Buka dashboard manajemen' : 'Buka dashboard guru'}
+            >
+              <Repeat2 size={16} />
+              <span className="hidden sm:inline">{teacherMode ? 'Mode Manajemen' : 'Mode Guru'}</span>
+            </button>
+          )}
           {/* Dark mode toggle */}
           <button
             onClick={toggleDark}

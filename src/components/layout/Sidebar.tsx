@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Link, useLocation } from 'react-router-dom'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useSidebarStore } from '../../stores/sidebarStore'
 import { useAuthStore } from '../../stores/authStore'
 import { useSettingsStore } from '../../stores/settingsStore'
@@ -164,13 +164,15 @@ export default function Sidebar() {
   const settings = useSettingsStore(s => s.settings)
   const features = useSubscriptionStore(s => s.subscription?.features)
   const location = useLocation()
+  const navigate = useNavigate()
   const [expandedMenus, setExpandedMenus] = useState<string[]>([])
+  const teacherMode = user?.role === 'kepala' && !!user.can_teach && location.pathname.startsWith('/guru')
 
   const menuItems = (
     user?.role === 'bendahara'
       ? bendaharaMenuItems
       : user?.role === 'kepala'
-        ? kepalaMenuItems
+        ? teacherMode ? guruMenuItems : kepalaMenuItems
         : user?.role === 'admin' || user?.role === 'super_admin'
           ? adminMenuItems
           : user?.role === 'operator' || user?.role === 'tata_usaha' || user?.role === 'tu'
@@ -231,6 +233,12 @@ export default function Sidebar() {
         </div>
 
         {/* Menu */}
+        {user?.role === 'kepala' && user.can_teach && isOpen && (
+          <div className="mx-2 mt-3 grid grid-cols-2 gap-1 rounded-lg bg-white/10 p-1 text-xs">
+            <button onClick={() => navigate('/admin')} className={clsx('rounded-md px-2 py-2', !teacherMode ? 'bg-white text-sidebar' : 'text-white/70')}>Mode Manajemen</button>
+            <button onClick={() => navigate('/guru')} className={clsx('rounded-md px-2 py-2', teacherMode ? 'bg-white text-sidebar' : 'text-white/70')}>Mode Guru</button>
+          </div>
+        )}
         <nav className="flex-1 overflow-y-auto py-3 px-2 space-y-0.5">
           {menuItems.map((item) => (
             <div key={item.label} className="mb-1">

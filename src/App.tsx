@@ -80,6 +80,12 @@ import KantinScannerPage from './pages/admin/KantinScannerPage'
 import DeveloperApiPage from './pages/admin/DeveloperApiPage'
 import PwaInstallPrompt from './components/PwaInstallPrompt'
 import api from './services/api'
+import type { User } from './types'
+
+function canAccessRole(user: User, allowedRoles?: string[]) {
+  if (!allowedRoles || allowedRoles.includes(user.role)) return true
+  return user.role === 'kepala' && !!user.can_teach && allowedRoles.some(role => role === 'guru' || role === 'wali_kelas')
+}
 
 function AdminIndexRoute() {
   const { user } = useAuthStore()
@@ -94,7 +100,7 @@ function ProtectedRoute({ children, allowedRoles }: { children: ReactNode, allow
   // dan halaman tidak memanggil API sebelum peran diketahui.
   if (!authReady || (isAuthenticated && !user)) return <div className="flex items-center justify-center py-20 text-sm text-gray-400">Memuat sesi...</div>
   if (!isAuthenticated) return <Navigate to="/login" replace />
-  if (allowedRoles && user && !allowedRoles.includes(user.role)) {
+  if (allowedRoles && user && !canAccessRole(user, allowedRoles)) {
     const path = user.role === 'admin' || user.role === 'super_admin' || user.role === 'kepala' || user.role === 'bendahara' || user.role === 'operator' || user.role === 'tata_usaha' || user.role === 'tu' ? '/admin' :
                  user.role === 'guru' || user.role === 'wali_kelas' ? '/guru' : '/siswa'
     return <Navigate to={path} replace />

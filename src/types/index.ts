@@ -7,6 +7,7 @@ export interface User {
   nama: string
   email: string
   role: UserRole
+  can_teach?: boolean
   avatar?: string
   nip?: string
   nis?: string

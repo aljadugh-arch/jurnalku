@@ -19,6 +19,9 @@ interface AuthState {
   updateUser: (partial: Partial<User>) => void
 }
 
+export const canAccessTeacherDashboard = (user: User | null) =>
+  !!user && (user.role === 'guru' || user.role === 'wali_kelas' || (user.role === 'kepala' && !!user.can_teach))
+
 const storedToken = () => localStorage.getItem('jurnalku_token')
 const AUTH_RETRY_MS = 3000
 

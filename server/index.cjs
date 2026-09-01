@@ -230,6 +230,7 @@ db.exec(`
     email TEXT UNIQUE NOT NULL,
     password TEXT NOT NULL,
     role TEXT NOT NULL DEFAULT 'guru',
+    can_teach INTEGER NOT NULL DEFAULT 0,
     nip TEXT,
     nis TEXT,
     avatar TEXT,
@@ -778,6 +779,13 @@ db.exec(`
   );
 `);
 
+try {
+  const userColumns = db.prepare('PRAGMA table_info(users)').all()
+  if (!userColumns.some(column => column.name === 'can_teach')) {
+    db.exec('ALTER TABLE users ADD COLUMN can_teach INTEGER NOT NULL DEFAULT 0')
+  }
+} catch {}
+
 // Seed WA Gateway config
 const existWA = db.prepare("SELECT id FROM wa_gateway_config WHERE id = 'main'").get()
 if (!existWA) {
@@ -1181,10 +1189,27 @@ function requireRole(...roles) {
     next()
   }
 }
+function userHasCapability(user, capability) {
+  if (capability !== 'teacher' || !user) return false
+  if (['guru', 'wali_kelas'].includes(user.role)) return true
+  if (user.role !== 'kepala' || !user.tenant_id) return false
+  const stored = db.prepare('SELECT can_teach FROM users WHERE id=? AND tenant_id=?').get(user.id, user.tenant_id)
+  return !!stored?.can_teach && !!resolveGtkForUser(user.id, user.tenant_id)
+}
+function isTeacherContext(req) {
+  return ['guru', 'wali_kelas'].includes(req.user?.role)
+    || (String(req.headers['x-access-mode'] || '') === 'teacher' && userHasCapability(req.user, 'teacher'))
+}
+function requireCapability(capability) {
+  return (req, res, next) => authMiddleware(req, res, () => {
+    if (!userHasCapability(req.user, capability)) return res.status(403).json({ error: 'Akses ditolak: capability tidak tersedia' })
+    next()
+  })
+}
 const ADMIN = requireRole('admin', 'super_admin')
 const SUPER = requireRole('super_admin')
 const STAFF = requireRole('admin', 'super_admin', 'guru', 'wali_kelas', 'operator', 'tata_usaha', 'tu', 'kepala')
-const TEACHER = requireRole('guru', 'wali_kelas')
+const TEACHER = requireCapability('teacher')
 const JOURNAL_REVIEWER = requireRole('admin', 'super_admin', 'kepala', 'operator')
 const BENDAHARA = requireRole('bendahara', 'admin', 'super_admin', 'operator')
 const DASHBOARD_ROLES = requireRole('admin', 'super_admin', 'kepala', 'operator', 'bendahara', 'tata_usaha', 'tu')
@@ -1837,13 +1862,13 @@ app.post('/api/auth/login', authLimiter, (req, res) => {
   if (!user || !bcrypt.compareSync(password, user.password)) {
     return res.status(401).json({ error: 'Email/kode guru/NIS/NISN atau password salah' })
   }
-  const token = jwt.sign({ id: user.id, role: user.role, nama: user.nama, email: user.email, tenant_id: user.tenant_id, gtk_id: user.gtk_id || null, siswa_id: user.siswa_id || null, nis: user.nis || null }, JWT_SECRET, { expiresIn: '24h' })
-  res.json({ token, user: { id: user.id, nama: user.nama, email: user.email, role: user.role, nip: user.nip, nis: user.nis, siswa_id: user.siswa_id, gtk_id: user.gtk_id, avatar: user.avatar } })
+  const token = jwt.sign({ id: user.id, role: user.role, nama: user.nama, email: user.email, tenant_id: user.tenant_id, gtk_id: user.gtk_id || null, siswa_id: user.siswa_id || null, nis: user.nis || null, can_teach: !!user.can_teach }, JWT_SECRET, { expiresIn: '24h' })
+  res.json({ token, user: { id: user.id, nama: user.nama, email: user.email, role: user.role, nip: user.nip, nis: user.nis, siswa_id: user.siswa_id, gtk_id: user.gtk_id, avatar: user.avatar, can_teach: !!user.can_teach } })
 })
 
 app.get('/api/auth/me', authMiddleware, (req, res) => {
-  const user = db.prepare('SELECT id, nama, email, role, nip, nis, avatar FROM users WHERE id = ?').get(req.user.id)
-  res.json(user)
+  const user = db.prepare('SELECT id, nama, email, role, nip, nis, avatar, gtk_id, can_teach FROM users WHERE id = ? AND tenant_id = ?').get(req.user.id, req.tenantId)
+  res.json(user ? { ...user, can_teach: !!user.can_teach } : null)
 })
 
 app.post('/api/auth/register', (req, res) => {
@@ -2020,9 +2045,9 @@ app.post('/api/auth/avatar', authMiddleware, imageUpload.single('avatar'), compr
 const ASSIGNABLE_ROLES = ['kepala', 'admin', 'bendahara', 'guru', 'wali_kelas', 'siswa', 'wali_murid']
 
 app.get('/api/users', ADMIN, (req, res) => {
-  const rows = db.prepare('SELECT id, nama, email, role, nip, nis, avatar FROM users WHERE tenant_id = ? ORDER BY role, nama').all(req.tenantId)
+  const rows = db.prepare('SELECT id, nama, email, role, nip, nis, avatar, gtk_id, can_teach FROM users WHERE tenant_id = ? ORDER BY role, nama').all(req.tenantId)
   const links = db.prepare('SELECT student_id FROM user_students WHERE tenant_id=? AND user_id=? ORDER BY student_id')
-  res.json(rows.map(row => ({ ...row, student_ids: links.all(req.tenantId, row.id).map(x => x.student_id) })))
+  res.json(rows.map(row => ({ ...row, can_teach: !!row.can_teach, student_ids: links.all(req.tenantId, row.id).map(x => x.student_id) })))
 })
 
 function validStudentLinks(tenantId, role, value) {
@@ -2042,7 +2067,7 @@ const replaceUserLinks = db.transaction((tenantId, userId, student_ids) => {
 })
 
 app.post('/api/users', ADMIN, (req, res) => {
-  const { nama, email, password, role, student_ids = [] } = req.body
+  const { nama, email, password, role, student_ids = [], can_teach = false } = req.body
   if (!nama || !nama.trim()) return res.status(400).json({ error: 'Nama wajib diisi' })
   if (!isEmail(email)) return res.status(400).json({ error: 'Email tidak valid' })
   if (!isStr(password, 6, 100)) return res.status(400).json({ error: 'Password minimal 6 karakter' })
@@ -2052,8 +2077,8 @@ app.post('/api/users', ADMIN, (req, res) => {
   try { links = validStudentLinks(req.tenantId, role, student_ids) } catch (e) { return res.status(400).json({ error: e.message }) }
   const id = uuidv4()
   db.transaction(() => {
-    db.prepare('INSERT INTO users (id, nama, email, password, role, tenant_id) VALUES (?,?,?,?,?,?)')
-      .run(id, nama.trim(), email.trim(), bcrypt.hashSync(password, 10), role, req.tenantId)
+    db.prepare('INSERT INTO users (id, nama, email, password, role, tenant_id, can_teach) VALUES (?,?,?,?,?,?,?)')
+      .run(id, nama.trim(), email.trim(), bcrypt.hashSync(password, 10), role, req.tenantId, role === 'kepala' && can_teach ? 1 : 0)
     replaceUserLinks(req.tenantId, id, links)
   })()
   // Auto-link GTK untuk semua role staf (guru, kepala, wali_kelas, bendahara, admin)
@@ -2075,11 +2100,11 @@ app.post('/api/users', ADMIN, (req, res) => {
     }
     // else: guru tidak ada di data GTK → biarkan, admin harus tambah dari Data GTK dulu
   }
-  res.json({ id, nama, email, role })
+  res.json({ id, nama, email, role, can_teach: role === 'kepala' && !!can_teach })
 })
 
 app.put('/api/users/:id', ADMIN, (req, res) => {
-  const { nama, email, role, password, student_ids } = req.body
+  const { nama, email, role, password, student_ids, can_teach } = req.body
   const target = db.prepare('SELECT * FROM users WHERE id = ? AND tenant_id = ?').get(req.params.id, req.tenantId)
   if (!target) return res.status(404).json({ error: 'User tidak ditemukan' })
   if (target.role === 'super_admin') return res.status(403).json({ error: 'Tidak bisa mengubah superadmin' })
@@ -2089,8 +2114,8 @@ app.put('/api/users/:id', ADMIN, (req, res) => {
   try { links = validStudentLinks(req.tenantId, finalRole, student_ids === undefined ? db.prepare('SELECT student_id FROM user_students WHERE tenant_id=? AND user_id=?').all(req.tenantId, req.params.id).map(x => x.student_id) : student_ids) } catch (e) { return res.status(400).json({ error: e.message }) }
   if (password && !isStr(password, 6, 100)) return res.status(400).json({ error: 'Password minimal 6 karakter' })
   db.transaction(() => {
-    db.prepare('UPDATE users SET nama = COALESCE(?, nama), email = COALESCE(?, email), role = COALESCE(?, role) WHERE id = ? AND tenant_id = ?')
-      .run(nama || null, email || null, role || null, req.params.id, req.tenantId)
+    db.prepare('UPDATE users SET nama = COALESCE(?, nama), email = COALESCE(?, email), role = COALESCE(?, role), can_teach = ? WHERE id = ? AND tenant_id = ?')
+      .run(nama || null, email || null, role || null, finalRole === 'kepala' && (can_teach === undefined ? target.can_teach : can_teach) ? 1 : 0, req.params.id, req.tenantId)
     if (password) db.prepare('UPDATE users SET password = ? WHERE id = ? AND tenant_id=?').run(bcrypt.hashSync(password, 10), req.params.id, req.tenantId)
     replaceUserLinks(req.tenantId, req.params.id, links)
   })()
@@ -2373,7 +2398,7 @@ app.get('/api/siswa', authMiddleware, (req, res) => {
   const { search, rombel_id, status } = req.query
   let sql = `SELECT s.*, r.nama rombel_nama FROM siswa s LEFT JOIN rombel r ON r.id=s.rombel_id AND r.tenant_id=s.tenant_id WHERE 1=1 AND s.tenant_id=?`
   const params = [req.tenantId]
-  if (['guru','wali_kelas'].includes(req.user.role)) {
+  if (isTeacherContext(req)) {
     const gtk = resolveGtkForUser(req.user.id, req.tenantId)
     // A teacher without a linked GTK must never receive the tenant-wide list.
     if (!gtk) return res.json([])
@@ -2790,7 +2815,7 @@ app.delete('/api/ekskul/:id', ADMIN, (req, res) => {
 
 // Anggota ekskul: daftar siswa peserta ekskul
 app.get('/api/ekskul/:id/anggota', authMiddleware, (req, res) => {
-  if (['guru', 'wali_kelas'].includes(req.user.role)) {
+  if (isTeacherContext(req)) {
     const gtk = resolveGtkForUser(req.user.id, req.tenantId)
     if (!gtk || !db.prepare('SELECT 1 FROM ekskul WHERE id=? AND pembina_id=? AND tenant_id=?').get(req.params.id, gtk.id, req.tenantId)) return res.status(403).json({ error: 'Bukan pembina ekskul ini' })
   }
@@ -2818,7 +2843,7 @@ app.post('/api/ekskul/:id/anggota', ADMIN, (req, res) => {
 // Absensi ekskul
 app.get('/api/absensi-ekskul', authMiddleware, (req, res) => {
   const { ekskul_id, tanggal } = req.query
-  if (['guru', 'wali_kelas'].includes(req.user.role)) {
+  if (isTeacherContext(req)) {
     const gtk = resolveGtkForUser(req.user.id, req.tenantId)
     if (!gtk || !db.prepare('SELECT 1 FROM ekskul WHERE id=? AND pembina_id=? AND tenant_id=?').get(ekskul_id, gtk.id, req.tenantId)) return res.status(403).json({ error: 'Bukan pembina ekskul ini' })
   }
@@ -2832,7 +2857,7 @@ app.get('/api/absensi-ekskul', authMiddleware, (req, res) => {
 
 app.post('/api/absensi-ekskul/bulk', STAFF, (req, res) => {
   const { ekskul_id, tanggal, data } = req.body
-  if (['guru', 'wali_kelas'].includes(req.user.role)) {
+  if (isTeacherContext(req)) {
     const gtk = resolveGtkForUser(req.user.id, req.tenantId)
     if (!gtk || !db.prepare('SELECT 1 FROM ekskul WHERE id=? AND pembina_id=? AND tenant_id=?').get(ekskul_id, gtk.id, req.tenantId)) return res.status(403).json({ error: 'Bukan pembina ekskul ini' })
   }
@@ -2984,7 +3009,7 @@ function teacherCanTeachPair(gtkId, tenantId, mapelId, rombelId, tanggal) {
 }
 
 function teacherCanAccessStudentOnDate(req, siswaId, tanggal) {
-  if (!['guru', 'wali_kelas'].includes(req.user.role)) return true
+  if (!isTeacherContext(req)) return true
   if (!/^\d{4}-\d{2}-\d{2}$/.test(String(tanggal || ''))) return false
   const gtk = resolveGtkForUser(req.user.id, req.tenantId)
   if (!gtk) return false
@@ -3159,7 +3184,7 @@ app.get('/api/absensi-mapel', STAFF, (req, res) => {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(tanggal)) return res.status(400).json({ error: 'Tanggal tidak valid' })
   const jadwalId = String(req.query.jadwal_id || '').trim()
   const rombelId = String(req.query.rombel_id || '').trim()
-  if (['guru','wali_kelas'].includes(req.user.role)) {
+  if (isTeacherContext(req)) {
     if (!jadwalId) return res.status(400).json({ error: 'jadwal_id wajib untuk guru' })
     const gtk = resolveGtkForUser(req.user.id, req.tenantId)
     const jadwal = db.prepare('SELECT mapel_id,rombel_id FROM jadwal WHERE id=? AND tenant_id=?').get(jadwalId, req.tenantId)
@@ -3185,7 +3210,7 @@ app.post('/api/absensi-mapel/bulk', STAFF, (req, res) => {
   const gtk = resolveGtkForUser(req.user.id, req.tenantId)
   const jadwal = db.prepare('SELECT id,mapel_id,rombel_id,gtk_id FROM jadwal WHERE id=? AND tenant_id=?').get(jadwal_id, req.tenantId)
   if (!jadwal) return res.status(404).json({ error: 'Jadwal tidak ditemukan' })
-  if (['guru','wali_kelas'].includes(req.user.role) && (!gtk || !teacherCanTeachPair(gtk.id, req.tenantId, jadwal.mapel_id, jadwal.rombel_id, date))) return res.status(403).json({ error: 'Jadwal bukan yang Anda ampu' })
+  if (isTeacherContext(req) && (!gtk || !teacherCanTeachPair(gtk.id, req.tenantId, jadwal.mapel_id, jadwal.rombel_id, date))) return res.status(403).json({ error: 'Jadwal bukan yang Anda ampu' })
   const statuses = new Set(['hadir','sakit','izin','alpha','alpa'])
   const studentExists = db.prepare("SELECT 1 FROM siswa WHERE id=? AND rombel_id=? AND tenant_id=? AND COALESCE(status,'aktif')='aktif'")
   if (data.some(row => !row?.siswa_id || !statuses.has(String(row.status || '').toLowerCase()) || !studentExists.get(row.siswa_id, jadwal.rombel_id, req.tenantId))) return res.status(400).json({ error: 'Siswa atau status absensi tidak valid' })
@@ -4503,7 +4528,7 @@ app.get('/api/peminatan/kelompok',authMiddleware,(req,res)=>res.json(db.prepare(
 // Legacy aliases
 app.get('/api/tahfidz/kelompok', authMiddleware, (req, res) => res.json(db.prepare(`SELECT k.*,g.nama pembimbing_nama,count(p.siswa_id) jumlah_peserta FROM tahfidz_kelompok k LEFT JOIN gtk g ON g.id=k.pembimbing_id AND g.tenant_id=k.tenant_id LEFT JOIN tahfidz_peserta p ON p.kelompok_id=k.id AND p.tenant_id=k.tenant_id WHERE k.tenant_id=? GROUP BY k.id ORDER BY k.nama`).all(req.tenantId)))
 app.get('/api/guru/peminatan', STAFF, (req, res) => {
-  if (!['guru', 'wali_kelas'].includes(req.user.role)) return res.status(403).json({ error: 'Akses khusus guru' })
+  if (!isTeacherContext(req)) return res.status(403).json({ error: 'Akses khusus guru' })
   const gtk = resolveGtkForUser(req.user.id, req.tenantId)
   if (!gtk) return res.json([])
   res.json(db.prepare(`SELECT k.*,j.nama jenis_nama,count(p.siswa_id) jumlah_anggota
@@ -4521,14 +4546,14 @@ app.post('/api/tahfidz/kelompok', ADMIN, (req, res) => {
   res.json({ id })
 })
 app.get('/api/tahfidz/kelompok/:id/peserta', authMiddleware, (req,res)=>{
-  if (['guru','wali_kelas'].includes(req.user.role)) {
+  if (isTeacherContext(req)) {
     const gtk=resolveGtkForUser(req.user.id,req.tenantId)
     if(!gtk||!db.prepare('SELECT 1 FROM tahfidz_kelompok WHERE id=? AND pembimbing_id=? AND tenant_id=?').get(req.params.id,gtk.id,req.tenantId)) return res.status(403).json({error:'Bukan pembimbing kegiatan ini'})
   }
   res.json(db.prepare(`SELECT s.* FROM tahfidz_peserta p JOIN siswa s ON s.id=p.siswa_id AND s.tenant_id=p.tenant_id LEFT JOIN rombel r ON r.id=s.rombel_id AND r.tenant_id=s.tenant_id WHERE p.kelompok_id=? AND p.tenant_id=? ORDER BY s.nama`).all(req.params.id,req.tenantId))
 })
 app.get('/api/tahfidz/pertemuan', authMiddleware, (req,res)=>{
-  if (['guru','wali_kelas'].includes(req.user.role)) {
+  if (isTeacherContext(req)) {
     const gtk=resolveGtkForUser(req.user.id,req.tenantId)
     if(!gtk) return res.json([])
     if(req.query.kelompok_id&&!db.prepare('SELECT 1 FROM tahfidz_kelompok WHERE id=? AND pembimbing_id=? AND tenant_id=?').get(req.query.kelompok_id,gtk.id,req.tenantId)) return res.status(403).json({error:'Bukan pembimbing kegiatan ini'})
@@ -4542,7 +4567,7 @@ app.post('/api/tahfidz/pertemuan', STAFF, (req,res)=>{
   const { kelompok_id,tanggal,materi,absensi=[] }=req.body
   const group=db.prepare('SELECT id,pembimbing_id FROM tahfidz_kelompok WHERE id=? AND tenant_id=?').get(kelompok_id,req.tenantId)
   if(!group||!tanggal||!Array.isArray(absensi)) return res.status(400).json({error:'Data pertemuan tidak valid'})
-  if(['guru','wali_kelas'].includes(req.user.role)){const gtk=resolveGtkForUser(req.user.id,req.tenantId);if(!gtk||group.pembimbing_id!==gtk.id)return res.status(403).json({error:'Bukan pembimbing kegiatan ini'})}
+  if(isTeacherContext(req)){const gtk=resolveGtkForUser(req.user.id,req.tenantId);if(!gtk||group.pembimbing_id!==gtk.id)return res.status(403).json({error:'Bukan pembimbing kegiatan ini'})}
   const anggota=new Set(db.prepare('SELECT siswa_id FROM tahfidz_peserta WHERE kelompok_id=? AND tenant_id=?').all(kelompok_id,req.tenantId).map(x=>x.siswa_id))
   if(absensi.some(a=>!anggota.has(a.siswa_id)||!['hadir','izin','sakit','alpa'].includes(a.status))) return res.status(400).json({error:'Absensi hanya untuk peserta terpilih'})
   const id=uuidv4(); db.transaction(()=>{db.prepare('INSERT INTO tahfidz_pertemuan VALUES(?,?,?,?,?)').run(id,kelompok_id,tanggal,materi||'',req.tenantId);const q=db.prepare('INSERT INTO tahfidz_absensi VALUES(?,?,?,?,?)');absensi.forEach(a=>q.run(id,a.siswa_id,a.status,a.catatan||'',req.tenantId))})()
@@ -5065,7 +5090,7 @@ app.get('/api/supervisi/rekap', JOURNAL_REVIEWER, (req, res) => {
 app.post('/api/jurnal', STAFF, signatureUpload.single('signature'), async (req, res, next) => {
   const id = uuidv4()
   let { guru_id, mapel_id, rombel_id, tanggal, jam_ke, materi, kegiatan, catatan, status, signature_type, signature_data } = req.body
-  const teacher = ['guru', 'wali_kelas'].includes(req.user.role)
+  const teacher = isTeacherContext(req)
   if (teacher) {
     const gtk = resolveGtkForUser(req.user.id, req.tenantId)
     if (!gtk) return res.status(403).json({ error: 'Akun guru belum terhubung ke GTK' })
@@ -5108,7 +5133,7 @@ app.put('/api/jurnal/:id', STAFF, (req, res) => {
     const result = db.prepare("UPDATE jurnal_mengajar SET status=? WHERE id=? AND tenant_id=? AND status='submitted'").run(status, req.params.id, req.tenantId)
     return res.status(result.changes ? 200 : 404).json(result.changes ? { success: true } : { error: 'Jurnal submitted tidak ditemukan' })
   } else {
-    if (!['guru','wali_kelas'].includes(req.user.role) || !['draft','submitted'].includes(status)) return res.status(403).json({ error: 'Status jurnal tidak diizinkan' })
+    if (!isTeacherContext(req) || !['draft','submitted'].includes(status)) return res.status(403).json({ error: 'Status jurnal tidak diizinkan' })
     const gtk = resolveGtkForUser(req.user.id, req.tenantId)
     if (!gtk) return res.status(403).json({ error: 'Akun guru belum terhubung ke GTK' })
     const result = db.prepare("UPDATE jurnal_mengajar SET materi=?, kegiatan=?, catatan=?, status=? WHERE id=? AND guru_id=? AND tenant_id=? AND status IN ('draft','rejected') AND (? != 'submitted' OR signature_path IS NOT NULL)").run(materi||'', kegiatan||'', catatan||'', status, req.params.id, gtk.id, req.tenantId, status)
@@ -5118,7 +5143,7 @@ app.put('/api/jurnal/:id', STAFF, (req, res) => {
 
 app.delete('/api/jurnal/:id', STAFF, (req, res) => {
   const reviewer = ['admin','super_admin','kepala','operator'].includes(req.user.role)
-  if (!reviewer && !['guru', 'wali_kelas'].includes(req.user.role)) return res.status(403).json({ error: 'Role tidak diizinkan menghapus jurnal' })
+  if (!reviewer && !isTeacherContext(req)) return res.status(403).json({ error: 'Role tidak diizinkan menghapus jurnal' })
   let result
   if (reviewer) {
     result = db.prepare('DELETE FROM jurnal_mengajar WHERE id=? AND tenant_id=?').run(req.params.id, req.tenantId)
@@ -5268,7 +5293,7 @@ app.get('/api/penilaian-harian', authMiddleware, (req, res) => {
 app.post('/api/penilaian-harian', STAFF, (req, res) => {
   const id = uuidv4()
   const { jurnal_id, siswa_id, mapel_id, tanggal, sikap, keaktifan, pengetahuan, catatan } = req.body
-  if (['guru', 'wali_kelas'].includes(req.user.role)) {
+  if (isTeacherContext(req)) {
     const gtk = resolveGtkForUser(req.user.id, req.tenantId)
     const siswa = db.prepare('SELECT rombel_id FROM siswa WHERE id=? AND tenant_id=?').get(siswa_id, req.tenantId)
     if (!gtk || !siswa || !teacherCanTeachPair(gtk.id, req.tenantId, mapel_id, siswa.rombel_id, tanggal)) return res.status(403).json({ error: 'Siswa/mapel tidak sesuai jadwal mengajar Anda' })
@@ -5281,7 +5306,7 @@ app.post('/api/penilaian-harian', STAFF, (req, res) => {
 app.post('/api/penilaian-harian/bulk', STAFF, (req, res) => {
   const { jurnal_id, mapel_id, tanggal, data } = req.body
   if (!data || !Array.isArray(data)) return res.status(400).json({ error: 'Data harus array' })
-  if (['guru', 'wali_kelas'].includes(req.user.role)) {
+  if (isTeacherContext(req)) {
     const gtk = resolveGtkForUser(req.user.id, req.tenantId)
     if (!gtk || data.some(d => {
       const siswa = db.prepare('SELECT rombel_id FROM siswa WHERE id=? AND tenant_id=?').get(d.siswa_id, req.tenantId)
@@ -5336,7 +5361,7 @@ app.get('/api/penilaian-harian/rekap/:siswa_id', authMiddleware, (req, res) => {
 
 // ==================== CATATAN KEPRIBADIAN ====================
 function teacherCanAccessStudent(req, siswaId) {
-  if (!['guru', 'wali_kelas'].includes(req.user.role)) return true
+  if (!isTeacherContext(req)) return true
   const gtk = resolveGtkForUser(req.user.id, req.tenantId)
   if (!gtk) return false
   return !!db.prepare(`SELECT 1 FROM siswa s LEFT JOIN rombel r ON r.id=s.rombel_id AND r.tenant_id=s.tenant_id
@@ -5380,7 +5405,7 @@ app.get('/api/catatan-kepribadian', authMiddleware, (req, res) => {
     LEFT JOIN rombel r ON s.rombel_id = r.id
     WHERE c.tenant_id=?`
   const params = [req.tenantId]
-  if (['guru','wali_kelas'].includes(req.user.role)) {
+  if (isTeacherContext(req)) {
     const gtk = resolveGtkForUser(req.user.id, req.tenantId)
     if (!gtk) return res.json([])
     sql += ` AND (r.wali_kelas_id=? OR s.rombel_id IN (SELECT rombel_id FROM pengajar WHERE gtk_id=? AND tenant_id=? UNION SELECT rombel_id FROM jadwal WHERE gtk_id=? AND tenant_id=?))`
