@@ -183,7 +183,7 @@ const compressUploadedImages = (fields = [], prefix = 'media') => async (req, _r
 }
 const postingUpload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 10 * 1024 * 1024, files: 1 }
+  limits: { fileSize: 10 * 1024 * 1024, files: 10 }
 })
 const savePostingUpload = async (file, tenantId) => {
   if (!file?.buffer?.length) throw Error('File wajib diunggah')
@@ -4409,7 +4409,7 @@ app.get('/api/tagihan', BENDAHARA, (req, res) => {
 })
 
 app.post('/api/tagihan/generate', BENDAHARA, (req, res) => {
-  const { rombel_id, bulan, tahun, siswa_ids } = req.body
+  const { rombel_id, bulan, tahun, siswa_ids, siswa_id } = req.body
   const jenis_nama = (req.body.jenis_nama || '').trim()
   const nominalRaw = req.body.nominal
   if (!jenis_nama) return res.status(400).json({ error: 'Nama jenis tagihan wajib diisi' })
@@ -4425,11 +4425,14 @@ app.post('/api/tagihan/generate', BENDAHARA, (req, res) => {
   const jenis_tagihan_id = jenis.id
   // rombel_id='all' => semua siswa aktif; selain itu per rombel
   let siswaList
-  if (Array.isArray(siswa_ids)) {
-    if (!siswa_ids.length) return res.status(400).json({ error: 'Pilih minimal satu siswa' })
-    const placeholders = siswa_ids.map(() => '?').join(',')
-    siswaList = db.prepare(`SELECT id FROM siswa WHERE id IN (${placeholders}) AND status='aktif' AND tenant_id = ?`).all(...siswa_ids, req.tenantId)
-    if (siswaList.length !== new Set(siswa_ids).size) return res.status(400).json({ error: 'Pilihan siswa tidak valid' })
+  const selectedSiswaIds = siswa_id ? [siswa_id] : siswa_ids
+  if (Array.isArray(selectedSiswaIds)) {
+    if (!selectedSiswaIds.length) return res.status(400).json({ error: 'Pilih minimal satu siswa' })
+    const uniqueIds = [...new Set(selectedSiswaIds.map(id => String(id).trim()).filter(Boolean))]
+    if (uniqueIds.length !== selectedSiswaIds.length) return res.status(400).json({ error: 'Pilihan siswa tidak valid' })
+    const placeholders = uniqueIds.map(() => '?').join(',')
+    siswaList = db.prepare(`SELECT id FROM siswa WHERE id IN (${placeholders}) AND status='aktif' AND tenant_id = ?`).all(...uniqueIds, req.tenantId)
+    if (siswaList.length !== uniqueIds.length) return res.status(400).json({ error: 'Pilihan siswa tidak valid' })
   } else {
     siswaList = (!rombel_id || rombel_id === 'all')
       ? db.prepare("SELECT id FROM siswa WHERE status = 'aktif' AND tenant_id = ?").all(req.tenantId)
@@ -5170,21 +5173,32 @@ app.get('/api/posting', authMiddleware, (req, res) => {
 })
 
 app.post('/api/posting', STAFF, (req, res) => {
-  const { judul, isi, kategori, media, activity_type, location_lat, location_lng, location_name, poll_data, tags } = req.body
+  const { judul, isi, konten, kategori, media, activity_type, location_lat, location_lng, location_name, poll_data, tags } = req.body
   if (!judul?.trim() || !isi?.trim()) return res.status(400).json({ error: 'Judul dan isi wajib diisi.' })
+  const safeKonten = typeof konten === 'string' && konten.trim() ? konten.trim() : isi.trim()
   const safeMedia = Array.isArray(media) ? media.filter(item => item && typeof item === 'object' && typeof item.media_url === 'string' && item.media_url.startsWith('/uploads/')) : []
   const id = uuidv4()
   db.prepare(`INSERT INTO posting (id, tenant_id, author_user_id, konten, judul, isi, kategori, penulis_id, penulis_nama, media, activity_type, location_lat, location_lng, location_name, poll_data, tags) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
-    .run(id, req.tenantId, req.user.id, isi.trim(), judul.trim(), isi.trim(), kategori || 'berita', req.user.id, req.user.nama || req.user.username || '', JSON.stringify(safeMedia), activity_type || '', location_lat || null, location_lng || null, location_name || '', JSON.stringify(poll_data || []), JSON.stringify(tags || []))
+    .run(id, req.tenantId, req.user.id, safeKonten, judul.trim(), isi.trim(), kategori || 'berita', req.user.id, req.user.nama || req.user.username || '', JSON.stringify(safeMedia), activity_type || '', location_lat || null, location_lng || null, location_name || '', JSON.stringify(poll_data || []), JSON.stringify(tags || []))
   res.json({ id })
 })
 
-app.post('/api/posting/upload', STAFF, postingUpload.single('file'), async (req, res, next) => {
-  if (!req.file) return res.status(400).json({ error: 'File wajib diunggah' })
-  try { await savePostingUpload(req.file, req.tenantId) } catch (error) { return next(error) }
-  const mime = req.file.mimetype || ''
-  const mediaType = mime.startsWith('image/') ? 'image' : mime.startsWith('video/') ? 'video' : mime.startsWith('audio/') ? 'audio' : 'file'
-  res.json({ media_url: '/uploads/' + req.file.filename, media_type: mediaType, filename: req.file.originalname })
+app.post('/api/posting/upload', STAFF, postingUpload.fields([{ name: 'files', maxCount: 10 }, { name: 'file', maxCount: 1 }]), async (req, res, next) => {
+  const files = Object.values(req.files || {}).flat()
+  if (!files.length) return res.status(400).json({ error: 'File wajib diunggah' })
+  const saved = []
+  try {
+    for (const file of files) {
+      await savePostingUpload(file, req.tenantId)
+      const mime = file.mimetype || ''
+      const mediaType = mime.startsWith('image/') ? 'image' : mime.startsWith('video/') ? 'video' : mime.startsWith('audio/') ? 'audio' : 'file'
+      saved.push({ media_url: '/uploads/' + file.filename, media_type: mediaType, filename: file.originalname })
+    }
+  } catch (error) {
+    for (const item of saved) removeManagedUpload(item.media_url)
+    return next(error)
+  }
+  res.json({ media: saved })
 })
 
 app.delete('/api/posting/:id', STAFF, (req, res) => {

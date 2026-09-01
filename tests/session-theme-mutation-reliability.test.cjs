@@ -50,9 +50,9 @@ test('unggah gambar posting memakai klien terautentikasi dan kontrak media serve
   assert.match(editor, /api\.post\('\/posting\/upload'/)
   assert.match(editor, /setImage\(\{ src: data\.media_url/)
   assert.match(editor, /data\.media_type === 'video'/)
-  // Server menerima satu berkas per permintaan.
-  assert.match(editor, /for \(const file of Array\.from\(files\)\)/)
-  assert.doesNotMatch(editor, /append\('files'/)
+  // Satu pilihan dapat berisi banyak berkas dan dikirim sebagai satu batch.
+  assert.match(editor, /Array\.from\(files\)\.forEach\(file => formData\.append\('files', file\)\)/)
+  assert.match(editor, /Array\.isArray\(response\.data\.media\)/)
 })
 
 test('simpan absensi kelas bersifat atomik, tervalidasi, dan menampilkan pesan server', () => {

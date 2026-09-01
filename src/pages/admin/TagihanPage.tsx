@@ -153,7 +153,10 @@ export default function TagihanPage() {
     if (!genForm.rombel_id && !genForm.siswa_id) { toast.error('Pilih rombel atau siswa'); return }
     try {
       const payload: any = { ...genForm }
-      if (genForm.siswa_id) { payload.rombel_id = ''; }
+      if (genForm.siswa_id) {
+        payload.rombel_id = ''
+        payload.siswa_ids = [genForm.siswa_id]
+      }
       const res = await api.post('/tagihan/generate', payload)
       const skip = res.data.skipped ? `, ${res.data.skipped} dilewati (duplikat)` : ''
       toast.success(`${res.data.count} tagihan digenerate${skip}`)

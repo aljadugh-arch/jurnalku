@@ -37,7 +37,7 @@ test('all cashless image paths await authoritative normalization including batch
 
 test('posting uploads keep image bytes in memory until validation and compression succeed', () => {
   assert.match(server, /postingUpload = multer\(\{[\s\S]*?multer\.memoryStorage\(\)/)
-  assert.match(server, /await savePostingUpload\(req\.file/)
+  assert.match(server, /for \(const file of files\)[\s\S]*?await savePostingUpload\(file/)
   assert.match(server, /writeCompressedImage[\s\S]*?catch \(error\)[\s\S]*?rm\(destination/)
 })
 

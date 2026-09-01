@@ -41,7 +41,7 @@ export default function RichEditor({ content, onChange, placeholder = 'Tulis pos
   const [linkUrl, setLinkUrl] = useState('')
   const [linkText, setLinkText] = useState('')
   const [showImage, setShowImage] = useState(false)
-  const [imageUrl, setImageUrl] = useState('')
+  const [imageUrls, setImageUrls] = useState('')
   const [imageAlt, setImageAlt] = useState('')
   const [showPoll, setShowPoll] = useState(false)
   const [pollOptions, setPollOptions] = useState(['', ''])
@@ -78,6 +78,9 @@ export default function RichEditor({ content, onChange, placeholder = 'Tulis pos
       setCharCount(text.length)
       const images = [...editor.view.dom.querySelectorAll('img')].map(img => ({
         url: img.src,
+        media_url: img.src,
+        type: 'image',
+        media_type: 'image',
         alt: img.alt || '',
         width: img.width,
         height: img.height
@@ -93,9 +96,10 @@ export default function RichEditor({ content, onChange, placeholder = 'Tulis pos
   })
 
   const addImage = () => {
-    if (imageUrl.trim()) {
-      editor?.chain().focus().setImage({ src: imageUrl.trim(), alt: imageAlt.trim() }).run()
-      setImageUrl('')
+    const urls = imageUrls.split(/\s*[\n,]+\s*/).map(url => url.trim()).filter(Boolean)
+    if (urls.length) {
+      urls.forEach(url => editor?.chain().focus().setImage({ src: url, alt: imageAlt.trim() }).run())
+      setImageUrls('')
       setImageAlt('')
       setShowImage(false)
     }
@@ -143,20 +147,18 @@ export default function RichEditor({ content, onChange, placeholder = 'Tulis pos
     if (!files.length) return
     setUploading(true)
     try {
-      // Backend menerima satu file per request. Kirim berurutan supaya pilihan
-      // beberapa file tidak ditolak Multer dan semua media tetap tersimpan.
-      for (const file of Array.from(files)) {
-        const formData = new FormData()
-        formData.append('file', file)
-        const response = await api.post('/posting/upload', formData)
-        const data = response.data
-        if (!data.media_url) throw new Error('Respons upload tidak valid')
+      const formData = new FormData()
+      Array.from(files).forEach(file => formData.append('files', file))
+      const response = await api.post('/posting/upload', formData)
+      const uploaded = Array.isArray(response.data.media) ? response.data.media : []
+      if (!uploaded.length) throw new Error('Respons upload tidak valid')
+      uploaded.forEach((data: any) => {
         if (data.media_type === 'image') {
           editor?.chain().focus().setImage({ src: data.media_url, alt: data.filename }).run()
         } else if (data.media_type === 'video') {
           editor?.chain().focus().insertContent(`<video src="${data.media_url}" controls class="max-w-full rounded-lg my-2" />`).run()
         }
-      }
+      })
     } catch (error: any) {
       toast.error(error.response?.data?.error || error.message || 'Gagal mengunggah media')
     } finally {
@@ -239,11 +241,11 @@ export default function RichEditor({ content, onChange, placeholder = 'Tulis pos
           <div className="w-full max-w-md bg-white dark:bg-gray-800 rounded-xl p-6 shadow-xl">
             <h3 className="font-bold text-lg mb-4">Sisipkan Gambar via URL</h3>
             <div className="space-y-3">
-              <div><label className="block text-sm font-medium mb-1">URL Gambar *</label><input type="url" value={imageUrl} onChange={e => setImageUrl(e.target.value)} className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700" placeholder="https://example.com/image.jpg" /></div>
+              <div><label className="block text-sm font-medium mb-1">URL Gambar *</label><textarea value={imageUrls} onChange={e => setImageUrls(e.target.value)} rows={4} className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700" placeholder="Satu URL per baris atau pisahkan dengan koma" /><p className="text-xs text-gray-500 mt-1">Beberapa gambar dapat dimasukkan sekaligus.</p></div>
               <div><label className="block text-sm font-medium mb-1">Alt Text</label><input type="text" value={imageAlt} onChange={e => setImageAlt(e.target.value)} className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700" placeholder="Deskripsi gambar" /></div>
             </div>
             <div className="flex gap-3 mt-4 justify-end">
-              <button onClick={() => { setShowImage(false); setImageUrl(''); setImageAlt('') }} className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg">Batal</button>
+              <button onClick={() => { setShowImage(false); setImageUrls(''); setImageAlt('') }} className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg">Batal</button>
               <button onClick={addImage} className="px-4 py-2 bg-primary text-white rounded-lg">Sisipkan</button>
             </div>
           </div>
