@@ -33,7 +33,7 @@ async function configurePwa() {
     const tc = document.querySelector('meta[name="theme-color"]') as HTMLMetaElement | null
     if (tc && data.theme_color) tc.content = data.theme_color
     if (data.name) document.title = data.name
-    const baseIconUrl = data.icons?.[0]?.src || '/logo-jurnalku-256.png'
+    const baseIconUrl = data.icons?.find((icon: { sizes?: string }) => icon.sizes === '192x192')?.src || data.icons?.[0]?.src || '/logo-jurnalku-256.png'
     const iconUrl = data.version && !baseIconUrl.includes('v=')
       ? `${baseIconUrl}${baseIconUrl.includes('?') ? '&' : '?'}v=${data.version}`
       : baseIconUrl

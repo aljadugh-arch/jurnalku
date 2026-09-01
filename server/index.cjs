@@ -3476,7 +3476,7 @@ app.get('/api/pwa/icon/:size', async (req, res) => {
       : path.join(__dirname, '..', 'public', path.basename(relative))
     const input = fs.existsSync(source) ? source : fallback
     const image = await sharp(input).resize(size, size, { fit: 'contain', background: { r: 255, g: 255, b: 255, alpha: 0 } }).png().toBuffer()
-    res.type('image/png').set('Cache-Control', 'public, max-age=86400').send(image)
+    res.type('image/png').set({ 'Cache-Control': 'no-cache, must-revalidate', 'X-Content-Type-Options': 'nosniff' }).send(image)
   } catch (error) {
     console.error('[PWA icon]', error.message)
     res.status(500).json({ error: 'Ikon PWA gagal diproses' })

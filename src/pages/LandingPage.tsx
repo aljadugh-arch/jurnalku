@@ -128,10 +128,10 @@ export default function LandingPage() {
         <div className="max-w-4xl mx-auto px-4 text-center">
           <h2 className="text-xl sm:text-2xl font-bold text-gray-900 mb-6 font-display">Bergabung dengan Lembaga-Lembaga Terbaik</h2>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-6 items-center opacity-60">
-            <div className="text-3xl font-bold text-gray-400">SD</div>
-            <div className="text-3xl font-bold text-gray-400">SMP</div>
-            <div className="text-3xl font-bold text-gray-400">SMA</div>
-            <div className="text-3xl font-bold text-gray-400">MA</div>
+            <div className="text-3xl font-bold text-gray-600">SD</div>
+            <div className="text-3xl font-bold text-gray-600">SMP</div>
+            <div className="text-3xl font-bold text-gray-600">SMA</div>
+            <div className="text-3xl font-bold text-gray-600">MA</div>
           </div>
           <p className="text-gray-500 mt-6 text-sm">Dipercaya oleh 100+ lembaga pendidikan di seluruh Indonesia</p>
         </div>
