@@ -4,12 +4,16 @@ import toast from 'react-hot-toast'
 import api from '../../services/api'
 import { todayWib } from '../../lib/dateFormat'
 import * as XLSX from 'xlsx'
+import { useSettingsStore } from '../../stores/settingsStore'
+import { tenantExportFilename, tenantIdentity } from '../../utils/tenantExport'
 
 interface Siswa { id: string; nama: string; nis: string; rombel_id: string; rombel_nama?: string }
 interface Rombel { id: string; nama: string }
 interface RekapRow { id: string; nama: string; nis: string; rombel_nama: string; periode: string; jumlah_hadir: number; minimal_hadir: number; hasil: string }
 
 export default function AbsensiJamaahPage() {
+  const settings = useSettingsStore(s => s.settings)
+  const tenant = tenantIdentity(settings)
   const [siswa, setSiswa] = useState<Siswa[]>([])
   const [rombels, setRombels] = useState<Rombel[]>([])
   const [filterRombel, setFilterRombel] = useState('')
@@ -65,6 +69,8 @@ export default function AbsensiJamaahPage() {
     const rows = rekap.length ? rekap : (await api.get('/jamaah/rekap-manual', { params: { minimal_hadir: minimal } })).data.rows || []
     const ws = XLSX.utils.aoa_to_sheet([
       ['REKAP ABSENSI JAMAAH'],
+      [tenant.name],
+      tenant.address ? [tenant.address] : [],
       ['Nama Sesi', nama, 'Periode', periode || '-'],
       [],
       ['No', 'Nama Lengkap', 'NIS', 'Rombel', 'Periode', 'Hadir', 'Minimal', 'Keterangan'],
@@ -72,7 +78,8 @@ export default function AbsensiJamaahPage() {
     ])
     ws['!cols'] = [{wch:5},{wch:28},{wch:16},{wch:14},{wch:24},{wch:10},{wch:10},{wch:16}]
     const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, 'Rekap Jamaah')
-    XLSX.writeFile(wb, `Rekap_Absensi_Jamaah_${todayWib()}.xlsx`)
+    wb.Props = { Title: 'Rekapitulasi Absensi Jamaah', Author: tenant.name, Company: tenant.name }
+    XLSX.writeFile(wb, tenantExportFilename('Rekap_Absensi_Jamaah', tenant.name, todayWib(), 'xlsx'))
     toast.success('Excel rekap jamaah diunduh')
   }
 
@@ -81,7 +88,9 @@ export default function AbsensiJamaahPage() {
     const w = window.open('', '_blank')
     if (!w) { toast.error('Popup blocked'); return }
     const body = rows.map((r: RekapRow, i: number) => `<tr><td>${i+1}</td><td class="nama">${r.nama || ''}</td><td>${r.nis || ''}</td><td>${r.rombel_nama || ''}</td><td>${r.periode || ''}</td><td>${r.jumlah_hadir || 0}</td><td>${r.minimal_hadir || minimal}</td><td>${r.hasil === 'lolos' ? 'Lolos' : 'Tidak Lolos'}</td></tr>`).join('')
-    w.document.write(`<!doctype html><html><head><title>Rekap Jamaah</title><style>@page{size:landscape;margin:8mm}body{font-family:Arial,sans-serif;font-size:10px;color:#000}h2,h3{text-align:center;margin:2px}.meta{font-weight:bold;margin:10px 0}.hl{background:#ffeb3b;padding:2px 12px}table{width:100%;border-collapse:collapse}th,td{border:1px solid #000;padding:4px;text-align:center}.nama{text-align:left;min-width:180px}th{background:#e5e7eb}</style></head><body><h2>REKAPITULASI ABSENSI JAMAAH</h2><h3>MADRASAH TSANAWIYAH PLUS SUNAN DRAJAT 7 PALANG</h3><div class="meta">SESI: <span class="hl">${nama}</span> &nbsp; PERIODE: <span class="hl">${periode || '-'}</span></div><table><thead><tr><th>NO</th><th>NAMA LENGKAP</th><th>NIS</th><th>ROMBEL</th><th>PERIODE</th><th>HADIR</th><th>MIN</th><th>KETERANGAN</th></tr></thead><tbody>${body}</tbody></table><script>setTimeout(()=>window.print(),400)<\/script></body></html>`)
+    const title = tenantExportFilename('Rekap_Absensi_Jamaah', tenant.name, todayWib(), 'pdf').replace(/\.pdf$/, '')
+    const logo = tenant.logo ? `<img src="${tenant.logo}" alt="Logo" onerror="this.style.display='none'">` : ''
+    w.document.write(`<!doctype html><html><head><title>${title}</title><meta name="author" content="${tenant.name}"><style>@page{size:landscape;margin:8mm}body{font-family:Arial,sans-serif;font-size:10px;color:#000}.kop{display:flex;justify-content:center;align-items:center;gap:12px;border-bottom:2px solid #000;padding-bottom:7px}.kop img{width:58px;height:58px;object-fit:contain}h2,h3{text-align:center;margin:2px}.meta{font-weight:bold;margin:10px 0}.hl{background:#ffeb3b;padding:2px 12px}table{width:100%;border-collapse:collapse}th,td{border:1px solid #000;padding:4px;text-align:center}.nama{text-align:left;min-width:180px}th{background:#e5e7eb}</style></head><body><div class="kop">${logo}<div><h2>${tenant.name}</h2>${tenant.address ? `<div>${tenant.address}</div>` : ''}<h3>REKAPITULASI ABSENSI JAMAAH</h3></div></div><div class="meta">SESI: <span class="hl">${nama}</span> &nbsp; PERIODE: <span class="hl">${periode || '-'}</span></div><table><thead><tr><th>NO</th><th>NAMA LENGKAP</th><th>NIS</th><th>ROMBEL</th><th>PERIODE</th><th>HADIR</th><th>MIN</th><th>KETERANGAN</th></tr></thead><tbody>${body}</tbody></table><script>setTimeout(()=>window.print(),400)<\/script></body></html>`)
     w.document.close()
   }
 

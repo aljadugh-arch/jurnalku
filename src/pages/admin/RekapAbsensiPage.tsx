@@ -6,8 +6,11 @@ import toast from 'react-hot-toast'
 import api from '../../services/api'
 import { todayWib, yearWib, addDaysWib } from '../../lib/dateFormat'
 import * as XLSX from 'xlsx'
+import { useSettingsStore } from '../../stores/settingsStore'
+import { tenantExportFilename, tenantIdentity } from '../../utils/tenantExport'
 
 export default function RekapAbsensiPage() {
+  const settings = useSettingsStore(s => s.settings)
   const [tab, setTab] = useState<'siswa' | 'gtk'>('siswa')
   const [bulan, setBulan] = useState(() => todayWib().slice(0, 7))
   const [mode, setMode] = useState<'harian' | 'mingguan' | 'bulanan' | 'semester'>('bulanan')
@@ -64,6 +67,7 @@ export default function RekapAbsensiPage() {
   ]
 
   const categoryLabel = { kehadiran: 'Kehadiran Masuk & Pulang', mapel: 'Mata Pelajaran', kokurikuler: 'Kokurikuler', ekskul: 'Ekstrakurikuler', jamaah: 'Jamaah', kegiatan_lain: 'Kegiatan Lain' }[category]
+  const tenant = tenantIdentity(settings)
 
   const exportExcel = () => {
     const isCategory = category !== 'kehadiran'
@@ -75,11 +79,20 @@ export default function RekapAbsensiPage() {
     const rows = data.map((d: any, i: number) => isCategory
       ? [i + 1, d.nama, d.nisn || d.nis || '', d.rombel_nama || '', d.kegiatan_nama || '', d.hadir, d.sakit, d.izin, d.alpha, d.lain, d.total, d.total > 0 ? Math.round(d.hadir / d.total * 100) + '%' : '0%']
       : [i + 1, d.nama, d.nis || d.nip || '', d.rombel_nama || d.jabatan || '', d.hadir, d.sakit, d.izin, d.alpha, d.total > 0 ? Math.round(d.hadir / d.total * 100) + '%' : '0%'])
-    const ws = XLSX.utils.aoa_to_sheet([[`Rekapitulasi Absensi ${categoryLabel} - ${bulan}`], [], header, ...rows])
+    const ws = XLSX.utils.aoa_to_sheet([
+      [`Rekapitulasi Absensi ${categoryLabel}`],
+      [tenant.name],
+      tenant.address ? [tenant.address] : [],
+      [`Periode: ${bulan}`],
+      [],
+      header,
+      ...rows,
+    ])
     ws['!cols'] = header.map(() => ({ wch: 15 }))
     const wb = XLSX.utils.book_new()
     XLSX.utils.book_append_sheet(wb, ws, 'Rekap')
-    XLSX.writeFile(wb, `Rekap_Absensi_${category}_${bulan}.xlsx`)
+    wb.Props = { Title: `Rekapitulasi Absensi ${categoryLabel}`, Subject: `Periode ${bulan}`, Author: tenant.name, Company: tenant.name }
+    XLSX.writeFile(wb, tenantExportFilename(`Rekap_Absensi_${category}`, tenant.name, bulan, 'xlsx'))
     toast.success('Excel diunduh')
   }
 
@@ -103,7 +116,9 @@ export default function RekapAbsensiPage() {
       const dayCells = dates.map(x => `<td>${escapeHtml(map[x] || '')}</td>`).join('')
       return `<tr><td>${i+1}</td><td class="nama">${escapeHtml(d.nama || '')}</td><td>${escapeHtml(d.nisn || d.nis || d.nip || '')}</td>${dayCells}<td>${d.sakit || 0}</td><td>${d.izin || 0}</td><td>${d.alpha || 0}</td><td>${d.hadir || 0}</td></tr>`
     }).join('')
-    printWindow.document.write(`<!DOCTYPE html><html><head><title>Rekap Absensi</title><style>@page{size:landscape;margin:7mm}body{font-family:Arial,sans-serif;font-size:9px;color:#000}h2,h3{text-align:center;margin:1px 0}.meta{display:flex;gap:12px;margin:8px 0;font-weight:bold}.hl{background:#ffeb3b;padding:2px 14px}table{border-collapse:collapse;width:100%;font-size:8px}th,td{border:1px solid #000;text-align:center;padding:2px}.nama{text-align:left;min-width:170px}.tgl{width:18px}.total{background:#e5e7eb;font-weight:bold}.s{background:#22c55e}.i{background:#38bdf8}.a{background:#ef4444;color:#fff}.h{background:#d1d5db}.foot{margin-top:8px;font-size:8px;display:flex;justify-content:space-between}</style></head><body><h2>REKAPITULASI ABSENSI ${who}</h2><h3>SEMESTER GANJIL TP. ${new Date().getFullYear()}/${new Date().getFullYear()+1}</h3><h3>MADRASAH TSANAWIYAH PLUS SUNAN DRAJAT 7 PALANG</h3><div class="meta"><div>PERIODE: <span class="hl">${escapeHtml(periodeText)}</span></div><div>KELAS: <span class="hl">${tab==='siswa'?'SEMUA KELAS':'GTK'}</span></div></div><table><thead><tr><th rowspan="2">NO</th><th rowspan="2">NAMA LENGKAP</th><th rowspan="2">NISN/NIS</th><th colspan="${dates.length}">TANGGAL</th><th colspan="4" class="total">TOTAL</th></tr><tr>${dayHeaders}<th class="s">SAKIT</th><th class="i">IZIN</th><th class="a">ALFA</th><th class="h">HADIR</th></tr></thead><tbody>${rows}</tbody></table><div class="foot"><div>Kode: H=Hadir, S=Sakit, I=Izin, A=Alfa</div><div>Dicetak: ${new Date().toLocaleString('id-ID')}</div></div><script>setTimeout(()=>window.print(),500)<\/script></body></html>`)
+    const title = tenantExportFilename(`Rekap_Absensi_${category}`, tenant.name, bulan, 'pdf').replace(/\.pdf$/, '')
+    const logo = tenant.logo ? `<img src="${escapeHtml(tenant.logo)}" alt="Logo ${escapeHtml(tenant.name)}" onerror="this.style.display='none'">` : ''
+    printWindow.document.write(`<!DOCTYPE html><html><head><title>${escapeHtml(title)}</title><meta name="author" content="${escapeHtml(tenant.name)}"><style>@page{size:landscape;margin:7mm}body{font-family:Arial,sans-serif;font-size:9px;color:#000}.kop{display:flex;align-items:center;justify-content:center;gap:12px;border-bottom:2px solid #000;padding-bottom:7px;margin-bottom:6px}.kop img{width:58px;height:58px;object-fit:contain}.kop-text{text-align:center}.kop-text h2,.kop-text h3{margin:1px 0}h2,h3{text-align:center;margin:1px 0}.meta{display:flex;gap:12px;margin:8px 0;font-weight:bold}.hl{background:#ffeb3b;padding:2px 14px}table{border-collapse:collapse;width:100%;font-size:8px}th,td{border:1px solid #000;text-align:center;padding:2px}.nama{text-align:left;min-width:170px}.tgl{width:18px}.total{background:#e5e7eb;font-weight:bold}.s{background:#22c55e}.i{background:#38bdf8}.a{background:#ef4444;color:#fff}.h{background:#d1d5db}.foot{margin-top:8px;font-size:8px;display:flex;justify-content:space-between}</style></head><body><div class="kop">${logo}<div class="kop-text"><h2>${escapeHtml(tenant.name)}</h2>${tenant.address ? `<div>${escapeHtml(tenant.address)}</div>` : ''}<h3>REKAPITULASI ABSENSI ${who}</h3><h3>SEMESTER GANJIL TP. ${new Date().getFullYear()}/${new Date().getFullYear()+1}</h3></div></div><div class="meta"><div>PERIODE: <span class="hl">${escapeHtml(periodeText)}</span></div><div>KELAS: <span class="hl">${tab==='siswa'?'SEMUA KELAS':'GTK'}</span></div></div><table><thead><tr><th rowspan="2">NO</th><th rowspan="2">NAMA LENGKAP</th><th rowspan="2">NISN/NIS</th><th colspan="${dates.length}">TANGGAL</th><th colspan="4" class="total">TOTAL</th></tr><tr>${dayHeaders}<th class="s">SAKIT</th><th class="i">IZIN</th><th class="a">ALFA</th><th class="h">HADIR</th></tr></thead><tbody>${rows}</tbody></table><div class="foot"><div>Kode: H=Hadir, S=Sakit, I=Izin, A=Alfa</div><div>Dicetak: ${new Date().toLocaleString('id-ID')}</div></div><script>setTimeout(()=>window.print(),500)<\/script></body></html>`)
     printWindow.document.close()
   }
 
