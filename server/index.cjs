@@ -4736,6 +4736,7 @@ app.post('/api/absensi-siswa', STAFF, (req, res) => {
   // jenis: 'masuk' (default) | 'pulang'. Kalau 'pulang', field yang diupdate adalah waktu_pulang & status_pulang.
   const { siswa_id, rombel_id, tanggal, status, waktu_absen, metode, keterangan, jenis } = req.body
   const isPulang = jenis === 'pulang'
+  try { assertKbmActive(req, tanggal) } catch (e) { return res.status(400).json({ error: e.message }) }
   const jam = waktu_absen || null
   const id = uuidv4()
   const exists = db.prepare('SELECT id FROM absensi_siswa WHERE siswa_id = ? AND tanggal = ? AND tenant_id = ?').get(siswa_id, tanggal, req.tenantId)
@@ -4767,6 +4768,7 @@ app.post('/api/absensi-siswa/bulk', STAFF, (req, res) => {
   const { tanggal, rombel_id, data, jenis } = req.body
   const isPulang = jenis === 'pulang'
   if (!data || !Array.isArray(data)) return res.status(400).json({ error: 'Data harus array' })
+  try { assertKbmActive(req, tanggal) } catch (e) { return res.status(400).json({ error: e.message }) }
   let count = 0
   for (const d of data) {
     const exists = db.prepare('SELECT id FROM absensi_siswa WHERE siswa_id = ? AND tanggal = ? AND tenant_id = ?').get(d.siswa_id, tanggal, req.tenantId)

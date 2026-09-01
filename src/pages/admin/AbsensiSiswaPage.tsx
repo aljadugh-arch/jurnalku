@@ -31,6 +31,7 @@ export default function AbsensiSiswaPage() {
   const [qrIdentifiers, setQrIdentifiers] = useState<any[]>([])
   const [showQr, setShowQr] = useState(false)
   const [foundationTenantId, setFoundationTenantId] = useState<string | null>(null)
+  const [kbmStatus, setKbmStatus] = useState({ aktif: false, libur: false, loading: true })
   const qrRef = useRef<Html5Qrcode | null>(null)
   const scanBusyRef = useRef(false)
   const lastQrRef = useRef('')
@@ -53,6 +54,13 @@ export default function AbsensiSiswaPage() {
       .then(res => setQrIdentifiers(res.data))
       .catch(() => setQrIdentifiers([]))
   }, [selectedRombel])
+
+  useEffect(() => {
+    setKbmStatus(status => ({ ...status, loading: true }))
+    api.get('/kalender-kbm/status', { params: { tanggal } })
+      .then(res => setKbmStatus({ aktif: !!res.data.aktif, libur: !!res.data.libur, loading: false }))
+      .catch(() => setKbmStatus({ aktif: false, libur: false, loading: false }))
+  }, [tanggal])
 
   const loadData = async () => {
     try {
@@ -79,6 +87,7 @@ export default function AbsensiSiswaPage() {
   const setAll = (status: string) => setAbsensi(Object.fromEntries(siswaList.map(s => [s.id, status])))
 
   const handleRangeSave = async () => {
+    if (!kbmStatus.aktif && range.mulai === range.selesai && range.mulai === tanggal) return toast.error(kbmStatus.libur ? 'Hari libur: absensi nonaktif' : 'Aktifkan KBM tanggal ini di Kalender KBM terlebih dahulu')
     if (!selectedRombel) return toast.error('Pilih rombel')
     setLoading(true)
     try { const r = await api.post('/absensi-siswa/bulk-range', { ...range, rombel_id: selectedRombel, jenis: sesi }); toast.success(`${r.data.count} absensi rentang tersimpan`) }
@@ -100,6 +109,7 @@ export default function AbsensiSiswaPage() {
   }
 
   const startQrCamera = async () => {
+    if (!kbmStatus.aktif) return toast.error(kbmStatus.libur ? 'Hari libur: absensi nonaktif' : 'Aktifkan KBM tanggal ini di Kalender KBM terlebih dahulu')
     if (qrRef.current || cameraStartingRef.current) return
     cameraStartingRef.current = true
     setQrOpen(true)
@@ -150,12 +160,15 @@ export default function AbsensiSiswaPage() {
   }
 
   const handleQrScan = async () => {
+    if (!kbmStatus.aktif) return toast.error(kbmStatus.libur ? 'Hari libur: absensi nonaktif' : 'Aktifkan KBM tanggal ini di Kalender KBM terlebih dahulu')
     if (!qrToken.trim()) return toast.error('Isi/scan token QR')
     await submitQrToken(qrToken)
     setQrToken('')
   }
 
   const handleSave = async () => {
+    if (!kbmStatus.aktif) return toast.error(kbmStatus.libur ? 'Hari libur: absensi nonaktif' : 'Aktifkan KBM tanggal ini di Kalender KBM terlebih dahulu')
+    if (!selectedRombel || siswaList.length === 0) return toast.error('Pilih rombel yang memiliki siswa')
     const data = siswaList.map(s => ({
       siswa_id: s.id,
       status: absensi[s.id] || 'alpha',
@@ -223,6 +236,12 @@ export default function AbsensiSiswaPage() {
           <p className="text-sm text-red-600">Alpha</p>
         </div>
       </div>
+
+      {!kbmStatus.loading && !kbmStatus.aktif && (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          {kbmStatus.libur ? 'Tanggal ini ditandai sebagai hari libur. Absensi tidak dapat disimpan.' : 'KBM tanggal ini belum diaktifkan. Buka Kalender KBM dan tambahkan event “KBM Aktif” sebelum menyimpan absensi manual atau memindai QR.'}
+        </div>
+      )}
 
       <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100 space-y-3">
         <div className="flex flex-col sm:flex-row gap-3">
