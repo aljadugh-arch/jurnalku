@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { escapeHtml } from '../../utils/escapeHtml'
 import { Download, FileSpreadsheet, Users, GraduationCap } from 'lucide-react'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
@@ -8,6 +8,96 @@ import { todayWib, yearWib, addDaysWib } from '../../lib/dateFormat'
 import * as XLSX from 'xlsx'
 import { useSettingsStore } from '../../stores/settingsStore'
 import { tenantExportFilename, tenantIdentity } from '../../utils/tenantExport'
+
+function PercentageBadge({ row }: { row: any }) {
+  const percentage = row.total > 0 ? Math.round(row.hadir / row.total * 100) : 0
+  return <span className={`px-2 py-1 rounded-full text-xs font-medium ${percentage >= 90 ? 'bg-green-100 text-green-700' : percentage >= 75 ? 'bg-yellow-100 text-yellow-700' : 'bg-red-100 text-red-700'}`}>{percentage}%</span>
+}
+
+function SiswaRecapTable({ data }: { data: any[] }) {
+  return (
+    <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+      <div className="overflow-x-auto -mx-2 px-2">
+        <table className="w-full text-sm">
+          <thead className="bg-gray-50 border-b"><tr>
+            <th className="text-left px-4 py-3 font-medium text-gray-600">No</th>
+            <th className="text-left px-4 py-3 font-medium text-gray-600">Nama Siswa</th>
+            <th className="text-left px-4 py-3 font-medium text-gray-600">NIS</th>
+            <th className="text-left px-4 py-3 font-medium text-gray-600">Rombel</th>
+            <th className="text-center px-4 py-3 font-medium text-blue-600">Hadir</th>
+            <th className="text-center px-4 py-3 font-medium text-yellow-600">Sakit</th>
+            <th className="text-center px-4 py-3 font-medium text-purple-600">Izin</th>
+            <th className="text-center px-4 py-3 font-medium text-red-600">Alpha</th>
+            <th className="text-center px-4 py-3 font-medium text-gray-600">% Hadir</th>
+          </tr></thead>
+          <tbody className="divide-y divide-gray-100">
+            {data.length === 0 && <tr><td colSpan={9} className="px-4 py-8 text-center text-gray-400">Belum ada data absensi siswa untuk periode ini</td></tr>}
+            {data.map((siswa: any, i: number) => <tr key={siswa.id || i} className="hover:bg-gray-50">
+              <td className="px-4 py-3 text-gray-600">{i + 1}</td>
+              <td className="px-4 py-3 font-medium text-gray-800">{siswa.nama}</td>
+              <td className="px-4 py-3 text-gray-600 text-xs">{siswa.nis || '-'}</td>
+              <td className="px-4 py-3 text-gray-600">{siswa.rombel_nama || '-'}</td>
+              <td className="px-4 py-3 text-center font-medium text-blue-600">{siswa.hadir}</td>
+              <td className="px-4 py-3 text-center font-medium text-yellow-600">{siswa.sakit}</td>
+              <td className="px-4 py-3 text-center font-medium text-purple-600">{siswa.izin}</td>
+              <td className="px-4 py-3 text-center font-medium text-red-600">{siswa.alpha}</td>
+              <td className="px-4 py-3 text-center"><PercentageBadge row={siswa} /></td>
+            </tr>)}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  )
+}
+
+function GtkRecapTable({ data }: { data: any[] }) {
+  return (
+    <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+      <div className="overflow-x-auto -mx-2 px-2">
+        <table className="w-full text-sm">
+          <thead className="bg-gray-50 border-b"><tr>
+            <th className="text-left px-4 py-3 font-medium text-gray-600">No</th>
+            <th className="text-left px-4 py-3 font-medium text-gray-600">Nama GTK</th>
+            <th className="text-left px-4 py-3 font-medium text-gray-600">NIP</th>
+            <th className="text-left px-4 py-3 font-medium text-gray-600">Jabatan</th>
+            <th className="text-left px-4 py-3 font-medium text-gray-600">Mata Pelajaran</th>
+            <th className="text-left px-4 py-3 font-medium text-gray-600">Jadwal Mengajar</th>
+            <th className="text-center px-4 py-3 font-medium text-blue-600">Hadir</th>
+            <th className="text-center px-4 py-3 font-medium text-yellow-600">Sakit</th>
+            <th className="text-center px-4 py-3 font-medium text-purple-600">Izin</th>
+            <th className="text-center px-4 py-3 font-medium text-red-600">Alpha</th>
+            <th className="text-center px-4 py-3 font-medium text-gray-600">% Hadir</th>
+          </tr></thead>
+          <tbody className="divide-y divide-gray-100">
+            {data.length === 0 && <tr><td colSpan={11} className="px-4 py-8 text-center text-gray-400">Belum ada data absensi GTK untuk periode ini</td></tr>}
+            {data.map((gtk: any, i: number) => <tr key={gtk.id || i} className="hover:bg-gray-50">
+              <td className="px-4 py-3 text-gray-600">{i + 1}</td>
+              <td className="px-4 py-3 font-medium text-gray-800">{gtk.nama}</td>
+              <td className="px-4 py-3 text-gray-600 text-xs">{gtk.nip || '-'}</td>
+              <td className="px-4 py-3 text-gray-600">{gtk.jabatan || '-'}</td>
+              <td className="px-4 py-3 text-gray-600 min-w-48">{gtk.mapel_nama?.length ? gtk.mapel_nama.join(', ') : '-'}</td>
+              <td className="px-4 py-3 text-gray-600 min-w-72"><div className="space-y-1">{gtk.jadwal_mengajar?.length ? gtk.jadwal_mengajar.map((j: any) => <div key={`${j.jadwal_id}-${j.tanggal}`} className="text-xs"><span className="font-medium">{j.tanggal} · {j.jam_mulai}-{j.jam_selesai}</span> · {j.mapel_nama || '-'} · {j.rombel_nama || '-'}</div>) : '-'}</div></td>
+              <td className="px-4 py-3 text-center font-medium text-blue-600">{gtk.hadir}</td>
+              <td className="px-4 py-3 text-center font-medium text-yellow-600">{gtk.sakit}</td>
+              <td className="px-4 py-3 text-center font-medium text-purple-600">{gtk.izin}</td>
+              <td className="px-4 py-3 text-center font-medium text-red-600">{gtk.alpha}</td>
+              <td className="px-4 py-3 text-center"><PercentageBadge row={gtk} /></td>
+            </tr>)}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  )
+}
+
+function CategoryRecapTable({ data }: { data: any[] }) {
+  return (
+    <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden"><div className="overflow-x-auto -mx-2 px-2"><table className="w-full text-sm">
+      <thead className="bg-gray-50 border-b"><tr><th className="text-left px-4 py-3 font-medium text-gray-600">No</th><th className="text-left px-4 py-3 font-medium text-gray-600">Nama</th><th className="text-left px-4 py-3 font-medium text-gray-600">NIS</th><th className="text-left px-4 py-3 font-medium text-gray-600">Rombel</th><th className="text-left px-4 py-3 font-medium text-gray-600">Kegiatan/Mapel</th><th className="text-center px-4 py-3 font-medium text-blue-600">Hadir</th><th className="text-center px-4 py-3 font-medium text-yellow-600">Sakit</th><th className="text-center px-4 py-3 font-medium text-purple-600">Izin</th><th className="text-center px-4 py-3 font-medium text-red-600">Alpha</th><th className="text-center px-4 py-3 font-medium text-gray-600">% Hadir</th></tr></thead>
+      <tbody className="divide-y divide-gray-100">{data.length === 0 && <tr><td colSpan={10} className="px-4 py-8 text-center text-gray-400">Belum ada data absensi untuk periode ini</td></tr>}{data.map((row: any, i: number) => <tr key={row.id || i} className="hover:bg-gray-50"><td className="px-4 py-3 text-gray-600">{i + 1}</td><td className="px-4 py-3 font-medium text-gray-800">{row.nama}</td><td className="px-4 py-3 text-gray-600 text-xs">{row.nis || row.nisn || '-'}</td><td className="px-4 py-3 text-gray-600">{row.rombel_nama || '-'}</td><td className="px-4 py-3 text-gray-600">{row.kegiatan_nama || '-'}</td><td className="px-4 py-3 text-center font-medium text-blue-600">{row.hadir}</td><td className="px-4 py-3 text-center font-medium text-yellow-600">{row.sakit}</td><td className="px-4 py-3 text-center font-medium text-purple-600">{row.izin}</td><td className="px-4 py-3 text-center font-medium text-red-600">{row.alpha}</td><td className="px-4 py-3 text-center"><PercentageBadge row={row} /></td></tr>)}</tbody>
+    </table></div></div>
+  )
+}
 
 export default function RekapAbsensiPage() {
   const settings = useSettingsStore(s => s.settings)
@@ -29,6 +119,7 @@ export default function RekapAbsensiPage() {
   })
   const [category, setCategory] = useState<'kehadiran' | 'mapel' | 'kokurikuler' | 'ekskul' | 'jamaah' | 'kegiatan_lain'>('kehadiran')
   const [categoryData, setCategoryData] = useState<any>({ summary: { total: 0, hadir: 0, sakit: 0, izin: 0, alpha: 0, lain: 0 }, detail: [] })
+  const recapRequestId = useRef(0)
 
   const reportRange = useCallback(() => {
     if (mode === 'bulanan') {
@@ -52,6 +143,7 @@ export default function RekapAbsensiPage() {
   }, [reportRange, category])
 
   const loadRekap = useCallback(async () => {
+    const requestId = ++recapRequestId.current
     try {
       const apiMode = mode === 'harian' ? 'daily' : mode === 'mingguan' ? 'weekly' : mode === 'bulanan' ? 'monthly' : 'semester'
       const params: Record<string, string> = { tipe: tab, mode: apiMode }
@@ -60,6 +152,7 @@ export default function RekapAbsensiPage() {
       if (mode === 'bulanan') params.bulan = bulan
       if (mode === 'semester') { params.tahun_ajaran = tahunAjaran; params.semester = semester }
       const res = await api.get('/rekap-absensi', { params })
+      if (requestId !== recapRequestId.current) return
       if (tab === 'siswa') setRekapSiswa(res.data.detail)
       else setRekapGtk(res.data.detail)
       setSummary(res.data.summary)
@@ -184,7 +277,7 @@ export default function RekapAbsensiPage() {
         <span className="text-xs text-gray-500">{reportPeriod.label}</span>
       </div>
 
-      {category === 'kehadiran' && schedule.length > 0 && (
+      {category === 'kehadiran' && tab === 'gtk' && schedule.length > 0 && (
         <div className="bg-sky-50 border border-sky-100 rounded-xl p-4">
           <h3 className="text-sm font-semibold text-sky-900">Jadwal mengajar guru pada periode ini</h3>
           <div className="mt-2 flex flex-wrap gap-2">{schedule.map((j: any) => <span key={`${j.jadwal_id}-${j.tanggal}`} className="text-xs bg-white border border-sky-100 rounded-lg px-2 py-1">{j.tanggal} · {j.guru_nama || 'GTK'} · {j.mapel_nama || '-'} · {j.rombel_nama || '-'}</span>)}</div>
@@ -234,60 +327,10 @@ export default function RekapAbsensiPage() {
         </ResponsiveContainer>
       </div>
 
-      {/* Tabel Detail: siswa dan GTK sengaja memakai kontrak kolom berbeda. */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-        <div className="overflow-x-auto -mx-2 px-2">
-          <table className="w-full text-sm">
-            <thead className="bg-gray-50 border-b">
-              <tr>
-                <th className="text-left px-4 py-3 font-medium text-gray-600">No</th>
-                <th className="text-left px-4 py-3 font-medium text-gray-600">{category === 'kehadiran' && tab === 'gtk' ? 'Nama GTK' : 'Nama'}</th>
-                <th className="text-left px-4 py-3 font-medium text-gray-600">{tab === 'siswa' ? 'NIS' : 'NIP'}</th>
-                <th className="text-left px-4 py-3 font-medium text-gray-600">{category === 'kehadiran' ? (tab === 'siswa' ? 'Rombel' : 'Jabatan') : 'Rombel'}</th>
-                {category !== 'kehadiran' && <th className="text-left px-4 py-3 font-medium text-gray-600">Kegiatan/Mapel</th>}
-                {category === 'kehadiran' && tab === 'gtk' && <>
-                  <th className="text-left px-4 py-3 font-medium text-gray-600">Mata Pelajaran</th>
-                  <th className="text-left px-4 py-3 font-medium text-gray-600">Jadwal Mengajar</th>
-                </>}
-                <th className="text-center px-4 py-3 font-medium text-blue-600">Hadir</th>
-                <th className="text-center px-4 py-3 font-medium text-yellow-600">Sakit</th>
-                <th className="text-center px-4 py-3 font-medium text-purple-600">Izin</th>
-                <th className="text-center px-4 py-3 font-medium text-red-600">Alpha</th>
-                <th className="text-center px-4 py-3 font-medium text-gray-600">% Hadir</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100">
-              {data.length === 0 && (
-                <tr><td colSpan={category === 'kehadiran' ? (tab === 'gtk' ? 11 : 9) : 10} className="px-4 py-8 text-center text-gray-400">Belum ada data absensi untuk periode ini</td></tr>
-              )}
-              {data.map((d: any, i: number) => (
-                <tr key={d.id || i} className="hover:bg-gray-50">
-                  <td className="px-4 py-3 text-gray-600">{i + 1}</td>
-                  <td className="px-4 py-3 font-medium text-gray-800">{d.nama}</td>
-                  <td className="px-4 py-3 text-gray-600 text-xs">{d.nis || d.nip || '-'}</td>
-                  <td className="px-4 py-3 text-gray-600">{d.rombel_nama || d.jabatan || '-'}</td>
-                  {category !== 'kehadiran' && <td className="px-4 py-3 text-gray-600">{d.kegiatan_nama || '-'}</td>}
-                  {category === 'kehadiran' && tab === 'gtk' && <>
-                    <td className="px-4 py-3 text-gray-600 min-w-48">{d.mapel_nama?.length ? d.mapel_nama.join(', ') : '-'}</td>
-                    <td className="px-4 py-3 text-gray-600 min-w-72">
-                      <div className="space-y-1">{d.jadwal_mengajar?.length ? d.jadwal_mengajar.map((j: any) => <div key={`${j.jadwal_id}-${j.tanggal}`} className="text-xs"><span className="font-medium">{j.tanggal} · {j.jam_mulai}-{j.jam_selesai}</span> · {j.mapel_nama || '-'} · {j.rombel_nama || '-'}</div>) : '-'}</div>
-                    </td>
-                  </>}
-                  <td className="px-4 py-3 text-center font-medium text-blue-600">{d.hadir}</td>
-                  <td className="px-4 py-3 text-center font-medium text-yellow-600">{d.sakit}</td>
-                  <td className="px-4 py-3 text-center font-medium text-purple-600">{d.izin}</td>
-                  <td className="px-4 py-3 text-center font-medium text-red-600">{d.alpha}</td>
-                  <td className="px-4 py-3 text-center">
-                    <span className={`px-2 py-1 rounded-full text-xs font-medium ${d.total > 0 && d.hadir/d.total >= 0.9 ? 'bg-green-100 text-green-700' : d.total > 0 && d.hadir/d.total >= 0.75 ? 'bg-yellow-100 text-yellow-700' : 'bg-red-100 text-red-700'}`}>
-                      {d.total > 0 ? Math.round(d.hadir / d.total * 100) : 0}%
-                    </span>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
+      {/* Siswa dan GTK merupakan dua daftar berbeda; hanya daftar tab aktif yang dirender. */}
+      {category === 'kehadiran'
+        ? (tab === 'siswa' ? <SiswaRecapTable data={rekapSiswa} /> : <GtkRecapTable data={rekapGtk} />)
+        : <CategoryRecapTable data={categoryData.detail} />}
     </div>
   )
 }

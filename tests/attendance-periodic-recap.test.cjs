@@ -72,9 +72,13 @@ test('rekap GTK hanya berasal dari gtk/absensi_guru dan setiap GTK membawa mapel
   db.close()
 })
 
-test('UI rekap GTK memakai kolom khusus GTK, mapel, dan jadwal mengajar', () => {
+test('UI merender daftar Siswa dan GTK sebagai tabel terpisah sesuai tab aktif', () => {
   const fs = require('node:fs')
   const page = fs.readFileSync(require('node:path').join(__dirname, '../src/pages/admin/RekapAbsensiPage.tsx'), 'utf8')
+  assert.match(page, /function SiswaRecapTable/)
+  assert.match(page, /function GtkRecapTable/)
+  assert.match(page, /tab === 'siswa'\s*\?\s*<SiswaRecapTable data=\{rekapSiswa\}/)
+  assert.match(page, /:\s*<GtkRecapTable data=\{rekapGtk\}/)
   assert.match(page, /Nama GTK/)
   assert.match(page, /Mata Pelajaran/)
   assert.match(page, /Jadwal Mengajar/)
