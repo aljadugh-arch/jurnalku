@@ -155,6 +155,12 @@ function getPeriodicAttendanceRecap(db, tenantId, entityType, range) {
         JOIN gtk g ON g.id=a.gtk_id AND g.tenant_id=a.tenant_id
         WHERE a.tenant_id=? AND a.tanggal BETWEEN ? AND ?`).all(tenantId, range.from, range.to)
   const normalizedRecords = records.map(record => ({ ...record, status: statusKey(record.status) }))
+  const scheduleByGtk = new Map()
+  for (const item of schedule) {
+    if (!item.gtk_id) continue
+    if (!scheduleByGtk.has(item.gtk_id)) scheduleByGtk.set(item.gtk_id, [])
+    scheduleByGtk.get(item.gtk_id).push(item)
+  }
   const byEntityDate = new Map()
   for (const record of records) {
     const key = `${record.entity_id}\0${record.tanggal}`
@@ -168,7 +174,10 @@ function getPeriodicAttendanceRecap(db, tenantId, entityType, range) {
       per_tanggal[date] = key ? key.charAt(0).toUpperCase() : ''
       if (key) { totals[key]++; totals.total++ } else totals.kosong++
     }
-    return { ...entity, ...totals, per_tanggal }
+    if (isStudent) return { ...entity, ...totals, per_tanggal }
+    const jadwal_mengajar = scheduleByGtk.get(entity.id) || []
+    const mapel_nama = [...new Set(jadwal_mengajar.map(item => item.mapel_nama).filter(Boolean))]
+    return { ...entity, mapel_nama, jadwal_mengajar, ...totals, per_tanggal }
   })
   return {
     entity_type: entityType,

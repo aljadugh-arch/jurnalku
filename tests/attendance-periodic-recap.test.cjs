@@ -48,16 +48,37 @@ test('rekap siswa hanya berasal dari siswa/absensi_siswa dan fallback tanggal ko
   db.close()
 })
 
-test('rekap GTK hanya berasal dari gtk/absensi_guru dan fallback tanggal kosong', () => {
+test('rekap GTK hanya berasal dari gtk/absensi_guru dan setiap GTK membawa mapel serta jadwalnya sendiri', () => {
   const db = fixture()
   db.prepare("INSERT INTO gtk VALUES ('g2','GTK Kosong','NIP2','TU','Tetap','t1')").run()
-  const range = buildRekapRange({ mode: 'daily', tanggal: '2026-09-01' })
+  db.prepare("INSERT INTO mapel VALUES ('m2','Bahasa Indonesia','t1')").run()
+  db.prepare("INSERT INTO jadwal VALUES ('j2','g2','r1','m2','rabu','08:00','09:00','mapel','t1')").run()
+  const range = buildRekapRange({ mode: 'weekly', mulai: '2026-09-01' })
   const result = getPeriodicAttendanceRecap(db, 't1', 'gtk', range)
   assert.equal(result.entity_type, 'gtk')
   assert.equal(result.detail.length, 2)
   assert.equal(result.detail.some(row => row.nis), false)
-  assert.equal(result.detail.find(row => row.id === 'g2').per_tanggal['2026-09-01'], '')
+  const guru = result.detail.find(row => row.id === 'g1')
+  const gtkKosong = result.detail.find(row => row.id === 'g2')
+  assert.deepEqual(guru.mapel_nama, ['Matematika'])
+  assert.equal(guru.jadwal_mengajar.length, 1)
+  assert.equal(guru.jadwal_mengajar[0].guru_nama, 'Guru Satu')
+  assert.equal(guru.jadwal_mengajar[0].tanggal, '2026-09-01')
+  assert.deepEqual(gtkKosong.mapel_nama, ['Bahasa Indonesia'])
+  assert.equal(gtkKosong.jadwal_mengajar.length, 1)
+  assert.equal(gtkKosong.jadwal_mengajar[0].tanggal, '2026-09-02')
+  assert.equal(gtkKosong.per_tanggal['2026-09-02'], '')
+  assert.equal(result.schedule.every(item => result.detail.some(row => row.id === item.gtk_id)), true)
   db.close()
+})
+
+test('UI rekap GTK memakai kolom khusus GTK, mapel, dan jadwal mengajar', () => {
+  const fs = require('node:fs')
+  const page = fs.readFileSync(require('node:path').join(__dirname, '../src/pages/admin/RekapAbsensiPage.tsx'), 'utf8')
+  assert.match(page, /Nama GTK/)
+  assert.match(page, /Mata Pelajaran/)
+  assert.match(page, /Jadwal Mengajar/)
+  assert.match(page, /jadwal_mengajar/)
 })
 
 test('mingguan mengakumulasi harian, bulanan mengelompokkan minggu, semester mengelompokkan bulan', () => {

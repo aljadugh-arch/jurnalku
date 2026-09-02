@@ -90,10 +90,12 @@ export default function RekapAbsensiPage() {
       ? ['No', 'Nama', 'NIS/NISN', 'Rombel', 'Kegiatan/Mapel', 'Hadir', 'Sakit', 'Izin', 'Alpha', 'Lain', 'Total', '% Hadir']
       : tab === 'siswa'
         ? ['No', 'Nama', 'NIS', 'Rombel', 'Hadir', 'Sakit', 'Izin', 'Alpha', '% Hadir']
-        : ['No', 'Nama', 'NIP', 'Jabatan', 'Hadir', 'Sakit', 'Izin', 'Alpha', '% Hadir']
+        : ['No', 'Nama GTK', 'NIP', 'Jabatan', 'Mata Pelajaran', 'Jadwal Mengajar', 'Hadir', 'Sakit', 'Izin', 'Alpha', '% Hadir']
     const rows = data.map((d: any, i: number) => isCategory
       ? [i + 1, d.nama, d.nisn || d.nis || '', d.rombel_nama || '', d.kegiatan_nama || '', d.hadir, d.sakit, d.izin, d.alpha, d.lain, d.total, d.total > 0 ? Math.round(d.hadir / d.total * 100) + '%' : '0%']
-      : [i + 1, d.nama, d.nis || d.nip || '', d.rombel_nama || d.jabatan || '', d.hadir, d.sakit, d.izin, d.alpha, d.total > 0 ? Math.round(d.hadir / d.total * 100) + '%' : '0%'])
+      : tab === 'siswa'
+        ? [i + 1, d.nama, d.nis || '', d.rombel_nama || '', d.hadir, d.sakit, d.izin, d.alpha, d.total > 0 ? Math.round(d.hadir / d.total * 100) + '%' : '0%']
+        : [i + 1, d.nama, d.nip || '', d.jabatan || '', (d.mapel_nama || []).join(', '), (d.jadwal_mengajar || []).map((j: any) => `${j.tanggal} ${j.jam_mulai}-${j.jam_selesai} ${j.mapel_nama || '-'} ${j.rombel_nama || '-'}`).join(' | '), d.hadir, d.sakit, d.izin, d.alpha, d.total > 0 ? Math.round(d.hadir / d.total * 100) + '%' : '0%'])
     const ws = XLSX.utils.aoa_to_sheet([
       [`Rekapitulasi Absensi ${categoryLabel}`],
       [tenant.name],
@@ -232,17 +234,21 @@ export default function RekapAbsensiPage() {
         </ResponsiveContainer>
       </div>
 
-      {/* Tabel Detail */}
+      {/* Tabel Detail: siswa dan GTK sengaja memakai kontrak kolom berbeda. */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
         <div className="overflow-x-auto -mx-2 px-2">
           <table className="w-full text-sm">
             <thead className="bg-gray-50 border-b">
               <tr>
                 <th className="text-left px-4 py-3 font-medium text-gray-600">No</th>
-                <th className="text-left px-4 py-3 font-medium text-gray-600">Nama</th>
+                <th className="text-left px-4 py-3 font-medium text-gray-600">{category === 'kehadiran' && tab === 'gtk' ? 'Nama GTK' : 'Nama'}</th>
                 <th className="text-left px-4 py-3 font-medium text-gray-600">{tab === 'siswa' ? 'NIS' : 'NIP'}</th>
                 <th className="text-left px-4 py-3 font-medium text-gray-600">{category === 'kehadiran' ? (tab === 'siswa' ? 'Rombel' : 'Jabatan') : 'Rombel'}</th>
                 {category !== 'kehadiran' && <th className="text-left px-4 py-3 font-medium text-gray-600">Kegiatan/Mapel</th>}
+                {category === 'kehadiran' && tab === 'gtk' && <>
+                  <th className="text-left px-4 py-3 font-medium text-gray-600">Mata Pelajaran</th>
+                  <th className="text-left px-4 py-3 font-medium text-gray-600">Jadwal Mengajar</th>
+                </>}
                 <th className="text-center px-4 py-3 font-medium text-blue-600">Hadir</th>
                 <th className="text-center px-4 py-3 font-medium text-yellow-600">Sakit</th>
                 <th className="text-center px-4 py-3 font-medium text-purple-600">Izin</th>
@@ -252,7 +258,7 @@ export default function RekapAbsensiPage() {
             </thead>
             <tbody className="divide-y divide-gray-100">
               {data.length === 0 && (
-                <tr><td colSpan={category === 'kehadiran' ? 9 : 10} className="px-4 py-8 text-center text-gray-400">Belum ada data absensi untuk periode ini</td></tr>
+                <tr><td colSpan={category === 'kehadiran' ? (tab === 'gtk' ? 11 : 9) : 10} className="px-4 py-8 text-center text-gray-400">Belum ada data absensi untuk periode ini</td></tr>
               )}
               {data.map((d: any, i: number) => (
                 <tr key={d.id || i} className="hover:bg-gray-50">
@@ -261,6 +267,12 @@ export default function RekapAbsensiPage() {
                   <td className="px-4 py-3 text-gray-600 text-xs">{d.nis || d.nip || '-'}</td>
                   <td className="px-4 py-3 text-gray-600">{d.rombel_nama || d.jabatan || '-'}</td>
                   {category !== 'kehadiran' && <td className="px-4 py-3 text-gray-600">{d.kegiatan_nama || '-'}</td>}
+                  {category === 'kehadiran' && tab === 'gtk' && <>
+                    <td className="px-4 py-3 text-gray-600 min-w-48">{d.mapel_nama?.length ? d.mapel_nama.join(', ') : '-'}</td>
+                    <td className="px-4 py-3 text-gray-600 min-w-72">
+                      <div className="space-y-1">{d.jadwal_mengajar?.length ? d.jadwal_mengajar.map((j: any) => <div key={`${j.jadwal_id}-${j.tanggal}`} className="text-xs"><span className="font-medium">{j.tanggal} · {j.jam_mulai}-{j.jam_selesai}</span> · {j.mapel_nama || '-'} · {j.rombel_nama || '-'}</div>) : '-'}</div>
+                    </td>
+                  </>}
                   <td className="px-4 py-3 text-center font-medium text-blue-600">{d.hadir}</td>
                   <td className="px-4 py-3 text-center font-medium text-yellow-600">{d.sakit}</td>
                   <td className="px-4 py-3 text-center font-medium text-purple-600">{d.izin}</td>
