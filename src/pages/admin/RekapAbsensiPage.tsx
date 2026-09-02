@@ -19,6 +19,14 @@ export default function RekapAbsensiPage() {
   const [rekapSiswa, setRekapSiswa] = useState<any[]>([])
   const [rekapGtk, setRekapGtk] = useState<any[]>([])
   const [summary, setSummary] = useState<any>({ hadir: 0, sakit: 0, izin: 0, alpha: 0 })
+  const [schedule, setSchedule] = useState<any[]>([])
+  const [breakdown, setBreakdown] = useState<any>({ granularity: 'record', items: [] })
+  const [reportPeriod, setReportPeriod] = useState({ from: todayWib(), to: todayWib(), label: '' })
+  const [semester, setSemester] = useState<'ganjil' | 'genap'>(() => Number(todayWib().slice(5, 7)) >= 7 ? 'ganjil' : 'genap')
+  const [tahunAjaran, setTahunAjaran] = useState(() => {
+    const year = yearWib(), month = Number(todayWib().slice(5, 7))
+    return month >= 7 ? `${year}/${year + 1}` : `${year - 1}/${year}`
+  })
   const [category, setCategory] = useState<'kehadiran' | 'mapel' | 'kokurikuler' | 'ekskul' | 'jamaah' | 'kegiatan_lain'>('kehadiran')
   const [categoryData, setCategoryData] = useState<any>({ summary: { total: 0, hadir: 0, sakit: 0, izin: 0, alpha: 0, lain: 0 }, detail: [] })
 
@@ -46,13 +54,20 @@ export default function RekapAbsensiPage() {
   const loadRekap = useCallback(async () => {
     try {
       const apiMode = mode === 'harian' ? 'daily' : mode === 'mingguan' ? 'weekly' : mode === 'bulanan' ? 'monthly' : 'semester'
-      const year = yearWib()
-      const res = await api.get('/rekap-absensi', { params: { tipe: tab, mode: apiMode, mulai: from, tanggal_mulai: from, selesai: to, tanggal_selesai: to, bulan, tahun_ajaran: year + '/' + (year + 1), semester: 'ganjil' } })
+      const params: Record<string, string> = { tipe: tab, mode: apiMode }
+      if (mode === 'harian') params.tanggal = from
+      if (mode === 'mingguan') params.mulai = from
+      if (mode === 'bulanan') params.bulan = bulan
+      if (mode === 'semester') { params.tahun_ajaran = tahunAjaran; params.semester = semester }
+      const res = await api.get('/rekap-absensi', { params })
       if (tab === 'siswa') setRekapSiswa(res.data.detail)
       else setRekapGtk(res.data.detail)
       setSummary(res.data.summary)
+      setSchedule(res.data.schedule || [])
+      setBreakdown(res.data.breakdown || { granularity: 'record', items: [] })
+      setReportPeriod({ from: res.data.from, to: res.data.to, label: res.data.label || '' })
     } catch { /* empty */ }
-  }, [bulan, tab, mode, from, to])
+  }, [bulan, tab, mode, from, to, tahunAjaran, semester])
 
   useEffect(() => { void loadRekap() }, [loadRekap])
   useEffect(() => { if (category !== 'kehadiran') void loadCategoryRecap() }, [category, loadCategoryRecap])
@@ -83,7 +98,7 @@ export default function RekapAbsensiPage() {
       [`Rekapitulasi Absensi ${categoryLabel}`],
       [tenant.name],
       tenant.address ? [tenant.address] : [],
-      [`Periode: ${bulan}`],
+      [`Periode: ${reportPeriod.label || `${reportPeriod.from} s/d ${reportPeriod.to}`}`],
       [],
       header,
       ...rows,
@@ -91,8 +106,8 @@ export default function RekapAbsensiPage() {
     ws['!cols'] = header.map(() => ({ wch: 15 }))
     const wb = XLSX.utils.book_new()
     XLSX.utils.book_append_sheet(wb, ws, 'Rekap')
-    wb.Props = { Title: `Rekapitulasi Absensi ${categoryLabel}`, Subject: `Periode ${bulan}`, Author: tenant.name, Company: tenant.name }
-    XLSX.writeFile(wb, tenantExportFilename(`Rekap_Absensi_${category}`, tenant.name, bulan, 'xlsx'))
+    wb.Props = { Title: `Rekapitulasi Absensi ${categoryLabel}`, Subject: `Periode ${reportPeriod.label}`, Author: tenant.name, Company: tenant.name }
+    XLSX.writeFile(wb, tenantExportFilename(`Rekap_Absensi_${category}`, tenant.name, reportPeriod.from, 'xlsx'))
     toast.success('Excel diunduh')
   }
 
@@ -103,20 +118,20 @@ export default function RekapAbsensiPage() {
     const fmt = (x: string) => new Date(x + 'T00:00:00').toLocaleDateString('id-ID', { day: '2-digit', month: '2-digit', year: 'numeric' })
     const dates = (() => {
       const out: string[] = []
-      const a = mode === 'bulanan' || mode === 'semester' ? (data[0]?.from || '') : from
-      const b = mode === 'bulanan' ? `${bulan}-${String(new Date(Number(bulan.slice(0,4)), Number(bulan.slice(5,7)), 0).getDate()).padStart(2,'0')}` : mode === 'semester' ? (data[0]?.to || to) : to
-      let cursor = mode === 'bulanan' ? `${bulan}-01` : a
+      const a = mode === 'bulanan' || mode === 'semester' ? reportPeriod.from : from
+      const b = mode === 'bulanan' || mode === 'semester' ? reportPeriod.to : to
+      let cursor = a
       while (cursor <= b) { out.push(cursor); cursor = addDaysWib(cursor, 1) }
       return out
     })()
-    const periodeText = mode === 'bulanan' ? `${fmt(`${bulan}-01`)} s/d ${fmt(dates[dates.length-1] || `${bulan}-01`)}` : `${fmt(from)} s/d ${fmt(to)}`
+    const periodeText = `${fmt(reportPeriod.from)} s/d ${fmt(reportPeriod.to)}`
     const dayHeaders = dates.map(d => `<th class="tgl">${Number(d.slice(8,10))}</th>`).join('')
     const rows = data.map((d: any, i: number) => {
       const map = d.per_tanggal || {}
       const dayCells = dates.map(x => `<td>${escapeHtml(map[x] || '')}</td>`).join('')
       return `<tr><td>${i+1}</td><td class="nama">${escapeHtml(d.nama || '')}</td><td>${escapeHtml(d.nisn || d.nis || d.nip || '')}</td>${dayCells}<td>${d.sakit || 0}</td><td>${d.izin || 0}</td><td>${d.alpha || 0}</td><td>${d.hadir || 0}</td></tr>`
     }).join('')
-    const title = tenantExportFilename(`Rekap_Absensi_${category}`, tenant.name, bulan, 'pdf').replace(/\.pdf$/, '')
+    const title = tenantExportFilename(`Rekap_Absensi_${category}`, tenant.name, reportPeriod.from, 'pdf').replace(/\.pdf$/, '')
     const logo = tenant.logo ? `<img src="${escapeHtml(tenant.logo)}" alt="Logo ${escapeHtml(tenant.name)}" onerror="this.style.display='none'">` : ''
     printWindow.document.write(`<!DOCTYPE html><html><head><title>${escapeHtml(title)}</title><meta name="author" content="${escapeHtml(tenant.name)}"><style>@page{size:landscape;margin:7mm}body{font-family:Arial,sans-serif;font-size:9px;color:#000}.kop{display:flex;align-items:center;justify-content:center;gap:12px;border-bottom:2px solid #000;padding-bottom:7px;margin-bottom:6px}.kop img{width:58px;height:58px;object-fit:contain}.kop-text{text-align:center}.kop-text h2,.kop-text h3{margin:1px 0}h2,h3{text-align:center;margin:1px 0}.meta{display:flex;gap:12px;margin:8px 0;font-weight:bold}.hl{background:#ffeb3b;padding:2px 14px}table{border-collapse:collapse;width:100%;font-size:8px}th,td{border:1px solid #000;text-align:center;padding:2px}.nama{text-align:left;min-width:170px}.tgl{width:18px}.total{background:#e5e7eb;font-weight:bold}.s{background:#22c55e}.i{background:#38bdf8}.a{background:#ef4444;color:#fff}.h{background:#d1d5db}.foot{margin-top:8px;font-size:8px;display:flex;justify-content:space-between}</style></head><body><div class="kop">${logo}<div class="kop-text"><h2>${escapeHtml(tenant.name)}</h2>${tenant.address ? `<div>${escapeHtml(tenant.address)}</div>` : ''}<h3>REKAPITULASI ABSENSI ${who}</h3><h3>SEMESTER GANJIL TP. ${new Date().getFullYear()}/${new Date().getFullYear()+1}</h3></div></div><div class="meta"><div>PERIODE: <span class="hl">${escapeHtml(periodeText)}</span></div><div>KELAS: <span class="hl">${tab==='siswa'?'SEMUA KELAS':'GTK'}</span></div></div><table><thead><tr><th rowspan="2">NO</th><th rowspan="2">NAMA LENGKAP</th><th rowspan="2">NISN/NIS</th><th colspan="${dates.length}">TANGGAL</th><th colspan="4" class="total">TOTAL</th></tr><tr>${dayHeaders}<th class="s">SAKIT</th><th class="i">IZIN</th><th class="a">ALFA</th><th class="h">HADIR</th></tr></thead><tbody>${rows}</tbody></table><div class="foot"><div>Kode: H=Hadir, S=Sakit, I=Izin, A=Alfa</div><div>Dicetak: ${new Date().toLocaleString('id-ID')}</div></div><script>setTimeout(()=>window.print(),500)<\/script></body></html>`)
     printWindow.document.close()
@@ -159,8 +174,27 @@ export default function RekapAbsensiPage() {
             </button>
           </>}
         </div>
-        <select value={mode} onChange={e => setMode(e.target.value as any)} className="px-3 py-2 border rounded-lg text-sm"><option value="harian">Harian</option><option value="mingguan">Mingguan</option><option value="bulanan">Bulanan</option><option value="semester">Semester</option></select><input type="month" value={bulan} onChange={e => setBulan(e.target.value)} className="px-3 py-2 border rounded-lg text-sm" />{mode !== 'bulanan' && mode !== 'semester' && <><input type="date" value={from} onChange={e => setFrom(e.target.value)} className="px-3 py-2 border rounded-lg text-sm" /><input type="date" value={to} onChange={e => setTo(e.target.value)} className="px-3 py-2 border rounded-lg text-sm" /></>}
+        <select value={mode} onChange={e => setMode(e.target.value as any)} className="px-3 py-2 border rounded-lg text-sm"><option value="harian">Harian</option><option value="mingguan">Mingguan</option><option value="bulanan">Bulanan</option><option value="semester">Semester</option></select>
+        {mode === 'bulanan' && <input type="month" value={bulan} onChange={e => setBulan(e.target.value)} className="px-3 py-2 border rounded-lg text-sm" />}
+        {mode === 'harian' && <input type="date" value={from} onChange={e => { setFrom(e.target.value); setTo(e.target.value) }} className="px-3 py-2 border rounded-lg text-sm" />}
+        {mode === 'mingguan' && <input type="date" value={from} onChange={e => setFrom(e.target.value)} className="px-3 py-2 border rounded-lg text-sm" />}
+        {mode === 'semester' && <><input value={tahunAjaran} onChange={e => setTahunAjaran(e.target.value)} placeholder="2026/2027" className="px-3 py-2 border rounded-lg text-sm w-32" /><select value={semester} onChange={e => setSemester(e.target.value as 'ganjil' | 'genap')} className="px-3 py-2 border rounded-lg text-sm"><option value="ganjil">Ganjil</option><option value="genap">Genap</option></select></>}
+        <span className="text-xs text-gray-500">{reportPeriod.label}</span>
       </div>
+
+      {category === 'kehadiran' && schedule.length > 0 && (
+        <div className="bg-sky-50 border border-sky-100 rounded-xl p-4">
+          <h3 className="text-sm font-semibold text-sky-900">Jadwal mengajar guru pada periode ini</h3>
+          <div className="mt-2 flex flex-wrap gap-2">{schedule.map((j: any) => <span key={`${j.jadwal_id}-${j.tanggal}`} className="text-xs bg-white border border-sky-100 rounded-lg px-2 py-1">{j.tanggal} · {j.guru_nama || 'GTK'} · {j.mapel_nama || '-'} · {j.rombel_nama || '-'}</span>)}</div>
+        </div>
+      )}
+
+      {category === 'kehadiran' && breakdown.items.length > 0 && (
+        <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
+          <h3 className="text-sm font-semibold text-gray-800">Akumulasi {breakdown.granularity === 'daily' ? 'harian' : breakdown.granularity === 'weekly' ? 'mingguan' : breakdown.granularity === 'monthly' ? 'bulanan' : 'periode'}</h3>
+          <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">{breakdown.items.map((item: any) => <div key={`${item.from}-${item.to}`} className="border rounded-lg p-3 text-xs"><div className="font-semibold text-gray-700">{item.label}</div><div className="mt-1 text-gray-500">H {item.summary.hadir} · S {item.summary.sakit} · I {item.summary.izin} · A {item.summary.alpha}</div></div>)}</div>
+        </div>
+      )}
 
       {/* Summary Cards */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">

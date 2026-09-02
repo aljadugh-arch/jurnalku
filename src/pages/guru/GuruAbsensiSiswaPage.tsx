@@ -51,9 +51,15 @@ export default function GuruAbsensiSiswaPage() {
   const handleSave = async () => {
     setSaving(true)
     try {
-      const data = siswaList.map(s => ({ siswa_id: s.id, status: absensi[s.id] || 'hadir' }))
+      const data = Object.entries(absensi)
+        .filter(([, status]) => ['hadir', 'sakit', 'izin', 'alpha'].includes(status))
+        .map(([siswa_id, status]) => ({ siswa_id, status }))
+      if (!data.length) {
+        toast.error('Pilih Hadir, Sakit, Izin, atau Alpha minimal untuk satu siswa')
+        return
+      }
       await api.post('/absensi-mapel/bulk', { tanggal, jadwal_id: selectedJadwal, data })
-      toast.success('Absensi per mata pelajaran berhasil disimpan')
+      toast.success('Absensi yang dipilih berhasil disimpan; siswa lainnya tetap kosong')
     } catch (err: any) { toast.error(err.response?.data?.error || 'Gagal menyimpan absensi') }
     finally { setSaving(false) }
   }
@@ -102,7 +108,7 @@ export default function GuruAbsensiSiswaPage() {
                   <td className="px-4 py-3 font-mono text-gray-700">{s.nis}</td>
                   <td className="px-4 py-3 font-medium text-gray-800">{s.nama}</td>
                   <td className="px-4 py-3 text-center">
-                    <button onClick={() => setStatus(s.id, 'hadir')} className={`p-1.5 rounded-full ${(absensi[s.id] || 'hadir') === 'hadir' ? 'bg-green-100 text-green-700' : 'text-gray-300 hover:text-green-500'}`}><CheckCircle size={20} /></button>
+                    <button onClick={() => setStatus(s.id, 'hadir')} className={`p-1.5 rounded-full ${absensi[s.id] === 'hadir' ? 'bg-green-100 text-green-700' : 'text-gray-300 hover:text-green-500'}`}><CheckCircle size={20} /></button>
                   </td>
                   <td className="px-4 py-3 text-center">
                     <button onClick={() => setStatus(s.id, 'sakit')} className={`p-1.5 rounded-full ${absensi[s.id] === 'sakit' ? 'bg-yellow-100 text-yellow-700' : 'text-gray-300 hover:text-yellow-500'}`}><Clock size={20} /></button>

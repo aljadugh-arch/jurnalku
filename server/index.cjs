@@ -26,6 +26,7 @@ const waQueue = require('./wa-queue.cjs')
 const notificationMonitor = require('./notification-monitor.cjs')
 const { getAttendanceOverview, studentAttendance } = require('./attendance-summary.cjs')
 const { getCategoryRecap } = require('./attendance-recap.cjs')
+const { buildRekapRange, getPeriodicAttendanceRecap, deduplicateAttendance } = require('./attendance-periodic-recap.cjs')
 const { isDriveFolderUrl } = require('./library-config.cjs')
 const { getLateDashboard } = require('./dashboard-late.cjs')
 const { registerRoutes: registerBackupRestoreRoutes } = require('./backup-restore.cjs')
@@ -927,8 +928,13 @@ for (const col of [
   try { db.prepare(`ALTER TABLE ${col[0]} ADD COLUMN ${col[1]} ${col[2]}`).run() } catch {}
 }
 // duplicate QR reads must converge to one student/day row after tenant_id migration
-try { db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_absensi_siswa_unique ON absensi_siswa(tenant_id,siswa_id,tanggal)') } catch (e) {
-  if (!String(e.message).includes('already exists')) console.error('[migration] absensi siswa unique:', e.message)
+try {
+  const cleanedAttendance = deduplicateAttendance(db)
+  if (cleanedAttendance.absensi_siswa || cleanedAttendance.absensi_guru) {
+    console.log('[migration] attendance duplicates removed:', cleanedAttendance)
+  }
+} catch (e) {
+  console.error('[migration] attendance unique indexes:', e.message)
 }
 
 function studentInitialPassword(siswa) {
@@ -3909,90 +3915,18 @@ app.post('/api/notif/cek-guru-ceklok', STAFF, (req, res) => {
 })
 
 // ==================== REKAP ABSENSI ====================
-// mode: 'monthly' (default, param bulan=YYYY-MM), 'weekly' (param mulai=YYYY-MM-DD; 7 hari),
-//       'semester' (param tahun_ajaran=YYYY/YYYY + semester=ganjil|genap),
-//       'yearly'   (param tahun=YYYY -> 12 bulan). tipe: 'siswa' | 'gtk'.
-function buildRekapRange(q) {
-  const mode = (q.mode || 'monthly').toLowerCase()
-  if (mode === 'daily' || mode === 'harian') {
-    const date = q.tanggal || q.mulai || q.tanggal_mulai
-    if (!date) return { error: 'Parameter tanggal/mulai (YYYY-MM-DD) wajib untuk mode daily' }
-    const d = new Date(date + 'T00:00:00')
-    if (isNaN(d.getTime())) return { error: 'Format tanggal tidak valid' }
-    const iso = x => `${x.getFullYear()}-${String(x.getMonth()+1).padStart(2,'0')}-${String(x.getDate()).padStart(2,'0')}`
-    return { mode: 'daily', from: iso(d), to: iso(d), label: `Harian ${iso(d)}` }
-  }
-  if (mode === 'weekly') {
-    const start = q.mulai || q.tanggal_mulai
-    if (!start) return { error: 'Parameter mulai (YYYY-MM-DD) wajib untuk mode weekly' }
-    const d = new Date(start + 'T00:00:00')
-    if (isNaN(d.getTime())) return { error: 'Format mulai tidak valid' }
-    const explicitEnd = q.selesai || q.tanggal_selesai || q.to
-    const end = explicitEnd ? new Date(explicitEnd + 'T00:00:00') : new Date(d.getTime() + 6 * 86400000)
-    if (isNaN(end.getTime())) return { error: 'Format selesai tidak valid' }
-    const iso = x => `${x.getFullYear()}-${String(x.getMonth()+1).padStart(2,'0')}-${String(x.getDate()).padStart(2,'0')}`
-    return { mode, from: iso(d), to: iso(end), label: `Minggu ${iso(d)} s/d ${iso(end)}` }
-  }
-  if (mode === 'semester') {
-    const ta = q.tahun_ajaran
-    const sem = (q.semester || '').toLowerCase()
-    if (!ta || !['ganjil', 'genap'].includes(sem)) return { error: 'tahun_ajaran (YYYY/YYYY) & semester (ganjil|genap) wajib' }
-    const [ay1, ay2] = ta.split('/').map(x => parseInt(x, 10))
-    if (!ay1 || !ay2) return { error: 'Format tahun_ajaran salah' }
-    // Ganjil: Jul(y1)-Des(y1); Genap: Jan(y2)-Jun(y2)
-    if (sem === 'ganjil') return { mode, from: `${ay1}-07-01`, to: `${ay1}-12-31`, label: `Semester Ganjil ${ta}` }
-    return { mode, from: `${ay2}-01-01`, to: `${ay2}-06-30`, label: `Semester Genap ${ta}` }
-  }
-  if (mode === 'yearly') {
-    const y = parseInt(q.tahun || '', 10)
-    if (!y) return { error: 'Parameter tahun (YYYY) wajib' }
-    return { mode, from: `${y}-01-01`, to: `${y}-12-31`, label: `Tahun ${y}` }
-  }
-  // monthly (default)
-  const bulan = q.bulan
-  if (!bulan) return { error: 'Parameter bulan (YYYY-MM) wajib' }
-  const [yy, mm] = bulan.split('-').map(x => parseInt(x, 10))
-  if (!yy || !mm) return { error: 'Format bulan salah' }
-  const lastDay = new Date(yy, mm, 0).getDate()
-  return { mode: 'monthly', from: `${bulan}-01`, to: `${bulan}-${String(lastDay).padStart(2, '0')}`, label: `Bulan ${bulan}` }
-}
-
+// Rekap periodik memiliki kontrak entitas tegas: siswa hanya membaca absensi_siswa,
+// GTK hanya membaca absensi_guru. Baris tanpa pilihan status tetap kosong.
 app.get('/api/rekap-absensi', authMiddleware, (req, res) => {
-  const { tipe } = req.query
-  // Backward compat: kalau hanya bulan+tipe -> monthly.
+  const tipe = String(req.query.tipe || '').toLowerCase()
+  if (!['siswa', 'gtk'].includes(tipe)) return res.status(400).json({ error: 'Parameter tipe harus siswa atau gtk' })
   const range = buildRekapRange(req.query)
   if (range.error) return res.status(400).json({ error: range.error })
-  const { from, to, mode, label } = range
-
-  const cnt = (table, id, col, status) =>
-    db.prepare(`SELECT COUNT(*) as c FROM ${table} WHERE ${col}=? AND tanggal BETWEEN ? AND ? AND status=? AND tenant_id=?`)
-      .get(id, from, to, status, req.tenantId).c
-
-  if (tipe === 'gtk') {
-    const gtks = db.prepare("SELECT id, nama, nip, jabatan FROM gtk WHERE tenant_id = ? ORDER BY nama").all(req.tenantId)
-    const detail = gtks.map(g => {
-      const hadir = cnt('absensi_guru', g.id, 'gtk_id', 'hadir')
-      const sakit = cnt('absensi_guru', g.id, 'gtk_id', 'sakit')
-      const izin  = cnt('absensi_guru', g.id, 'gtk_id', 'izin')
-      const alpha = cnt('absensi_guru', g.id, 'gtk_id', 'alpha')
-      return { ...g, hadir, sakit, izin, alpha, total: hadir + sakit + izin + alpha }
-    })
-    const summary = { hadir: detail.reduce((s,d) => s+d.hadir, 0), sakit: detail.reduce((s,d) => s+d.sakit, 0), izin: detail.reduce((s,d) => s+d.izin, 0), alpha: detail.reduce((s,d) => s+d.alpha, 0) }
-    return res.json({ mode, from, to, label, detail, summary })
+  try {
+    return res.json(getPeriodicAttendanceRecap(db, req.tenantId, tipe, range))
+  } catch (error) {
+    return res.status(400).json({ error: error.message })
   }
-  const siswa = db.prepare("SELECT s.id, s.nama, s.nis, s.nisn, r.nama as rombel_nama FROM siswa s LEFT JOIN rombel r ON s.rombel_id = r.id WHERE s.tenant_id = ? ORDER BY r.nama, s.nama").all(req.tenantId)
-  const detail = siswa.map(s => {
-    const hadir = cnt('absensi_siswa', s.id, 'siswa_id', 'hadir')
-    const sakit = cnt('absensi_siswa', s.id, 'siswa_id', 'sakit')
-    const izin  = cnt('absensi_siswa', s.id, 'siswa_id', 'izin')
-    const alpha = cnt('absensi_siswa', s.id, 'siswa_id', 'alpha')
-    const byDateRows = db.prepare(`SELECT tanggal, status FROM absensi_siswa WHERE siswa_id=? AND tanggal BETWEEN ? AND ? AND tenant_id=? ORDER BY tanggal`).all(s.id, from, to, req.tenantId)
-    const per_tanggal = {}
-    byDateRows.forEach(r => { per_tanggal[r.tanggal] = (String(r.status || '').charAt(0) || '').toUpperCase() })
-    return { ...s, hadir, sakit, izin, alpha, total: hadir + sakit + izin + alpha, per_tanggal }
-  })
-  const summary = { hadir: detail.reduce((s,d) => s+d.hadir, 0), sakit: detail.reduce((s,d) => s+d.sakit, 0), izin: detail.reduce((s,d) => s+d.izin, 0), alpha: detail.reduce((s,d) => s+d.alpha, 0) }
-  res.json({ mode, from, to, label, detail, summary })
 })
 
 app.get('/api/rekap-absensi/kategori', authMiddleware, (req, res) => {
