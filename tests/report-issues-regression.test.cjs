@@ -38,8 +38,10 @@ test('QR attendance punya unique constraint dan duplicate guard berbasis ref', (
   assert.match(absensi, /qrRef\.current\?\.stop\(\)/)
 })
 
-test('modal memakai layer di atas navigasi', () => {
-  assert.match(modal, /z-\[100\]/)
+test('modal memakai portal dan layer di atas navigasi serta popup detail', () => {
+  assert.match(modal, /createPortal\(/)
+  assert.match(modal, /z-\[120\]/)
+  assert.match(modal, /document\.body/)
   assert.match(rombel, /z-\[100\]/)
 })
 

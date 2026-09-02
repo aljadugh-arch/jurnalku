@@ -2408,7 +2408,9 @@ app.get('/api/siswa', authMiddleware, (req, res) => {
   if (search) { sql += ' AND (s.nama LIKE ? OR s.nik LIKE ? OR s.nis LIKE ? OR s.nisn LIKE ? OR r.nama LIKE ?)'; params.push(`%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`) }
   if (rombel_id) { sql += ' AND s.rombel_id = ?'; params.push(rombel_id) }
   if (status) { sql += ' AND s.status = ?'; params.push(status) }
-  sql += ' ORDER BY s.nama'
+  // Siswa yang rombelnya kosong atau menunjuk rombel yang sudah tidak ada tetap
+  // terlihat, tetapi selalu ditempatkan setelah siswa dengan rombel valid.
+  sql += ' ORDER BY CASE WHEN r.id IS NULL THEN 1 ELSE 0 END, s.nama COLLATE NOCASE'
   res.json(db.prepare(sql).all(...params))
 })
 

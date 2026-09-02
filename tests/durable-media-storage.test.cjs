@@ -88,7 +88,7 @@ test('foundation picker and cross-tenant lists have matching scoped contracts', 
     assert.match(page, /const isLocalTenant = !foundationTenantId/)
     assert.match(page, /\{isLocalTenant && <button[\s\S]*?setShowImport\(true\)[\s\S]*?<\/button>\}/)
     assert.match(page, /\{isLocalTenant && <button[\s\S]*?setShowModal\(true\)[\s\S]*?<\/button>\}/)
-    assert.match(page, /\{isLocalTenant && showModal && \(/)
+    assert.match(page, /\{isLocalTenant && \([\s\S]*?<Modal[\s\S]*?open=\{showModal\}/)
     assert.match(page, /\{isLocalTenant && showImport && \(/)
   }
   assert.match(siswaPage, /\{isLocalTenant && <label[\s\S]*?handleFoto\(s\.id/)

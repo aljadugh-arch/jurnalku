@@ -1,4 +1,5 @@
 import { useEffect, type ReactNode } from 'react'
+import { createPortal } from 'react-dom'
 import { X } from 'lucide-react'
 
 interface ModalProps {
@@ -13,32 +14,29 @@ interface ModalProps {
 export default function Modal({ open, onClose, title, children, footer, maxWidth = 'md:max-w-lg' }: ModalProps) {
   useEffect(() => {
     if (!open) return
-    window.scrollTo(0, 0)
+    const previousOverflow = document.body.style.overflow
     document.body.style.overflow = 'hidden'
-    return () => { document.body.style.overflow = '' }
+    return () => { document.body.style.overflow = previousOverflow }
   }, [open])
 
   if (!open) return null
 
-  return (
-    <div className="fixed inset-0 bg-black/50 z-[100] flex items-start justify-center p-4 overflow-y-auto" onClick={onClose}>
+  return createPortal(
+    <div className="fixed inset-0 z-[120] flex items-center justify-center overflow-y-auto bg-black/50 p-4" onClick={onClose}>
       <div
         onClick={e => e.stopPropagation()}
-        className={
-          'bg-white flex flex-col w-full rounded-2xl max-h-[90vh] my-6 md:my-10 ' +
-          'md:max-h-[calc(100vh-5rem)] ' +
-          maxWidth
-        }
+        className={'flex max-h-[calc(100dvh-2rem)] w-full flex-col rounded-2xl bg-white shadow-2xl ' + maxWidth}
       >
-        <div className="sticky top-0 bg-white flex items-center justify-between px-6 py-4 border-b border-gray-100 rounded-t-2xl">
+        <div className="sticky top-0 z-10 flex items-center justify-between rounded-t-2xl border-b border-gray-100 bg-white px-6 py-4">
           <h2 className="text-lg font-bold text-gray-800">{title}</h2>
-          <button onClick={onClose} className="p-1 hover:bg-gray-100 rounded-lg"><X size={20} /></button>
+          <button onClick={onClose} className="rounded-lg p-1 hover:bg-gray-100" aria-label="Tutup"><X size={20} /></button>
         </div>
         <div className="overflow-y-auto px-6 py-4">{children}</div>
         {footer && (
-          <div className="sticky bottom-0 bg-white px-6 py-4 border-t border-gray-100">{footer}</div>
+          <div className="sticky bottom-0 z-10 border-t border-gray-100 bg-white px-6 py-4">{footer}</div>
         )}
       </div>
-    </div>
+    </div>,
+    document.body
   )
 }

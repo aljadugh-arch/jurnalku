@@ -352,14 +352,14 @@ function registerTenantRoutes(app, db, authMiddleware, uuidv4, SUPER) {
       targetTenants = [tenant_id]
     }
 
-    let sql = `SELECT s.*, t.nama as tenant_nama, t.slug as tenant_slug FROM siswa s JOIN tenants t ON s.tenant_id = t.id WHERE s.tenant_id IN (${targetTenants.map(() => '?').join(',')})`
+    let sql = `SELECT s.*, r.nama as rombel_nama, t.nama as tenant_nama, t.slug as tenant_slug FROM siswa s LEFT JOIN rombel r ON r.id=s.rombel_id AND r.tenant_id=s.tenant_id JOIN tenants t ON s.tenant_id = t.id WHERE s.tenant_id IN (${targetTenants.map(() => '?').join(',')})`
     const params = [...targetTenants]
     if (search) {
       sql += ' AND (s.nama LIKE ? OR s.nis LIKE ? OR s.nisn LIKE ?)'
       const q = `%${search}%`
       params.push(q, q, q)
     }
-    sql += ' ORDER BY s.nama LIMIT ? OFFSET ?'
+    sql += ' ORDER BY CASE WHEN r.id IS NULL THEN 1 ELSE 0 END, s.nama COLLATE NOCASE LIMIT ? OFFSET ?'
     params.push(Number(limit), Number(offset))
 
     const students = db.prepare(sql).all(...params)

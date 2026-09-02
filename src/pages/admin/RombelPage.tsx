@@ -3,6 +3,7 @@ import { Plus, Trash2, X, Users, Pencil, Search, ArrowRightLeft, ChevronRight } 
 import toast from 'react-hot-toast'
 import api from '../../services/api'
 import { createPortal } from 'react-dom'
+import Modal from '../../components/ui/Modal'
 
 interface Rombel {
   id: string; nama: string; tingkat: string; tahun_ajaran: string
@@ -335,14 +336,14 @@ export default function RombelPage() {
         </div>
       )}
 
-      {/* Modal pindah rombel */}
-      {showPindah && (
-        <div className="fixed inset-0 bg-black/50 z-[100] flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl w-full max-w-sm p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-bold text-gray-800">Pindah Rombel</h2>
-              <button onClick={() => setShowPindah(null)} className="p-1 hover:bg-gray-100 rounded-lg"><X size={20} /></button>
-            </div>
+      {/* Dialog aktif dipasang via portal agar berada di atas detail rombel */}
+      <Modal open={!!showPindah} onClose={() => setShowPindah(null)} title="Pindah Rombel" maxWidth="md:max-w-sm" footer={
+        <div className="flex gap-3">
+          <button onClick={() => setShowPindah(null)} className="flex-1 px-4 py-2 border rounded-lg text-sm">Batal</button>
+          <button onClick={handlePindah} className="flex-1 px-4 py-2 bg-amber-500 text-white rounded-lg text-sm hover:bg-amber-600">Pindahkan</button>
+        </div>
+      }>
+        {showPindah && <>
             <p className="text-sm text-gray-600 mb-4">
               Pindahkan <span className="font-semibold text-gray-800">{showPindah.nama}</span> ke rombel:
             </p>
@@ -356,22 +357,16 @@ export default function RombelPage() {
                 <option key={r.id} value={r.id}>{r.nama} ({r.jumlah_siswa} siswa)</option>
               ))}
             </select>
-            <div className="flex gap-3">
-              <button onClick={() => setShowPindah(null)} className="flex-1 px-4 py-2 border rounded-lg text-sm">Batal</button>
-              <button onClick={handlePindah} className="flex-1 px-4 py-2 bg-amber-500 text-white rounded-lg text-sm hover:bg-amber-600">Pindahkan</button>
-            </div>
-          </div>
-        </div>
-      )}
+        </>}
+      </Modal>
 
-      {/* Modal edit siswa */}
-      {showEditSiswa && (
-        <div className="fixed inset-0 bg-black/50 z-[100] flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl w-full max-w-sm p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-bold text-gray-800">Edit Data Siswa</h2>
-              <button onClick={() => setShowEditSiswa(null)} className="p-1 hover:bg-gray-100 rounded-lg"><X size={20} /></button>
-            </div>
+      <Modal open={!!showEditSiswa} onClose={() => setShowEditSiswa(null)} title="Edit Data Siswa" maxWidth="md:max-w-sm" footer={
+        <div className="flex gap-3">
+          <button onClick={() => setShowEditSiswa(null)} className="flex-1 px-4 py-2 border rounded-lg text-sm">Batal</button>
+          <button onClick={handleEditSiswa} className="flex-1 px-4 py-2 bg-primary text-white rounded-lg text-sm hover:bg-primary-dark">Simpan</button>
+        </div>
+      }>
+        {showEditSiswa &&
             <div className="space-y-3">
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1">Nama Lengkap *</label>
@@ -386,13 +381,8 @@ export default function RombelPage() {
                 <input value={editSiswaForm.nisn} onChange={e => setEditSiswaForm({...editSiswaForm, nisn: e.target.value})} className="w-full px-3 py-2 border rounded-lg text-sm" />
               </div>
             </div>
-            <div className="flex gap-3 mt-6">
-              <button onClick={() => setShowEditSiswa(null)} className="flex-1 px-4 py-2 border rounded-lg text-sm">Batal</button>
-              <button onClick={handleEditSiswa} className="flex-1 px-4 py-2 bg-primary text-white rounded-lg text-sm hover:bg-primary-dark">Simpan</button>
-            </div>
-          </div>
-        </div>
-      )}
+        }
+      </Modal>
     </div>
   )
 }
