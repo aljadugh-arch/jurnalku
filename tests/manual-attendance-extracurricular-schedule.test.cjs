@@ -28,13 +28,16 @@ test('API bulk manual memvalidasi status dan siswa tenant sebelum upsert masuk a
   assert.match(bulk, /status=\?/)
 })
 
-test('dashboard guru menggabungkan jadwal mapel dan ekstrakurikuler hari ini', () => {
+test('dashboard dan halaman jadwal guru menggabungkan jadwal mapel dan ekstrakurikuler', () => {
   const helper = routeBody('function teacherScheduleForDay', "app.get('/api/guru/dashboard'")
-  const api = routeBody("app.get('/api/guru/dashboard'", 'function clockToMinutes')
-  assert.match(api, /teacherScheduleForDay/)
+  const dashboardApi = routeBody("app.get('/api/guru/dashboard'", 'function clockToMinutes')
+  const scheduleApi = routeBody("app.get('/api/guru/jadwal'", "app.get('/api/guru/wali-kelas'")
+  assert.match(dashboardApi, /teacherScheduleForDay/)
   assert.match(helper, /FROM ekskul e/)
   assert.match(helper, /'ekskul' jenis_kegiatan/)
   assert.match(helper, /e\.pembina_id=\? AND e\.tenant_id=\? AND lower\(e\.hari\)=\?/)
+  assert.match(scheduleApi, /FROM ekskul e WHERE e\.pembina_id=\? AND e\.tenant_id=\?/)
+  assert.match(scheduleApi, /\[\.\.\.rows, \.\.\.extracurricular\]/)
 })
 
 test('halaman dashboard tidak membuka jurnal atau kelas untuk jadwal ekstrakurikuler', () => {

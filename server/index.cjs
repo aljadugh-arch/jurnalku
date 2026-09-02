@@ -3244,7 +3244,12 @@ app.get('/api/guru/jadwal', authMiddleware, (req, res) => {
     WHERE j.gtk_id=? AND j.tenant_id=?
     ORDER BY j.hari,j.jam_mulai`).all(gtk.id, req.tenantId)
   if (!rows.length) rows = pengajarAsJadwal(gtk.id, req.tenantId)
-  res.json(rows.map(titleHari))
+  const extracurricular = db.prepare(`SELECT 'ekskul-' || e.id AS id,e.hari,e.jam_mulai,e.jam_selesai,'' AS ruangan,
+    NULL AS mapel_id,NULL AS rombel_id,e.nama AS mapel_nama,'' AS mapel_kode,'Ekstrakurikuler' AS rombel_nama,
+    'ekskul' AS jenis_kegiatan,e.nama AS nama_kegiatan
+    FROM ekskul e WHERE e.pembina_id=? AND e.tenant_id=?
+    ORDER BY e.hari,e.jam_mulai,e.nama`).all(gtk.id, req.tenantId)
+  res.json([...rows, ...extracurricular].map(titleHari))
 })
 
 app.get('/api/guru/wali-kelas', authMiddleware, (req, res) => {
