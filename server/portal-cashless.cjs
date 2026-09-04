@@ -239,7 +239,7 @@ function registerPortalRoutes(app, db, { requireRole, uuid, bcrypt }) {
     catch (e) { s.status(401).json({ error: e.message }) }
   })
 
-  const mode = (r, s, n) => db.prepare("SELECT 1 FROM settings WHERE tenant_id=? AND jenjang='pesantren'").get(r.tenantId) ? n() : s.status(403).json({ error: 'Fitur khusus pesantren' })
+  const mode = (r, s, n) => require('./tenant-settings.cjs').getTenantSettings(db, r.tenantId, 'jenjang')?.jenjang === 'pesantren' ? n() : s.status(403).json({ error: 'Fitur khusus pesantren' })
   for (const [route, table] of [['asrama', 'asrama'], ['kamar', 'kamar'], ['penempatan', 'penempatan_kamar'], ['perizinan', 'perizinan_santri']]) {
     app.get('/api/pesantren/' + route, portal, mode, (r, s) => s.json(db.prepare(`SELECT * FROM ${table} WHERE tenant_id=?`).all(r.tenantId)))
     app.post('/api/pesantren/' + route, requireRole('admin', 'super_admin'), mode, (r, s) => {

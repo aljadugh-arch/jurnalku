@@ -210,8 +210,7 @@ function registerTenantRoutes(app, db, authMiddleware, uuidv4, SUPER) {
       .run(adminId, `Admin ${nama}`, adminEmail, hashedPw, 'admin', id)
 
     // Create default settings for tenant
-    db.prepare('INSERT OR IGNORE INTO settings (id, nama_lembaga, tenant_id) VALUES (?,?,?)')
-      .run(uuidv4(), nama, id)
+    require('./tenant-settings.cjs').ensureTenantSettings(db, id, { nama_lembaga: nama })
 
     // Create default notif_settings for tenant
     db.prepare(`INSERT OR IGNORE INTO notif_settings (id, tenant_id) VALUES (?, ?)`)

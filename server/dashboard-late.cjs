@@ -1,3 +1,5 @@
+const { getTenantSettings } = require('./tenant-settings.cjs')
+
 function delayMinutes(waktu, batas) {
   if (!waktu || !batas) return 0
   const minutes = value => value.slice(0, 5).split(':').reduce((h, m) => Number(h) * 60 + Number(m))
@@ -5,8 +7,7 @@ function delayMinutes(waktu, batas) {
 }
 
 function getLateDashboard(db, tenantId, date) {
-  const cfg = db.prepare(`SELECT ceklok_masuk_selesai, sesi_masuk_selesai FROM settings
-    WHERE tenant_id=? ORDER BY updated_at DESC LIMIT 1`).get(tenantId) || {}
+  const cfg = getTenantSettings(db, tenantId, 'ceklok_masuk_selesai, sesi_masuk_selesai') || {}
   const guru = cfg.ceklok_masuk_selesai ? db.prepare(`SELECT g.nama, a.waktu_masuk AS waktu
     FROM absensi_guru a JOIN gtk g ON g.id=a.gtk_id AND g.tenant_id=a.tenant_id
     WHERE a.tenant_id=? AND a.tanggal=? AND a.waktu_masuk>? ORDER BY a.waktu_masuk, g.nama`)

@@ -1,4 +1,5 @@
 const ExcelJS = require('exceljs')
+const { getTenantSettings } = require('./tenant-settings.cjs')
 const crypto = require('node:crypto')
 
 const HEADERS = {
@@ -25,7 +26,7 @@ const jakartaDate = () => {
 const financeExportFilename = (tenantName, date = jakartaDate()) => `Rekap_Keuangan_${safeFilenamePart(tenantName)}_${date}.xlsx`
 
 function financeIdentity(db, tenant) {
-  const settings = db.prepare('SELECT nama_lembaga,alamat,logo FROM settings WHERE tenant_id=? ORDER BY updated_at DESC LIMIT 1').get(tenant) || {}
+  const settings = getTenantSettings(db, tenant, 'nama_lembaga,alamat,logo') || {}
   const tenantRow = db.prepare('SELECT nama FROM tenants WHERE id=? LIMIT 1').get(tenant) || {}
   return {
     nama_lembaga: text(settings.nama_lembaga || tenantRow.nama || 'Lembaga'),

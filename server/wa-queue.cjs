@@ -1,5 +1,6 @@
 const crypto = require('crypto')
 const { isHoliday } = require('./holiday-rules.cjs')
+const { getTenantSettings } = require('./tenant-settings.cjs')
 
 function setupWA(db) {
   db.exec(`CREATE TABLE IF NOT EXISTS wa_queue(
@@ -46,7 +47,7 @@ function honorificTeacherName(name, jenisKelamin) {
 }
 function render(template,data){return String(template||'').replace(/\{(\w+)\}/g,(_,k)=>data[k]??'')}
 function tenantHolidayState(db, tenantId, date) {
-  const settings = db.prepare('SELECT hari_libur FROM settings WHERE tenant_id=?').get(tenantId)
+  const settings = getTenantSettings(db, tenantId, 'hari_libur')
   const events = db.prepare("SELECT jenis FROM kalender_kbm WHERE tenant_id=? AND tanggal=? AND jenis='libur'").all(tenantId, date)
   return { holidayDays: settings?.hari_libur || [], calendarEvents: events }
 }
@@ -63,7 +64,7 @@ function queueWaliAttendance(db,{tenantId,studentId,date,session,status}) {
   const user=linked||db.prepare("SELECT phone,nama FROM users WHERE tenant_id=? AND role='wali_murid' AND nis=? LIMIT 1").get(tenantId,s.nis)
   const phone=s.no_hp||user?.phone
   if(!normalizePhone(phone))return {queued:false,reason:'missing_phone'}
-  const school=db.prepare('SELECT nama_lembaga FROM settings WHERE tenant_id=?').get(tenantId)
+  const school=getTenantSettings(db, tenantId, 'nama_lembaga')
   const message=render(conf.template_absensi_wali,{nama_ortu:s.nama_ortu||user?.nama||'Bapak/Ibu',nama:s.nama,status,tanggal:date,lembaga:school?.nama_lembaga||'Sekolah'})
   return enqueue(db,{tenantId,phone,message,key:`wali:${studentId}:${date}:${session}:${status}`,targetType:'siswa',targetId:studentId})
 }
@@ -72,7 +73,7 @@ function queueDueTeachers(db,{tenantId,date,time}) {
   if (shouldSuppress(db, tenantId, date)) return {...out, reason:'holiday'}
   const conf=db.prepare('SELECT * FROM notif_settings WHERE tenant_id=?').get(tenantId)
   if(!conf?.guru_belum_ceklok||time<conf.batas_ceklok_guru)return out
-  const school=db.prepare('SELECT nama_lembaga FROM settings WHERE tenant_id=?').get(tenantId)
+  const school=getTenantSettings(db, tenantId, 'nama_lembaga')
   const day=['Minggu','Senin','Selasa','Rabu','Kamis','Jumat','Sabtu'][new Date(`${date}T12:00:00Z`).getUTCDay()]
   // Hanya ingatkan GTK yang memang memiliki jadwal mengajar pada hari tersebut.
   // Sebelumnya semua GTK aktif ikut diproses, termasuk staf tanpa jadwal.
@@ -97,7 +98,7 @@ function queueDueSchedules(db,{tenantId,date,time}) {
   const day=['Minggu','Senin','Selasa','Rabu','Kamis','Jumat','Sabtu'][new Date(`${date}T12:00:00Z`).getUTCDay()]
   const active=db.prepare('SELECT 1 FROM tahun_ajaran WHERE tenant_id=? AND aktif=1 AND (? BETWEEN tanggal_mulai AND tanggal_selesai) LIMIT 1').get(tenantId,date)
   if(!active)return out
-  const school=db.prepare('SELECT nama_lembaga FROM settings WHERE tenant_id=?').get(tenantId)
+  const school=getTenantSettings(db, tenantId, 'nama_lembaga')
   const rows=db.prepare(`SELECT j.id,j.gtk_id,j.jam_mulai,j.jam_selesai,g.nama nama_guru,g.no_hp,m.nama mapel,r.nama rombel
     FROM jadwal j JOIN gtk g ON g.id=j.gtk_id AND g.tenant_id=j.tenant_id AND g.status='aktif'
     JOIN mapel m ON m.id=j.mapel_id AND m.tenant_id=j.tenant_id JOIN rombel r ON r.id=j.rombel_id AND r.tenant_id=j.tenant_id

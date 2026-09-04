@@ -15,6 +15,7 @@ const { v4: uuidv4 } = require('uuid')
 const multer = require('multer')
 const { execSync } = require('child_process')
 const { setupTenantTables, tenantMiddleware, registerTenantRoutes } = require('./tenant.cjs')
+const { canonicalSettingsId, getTenantSettings, ensureTenantSettings } = require('./tenant-settings.cjs')
 const { normalizeHolidayDays } = require('./holiday-rules.cjs')
 const { parseGuruHariRules, guruBolehMengajar } = require('./jadwal-rules.cjs')
 const { intervalTumpangTindih } = require('./jadwal-time-rules.cjs')
@@ -792,10 +793,7 @@ const existWA = db.prepare("SELECT id FROM wa_gateway_config WHERE id = 'main'")
 if (!existWA) {
   db.prepare("INSERT INTO wa_gateway_config (id) VALUES ('main')").run()
 }
-const existSettings = db.prepare('SELECT id FROM settings WHERE id = ?').get('main')
-if (!existSettings) {
-  db.prepare('INSERT INTO settings (id) VALUES (?)').run('main')
-}
+ensureTenantSettings(db, 'default')
 
 // Seed tahun ajaran (minimal, required by app)
 const existTA = db.prepare('SELECT id FROM tahun_ajaran LIMIT 1').get()
@@ -1804,7 +1802,7 @@ app.post('/api/auth/demo', (req, res) => {
     if (t) return t.id
     const id = 'default'
     db.prepare('INSERT INTO tenants (id, slug, nama, email) VALUES (?,?,?,?)').run(id, 'demo', 'Demo Jurnal Madrasah', 'demo@jurnalmadrasah.web.id')
-    try { db.prepare('INSERT INTO settings (id, nama_lembaga, tenant_id) VALUES (?,?,?)').run('main_default', 'Demo Jurnal Madrasah', id) } catch {}
+    try { ensureTenantSettings(db, id, { nama_lembaga: 'Demo Jurnal Madrasah' }) } catch {}
     return id
   }
   const makeDemo = (wantRole) => {
@@ -1916,7 +1914,7 @@ app.post('/api/auth/register', (req, res) => {
   db.prepare('INSERT INTO users (id, nama, email, password, role, tenant_id) VALUES (?,?,?,?,?,?)').run(id, nama, email, hashed, 'admin', tenantId)
 
   // Create default settings for tenant
-  db.prepare('INSERT INTO settings (id, nama_lembaga, tenant_id) VALUES (?,?,?)').run(uuidv4(), nama_lembaga || nama, tenantId)
+  ensureTenantSettings(db, tenantId, { nama_lembaga: nama_lembaga || nama })
   db.prepare('INSERT INTO notif_settings (id, tenant_id) VALUES (?,?)').run('main_' + tenantId, tenantId)
 
   // Auto-login: return token + user so FE can go straight to dashboard.
@@ -2238,7 +2236,7 @@ app.get('/api/settings', (req, res) => {
       if (user.tenant_id) tenantId = user.tenant_id
     } catch {}
   }
-  const settings = db.prepare('SELECT * FROM settings WHERE id = ?').get('main_' + tenantId) || db.prepare('SELECT * FROM settings WHERE tenant_id = ? ORDER BY updated_at DESC, id DESC').get(tenantId) || db.prepare('SELECT * FROM settings WHERE id = ?').get('main')
+  const settings = getTenantSettings(db, tenantId)
   res.set('Cache-Control', 'no-store')
   res.json(settings || {})
 })
@@ -2266,14 +2264,14 @@ app.get('/api/geocode/search', async (req, res) => {
 
 app.put('/api/settings', ADMIN, (req, res) => {
   const { nama_lembaga, alamat, telepon, email, theme, primary_color, accent_color, sidebar_color, geo_latitude, geo_longitude, geo_radius, jenjang, hari_libur, bg_size, bg_position, bg_repeat, bg_blur, pwa_enabled, pwa_name, pwa_theme_color, pwa_bg_color } = req.body
-  const id = 'main_' + req.tenantId
+  const id = canonicalSettingsId(req.tenantId)
   const bg_size_v = bg_size || 'cover'
   const bg_position_v = bg_position || 'center'
   const bg_repeat_v = bg_repeat || 'no-repeat'
   const bg_blur_v = bg_blur || 0
   db.prepare(`INSERT INTO settings (id, tenant_id, nama_lembaga, alamat, telepon, email, theme, primary_color, accent_color, sidebar_color, geo_latitude, geo_longitude, geo_radius, jenjang, hari_libur, bg_size, bg_position, bg_repeat, bg_blur, pwa_enabled, pwa_name, pwa_theme_color, pwa_bg_color, updated_at)
     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,datetime('now'))
-    ON CONFLICT(id) DO UPDATE SET nama_lembaga=excluded.nama_lembaga, alamat=excluded.alamat, telepon=excluded.telepon, email=excluded.email, theme=excluded.theme, primary_color=excluded.primary_color, accent_color=excluded.accent_color, sidebar_color=excluded.sidebar_color, geo_latitude=excluded.geo_latitude, geo_longitude=excluded.geo_longitude, geo_radius=excluded.geo_radius, jenjang=excluded.jenjang, hari_libur=excluded.hari_libur, bg_size=excluded.bg_size, bg_position=excluded.bg_position, bg_repeat=excluded.bg_repeat, bg_blur=excluded.bg_blur, pwa_enabled=excluded.pwa_enabled, pwa_name=excluded.pwa_name, pwa_theme_color=excluded.pwa_theme_color, pwa_bg_color=excluded.pwa_bg_color, updated_at=datetime('now')`)
+    ON CONFLICT(id) DO UPDATE SET tenant_id=excluded.tenant_id, nama_lembaga=excluded.nama_lembaga, alamat=excluded.alamat, telepon=excluded.telepon, email=excluded.email, theme=excluded.theme, primary_color=excluded.primary_color, accent_color=excluded.accent_color, sidebar_color=excluded.sidebar_color, geo_latitude=excluded.geo_latitude, geo_longitude=excluded.geo_longitude, geo_radius=excluded.geo_radius, jenjang=excluded.jenjang, hari_libur=excluded.hari_libur, bg_size=excluded.bg_size, bg_position=excluded.bg_position, bg_repeat=excluded.bg_repeat, bg_blur=excluded.bg_blur, pwa_enabled=excluded.pwa_enabled, pwa_name=excluded.pwa_name, pwa_theme_color=excluded.pwa_theme_color, pwa_bg_color=excluded.pwa_bg_color, updated_at=datetime('now')`)
     .run(id, req.tenantId, nama_lembaga, alamat, telepon, email, theme, primary_color, accent_color, sidebar_color, geo_latitude || null, geo_longitude || null, geo_radius || 200, jenjang || '', JSON.stringify(hari_libur || []), bg_size_v, bg_position_v, bg_repeat_v, bg_blur_v, pwa_enabled ? 1 : 0, pwa_name || '', pwa_theme_color || '#1e40af', pwa_bg_color || '#ffffff')
   res.json({ success: true })
 })
@@ -2281,11 +2279,11 @@ app.put('/api/settings', ADMIN, (req, res) => {
 app.post('/api/settings/logo', ADMIN, imageUpload.single('logo'), compressUploadedImages(['logo']), (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'No file' })
   const logoPath = `/uploads/${req.file.filename}`
-  const id = 'main_' + req.tenantId
+  const id = canonicalSettingsId(req.tenantId)
   const current = db.prepare('SELECT logo, pwa_icon FROM settings WHERE id=? AND tenant_id=?').get(id, req.tenantId) || {}
   const pwaIcon = (!current.pwa_icon || current.pwa_icon === current.logo) ? logoPath : current.pwa_icon
   try { db.prepare(`INSERT INTO settings (id, tenant_id, logo, pwa_icon, updated_at) VALUES (?,?,?,?,datetime('now'))
-    ON CONFLICT(id) DO UPDATE SET logo=excluded.logo,
+    ON CONFLICT(id) DO UPDATE SET tenant_id=excluded.tenant_id, logo=excluded.logo,
       pwa_icon=CASE WHEN settings.pwa_icon IS NULL OR settings.pwa_icon='' OR settings.pwa_icon=settings.logo THEN excluded.logo ELSE settings.pwa_icon END,
       updated_at=datetime('now')`).run(id, req.tenantId, logoPath, pwaIcon) }
   catch (error) { removeManagedUpload(logoPath); throw error }
@@ -2305,18 +2303,18 @@ app.post('/api/settings/kts-template', ADMIN, ktsUpload.fields([
 ]), compressUploadedImages(['depan', 'belakang'], 'kts'), (req, res) => {
   const files = req.files || {}
   if (!files.depan?.[0] && !files.belakang?.[0]) return res.status(400).json({ error: 'Pilih gambar depan atau belakang' })
-  const id = 'main_' + req.tenantId
+  const id = canonicalSettingsId(req.tenantId)
   try { db.prepare(`INSERT INTO settings (id, tenant_id, updated_at) VALUES (?,?,datetime('now')) ON CONFLICT(id) DO NOTHING`).run(id, req.tenantId) }
   catch (error) {
     for (const list of Object.values(files)) for (const file of list) removeManagedUpload('/uploads/' + file.filename)
     throw error
   }
-  const current = db.prepare('SELECT kts_depan, kts_belakang FROM settings WHERE id=?').get(id) || {}
+  const current = getTenantSettings(db, req.tenantId, 'kts_depan, kts_belakang') || {}
   const saved = {}
   for (const side of ['depan', 'belakang']) {
     if (!files[side]?.[0]) continue
     const url = '/uploads/' + files[side][0].filename
-    try { db.prepare(`UPDATE settings SET kts_${side}=?, updated_at=datetime('now') WHERE id=?`).run(url, id) }
+    try { db.prepare(`UPDATE settings SET kts_${side}=?, updated_at=datetime('now') WHERE id=? AND tenant_id=?`).run(url, id, req.tenantId) }
     catch (error) { removeManagedUpload(url); throw error }
     removeTenantUpload(current['kts_' + side])
     saved['kts_' + side] = url
@@ -2326,10 +2324,10 @@ app.post('/api/settings/kts-template', ADMIN, ktsUpload.fields([
 
 app.delete('/api/settings/kts-template/:side', ADMIN, (req, res) => {
   if (!['depan', 'belakang'].includes(req.params.side)) return res.status(400).json({ error: 'Sisi tidak valid' })
-  const id = 'main_' + req.tenantId
+  const id = canonicalSettingsId(req.tenantId)
   const column = 'kts_' + req.params.side
-  const current = db.prepare(`SELECT ${column} FROM settings WHERE id=?`).get(id)
-  db.prepare(`UPDATE settings SET ${column}='', updated_at=datetime('now') WHERE id=?`).run(id)
+  const current = db.prepare(`SELECT ${column} FROM settings WHERE id=? AND tenant_id=?`).get(id, req.tenantId)
+  db.prepare(`UPDATE settings SET ${column}='', updated_at=datetime('now') WHERE id=? AND tenant_id=?`).run(id, req.tenantId)
   removeTenantUpload(current?.[column])
   res.json({ success: true, [column]: '' })
 })
@@ -2337,35 +2335,35 @@ app.delete('/api/settings/kts-template/:side', ADMIN, (req, res) => {
 // Pengaturan jam sesi absensi QR siswa + batas waktu ceklok GTK
 app.put('/api/settings/jam-absensi', ADMIN, (req, res) => {
   const f = req.body || {}
-  const id = 'main_' + req.tenantId
+  const id = canonicalSettingsId(req.tenantId)
   const cols = ['sesi_masuk_mulai','sesi_masuk_selesai','sesi_pulang_mulai','sesi_pulang_selesai','ceklok_masuk_mulai','ceklok_masuk_selesai','ceklok_pulang_mulai','ceklok_pulang_selesai']
   // Pastikan baris settings tenant ada
   db.prepare(`INSERT INTO settings (id, tenant_id, updated_at) VALUES (?,?,datetime('now')) ON CONFLICT(id) DO NOTHING`).run(id, req.tenantId)
   for (const c of cols) {
     if (typeof f[c] === 'string' && /^\d{2}:\d{2}$/.test(f[c])) {
-      db.prepare(`UPDATE settings SET ${c}=?, updated_at=datetime('now') WHERE id=?`).run(f[c], id)
+      db.prepare(`UPDATE settings SET ${c}=?, updated_at=datetime('now') WHERE id=? AND tenant_id=?`).run(f[c], id, req.tenantId)
     }
   }
-  const saved = db.prepare('SELECT * FROM settings WHERE id=?').get(id)
+  const saved = getTenantSettings(db, req.tenantId)
   res.json({ success: true, settings: saved })
 })
 app.post('/api/settings/background', ADMIN, imageUpload.single('background'), compressUploadedImages(['background']), (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'No file' })
   const bgPath = `/uploads/${req.file.filename}`
-  const id = 'main_' + req.tenantId
+  const id = canonicalSettingsId(req.tenantId)
   const current = db.prepare('SELECT background FROM settings WHERE id=? AND tenant_id=?').get(id, req.tenantId)
   try { db.prepare(`INSERT INTO settings (id, tenant_id, background, updated_at) VALUES (?,?,?,datetime('now'))
-    ON CONFLICT(id) DO UPDATE SET background=excluded.background, updated_at=datetime('now')`).run(id, req.tenantId, bgPath) }
+    ON CONFLICT(id) DO UPDATE SET tenant_id=excluded.tenant_id, background=excluded.background, updated_at=datetime('now')`).run(id, req.tenantId, bgPath) }
   catch (error) { removeManagedUpload(bgPath); throw error }
   removeManagedUpload(current?.background)
   res.json({ background: bgPath })
 })
 
 app.delete('/api/settings/background', ADMIN, (req, res) => {
-  const id = 'main_' + req.tenantId
+  const id = canonicalSettingsId(req.tenantId)
   const current = db.prepare('SELECT background FROM settings WHERE id=? AND tenant_id=?').get(id, req.tenantId)
   db.prepare(`INSERT INTO settings (id, tenant_id, background, updated_at) VALUES (?,?,'',datetime('now'))
-    ON CONFLICT(id) DO UPDATE SET background='', updated_at=datetime('now')`).run(id, req.tenantId)
+    ON CONFLICT(id) DO UPDATE SET tenant_id=excluded.tenant_id, background='', updated_at=datetime('now')`).run(id, req.tenantId)
   removeManagedUpload(current?.background)
   res.json({ success: true })
 })
@@ -2988,7 +2986,7 @@ app.post('/api/absensi-kegiatan/bulk', STAFF, (req, res) => {
 
 // Hari libur tenant (settings.hari_libur + kalender_kbm jenis 'libur') menekan jadwal mengajar.
 function tenantIsHoliday(tenantId, tanggal) {
-  const settings = db.prepare('SELECT hari_libur FROM settings WHERE tenant_id=?').get(tenantId)
+  const settings = getTenantSettings(db, tenantId, 'hari_libur')
   const events = db.prepare("SELECT jenis FROM kalender_kbm WHERE tenant_id=? AND tanggal=?").all(tenantId, tanggal)
   return isHoliday({ date: tanggal, holidayDays: settings?.hari_libur || [], calendarEvents: events })
 }
@@ -3397,8 +3395,7 @@ app.post('/api/guru/ceklok', STAFF, (req, res) => {
   const { type, latitude, longitude } = req.body
   if (!['masuk', 'pulang'].includes(type)) return res.status(400).json({ error: 'Jenis ceklok tidak valid' })
   // Selalu baca baris canonical. Tenant lama bisa punya baris settings duplikat tanpa koordinat.
-  const geo = db.prepare('SELECT geo_latitude, geo_longitude, geo_radius FROM settings WHERE id = ?').get('main_' + req.tenantId)
-    || db.prepare('SELECT geo_latitude, geo_longitude, geo_radius FROM settings WHERE tenant_id = ? ORDER BY updated_at DESC, id DESC').get(req.tenantId)
+  const geo = getTenantSettings(db, req.tenantId, 'geo_latitude, geo_longitude, geo_radius')
   if (geo?.geo_latitude != null && geo?.geo_longitude != null) {
     const lat = Number(latitude), lng = Number(longitude)
     if (!Number.isFinite(lat) || !Number.isFinite(lng)) return res.status(400).json({ error: 'Lokasi tidak terbaca' })
@@ -3412,7 +3409,7 @@ app.post('/api/guru/ceklok', STAFF, (req, res) => {
   const today = todayJakarta()
   const now = timeJakarta()
   // Batas waktu ceklok GTK. Ceklok pulang tetap dibatasi window; ceklok masuk boleh telat (ditandai 'terlambat').
-  const tcfg = db.prepare('SELECT ceklok_masuk_mulai, ceklok_masuk_selesai, ceklok_pulang_mulai, ceklok_pulang_selesai FROM settings WHERE tenant_id = ? ORDER BY updated_at DESC, id DESC LIMIT 1').get(req.tenantId) || {}
+  const tcfg = getTenantSettings(db, req.tenantId, 'ceklok_masuk_mulai, ceklok_masuk_selesai, ceklok_pulang_mulai, ceklok_pulang_selesai') || {}
   let statusMasuk = 'hadir'
   if (type === 'masuk' && tcfg.ceklok_masuk_selesai && now > tcfg.ceklok_masuk_selesai) {
     statusMasuk = 'terlambat' // lewat batas jam masuk: tetap boleh, ditandai terlambat
@@ -3477,7 +3474,7 @@ function selectLinkedStudent(req) {
 }
 
 app.get('/api/pwa/manifest', (req, res) => {
-  const s = db.prepare('SELECT pwa_enabled,pwa_name,pwa_icon,nama_lembaga,logo,primary_color,pwa_bg_color,pwa_theme_color,updated_at FROM settings WHERE tenant_id=? ORDER BY updated_at DESC LIMIT 1').get(req.tenantId) || {}
+  const s = getTenantSettings(db, req.tenantId, 'pwa_enabled,pwa_name,pwa_icon,nama_lembaga,logo,primary_color,pwa_bg_color,pwa_theme_color,updated_at') || {}
   if (s.pwa_enabled === 0) return res.status(404).json({ error: 'PWA dinonaktifkan' })
   const t = req.tenant || db.prepare('SELECT nama FROM tenants WHERE id=?').get(req.tenantId) || {}
   const name = s.pwa_name || (t.nama ? t.nama + ' Apps' : 'Jurnalku')
@@ -3487,7 +3484,7 @@ app.get('/api/pwa/manifest', (req, res) => {
 app.get('/api/pwa/icon/:size', async (req, res) => {
   const size = Number(req.params.size)
   if (![192, 512].includes(size)) return res.status(404).end()
-  const s = db.prepare('SELECT pwa_enabled,pwa_icon,logo FROM settings WHERE tenant_id=? ORDER BY updated_at DESC LIMIT 1').get(req.tenantId) || {}
+  const s = getTenantSettings(db, req.tenantId, 'pwa_enabled,pwa_icon,logo') || {}
   if (s.pwa_enabled === 0) return res.status(404).end()
   const fallback = path.join(__dirname, '..', 'public', 'logo-jurnalku-256.png')
   try {
@@ -3505,7 +3502,7 @@ app.get('/api/pwa/icon/:size', async (req, res) => {
   }
 })
 async function sendTenantIcon(req, res, size = 64) {
-  const s = db.prepare('SELECT pwa_icon,logo FROM settings WHERE tenant_id=? ORDER BY updated_at DESC, id DESC LIMIT 1').get(req.tenantId) || {}
+  const s = getTenantSettings(db, req.tenantId, 'pwa_icon,logo') || {}
   const fallback = path.join(__dirname, '..', 'public', 'logo-jurnalku-256.png')
   try {
     const configured = s.pwa_icon || s.logo || '/logo-jurnalku-256.png'
@@ -3524,7 +3521,7 @@ app.get('/favicon.ico', (req, res) => sendTenantIcon(req, res, 64))
 app.get('/apple-touch-icon.png', (req, res) => sendTenantIcon(req, res, 192))
 
 app.put('/api/settings/pwa', ADMIN, (req, res) => {
-  const id = 'main_' + req.tenantId
+  const id = canonicalSettingsId(req.tenantId)
   db.prepare(`INSERT INTO settings (id,tenant_id,updated_at) VALUES (?,?,datetime('now')) ON CONFLICT(id) DO NOTHING`).run(id, req.tenantId)
   const current = db.prepare('SELECT pwa_icon FROM settings WHERE id=? AND tenant_id=?').get(id, req.tenantId)
   const pwaIcon = req.body.pwa_icon === undefined ? (current?.pwa_icon || '') : (req.body.pwa_icon || '')
@@ -3534,7 +3531,7 @@ app.put('/api/settings/pwa', ADMIN, (req, res) => {
 
 // Regenerate PWA manifest - just returns current manifest (dynamic)
 app.post('/api/settings/pwa-manifest', ADMIN, (req, res) => {
-  const s = db.prepare('SELECT pwa_name,pwa_icon,nama_lembaga,logo,primary_color,pwa_bg_color,pwa_theme_color FROM settings WHERE tenant_id=? ORDER BY updated_at DESC LIMIT 1').get(req.tenantId) || {}
+  const s = getTenantSettings(db, req.tenantId, 'pwa_name,pwa_icon,nama_lembaga,logo,primary_color,pwa_bg_color,pwa_theme_color') || {}
   const t = req.tenant || db.prepare('SELECT nama FROM tenants WHERE id=?').get(req.tenantId) || {}
   const name = s.pwa_name || (t.nama ? t.nama + ' Apps' : 'Jurnalku')
   res.type('application/manifest+json').set('Cache-Control', 'no-store').json({ name, short_name: name.slice(0, 24), id: '/', start_url: req.isRegisteredTenantHost ? '/login' : '/', scope: '/', display: 'standalone', background_color: s.pwa_bg_color || '#ffffff', theme_color: s.pwa_theme_color || s.primary_color || '#2563eb', icons: [{ src: '/api/pwa/icon/192', sizes: '192x192', type: 'image/png', purpose: 'any maskable' }, { src: '/api/pwa/icon/512', sizes: '512x512', type: 'image/png', purpose: 'any maskable' }] })
@@ -3943,7 +3940,7 @@ const { dayNameForDate, isHoliday } = require('./holiday-rules.cjs')
 
 function isHolidayDate(tanggal, tenantId) {
   if (tenantId) {
-    const settings = db.prepare('SELECT hari_libur FROM settings WHERE tenant_id=?').get(tenantId)
+    const settings = getTenantSettings(db, tenantId, 'hari_libur')
     const events = db.prepare("SELECT jenis FROM kalender_kbm WHERE tenant_id=? AND tanggal=? AND jenis='libur'").all(tenantId, tanggal)
     return isHoliday({ date: tanggal, holidayDays: settings?.hari_libur, calendarEvents: events })
   }
@@ -4831,7 +4828,7 @@ app.post('/api/absensi-siswa/qr-scan', STAFF, (req, res) => {
   try { assertKbmActive(req, tanggal) } catch (e) { return res.status(400).json({ error: e.message }) }
   const waktu = timeJakarta()
   // Batas rombel/hari paling spesifik; settings lama menjadi fallback.
-  const cfg = db.prepare('SELECT sesi_pulang_mulai FROM settings WHERE tenant_id = ? ORDER BY updated_at DESC LIMIT 1').get(req.tenantId) || {}
+  const cfg = getTenantSettings(db, req.tenantId, 'sesi_pulang_mulai') || {}
   const hari = require('./attendance-rules.cjs').hariJakarta()
   const batas = siswa.rombel_id && db.prepare('SELECT jam_pulang,aktif FROM rombel_jam_pulang WHERE rombel_id=? AND hari=? AND tenant_id=?').get(siswa.rombel_id, hari, req.tenantId)
   let sesi

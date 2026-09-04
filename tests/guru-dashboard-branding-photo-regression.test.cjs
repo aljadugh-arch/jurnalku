@@ -43,7 +43,7 @@ test('logo tenant ikut menyegarkan ikon PWA dan favicon memakai URL versi terbar
   const logoRoute = server.match(/app\.post\('\/api\/settings\/logo'[\s\S]*?\n}\)\n/)?.[0] || ''
   assert.match(logoRoute, /SELECT logo, pwa_icon/)
   assert.match(logoRoute, /pwa_icon=CASE/)
-  assert.match(server, /updated_at FROM settings WHERE tenant_id=\? ORDER BY updated_at DESC LIMIT 1/)
+  assert.match(server, /getTenantSettings\(db, req\.tenantId, 'pwa_enabled,pwa_name,pwa_icon,nama_lembaga,logo,primary_color,pwa_bg_color,pwa_theme_color,updated_at'\)/)
   assert.match(server, /`\/api\/pwa\/icon\/192\?v=\$\{version\}`/)
   assert.match(server, /`\/api\/pwa\/icon\/512\?v=\$\{version\}`/)
   assert.match(main, /data\.version/)

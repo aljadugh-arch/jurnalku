@@ -13,7 +13,8 @@ const financePanel = fs.readFileSync(path.join(root, 'src/components/FinanceExce
 function fakeFinanceDb(settingsByTenant) {
   return {
     prepare(sql) {
-      if (/FROM settings/.test(sql)) return { get: tenant => settingsByTenant[tenant] }
+      if (/PRAGMA table_info\(settings\)/.test(sql)) return { all: () => [{ name: 'id' }, { name: 'tenant_id' }] }
+      if (/FROM settings/.test(sql)) return { get: (_id, tenant) => settingsByTenant[tenant] }
       if (/FROM tenants/.test(sql)) return { get: tenant => ({ nama: settingsByTenant[tenant]?.nama_lembaga || tenant }) }
       return { all: () => [] }
     },
@@ -63,7 +64,7 @@ test('panel keuangan menyediakan Excel dan PDF bernama tenant tanpa fallback ben
 
 test('ekspor keuangan server mengambil identitas berdasarkan tenant id aktif', () => {
   const server = fs.readFileSync(path.join(root, 'server/finance-excel.cjs'), 'utf8')
-  assert.match(server, /FROM settings WHERE tenant_id=\?/)
+  assert.match(server, /getTenantSettings\(db, tenant/)
   assert.match(server, /exportFinance\(db, req\.tenantId\)/)
   assert.match(server, /financeExportFilename/)
 })
