@@ -32,4 +32,18 @@ function ensureTenantSettings(db, tenantId, defaults = {}) {
   return getTenantSettings(db, tid)
 }
 
-module.exports = { canonicalSettingsId, getTenantSettings, ensureTenantSettings }
+function migrateTenantSettings(db) {
+  const tenants = db.prepare('SELECT id,nama FROM tenants').all()
+  return db.transaction(() => {
+    let created = 0
+    for (const tenant of tenants) {
+      if (getTenantSettings(db, tenant.id)) continue
+      const legacy = db.prepare('SELECT * FROM settings WHERE tenant_id=? ORDER BY datetime(updated_at) DESC, id DESC LIMIT 1').get(tenant.id)
+      ensureTenantSettings(db, tenant.id, legacy || { nama_lembaga: tenant.nama || '' })
+      created++
+    }
+    return created
+  })()
+}
+
+module.exports = { canonicalSettingsId, getTenantSettings, ensureTenantSettings, migrateTenantSettings }

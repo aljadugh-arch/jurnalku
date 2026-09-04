@@ -10,7 +10,7 @@ const waSource = fs.readFileSync(path.join(root, 'server/wa-queue.cjs'), 'utf8')
 const dashboardSource = fs.readFileSync(path.join(root, 'server/dashboard-late.cjs'), 'utf8')
 const financeSource = fs.readFileSync(path.join(root, 'server/finance-excel.cjs'), 'utf8')
 const helperSource = fs.readFileSync(path.join(root, 'server/tenant-settings.cjs'), 'utf8')
-const { canonicalSettingsId, getTenantSettings, ensureTenantSettings } = require('../server/tenant-settings.cjs')
+const { canonicalSettingsId, getTenantSettings, ensureTenantSettings, migrateTenantSettings } = require('../server/tenant-settings.cjs')
 const { isHoliday } = require('../server/holiday-rules.cjs')
 
 function fixture() {
@@ -49,6 +49,18 @@ test('ensureTenantSettings membuat satu row canonical tanpa menyalin global atau
   assert.equal(row.tenant_id, 'tenant-baru')
   assert.equal(row.nama_lembaga, 'Tenant Baru')
   assert.equal(row.hari_libur, '["jumat"]')
+})
+
+test('migrasi membuat canonical tenant lama dari row tenant itu sendiri, bukan row global', () => {
+  const db = fixture()
+  db.exec('CREATE TABLE tenants(id TEXT PRIMARY KEY,nama TEXT)')
+  db.prepare('INSERT INTO tenants VALUES (?,?)').run('tenant-lama', 'Tenant Lama')
+  db.prepare('INSERT INTO settings (id,tenant_id,nama_lembaga,hari_libur) VALUES (?,?,?,?)')
+    .run('legacy-tenant-lama', 'tenant-lama', 'Identitas Tenant Lama', '["minggu"]')
+  assert.equal(migrateTenantSettings(db), 1)
+  assert.deepEqual(getTenantSettings(db, 'tenant-lama', 'id,tenant_id,nama_lembaga,hari_libur'), {
+    id: 'main_tenant-lama', tenant_id: 'tenant-lama', nama_lembaga: 'Identitas Tenant Lama', hari_libur: '["minggu"]',
+  })
 })
 
 test('aturan libur Mifda dan MTs tetap eksklusif walau ada settings legacy yang konflik', () => {

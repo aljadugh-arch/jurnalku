@@ -15,7 +15,7 @@ const { v4: uuidv4 } = require('uuid')
 const multer = require('multer')
 const { execSync } = require('child_process')
 const { setupTenantTables, tenantMiddleware, registerTenantRoutes } = require('./tenant.cjs')
-const { canonicalSettingsId, getTenantSettings, ensureTenantSettings } = require('./tenant-settings.cjs')
+const { canonicalSettingsId, getTenantSettings, ensureTenantSettings, migrateTenantSettings } = require('./tenant-settings.cjs')
 const { normalizeHolidayDays } = require('./holiday-rules.cjs')
 const { parseGuruHariRules, guruBolehMengajar } = require('./jadwal-rules.cjs')
 const { intervalTumpangTindih } = require('./jadwal-time-rules.cjs')
@@ -804,6 +804,7 @@ if (!existTA) {
 
 setupTenantTables(db)
 setupSubscriptionTables(db)
+migrateTenantSettings(db)
 
 // Migrasi: kolom UNIQUE global (nip/nis/kode) peninggalan pra-multi-tenant bikin
 // import/edit gagal begitu ada NIP/NIS kosong kedua atau kode sama antar-sekolah.
