@@ -66,7 +66,7 @@ function setupTenantTables(db) {
   const tables = [
     'users', 'siswa', 'gtk', 'mapel', 'rombel', 'jadwal', 'sesi_kelas_guru',
     'jurnal_mengajar', 'absensi_siswa', 'absensi_guru',
-    'ekskul', 'absensi_ekskul', 'tahun_ajaran',
+    'ekskul', 'ekskul_anggota', 'absensi_ekskul', 'tahun_ajaran',
     'jenis_tagihan', 'tagihan', 'tabungan',
     'kalender_kbm', 'modul_ajar', 'kegiatan_khusus',
     'notif_settings', 'broadcast_log', 'settings',

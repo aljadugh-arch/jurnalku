@@ -35,6 +35,7 @@ const { registerFinanceExcelRoutes } = require('./finance-excel.cjs')
 const { FEATURE_KEYS, addMonthsIso, accessForTenant, featureForPath, normalizeFeatureSelection, generateUnlockCode, hashUnlockCode, setupSubscriptionTables } = require('./subscription.cjs')
 const { setupBackupTables, registerBackupRoutes } = require('./backup-drive.cjs')
 const { DOCUMENT_TYPES, buildPrompt, validateGenerateInput, createTemplateContent, createDocumentDocx, callAi } = require('./ai-documents.cjs')
+const { setupEkskulMembership } = require('./extracurricular-membership.cjs')
 
 const app = express()
 const PORT = process.env.PORT || 3001
@@ -595,8 +596,8 @@ db.exec(`
     id TEXT PRIMARY KEY,
     ekskul_id TEXT NOT NULL,
     siswa_id TEXT NOT NULL,
-    tenant_id TEXT,
-    UNIQUE(ekskul_id, siswa_id),
+    tenant_id TEXT NOT NULL,
+    UNIQUE(tenant_id, ekskul_id, siswa_id),
     FOREIGN KEY (ekskul_id) REFERENCES ekskul(id),
     FOREIGN KEY (siswa_id) REFERENCES siswa(id)
   );
@@ -793,7 +794,7 @@ const existWA = db.prepare("SELECT id FROM wa_gateway_config WHERE id = 'main'")
 if (!existWA) {
   db.prepare("INSERT INTO wa_gateway_config (id) VALUES ('main')").run()
 }
-ensureTenantSettings(db, 'default')
+// Tenant-scoped settings are created after setupTenantTables has added tenant_id.
 
 // Seed tahun ajaran (minimal, required by app)
 const existTA = db.prepare('SELECT id FROM tahun_ajaran LIMIT 1').get()
@@ -803,6 +804,8 @@ if (!existTA) {
 }
 
 setupTenantTables(db)
+ensureTenantSettings(db, 'default')
+setupEkskulMembership(db)
 setupSubscriptionTables(db)
 migrateTenantSettings(db)
 
@@ -2782,7 +2785,10 @@ app.delete('/api/rombel/:id', ADMIN, (req, res) => {
 
 // ==================== EKSKUL ====================
 app.get('/api/ekskul', authMiddleware, (req, res) => {
-  const rows = db.prepare(`SELECT e.*, g.nama as pembina_nama FROM ekskul e LEFT JOIN gtk g ON e.pembina_id = g.id WHERE e.tenant_id=? ORDER BY e.nama`).all(req.tenantId)
+  const rows = db.prepare(`SELECT e.*, g.nama as pembina_nama,
+    (SELECT COUNT(*) FROM ekskul_anggota ea WHERE ea.ekskul_id=e.id AND ea.tenant_id=e.tenant_id) as jumlah_anggota
+    FROM ekskul e LEFT JOIN gtk g ON e.pembina_id = g.id AND g.tenant_id=e.tenant_id
+    WHERE e.tenant_id=? ORDER BY e.nama`).all(req.tenantId)
   res.json(rows)
 })
 
@@ -2799,13 +2805,18 @@ app.get('/api/guru/ekskul', STAFF, (req, res) => {
 app.post('/api/ekskul', ADMIN, (req, res) => {
   const id = uuidv4()
   const { nama, pembina_id, hari, jam_mulai, jam_selesai, deskripsi } = req.body
+  if (!isStr(nama)) return res.status(400).json({ error: 'Nama ekstrakurikuler wajib diisi' })
+  if (pembina_id && !db.prepare('SELECT id FROM gtk WHERE id=? AND tenant_id=?').get(pembina_id, req.tenantId)) return res.status(400).json({ error: 'Pembina tidak ditemukan pada lembaga ini' })
   db.prepare('INSERT INTO ekskul (id, nama, pembina_id, hari, jam_mulai, jam_selesai, deskripsi, tenant_id) VALUES (?,?,?,?,?,?,?,?)').run(id, nama, pembina_id || null, hari, jam_mulai, jam_selesai, deskripsi || '', req.tenantId)
   res.json({ id })
 })
 
 app.put('/api/ekskul/:id', ADMIN, (req, res) => {
   const { nama, pembina_id, hari, jam_mulai, jam_selesai, deskripsi } = req.body
-  db.prepare('UPDATE ekskul SET nama=?, pembina_id=?, hari=?, jam_mulai=?, jam_selesai=?, deskripsi=? WHERE id=? AND tenant_id=?').run(nama, pembina_id || null, hari, jam_mulai, jam_selesai, deskripsi || '', req.params.id, req.tenantId)
+  if (!isStr(nama)) return res.status(400).json({ error: 'Nama ekstrakurikuler wajib diisi' })
+  if (pembina_id && !db.prepare('SELECT id FROM gtk WHERE id=? AND tenant_id=?').get(pembina_id, req.tenantId)) return res.status(400).json({ error: 'Pembina tidak ditemukan pada lembaga ini' })
+  const result = db.prepare('UPDATE ekskul SET nama=?, pembina_id=?, hari=?, jam_mulai=?, jam_selesai=?, deskripsi=? WHERE id=? AND tenant_id=?').run(nama, pembina_id || null, hari, jam_mulai, jam_selesai, deskripsi || '', req.params.id, req.tenantId)
+  if (!result.changes) return res.status(404).json({ error: 'Ekstrakurikuler tidak ditemukan' })
   res.json({ success: true })
 })
 
@@ -2822,26 +2833,36 @@ app.delete('/api/ekskul/:id', ADMIN, (req, res) => {
 
 // Anggota ekskul: daftar siswa peserta ekskul
 app.get('/api/ekskul/:id/anggota', authMiddleware, (req, res) => {
+  const ekskul = db.prepare('SELECT 1 FROM ekskul WHERE id=? AND tenant_id=?').get(req.params.id, req.tenantId)
+  if (!ekskul) return res.status(404).json({ error: 'Ekstrakurikuler tidak ditemukan' })
   if (isTeacherContext(req)) {
     const gtk = resolveGtkForUser(req.user.id, req.tenantId)
     if (!gtk || !db.prepare('SELECT 1 FROM ekskul WHERE id=? AND pembina_id=? AND tenant_id=?').get(req.params.id, gtk.id, req.tenantId)) return res.status(403).json({ error: 'Bukan pembina ekskul ini' })
   }
   const rows = db.prepare(`SELECT s.id, s.nis, s.nama, r.nama as rombel_nama
-    FROM ekskul_anggota ea JOIN siswa s ON ea.siswa_id = s.id
-    LEFT JOIN rombel r ON s.rombel_id = r.id
+    FROM ekskul_anggota ea JOIN siswa s ON ea.siswa_id = s.id AND s.tenant_id = ea.tenant_id
+    LEFT JOIN rombel r ON s.rombel_id = r.id AND r.tenant_id = s.tenant_id
     WHERE ea.ekskul_id = ? AND ea.tenant_id = ? ORDER BY s.nama`).all(req.params.id, req.tenantId)
   res.json(rows)
 })
 
 // Set anggota (replace full list). body: { siswa_ids: [] }
 app.post('/api/ekskul/:id/anggota', ADMIN, (req, res) => {
-  const ids = Array.isArray(req.body.siswa_ids) ? req.body.siswa_ids : []
+  if (!Array.isArray(req.body.siswa_ids)) return res.status(400).json({ error: 'Daftar siswa harus berupa array' })
+  const ids = [...new Set(req.body.siswa_ids.map(id => String(id || '').trim()).filter(Boolean))]
   const ekskul_id = req.params.id
+  if (!db.prepare('SELECT id FROM ekskul WHERE id=? AND tenant_id=?').get(ekskul_id, req.tenantId)) {
+    return res.status(404).json({ error: 'Ekstrakurikuler tidak ditemukan' })
+  }
+  const validIds = ids.length
+    ? db.prepare(`SELECT id FROM siswa WHERE tenant_id=? AND id IN (${ids.map(() => '?').join(',')})`).all(req.tenantId, ...ids).map(row => row.id)
+    : []
+  if (validIds.length !== ids.length) return res.status(400).json({ error: 'Siswa tidak valid atau bukan milik lembaga ini' })
   const del = db.prepare('DELETE FROM ekskul_anggota WHERE ekskul_id = ? AND tenant_id = ?')
-  const ins = db.prepare('INSERT OR IGNORE INTO ekskul_anggota (id, ekskul_id, siswa_id, tenant_id) VALUES (?,?,?,?)')
+  const ins = db.prepare('INSERT INTO ekskul_anggota (id, ekskul_id, siswa_id, tenant_id) VALUES (?,?,?,?)')
   const trx = db.transaction(() => {
     del.run(ekskul_id, req.tenantId)
-    for (const sid of ids) ins.run(uuidv4(), ekskul_id, sid, req.tenantId)
+    for (const sid of validIds) ins.run(uuidv4(), ekskul_id, sid, req.tenantId)
   })
   trx()
   res.json({ success: true, count: ids.length })
@@ -2864,9 +2885,11 @@ app.get('/api/absensi-ekskul', authMiddleware, (req, res) => {
 
 app.post('/api/absensi-ekskul/bulk', STAFF, (req, res) => {
   const { ekskul_id, tanggal, data } = req.body
+  const activity = db.prepare('SELECT id,pembina_id FROM ekskul WHERE id=? AND tenant_id=?').get(ekskul_id, req.tenantId)
+  if (!activity) return res.status(400).json({ error: 'Ekstrakurikuler tidak ditemukan' })
   if (isTeacherContext(req)) {
     const gtk = resolveGtkForUser(req.user.id, req.tenantId)
-    if (!gtk || !db.prepare('SELECT 1 FROM ekskul WHERE id=? AND pembina_id=? AND tenant_id=?').get(ekskul_id, gtk.id, req.tenantId)) return res.status(403).json({ error: 'Bukan pembina ekskul ini' })
+    if (!gtk || activity.pembina_id !== gtk.id) return res.status(403).json({ error: 'Bukan pembina ekskul ini' })
   }
   if (!data || !Array.isArray(data)) return res.status(400).json({ error: 'Data harus array' })
   const validStatuses = new Set(['hadir', 'izin', 'sakit', 'alpa'])
