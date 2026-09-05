@@ -8,6 +8,7 @@ import JSZip from 'jszip'
 import { QRCodeCanvas } from 'qrcode.react'
 import QRCode from 'qrcode'
 import FoundationTenantPicker from '../../components/FoundationTenantPicker'
+import { playFeedbackSound, primeFeedbackSound } from '../../lib/feedbackSound'
 
 const statusColors: Record<string, string> = {
   hadir: 'bg-green-100 text-green-700',
@@ -165,9 +166,18 @@ export default function AbsensiSiswaPage() {
     setQrOpen(false)
   }
 
+  // Sesi bunyi diambil dari respons server (r.data.sesi), bukan dropdown UI:
+  // server yang memutuskan masuk/pulang berdasarkan jam & batas jam pulang rombel.
+  const announceScanResult = (data: any) => {
+    if (data?.already) return playFeedbackSound('duplicate')
+    playFeedbackSound(data?.sesi === 'pulang' ? 'pulang' : 'masuk')
+  }
+
   const startQrCamera = async () => {
     if (!kbmStatus.aktif) return toast.error(kbmStatus.libur ? 'Hari libur: absensi nonaktif' : 'Aktifkan KBM tanggal ini di Kalender KBM terlebih dahulu')
     if (qrRef.current || cameraStartingRef.current) return
+    // Gestur klik "Scan Kamera" adalah kesempatan sah untuk membuka AudioContext.
+    primeFeedbackSound()
     cameraStartingRef.current = true
     setQrOpen(true)
     setTimeout(async () => {
@@ -181,8 +191,8 @@ export default function AbsensiSiswaPage() {
           scanBusyRef.current = true
           lastQrRef.current = normalized
           setScanBusy(true); setLastQr(normalized); setQrToken(normalized)
-          try { const r = await api.post('/absensi-siswa/qr-scan', { token: normalized, sesi }); toast.success(r.data.already ? `${r.data.siswa?.nama || 'Siswa'} sudah tercatat` : `${r.data.siswa?.nama || 'Siswa'} hadir (${r.data.sesi})`); loadData() }
-          catch (err: any) { toast.error(err.response?.data?.error || 'QR gagal') }
+          try { const r = await api.post('/absensi-siswa/qr-scan', { token: normalized, sesi }); announceScanResult(r.data); toast.success(r.data.already ? `${r.data.siswa?.nama || 'Siswa'} sudah tercatat` : `${r.data.siswa?.nama || 'Siswa'} hadir (${r.data.sesi})`); loadData() }
+          catch (err: any) { playFeedbackSound('error'); toast.error(err.response?.data?.error || 'QR gagal') }
           finally { window.setTimeout(() => { scanBusyRef.current = false; lastQrRef.current = ''; setScanBusy(false); setLastQr('') }, 1200) }
         }, () => {})
         cameraStartingRef.current = false
@@ -200,23 +210,27 @@ export default function AbsensiSiswaPage() {
     setQrToken(token)
     try {
       const r = await api.post('/absensi-siswa/qr-scan', { token, sesi })
+      announceScanResult(r.data)
       toast.success(r.data.already ? `${r.data.siswa?.nama || 'Siswa'} sudah tercatat` : `${r.data.siswa?.nama || 'Siswa'} hadir (${r.data.sesi})`)
       await loadData()
-    } catch (err: any) { toast.error(err.response?.data?.error || 'QR gagal') }
+    } catch (err: any) { playFeedbackSound('error'); toast.error(err.response?.data?.error || 'QR gagal') }
     finally { window.setTimeout(() => { scanBusyRef.current = false; lastQrRef.current = ''; setScanBusy(false); setLastQr('') }, 1200) }
   }
 
   const scanQrImage = async (file?: File) => {
     if (!file || scanBusyRef.current) return
+    primeFeedbackSound()
     try {
       const scanner = new Html5Qrcode('qr-file-reader')
       const text = await scanner.scanFile(file, true)
       await submitQrToken(text)
       try { scanner.clear() } catch {}
-    } catch (err: any) { toast.error(err.response?.data?.error || 'QR foto gagal dibaca') }
+    } catch (err: any) { playFeedbackSound('error'); toast.error(err.response?.data?.error || 'QR foto gagal dibaca') }
   }
 
   const handleQrScan = async () => {
+    // Tombol "Proses"/Enter token manual: gestur pengguna, buka audio di sini.
+    primeFeedbackSound()
     if (!kbmStatus.aktif) return toast.error(kbmStatus.libur ? 'Hari libur: absensi nonaktif' : 'Aktifkan KBM tanggal ini di Kalender KBM terlebih dahulu')
     if (!qrToken.trim()) return toast.error('Isi/scan token QR')
     await submitQrToken(qrToken)

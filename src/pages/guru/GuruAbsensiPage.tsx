@@ -3,6 +3,7 @@ import { MapPin, Clock, Loader2, CheckCircle } from 'lucide-react'
 import toast from 'react-hot-toast'
 import api from '../../services/api'
 import { useSettingsStore } from '../../stores/settingsStore'
+import { playFeedbackSound, primeFeedbackSound } from '../../lib/feedbackSound'
 
 export default function GuruAbsensiPage() {
   const settings = useSettingsStore(s => s.settings)
@@ -34,20 +35,25 @@ export default function GuruAbsensiPage() {
   }
 
   const handleCeklok = async (type: 'masuk' | 'pulang') => {
+    // AudioContext harus dibuka di dalam gestur klik, bukan saat respons tiba.
+    primeFeedbackSound()
     setLoading(true)
     try {
       const loc = await getLocation()
       setLocation(loc)
       // Tolak fix GPS yang terlalu kasar (biasanya masih pakai IP/WiFi, belum lock satelit).
       if (loc.acc && loc.acc > 200) {
+        playFeedbackSound('error')
         toast.error(`Sinyal GPS lemah (akurasi ±${Math.round(loc.acc)}m). Keluar ruangan / aktifkan GPS presisi tinggi lalu coba lagi.`)
         return
       }
       const res = await api.post('/guru/ceklok', { type, latitude: loc.lat, longitude: loc.lng, accuracy: loc.acc })
+      playFeedbackSound(type === 'masuk' ? 'masuk' : 'pulang')
       toast.success(type === 'masuk' ? `Ceklok masuk berhasil: ${res.data.waktu_masuk}` : `Ceklok pulang berhasil: ${res.data.waktu_pulang}`)
       loadData()
     } catch (err: any) {
       const msg = err.response?.data?.error || err.message || 'Gagal ceklok'
+      playFeedbackSound('error')
       toast.error(msg)
     } finally { setLoading(false) }
   }

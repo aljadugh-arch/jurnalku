@@ -3,6 +3,7 @@ import { MapPin, Clock, CheckCircle, XCircle, Search, UserCheck } from 'lucide-r
 import toast from 'react-hot-toast'
 import api from '../../services/api'
 import { todayWib } from '../../lib/dateFormat'
+import { playFeedbackSound, primeFeedbackSound } from '../../lib/feedbackSound'
 
 interface CeklokRecord {
   id: string
@@ -74,19 +75,24 @@ export default function CekLokAdminPage() {
   useEffect(() => { fetchPersonal() }, [])
 
   const handleCeklok = (type: 'masuk' | 'pulang') => {
-    if (!navigator.geolocation) return toast.error('Perangkat tidak mendukung lokasi')
+    // Buka AudioContext saat klik; respons async tidak dianggap gestur pengguna.
+    primeFeedbackSound()
+    if (!navigator.geolocation) { playFeedbackSound('error'); return toast.error('Perangkat tidak mendukung lokasi') }
     setCeklokLoading(true)
     navigator.geolocation.getCurrentPosition(async pos => {
       try {
         await api.post('/guru/ceklok', { type, latitude: pos.coords.latitude, longitude: pos.coords.longitude })
+        playFeedbackSound(type === 'masuk' ? 'masuk' : 'pulang')
         toast.success(`Ceklok ${type} berhasil`)
         await Promise.all([fetchPersonal(), fetchData()])
       } catch (err: any) {
+        playFeedbackSound('error')
         toast.error(err.response?.data?.error || `Gagal ceklok ${type}`)
       } finally {
         setCeklokLoading(false)
       }
     }, err => {
+      playFeedbackSound('error')
       toast.error(err.code === 1 ? 'Izin lokasi ditolak' : 'Lokasi tidak dapat dibaca')
       setCeklokLoading(false)
     }, { enableHighAccuracy: true, timeout: 15000 })
