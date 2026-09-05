@@ -75,6 +75,10 @@ export default function BackupRestorePage() {
     try {
       const { data } = await api.post('/backup/run')
       toast.success(`Backup ke Drive berhasil (${fmtSize(data.size)})`)
+      // Media yang dilewati tidak menggagalkan backup, tetapi admin perlu tahu.
+      if (data.media_omitted > 0) {
+        toast(`${data.media_omitted} media dilewati karena melewati batas ukuran (${fmtSize(data.media_omitted_bytes || 0)}). Data tabel tetap tersimpan.`, { icon: '⚠️', duration: 8000 })
+      }
       loadLogs()
     } catch (err: any) {
       toast.error(err.response?.data?.error || 'Backup ke Drive gagal')

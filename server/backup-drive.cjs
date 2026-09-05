@@ -383,7 +383,16 @@ function registerBackupRoutes(app, db, { requireRole, uuid, mediaRoot }) {
 
       db.prepare('INSERT INTO backup_log (id, tenant_id, filename, drive_file_id, size, status) VALUES (?,?,?,?,?,?)')
         .run(id, req.tenantId, filename, driveFileId, gz.length, 'ok')
-      res.json({ id, drive_file_id: driveFileId, size: gz.length, filename })
+      // Media yang tidak tertampung budget dilaporkan agar admin tahu file mana
+      // yang perlu diperkecil/diunggah manual, tanpa menggagalkan backup data.
+      const omitted = artifact.manifest?.media?.omitted || []
+      res.json({
+        id, drive_file_id: driveFileId, size: gz.length, filename,
+        media_count: artifact.manifest?.media?.count || 0,
+        media_omitted: omitted.length,
+        media_omitted_bytes: artifact.manifest?.media?.omitted_bytes || 0,
+        media_omitted_files: omitted.slice(0, 20).map(item => ({ path: item.path, size: item.size, reason: item.reason })),
+      })
     } catch (e) {
       const msg = String(e.message || e)
       try {

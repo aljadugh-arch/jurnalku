@@ -2,7 +2,7 @@ const test = require('node:test')
 const assert = require('node:assert/strict')
 const zlib = require('node:zlib')
 const Database = require('better-sqlite3')
-const { createService } = require('../server/backup-restore.cjs')
+const { createService, LIMITS } = require('../server/backup-restore.cjs')
 
 function database() {
   const db = new Database(':memory:')
@@ -18,9 +18,14 @@ function database() {
 test('gzip expansion beyond the restore limit is rejected', () => {
   const db = database()
   db.prepare('UPDATE tenants SET id=? WHERE id=?').run('mtsplussd7', 'target-tenant')
-  const service = createService(db)
-  const compressed = zlib.gzipSync(Buffer.alloc(50 * 1024 * 1024 + 1, 0x20))
+  // Batas keras default kini 320 MB; mengalokasikan buffer sebesar itu di test
+  // memboroskan memori, jadi turunkan batas lewat options (hanya boleh menurunkan).
+  const service = createService(db, { maxBytes: 1024 * 1024 })
+  const compressed = zlib.gzipSync(Buffer.alloc(1024 * 1024 + 1, 0x20))
   assert.throws(() => service.parseArtifact('mtsplussd7', compressed), /terlalu besar/)
+  // Options tidak boleh menaikkan batas keras global.
+  const raised = createService(db, { maxBytes: LIMITS.MAX_BYTES * 4 })
+  assert.throws(() => raised.parseArtifact('mtsplussd7', zlib.gzipSync(Buffer.alloc(16, 0x20))), /JSON backup tidak valid/)
   db.close()
 })
 

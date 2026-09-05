@@ -30,7 +30,7 @@ const { getCategoryRecap } = require('./attendance-recap.cjs')
 const { buildRekapRange, getPeriodicAttendanceRecap, deduplicateAttendance } = require('./attendance-periodic-recap.cjs')
 const { isDriveFolderUrl } = require('./library-config.cjs')
 const { getLateDashboard } = require('./dashboard-late.cjs')
-const { registerRoutes: registerBackupRestoreRoutes } = require('./backup-restore.cjs')
+const { registerRoutes: registerBackupRestoreRoutes, LIMITS: BACKUP_LIMITS } = require('./backup-restore.cjs')
 const { registerFinanceExcelRoutes } = require('./finance-excel.cjs')
 const { FEATURE_KEYS, addMonthsIso, accessForTenant, featureForPath, normalizeFeatureSelection, generateUnlockCode, hashUnlockCode, setupSubscriptionTables } = require('./subscription.cjs')
 const { setupBackupTables, registerBackupRoutes } = require('./backup-drive.cjs')
@@ -1267,7 +1267,9 @@ app.post('/api/tenants/:id/unlock-keys', SUPER, (req, res) => {
   res.status(201).json({ code, plan, months, tenant_id: req.params.id, note: 'Kunci hanya ditampilkan sekali. Simpan dan kirim kepada admin lembaga.' })
 })
 
-const backupUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 50 * 1024 * 1024, files: 1 } })
+// Harus sejalan dengan batas keras parser backup. Artefak ekspor yang memuat
+// media base64 dapat jauh lebih besar daripada ukuran file media aslinya.
+const backupUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: BACKUP_LIMITS.MAX_BYTES, files: 1 } })
 registerBackupRestoreRoutes(app, db, { ADMIN, upload: backupUpload, dbPath, mediaRoot: UPLOAD_DIR })
 registerFinanceExcelRoutes(app, db, { authorize: requireRole('bendahara', 'admin', 'super_admin', 'operator'), upload: multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024, files: 1 } }) })
 registerPortalRoutes(app, db, { auth: authMiddleware, requireRole, uuid: uuidv4, bcrypt })

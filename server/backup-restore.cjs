@@ -33,10 +33,16 @@ const EXCLUDED = Object.freeze({
   broadcast_log: 'log operasional', broadcast_detail: 'nomor penerima dan log operasional',
 })
 const MAX_ROWS = 100000
-const MAX_BYTES = 50 * 1024 * 1024
-const MAX_MEDIA_FILES = 5000
-const MAX_MEDIA_FILE_BYTES = 10 * 1024 * 1024
-const MAX_MEDIA_TOTAL_BYTES = 30 * 1024 * 1024
+// Budget media dinaikkan: tenant produksi nyata sudah melewati 57 MB, sehingga
+// batas 30 MB lama membuat backup gagal total ("Total media backup melewati batas").
+// MAX_BYTES harus >= media base64 (rasio 4/3) + baris tabel, kalau tidak artefak
+// hasil ekspor sendiri akan ditolak saat di-restore.
+const MAX_MEDIA_FILES = 20000
+const MAX_MEDIA_FILE_BYTES = 25 * 1024 * 1024
+const MAX_MEDIA_TOTAL_BYTES = 200 * 1024 * 1024
+const MAX_BYTES = 320 * 1024 * 1024
+const LIMITS = Object.freeze({ MAX_ROWS, MAX_BYTES, MAX_MEDIA_FILES, MAX_MEDIA_FILE_BYTES, MAX_MEDIA_TOTAL_BYTES })
+const OMIT_REASONS = Object.freeze(['file_count_budget', 'file_too_large', 'total_budget'])
 const DENY = /(password|passwd|secret|token|api[_-]?key|session|credential|private[_-]?key)/i
 const LEGACY_SLUG_TARGETS = Object.freeze({
   'mts-plus-sunan-drajat-7-palang': 'mtsplussd7',
@@ -54,6 +60,15 @@ const sha256 = buffer => crypto.createHash('sha256').update(buffer).digest('hex'
 function createService(db, options = {}) {
   const backupDir = options.backupDir || process.env.JURNALKU_BACKUP_DIR || path.resolve(__dirname, '../var/backups')
   const mediaRoot = path.resolve(options.mediaRoot || process.env.MEDIA_ROOT || path.join(__dirname, 'uploads'))
+  // Budget ekspor dapat diturunkan lewat options (dipakai pengujian). Validasi
+  // artefak yang masuk tetap memakai batas keras global agar tidak bisa dilonggarkan
+  // oleh pengunggah.
+  const positive = (value, fallback) => Number.isInteger(value) && value > 0 ? value : fallback
+  const exportMediaFiles = positive(options.maxMediaFiles, MAX_MEDIA_FILES)
+  const exportMediaFileBytes = positive(options.maxMediaFileBytes, MAX_MEDIA_FILE_BYTES)
+  const exportMediaTotalBytes = positive(options.maxMediaTotalBytes, MAX_MEDIA_TOTAL_BYTES)
+  // `maxBytes` hanya boleh MENURUNKAN batas keras, tidak menaikkannya.
+  const maxBytes = Math.min(positive(options.maxBytes, MAX_BYTES), MAX_BYTES)
   const names = new Set(db.prepare("SELECT name FROM sqlite_master WHERE type='table'").all().map(row => row.name))
   const info = table => db.pragma(`table_info(${JSON.stringify(table)})`)
   const cols = table => info(table).map(row => row.name)
@@ -103,19 +118,24 @@ function createService(db, options = {}) {
         }
       }
     }
-    if (references.size > MAX_MEDIA_FILES) throw new ValidationError('Jumlah media backup melewati batas')
+    // Media yang tidak tertampung dilewati dan dicatat, bukan menggagalkan backup:
+    // satu foto besar tidak boleh membuat seluruh data tenant gagal dibackup.
     const media = []
+    const omitted = []
     let total = 0
-    for (const relative of [...references].sort()) {
+    const sorted = [...references].sort()
+    for (const relative of sorted.slice(exportMediaFiles)) omitted.push({ path: relative, size: 0, reason: 'file_count_budget' })
+    for (const relative of sorted.slice(0, exportMediaFiles)) {
       const source = path.resolve(mediaRoot, relative)
       if (!fs.existsSync(source) || !fs.statSync(source).isFile()) continue
+      const size = fs.statSync(source).size
+      if (size > exportMediaFileBytes) { omitted.push({ path: relative, size, reason: 'file_too_large' }); continue }
+      if (total + size > exportMediaTotalBytes) { omitted.push({ path: relative, size, reason: 'total_budget' }); continue }
       const buffer = fs.readFileSync(source)
-      if (buffer.length > MAX_MEDIA_FILE_BYTES) throw new ValidationError(`Media terlalu besar: ${relative}`)
       total += buffer.length
-      if (total > MAX_MEDIA_TOTAL_BYTES) throw new ValidationError('Total media backup melewati batas')
       media.push({ path: relative, size: buffer.length, checksum: sha256(buffer), data: buffer.toString('base64') })
     }
-    return media
+    return { media, omitted }
   }
 
   function exportData(tenantId, selected) {
@@ -127,12 +147,15 @@ function createService(db, options = {}) {
       tables[key] = rowsFor(key, tenantId)
       sections.push({ key, count: tables[key].length, checksum: checksum(tables[key]) })
     }
-    const media = collectMedia(tables)
+    const { media, omitted } = collectMedia(tables)
     return {
       manifest: {
         format: 'jurnalku-tenant-backup', schema_version: 2, created_at: new Date().toISOString(), tenant,
         users_excluded: true, excluded: EXCLUDED, sections,
-        media: { count: media.length, bytes: media.reduce((sum, item) => sum + item.size, 0), checksum: checksum(media) },
+        media: {
+          count: media.length, bytes: media.reduce((sum, item) => sum + item.size, 0), checksum: checksum(media),
+          omitted, omitted_bytes: omitted.reduce((sum, item) => sum + item.size, 0),
+        },
       },
       tables, media,
     }
@@ -183,26 +206,46 @@ function createService(db, options = {}) {
     if (!Buffer.isBuffer(buffer) || !buffer.length) throw new ValidationError('File backup wajib')
     let raw = buffer
     if (buffer[0] === 0x1f && buffer[1] === 0x8b) {
-      try { raw = zlib.gunzipSync(buffer, { maxOutputLength: MAX_BYTES + 1 }) }
+      try { raw = zlib.gunzipSync(buffer, { maxOutputLength: maxBytes + 1 }) }
       catch (error) {
         if (error?.code === 'ERR_BUFFER_TOO_LARGE') throw new ValidationError('File backup terlalu besar setelah diekstrak')
         throw new ValidationError('File GZIP rusak atau tidak valid')
       }
     }
-    if (raw.length > MAX_BYTES) throw new ValidationError('File backup terlalu besar setelah diekstrak')
+    if (raw.length > maxBytes) throw new ValidationError('File backup terlalu besar setelah diekstrak')
     let artifact
     try { artifact = JSON.parse(raw.toString('utf8')) } catch { throw new ValidationError('JSON backup tidak valid') }
     return artifact?.manifest?.format === 'jurnalku-tenant-backup' ? artifact : legacyArtifact(tenantId, artifact)
   }
 
+  function validateOmitted(declared) {
+    // Field baru; artefak lama tanpa `omitted` tetap diterima.
+    if (declared.omitted === undefined && declared.omitted_bytes === undefined) return []
+    if (!Array.isArray(declared.omitted)) throw new ValidationError('Daftar media omitted tidak valid')
+    let bytes = 0
+    const seen = new Set()
+    for (const item of declared.omitted) {
+      if (!item || typeof item.path !== 'string' || seen.has(item.path) || path.posix.normalize(item.path) !== item.path
+        || item.path.startsWith('../') || path.posix.isAbsolute(item.path)
+        || !Number.isInteger(item.size) || item.size < 0 || !OMIT_REASONS.includes(item.reason)) {
+        throw new ValidationError('Entri media omitted tidak valid')
+      }
+      seen.add(item.path)
+      bytes += item.size
+    }
+    if (declared.omitted_bytes !== undefined && declared.omitted_bytes !== bytes) throw new ValidationError('Ukuran media omitted tidak cocok')
+    return declared.omitted
+  }
+
   function validateMedia(artifact) {
     const version = artifact.manifest.schema_version
-    if (version === 1) return []
+    if (version === 1) return { media: [], omitted: [] }
     const media = artifact.media
     const declared = artifact.manifest.media
     if (!Array.isArray(media) || !declared || declared.count !== media.length || declared.checksum !== checksum(media)) {
       throw new ValidationError('Manifest media tidak cocok')
     }
+    const omitted = validateOmitted(declared)
     if (media.length > MAX_MEDIA_FILES) throw new ValidationError('Jumlah media backup melewati batas')
     let total = 0
     const seen = new Set()
@@ -220,11 +263,11 @@ function createService(db, options = {}) {
       if (total > MAX_MEDIA_TOTAL_BYTES) throw new ValidationError('Total media backup melewati batas')
     }
     if (declared.bytes !== total) throw new ValidationError('Ukuran media tidak cocok')
-    return media
+    return { media, omitted }
   }
 
   function normalized(tenantId, artifact) {
-    if (!artifact || Buffer.byteLength(JSON.stringify(artifact)) > MAX_BYTES || artifact.manifest?.format !== 'jurnalku-tenant-backup' || ![1, 2].includes(artifact.manifest.schema_version)) {
+    if (!artifact || Buffer.byteLength(JSON.stringify(artifact)) > maxBytes || artifact.manifest?.format !== 'jurnalku-tenant-backup' || ![1, 2].includes(artifact.manifest.schema_version)) {
       throw new ValidationError('Format atau versi backup tidak valid')
     }
     if (artifact.manifest.tenant?.id !== tenantId) throw new ValidationError('Backup lintas tenant ditolak')
@@ -250,8 +293,9 @@ function createService(db, options = {}) {
       total += artifact.tables[section.key].length
     }
     if (total > MAX_ROWS) throw new ValidationError('Jumlah baris melewati batas')
+    const mediaResult = validateMedia(artifact)
     return {
-      sections, rows, total, media: validateMedia(artifact),
+      sections, rows, total, media: mediaResult.media, mediaOmitted: mediaResult.omitted,
       tables: artifact.manifest.legacy_tables || [...new Set(rows.map(row => row.__table))],
     }
   }
@@ -360,12 +404,12 @@ function createService(db, options = {}) {
     } catch (error) {
       throw new ValidationError(`${error.message} (data database sudah di-rollback oleh transaksi; snapshot ${path.basename(snapshotPath)} tersedia)`)
     }
-    return { success: true, ...counts, ...mediaResult, snapshot: path.basename(snapshotPath) }
+    return { success: true, ...counts, ...mediaResult, media_omitted: data.mediaOmitted.length, snapshot: path.basename(snapshotPath) }
   }
 
   function preview(tenantId, artifact) {
     const data = normalized(tenantId, artifact); validateRefs(tenantId, data.rows)
-    return { valid: true, total: data.total, media_count: data.media.length, media_bytes: data.media.reduce((sum, item) => sum + item.size, 0), sections: data.sections.map(section => ({ key: section.key, label: SECTIONS[section.key].label, count: section.count })) }
+    return { valid: true, total: data.total, media_count: data.media.length, media_bytes: data.media.reduce((sum, item) => sum + item.size, 0), media_omitted: data.mediaOmitted.length, sections: data.sections.map(section => ({ key: section.key, label: SECTIONS[section.key].label, count: section.count })) }
   }
 
   return {
@@ -387,4 +431,4 @@ function registerRoutes(app, db, { ADMIN, upload, dbPath, mediaRoot }) {
   app.use('/api/backup-restore', (error, req, res, next) => res.status(error instanceof ValidationError ? 400 : 500).json({ error: error.message || 'Backup/restore gagal' }))
 }
 
-module.exports = { createService, registerRoutes, SECTIONS, EXCLUDED, ValidationError }
+module.exports = { createService, registerRoutes, SECTIONS, EXCLUDED, ValidationError, LIMITS }
