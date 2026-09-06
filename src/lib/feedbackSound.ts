@@ -107,17 +107,33 @@ function getSpeechSynth(): SpeechSynthesis | null {
 
 function pickBestVoice(synth: SpeechSynthesis): SpeechSynthesisVoice | null {
   const voices = synth.getVoices?.() || []
-  // Prioritas: voice Indonesia male > Indonesia female > voice Indonesia apapun > fallback pertama
-  const idVoices = voices.filter(v => /^id[-_]/i.test(v.lang) || /indonesia/i.test(v.name))
-  if (!idVoices.length) return null
-  // Cari male terlebih dahulu
-  const male = idVoices.find(v => /male|pria|laki|man/i.test(v.name))
-  if (male) return male
-  // Cari female (backup)
-  const female = idVoices.find(v => /female|wanita|perempuan|woman/i.test(v.name))
-  if (female) return female
-  // Ambil voice Indonesia pertama saja
-  return idVoices[0] || null
+  const name = (v: SpeechSynthesisVoice) => v.name.toLowerCase()
+  const isId = (v: SpeechSynthesisVoice) => /^id[-_]/i.test(v.lang) || /indonesia/i.test(v.name)
+
+  const idVoices = voices.filter(isId)
+  const anyVoices = voices
+
+  // Prioritas voz: 1) Google Bahasa Indonesia (female Indonesia - palin natural)
+  // 2) Google US English (male default, sering tersedia & natural)
+  // 3) voice id apapun (female male maskulin) 4) fallback pertama
+  const googleId = idVoices.find(v => /google/i.test(name(v)) && /bahasa|indonesia/i.test(name(v)))
+  if (googleId) return googleId
+
+  // Google US English: natural & sering "male"-ish
+  const googleUs = anyVoices.find(v => /google us english/i.test(name(v)))
+  if (googleUs) return googleUs
+
+  // male id favorit lain
+  const maleId = idVoices.find(v => /male|pria|laki|man|daniel|david|osman|rizwan/i.test(name(v)))
+  if (maleId) return maleId
+
+  const femaleId = idVoices.find(v => /female|wanita|perempuan|woman/i.test(name(v)))
+  if (femaleId) return femaleId
+
+  // id apapun
+  if (idVoices[0]) return idVoices[0]
+  // en fallback natural (kalau tanpa id voice)
+  return anyVoices.find(v => /google us english/i.test(name(v))) || null
 }
 
 function primeSpeechSynthesis() {
