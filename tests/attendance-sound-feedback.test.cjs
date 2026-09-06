@@ -43,7 +43,7 @@ test('helper suara mengucapkan nama depan dengan TTS Indonesia yang jelas dan vo
   assert.match(soundLib, /SpeechSynthesisUtterance/)
   assert.match(soundLib, /utterance\.lang = 'id-ID'/)
   assert.match(soundLib, /utterance\.volume = 1/)
-  assert.match(soundLib, /utterance\.rate = 0\.88/)
+  assert.match(soundLib, /utterance\.rate = 0\.86/)
   assert.match(soundLib, /firstName\(name\)/)
   assert.match(soundLib, /speakClear\(`\$\{nickname\} \$\{session\}`\)/)
 })
@@ -88,7 +88,9 @@ test('backend ceklok guru mengembalikan nama GTK untuk ucapan suara', () => {
   assert.match(route, /gtk: \{ id: gtk\.id, nama: gtk\.nama \}/)
 })
 
-test('AudioContext dibuka pada gestur pengguna agar autoplay policy tidak memblokir suara scan', () => {
+test('AudioContext dan speechSynthesis dibuka pada gestur pengguna agar autoplay policy tidak memblokir suara scan', () => {
+  assert.match(soundLib, /primeSpeechSynthesis\(\)/)
+  assert.match(soundLib, /SpeechSynthesisUtterance\(' '\)/)
   const camera = qrPage.slice(qrPage.indexOf('const startQrCamera'), qrPage.indexOf('const submitQrToken'))
   assert.match(camera, /primeFeedbackSound\(\)/)
   const manualEntry = qrPage.slice(qrPage.indexOf('const handleQrScan'), qrPage.indexOf('const handleSave'))

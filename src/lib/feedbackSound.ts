@@ -20,6 +20,7 @@ const TONES: Record<Tone, ToneSpec> = {
 }
 
 let ctx: AudioContext | null = null
+let speechPrimed = false
 
 function getContext(): AudioContext | null {
   if (typeof window === 'undefined') return null
@@ -40,12 +41,15 @@ function getContext(): AudioContext | null {
  */
 export function primeFeedbackSound() {
   const audio = getContext()
-  if (!audio) return
   try {
-    if (audio.state === 'suspended') void audio.resume()
+    if (audio?.state === 'suspended') void audio.resume()
   } catch {
     // Diamkan: gagal resume hanya berarti tidak ada suara.
   }
+  // Prime TTS juga harus terjadi di gesture pengguna. Beberapa browser/mobile
+  // mengizinkan beep WebAudio tapi menolak speechSynthesis bila baru dipanggil
+  // setelah respons async scan/ceklok.
+  primeSpeechSynthesis()
 }
 
 export function playFeedbackSound(tone: Tone = 'masuk') {
@@ -85,23 +89,54 @@ function firstName(name?: string | null) {
   return clean.split(' ')[0]
 }
 
-function speakClear(text: string) {
-  if (typeof window === 'undefined') return
+function getSpeechSynth(): SpeechSynthesis | null {
+  if (typeof window === 'undefined') return null
   const synth = window.speechSynthesis
-  if (!synth || typeof SpeechSynthesisUtterance === 'undefined') return
+  if (!synth || typeof SpeechSynthesisUtterance === 'undefined') return null
+  return synth
+}
+
+function pickIndonesianVoice(synth: SpeechSynthesis): SpeechSynthesisVoice | null {
+  const voices = synth.getVoices?.() || []
+  return voices.find(v => /^id[-_]/i.test(v.lang)) || voices.find(v => /indonesia/i.test(v.name)) || null
+}
+
+function primeSpeechSynthesis() {
+  const synth = getSpeechSynth()
+  if (!synth || speechPrimed) return
   try {
-    synth.cancel()
-    const utterance = new SpeechSynthesisUtterance(text)
+    const utterance = new SpeechSynthesisUtterance(' ')
     utterance.lang = 'id-ID'
-    utterance.volume = 1
-    utterance.rate = 0.88
-    utterance.pitch = 1.08
-    const voices = synth.getVoices?.() || []
-    const idVoice = voices.find(v => /^id[-_]/i.test(v.lang)) || voices.find(v => /indonesia/i.test(v.name))
+    utterance.volume = 0.01
+    utterance.rate = 1
+    utterance.pitch = 1
+    const idVoice = pickIndonesianVoice(synth)
     if (idVoice) utterance.voice = idVoice
-    window.setTimeout(() => {
-      try { synth.speak(utterance) } catch {}
-    }, 170)
+    synth.speak(utterance)
+    speechPrimed = true
+  } catch {
+    // TTS prime gagal: abaikan, akan dicoba lagi saat notifikasi sukses.
+  }
+}
+
+function speakClear(text: string) {
+  const synth = getSpeechSynth()
+  if (!synth) return
+  try {
+    const run = () => {
+      try {
+        synth.cancel()
+        const utterance = new SpeechSynthesisUtterance(text)
+        utterance.lang = 'id-ID'
+        utterance.volume = 1
+        utterance.rate = 0.86
+        utterance.pitch = 1.06
+        const idVoice = pickIndonesianVoice(synth)
+        if (idVoice) utterance.voice = idVoice
+        synth.speak(utterance)
+      } catch {}
+    }
+    window.setTimeout(run, 220)
   } catch {
     // TTS tidak didukung / diblokir: nada WebAudio tetap cukup sebagai fallback.
   }
