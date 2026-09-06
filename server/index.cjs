@@ -4916,6 +4916,43 @@ function normalizeQrToken(raw) {
   if (token.includes('/')) token = token.split('/').filter(Boolean).pop() || token
   return token.split(/[?#]/)[0].trim()
 }
+
+function normalizeNameParts(name) {
+  return String(name || '').replace(/[^\p{L}\p{N}\s'-]/gu, ' ').replace(/\s+/g, ' ').trim().split(' ').filter(Boolean)
+}
+
+function uniqueStudentNickname(db, siswa, tenantId) {
+  const parts = normalizeNameParts(siswa?.nama)
+  if (!parts.length) return siswa?.nama || ''
+  const all = db.prepare("SELECT nama FROM siswa WHERE tenant_id=? AND COALESCE(status,'aktif')='aktif'").all(tenantId)
+  const tokenCounts = new Map()
+  for (const row of all) {
+    for (const part of normalizeNameParts(row.nama)) {
+      const key = part.toLowerCase()
+      tokenCounts.set(key, (tokenCounts.get(key) || 0) + 1)
+    }
+  }
+  for (let i = parts.length - 1; i >= 0; i--) {
+    if ((tokenCounts.get(parts[i].toLowerCase()) || 0) === 1) return parts[i]
+  }
+  const suffixCounts = new Map()
+  for (const row of all) {
+    const rowParts = normalizeNameParts(row.nama)
+    for (let size = 2; size <= rowParts.length; size++) {
+      const key = rowParts.slice(-size).join(' ').toLowerCase()
+      suffixCounts.set(key, (suffixCounts.get(key) || 0) + 1)
+    }
+  }
+  for (let size = 2; size <= parts.length; size++) {
+    const suffix = parts.slice(-size).join(' ')
+    if ((suffixCounts.get(suffix.toLowerCase()) || 0) === 1) return suffix
+  }
+  return parts.join(' ')
+}
+
+function qrSiswaPayload(db, siswa, tenantId) {
+  return { nama: siswa.nama, nis: siswa.nis, nama_panggilan_unik: uniqueStudentNickname(db, siswa, tenantId) }
+}
 app.post('/api/absensi-siswa/qr-scan', STAFF, (req, res) => {
   const token = normalizeQrToken(req.body.token)
   if (!token) return res.status(400).json({ error: 'Token QR kosong' })
@@ -4948,28 +4985,28 @@ app.post('/api/absensi-siswa/qr-scan', STAFF, (req, res) => {
     // Sesi pulang: catat waktu_pulang & status_pulang
     if (!exists) {
       exists = insertOrReload('INSERT INTO absensi_siswa (id, siswa_id, rombel_id, tanggal, status, status_pulang, waktu_pulang, metode, tenant_id) VALUES (?,?,?,?,?,?,?,?,?)', [uuidv4(), siswa.id, siswa.rombel_id, tanggal, 'hadir', 'hadir', waktu, 'qr', req.tenantId])
-      if (exists?.status_pulang === 'hadir') return res.json({ siswa: { nama: siswa.nama, nis: siswa.nis }, already: true, sesi: 'pulang' })
+      if (exists?.status_pulang === 'hadir') return res.json({ siswa: qrSiswaPayload(db, siswa, req.tenantId), already: true, sesi: 'pulang' })
       if (exists) db.prepare('UPDATE absensi_siswa SET status_pulang=?, waktu_pulang=?, metode=? WHERE id=? AND tenant_id=?').run('hadir', waktu, 'qr', exists.id, req.tenantId)
     } else {
-      if (exists.status_pulang === 'hadir') return res.json({ siswa: { nama: siswa.nama, nis: siswa.nis }, already: true, sesi: 'pulang' })
+      if (exists.status_pulang === 'hadir') return res.json({ siswa: qrSiswaPayload(db, siswa, req.tenantId), already: true, sesi: 'pulang' })
       db.prepare('UPDATE absensi_siswa SET status_pulang=?, waktu_pulang=? WHERE id=?').run('hadir', waktu, exists.id)
     }
     try { notificationMonitor.logActivity(db, { tenantId: req.tenantId, eventType: 'student_qr_attendance', actorId: null, entityId: siswa.id, metadata: { sesi: 'pulang', metode: 'qr' } }) } catch {}
     try { waQueue.queueWaliAttendance(db, { tenantId: req.tenantId, studentId: siswa.id, date: tanggal, session: 'pulang', status: 'hadir' }) } catch {}
-    return res.json({ siswa: { nama: siswa.nama, nis: siswa.nis }, waktu, sesi: 'pulang' })
+    return res.json({ siswa: qrSiswaPayload(db, siswa, req.tenantId), waktu, sesi: 'pulang' })
   }
   // Sesi masuk (default)
   if (exists) {
-    if (exists.status === 'hadir') return res.json({ siswa: { nama: siswa.nama, nis: siswa.nis }, already: true, sesi: 'masuk' })
+    if (exists.status === 'hadir') return res.json({ siswa: qrSiswaPayload(db, siswa, req.tenantId), already: true, sesi: 'masuk' })
     db.prepare('UPDATE absensi_siswa SET status=?, waktu_masuk=?, waktu_absen=?, metode=? WHERE id=?').run('hadir', waktu, waktu, 'qr', exists.id)
   } else {
     exists = insertOrReload('INSERT INTO absensi_siswa (id, siswa_id, rombel_id, tanggal, status, waktu_masuk, waktu_absen, metode, tenant_id) VALUES (?,?,?,?,?,?,?,?,?)', [uuidv4(), siswa.id, siswa.rombel_id, tanggal, 'hadir', waktu, waktu, 'qr', req.tenantId])
-    if (exists?.status === 'hadir') return res.json({ siswa: { nama: siswa.nama, nis: siswa.nis }, already: true, sesi: 'masuk' })
+    if (exists?.status === 'hadir') return res.json({ siswa: qrSiswaPayload(db, siswa, req.tenantId), already: true, sesi: 'masuk' })
     if (exists) db.prepare('UPDATE absensi_siswa SET status=?, waktu_masuk=?, waktu_absen=?, metode=? WHERE id=? AND tenant_id=?').run('hadir', waktu, waktu, 'qr', exists.id, req.tenantId)
   }
   try { notificationMonitor.logActivity(db, { tenantId: req.tenantId, eventType: 'student_qr_attendance', actorId: null, entityId: siswa.id, metadata: { sesi: 'masuk', metode: 'qr' } }) } catch {}
   sendAbsensiNotifToWali(siswa.id, 'hadir', tanggal).catch(() => {})
-  res.json({ siswa: { nama: siswa.nama, nis: siswa.nis }, waktu, sesi: 'masuk' })
+  res.json({ siswa: qrSiswaPayload(db, siswa, req.tenantId), waktu, sesi: 'masuk' })
 })
 
 // ==================== ABSENSI GURU ====================

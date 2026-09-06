@@ -68,11 +68,11 @@ test('ceklok admin atau kepala juga mengucapkan nama pada sesi masuk dan pulang'
   assert.match(handler, /playFeedbackSound\('error'\)/)
 })
 
-test('scan QR siswa mengucapkan nama depan sesuai sesi yang dikembalikan server, bukan sesi pilihan UI', () => {
+test('scan QR siswa mengucapkan nama panggilan unik sesuai sesi server, bukan nama depan umum', () => {
   assert.match(qrPage, /import \{ announceStudentScanSuccess, playFeedbackSound, primeFeedbackSound \} from '\.\.\/\.\.\/lib\/feedbackSound'/)
   const announce = qrPage.slice(qrPage.indexOf('const announceScanResult'), qrPage.indexOf('const startQrCamera'))
   assert.notEqual(announce, '', 'helper announceScanResult belum ada')
-  assert.match(announce, /data\?\.siswa\?\.nama/)
+  assert.match(announce, /data\?\.siswa\?\.nama_panggilan_unik \|\| data\?\.siswa\?\.nama/)
   assert.match(announce, /data\?\.sesi === 'pulang' \? 'pulang' : 'masuk'/)
   assert.match(announce, /data\?\.already/)
   assert.match(announce, /announceStudentScanSuccess/)
@@ -85,6 +85,14 @@ test('kedua jalur scan QR (kamera dan token manual) memakai helper suara yang sa
   assert.match(manual, /announceScanResult\(r\.data\)/)
   assert.match(camera, /playFeedbackSound\('error'\)/)
   assert.match(manual, /playFeedbackSound\('error'\)/)
+})
+
+test('backend QR siswa mengembalikan nama panggilan unik untuk TTS', () => {
+  assert.match(serverIndex, /function uniqueStudentNickname\(db, siswa, tenantId\)/)
+  assert.match(serverIndex, /for \(let i = parts\.length - 1; i >= 0; i--\)/, 'prioritas nama belakang seperti Nufail/Maulidi')
+  assert.match(serverIndex, /tokenCounts\.get\(parts\[i\]\.toLowerCase\(\)\)/, 'hanya pilih token yang unik di tenant')
+  assert.match(serverIndex, /nama_panggilan_unik: uniqueStudentNickname\(db, siswa, tenantId\)/)
+  assert.match(serverIndex, /qrSiswaPayload\(db, siswa, req\.tenantId\)/)
 })
 
 test('backend ceklok guru mengembalikan nama GTK untuk ucapan suara', () => {
