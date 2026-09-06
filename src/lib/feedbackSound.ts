@@ -83,8 +83,17 @@ export function playFeedbackSound(tone: Tone = 'masuk') {
   }
 }
 
+function toNaturalCase(word: string) {
+  const clean = String(word || '').replace(/[_-]+/g, ' ').replace(/\s+/g, ' ').trim()
+  return clean.split(' ').filter(Boolean).map(part => {
+    // TTS sering mengeja ALL CAPS seperti “A-Z-Z-A-M-I”. Ubah menjadi kata biasa.
+    const lower = part.toLocaleLowerCase('id-ID')
+    return lower.charAt(0).toLocaleUpperCase('id-ID') + lower.slice(1)
+  }).join(' ')
+}
+
 function firstName(name?: string | null) {
-  const clean = String(name || '').replace(/\s+/g, ' ').trim()
+  const clean = toNaturalCase(String(name || ''))
   if (!clean) return ''
   return clean.split(' ')[0]
 }
@@ -96,9 +105,19 @@ function getSpeechSynth(): SpeechSynthesis | null {
   return synth
 }
 
-function pickIndonesianVoice(synth: SpeechSynthesis): SpeechSynthesisVoice | null {
+function pickBestVoice(synth: SpeechSynthesis): SpeechSynthesisVoice | null {
   const voices = synth.getVoices?.() || []
-  return voices.find(v => /^id[-_]/i.test(v.lang)) || voices.find(v => /indonesia/i.test(v.name)) || null
+  // Prioritas: voice Indonesia male > Indonesia female > voice Indonesia apapun > fallback pertama
+  const idVoices = voices.filter(v => /^id[-_]/i.test(v.lang) || /indonesia/i.test(v.name))
+  if (!idVoices.length) return null
+  // Cari male terlebih dahulu
+  const male = idVoices.find(v => /male|pria|laki|man/i.test(v.name))
+  if (male) return male
+  // Cari female (backup)
+  const female = idVoices.find(v => /female|wanita|perempuan|woman/i.test(v.name))
+  if (female) return female
+  // Ambil voice Indonesia pertama saja
+  return idVoices[0] || null
 }
 
 function primeSpeechSynthesis() {
@@ -110,7 +129,7 @@ function primeSpeechSynthesis() {
     utterance.volume = 0.01
     utterance.rate = 1
     utterance.pitch = 1
-    const idVoice = pickIndonesianVoice(synth)
+    const idVoice = pickBestVoice(synth)
     if (idVoice) utterance.voice = idVoice
     synth.speak(utterance)
     speechPrimed = true
@@ -130,8 +149,8 @@ function speakClear(text: string) {
     utterance.lang = 'id-ID'
     utterance.volume = 1
     utterance.rate = 0.86
-    utterance.pitch = 1.06
-    const idVoice = pickIndonesianVoice(synth)
+    utterance.pitch = 0.92
+    const idVoice = pickBestVoice(synth)
     if (idVoice) utterance.voice = idVoice
     synth.speak(utterance)
   } catch {
