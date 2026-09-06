@@ -111,29 +111,35 @@ function pickBestVoice(synth: SpeechSynthesis): SpeechSynthesisVoice | null {
   const isId = (v: SpeechSynthesisVoice) => /^id[-_]/i.test(v.lang) || /indonesia/i.test(v.name)
 
   const idVoices = voices.filter(isId)
-  const anyVoices = voices
 
-  // Prioritas voz: 1) Google Bahasa Indonesia (female Indonesia - palin natural)
-  // 2) Google US English (male default, sering tersedia & natural)
-  // 3) voice id apapun (female male maskulin) 4) fallback pertama
+  // Prioritas MALE-first (sesuai permintaan: suara laki-laki):
+  // 1) male Indonesia (Google + "male"/nama pria)
+  // 2) Google US English (suara pria natural, sering tersedia & jelas)
+  // 3) male lain di browser
+  // 4) female Indonesia (fallback bila tak ada male)
+
+  // (a) voice Indonesia yang terindikasi pria/maskulin / male
+  const maleId = idVoices.find(v =>
+    /male|\bpria\b|pria|laki|man|daniel|david|osman|rizwan|ardi|andika|budi|gilang|wira/i.test(name(v))
+  )
+  if (maleId) return maleId
+
+  // (b) Google US English — umumnya pria, keras & jelas
+  const googleUs = voices.find(v => /google\s*us\s*english/i.test(name(v)))
+  if (googleUs) return googleUs
+
+  // (c) male di semua bahasa
+  const maleAny = voices.find(v => /male|\bman\b|daniel|david/i.test(name(v)))
+  if (maleAny) return maleAny
+
+  // (d) voice Indonesia apa pun (fallback, bisa female)
+  if (idVoices[0]) return idVoices[0]
+
+  // (e) Google Bahasa Indonesia kalau ada (voice id paling natural)
   const googleId = idVoices.find(v => /google/i.test(name(v)) && /bahasa|indonesia/i.test(name(v)))
   if (googleId) return googleId
 
-  // Google US English: natural & sering "male"-ish
-  const googleUs = anyVoices.find(v => /google us english/i.test(name(v)))
-  if (googleUs) return googleUs
-
-  // male id favorit lain
-  const maleId = idVoices.find(v => /male|pria|laki|man|daniel|david|osman|rizwan/i.test(name(v)))
-  if (maleId) return maleId
-
-  const femaleId = idVoices.find(v => /female|wanita|perempuan|woman/i.test(name(v)))
-  if (femaleId) return femaleId
-
-  // id apapun
-  if (idVoices[0]) return idVoices[0]
-  // en fallback natural (kalau tanpa id voice)
-  return anyVoices.find(v => /google us english/i.test(name(v))) || null
+  return null
 }
 
 function primeSpeechSynthesis() {

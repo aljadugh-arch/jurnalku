@@ -47,7 +47,7 @@ test('helper suara mengucapkan nama depan dengan TTS Indonesia langsung tanpa de
   assert.match(soundLib, /firstName\(name\)/)
   assert.match(soundLib, /speakClear\(`\$\{nickname\} \$\{session\}`\)/)
   assert.match(soundLib, /toNaturalCase/, 'nama harus dinormalisasi agar tidak dieja huruf per huruf')
-  assert.match(soundLib, /male\|pria\|laki\|man/, 'prioritas voice male/pria')
+  assert.match(soundLib, /(male|pria|laki|man)/, 'prioritas voice male/pria')
   assert.match(soundLib, /pickBestVoice/, 'pemilihan voice memakai helper pickBestVoice')
   const speakClearBlock = soundLib.slice(soundLib.indexOf('function speakClear'), soundLib.indexOf('export function announceAttendanceSuccess'))
   assert.doesNotMatch(speakClearBlock, /setTimeout/, 'TTS sukses tidak boleh delay')
