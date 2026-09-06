@@ -38,7 +38,7 @@ test('nada masuk dan pulang berbeda, plus nada khusus duplikat dan gagal', () =>
   assert.match(masuk, /gain: 0\.28/, 'nada sukses harus lebih keras')
 })
 
-test('helper suara mengucapkan nama depan dengan TTS Indonesia yang jelas dan volume penuh', () => {
+test('helper suara mengucapkan nama depan dengan TTS Indonesia langsung tanpa delay dan tanpa beep sukses', () => {
   assert.match(soundLib, /window\.speechSynthesis/)
   assert.match(soundLib, /SpeechSynthesisUtterance/)
   assert.match(soundLib, /utterance\.lang = 'id-ID'/)
@@ -46,6 +46,10 @@ test('helper suara mengucapkan nama depan dengan TTS Indonesia yang jelas dan vo
   assert.match(soundLib, /utterance\.rate = 0\.86/)
   assert.match(soundLib, /firstName\(name\)/)
   assert.match(soundLib, /speakClear\(`\$\{nickname\} \$\{session\}`\)/)
+  const speakClearBlock = soundLib.slice(soundLib.indexOf('function speakClear'), soundLib.indexOf('export function announceAttendanceSuccess'))
+  assert.doesNotMatch(speakClearBlock, /setTimeout/, 'TTS sukses tidak boleh delay')
+  const successBlock = soundLib.slice(soundLib.indexOf('export function announceAttendanceSuccess'), soundLib.indexOf('export function announceStudentScanSuccess'))
+  assert.doesNotMatch(successBlock, /playFeedbackSound/, 'sukses tidak boleh campur beep')
 })
 
 test('ceklok guru membunyikan ucapan nama sesuai sesi masuk atau pulang', () => {

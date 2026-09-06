@@ -123,28 +123,24 @@ function speakClear(text: string) {
   const synth = getSpeechSynth()
   if (!synth) return
   try {
-    const run = () => {
-      try {
-        synth.cancel()
-        const utterance = new SpeechSynthesisUtterance(text)
-        utterance.lang = 'id-ID'
-        utterance.volume = 1
-        utterance.rate = 0.86
-        utterance.pitch = 1.06
-        const idVoice = pickIndonesianVoice(synth)
-        if (idVoice) utterance.voice = idVoice
-        synth.speak(utterance)
-      } catch {}
-    }
-    window.setTimeout(run, 220)
+    // Langsung bicara tanpa delay dan tanpa menunggu beep. Cancel hanya untuk
+    // menghentikan prime/ucapan sebelumnya agar scan beruntun tidak antre panjang.
+    synth.cancel()
+    const utterance = new SpeechSynthesisUtterance(text)
+    utterance.lang = 'id-ID'
+    utterance.volume = 1
+    utterance.rate = 0.86
+    utterance.pitch = 1.06
+    const idVoice = pickIndonesianVoice(synth)
+    if (idVoice) utterance.voice = idVoice
+    synth.speak(utterance)
   } catch {
-    // TTS tidak didukung / diblokir: nada WebAudio tetap cukup sebagai fallback.
+    // TTS tidak didukung / diblokir: absensi tetap tersimpan.
   }
 }
 
 export function announceAttendanceSuccess(name: string | undefined | null, session: AttendanceSession) {
   const nickname = firstName(name) || 'Berhasil'
-  playFeedbackSound(session)
   speakClear(`${nickname} ${session}`)
 }
 
