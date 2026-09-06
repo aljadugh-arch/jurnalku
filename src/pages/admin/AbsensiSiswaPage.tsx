@@ -8,7 +8,7 @@ import JSZip from 'jszip'
 import { QRCodeCanvas } from 'qrcode.react'
 import QRCode from 'qrcode'
 import FoundationTenantPicker from '../../components/FoundationTenantPicker'
-import { playFeedbackSound, primeFeedbackSound } from '../../lib/feedbackSound'
+import { announceStudentScanSuccess, playFeedbackSound, primeFeedbackSound } from '../../lib/feedbackSound'
 
 const statusColors: Record<string, string> = {
   hadir: 'bg-green-100 text-green-700',
@@ -169,8 +169,7 @@ export default function AbsensiSiswaPage() {
   // Sesi bunyi diambil dari respons server (r.data.sesi), bukan dropdown UI:
   // server yang memutuskan masuk/pulang berdasarkan jam & batas jam pulang rombel.
   const announceScanResult = (data: any) => {
-    if (data?.already) return playFeedbackSound('duplicate')
-    playFeedbackSound(data?.sesi === 'pulang' ? 'pulang' : 'masuk')
+    announceStudentScanSuccess(data?.siswa?.nama, data?.sesi === 'pulang' ? 'pulang' : 'masuk', data?.already)
   }
 
   const startQrCamera = async () => {

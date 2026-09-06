@@ -1,5 +1,44 @@
 const VALID_STATUSES = ['hadir', 'sakit', 'izin', 'alpha']
 
+function tableHasColumn(db, table, column) {
+  try { return Boolean(db.prepare(`PRAGMA table_info(${table})`).all().find(c => c.name === column)) } catch { return false }
+}
+
+function tableExistsRecap(db, table) {
+  return Boolean(db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?").get(table))
+}
+
+// Jumlah jam mengajar (JTM) dan kehadiran guru pada rentang ini.
+// Kehadiran = hari unik dengan catatan di absensi_guru (ceklok) ATAU sesi kelas aktif
+// di sesi_kelas_guru (masuk kelas). Jadwal mengajar memakai jenis_kegiatan='mapel'.
+function gtkTeachingStats(db, tenantId, from, to) {
+  const schedule = db.prepare(`SELECT gtk_id, COUNT(*) AS slots
+    FROM jadwal j
+    WHERE j.tenant_id=? AND j.jenis_kegiatan='mapel' AND j.gtk_id IS NOT NULL
+    GROUP BY gtk_id`).all(tenantId)
+  const hasSesi = tableExistsRecap(db, 'sesi_kelas_guru')
+  const mapelByGtk = {}
+  const mapelRows = db.prepare(`SELECT j.gtk_id, m.nama AS mapel_nama
+    FROM jadwal j JOIN mapel m ON m.id=j.mapel_id AND m.tenant_id=j.tenant_id
+    WHERE j.tenant_id=? AND j.jenis_kegiatan='mapel' AND j.gtk_id IS NOT NULL
+    GROUP BY j.gtk_id, m.nama ORDER BY m.nama`).all(tenantId)
+  for (const row of mapelRows) {
+    if (!mapelByGtk[row.gtk_id]) mapelByGtk[row.gtk_id] = []
+    mapelByGtk[row.gtk_id].push(row.mapel_nama)
+  }
+  const ceklokDays = new Map()
+  for (const row of db.prepare('SELECT DISTINCT gtk_id, tanggal FROM absensi_guru WHERE tenant_id=? AND tanggal>=? AND tanggal<=?').all(tenantId, from, to)) {
+    ceklokDays.set(row.gtk_id + '\0' + row.tanggal, true)
+  }
+  const sesiDays = new Map()
+  if (hasSesi && tableHasColumn(db, 'sesi_kelas_guru', 'guru_id')) {
+    for (const row of db.prepare("SELECT DISTINCT guru_id, tanggal FROM sesi_kelas_guru WHERE tenant_id=? AND tanggal>=? AND tanggal<=? AND status='aktif'").all(tenantId, from, to)) {
+      sesiDays.set(row.guru_id + '\0' + row.tanggal, true)
+    }
+  }
+  return { schedule, mapelByGtk, ceklokDays, sesiDays }
+}
+
 function isoDate(value) {
   const raw = String(value || '').trim()
   if (!/^\d{4}-\d{2}-\d{2}$/.test(raw)) return null
@@ -155,29 +194,38 @@ function getPeriodicAttendanceRecap(db, tenantId, entityType, range) {
         JOIN gtk g ON g.id=a.gtk_id AND g.tenant_id=a.tenant_id
         WHERE a.tenant_id=? AND a.tanggal BETWEEN ? AND ?`).all(tenantId, range.from, range.to)
   const normalizedRecords = records.map(record => ({ ...record, status: statusKey(record.status) }))
-  const scheduleByGtk = new Map()
-  for (const item of schedule) {
-    if (!item.gtk_id) continue
-    if (!scheduleByGtk.has(item.gtk_id)) scheduleByGtk.set(item.gtk_id, [])
-    scheduleByGtk.get(item.gtk_id).push(item)
-  }
+  const teaching = gtkTeachingStats(db, tenantId, range.from, range.to)
   const byEntityDate = new Map()
   for (const record of records) {
     const key = `${record.entity_id}\0${record.tanggal}`
     if (!byEntityDate.has(key)) byEntityDate.set(key, statusKey(record.status))
   }
+  const jtmByGtk = new Map()
+  for (const row of teaching.schedule) jtmByGtk.set(row.gtk_id, Number(row.slots) || 0)
+  const provision = (entityId, date) => {
+    const k = `${entityId}\0${date}`
+    return teaching.ceklokDays.has(k) || teaching.sesiDays.has(k)
+  }
   const detail = entities.map(entity => {
     const per_tanggal = Object.fromEntries(dates.map(date => [date, '']))
     const totals = emptySummary()
+    let hadirCount = 0
     for (const date of dates) {
       const key = byEntityDate.get(`${entity.id}\0${date}`) || ''
       per_tanggal[date] = key ? key.charAt(0).toUpperCase() : ''
       if (key) { totals[key]++; totals.total++ } else totals.kosong++
+      if (provision(entity.id, date)) hadirCount++
     }
     if (isStudent) return { ...entity, ...totals, per_tanggal }
-    const jadwal_mengajar = scheduleByGtk.get(entity.id) || []
-    const mapel_nama = [...new Set(jadwal_mengajar.map(item => item.mapel_nama).filter(Boolean))]
-    return { ...entity, mapel_nama, jadwal_mengajar, ...totals, per_tanggal }
+    const mapel_list = teaching.mapelByGtk[entity.id] || []
+    return {
+      ...entity,
+      mapel_list,
+      jml_jtm: jtmByGtk.get(entity.id) || 0,
+      jumlah_kehadiran: hadirCount,
+      ...totals,
+      per_tanggal,
+    }
   })
   return {
     entity_type: entityType,

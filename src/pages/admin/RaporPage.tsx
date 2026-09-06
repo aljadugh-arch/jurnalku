@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import api from '../../services/api'
-import { FileText, Zap, Download, RefreshCw, Send } from 'lucide-react'
+import { FileText, Zap, Download, RefreshCw, Send, Save } from 'lucide-react'
 import FoundationTenantPicker from '../../components/FoundationTenantPicker'
 
 export default function RaporPage() {
@@ -15,6 +15,8 @@ export default function RaporPage() {
   const [loading, setLoading] = useState(false)
   const [msg, setMsg] = useState('')
   const [foundationTenantId, setFoundationTenantId] = useState<string | null>(null)
+  const [stsSas, setStsSas] = useState<Record<string, { sts: number | ''; sas: number | '' }>>({})
+  const [savingStsSas, setSavingStsSas] = useState(false)
 
   useEffect(() => { loadRombel() }, [foundationTenantId])
   useEffect(() => { if (selectedRombel) loadSiswa() }, [selectedRombel, foundationTenantId])
@@ -38,13 +40,31 @@ export default function RaporPage() {
     } catch (e) { console.error(e) }
   }
   const loadRapor = async () => {
-    try {
-      const params: any = { siswa_id: selectedSiswa, tahun_ajaran: tahunAjaran, semester, jenis }
-      if (foundationTenantId && foundationTenantId !== 'all') params.tenant_id = foundationTenantId
-      const { data } = await api.get('/foundation/nilai', { params })
-      setRapor(data)
-    } catch (e) { console.error(e) }
-  }
+      try {
+        const params: any = { siswa_id: selectedSiswa, tahun_ajaran: tahunAjaran, semester, jenis }
+        if (foundationTenantId && foundationTenantId !== 'all') params.tenant_id = foundationTenantId
+        const { data } = await api.get(foundationTenantId ? '/foundation/nilai' : '/rapor', { params })
+        setRapor(data)
+        const seed: Record<string, { sts: number | ''; sas: number | '' }> = {}
+        for (const r of data) seed[r.mapel_id] = { sts: r.nilai_sts || '', sas: r.nilai_sas || '' }
+        setStsSas(seed)
+      } catch (e) { console.error(e) }
+    }
+
+    const saveStsSas = async () => {
+      const items = rapor
+        .filter(r => stsSas[r.mapel_id])
+        .map(r => ({ siswa_id: selectedSiswa, mapel_id: r.mapel_id, nilai_sts: stsSas[r.mapel_id]?.sts, nilai_sas: stsSas[r.mapel_id]?.sas }))
+      if (!items.length || foundationTenantId) return setMsg(foundationTenantId ? '✗ Input nilai sumatif hanya untuk data lembaga sendiri (non-yayasan)' : '✗ Belum ada mapel untuk disimpan')
+      setSavingStsSas(true); setMsg('')
+      try {
+        const { data } = await api.post('/rapor/nilai-sumatif', { tahun_ajaran: tahunAjaran, semester, items })
+        setMsg(`✓ ${data.message}`)
+        loadRapor()
+      } catch (e: any) {
+        setMsg(`✗ ${e.response?.data?.error || 'Gagal simpan nilai sumatif'}`)
+      } finally { setSavingStsSas(false) }
+    }
 
   const handleGenerate = async () => {
     if (!selectedRombel) return setMsg('Pilih kelas dulu')
@@ -85,6 +105,11 @@ export default function RaporPage() {
           <button onClick={handleGenerate} disabled={loading || !selectedRombel} className="px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary-dark flex items-center gap-2 disabled:opacity-50">
             <Zap size={16} /> Generate Rapor
           </button>
+          {jenis === 'sumatif' && (
+            <button onClick={saveStsSas} disabled={savingStsSas || !selectedSiswa} className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 flex items-center gap-2 disabled:opacity-50">
+              <Save size={16} /> {savingStsSas ? 'Menyimpan...' : 'Simpan Nilai STS/SAS'}
+            </button>
+          )}
           {jenis === 'akhir' && (
             <button onClick={handleSyncRDM} disabled={loading || !selectedRombel} className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 flex items-center gap-2 disabled:opacity-50">
               <Send size={16} /> Sync ke RDM
@@ -138,6 +163,7 @@ export default function RaporPage() {
             <select value={jenis} onChange={e => setJenis(e.target.value)} className="w-full px-3 py-2 border rounded-lg">
               <option value="tengah">Tengah Semester (PTS)</option>
               <option value="akhir">Akhir Semester (PAS)</option>
+              <option value="sumatif">Sumatif (STS/SAS)</option>
             </select>
           </div>
         </div>
@@ -164,11 +190,16 @@ export default function RaporPage() {
                 <tr>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">No</th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Mata Pelajaran</th>
-                  <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Peng.</th>
-                  <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Ket.</th>
-                  <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Sikap</th>
-                  <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase bg-primary/10">Akhir</th>
-                  <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Predikat</th>
+                  {jenis === 'sumatif' ? (<>
+                    <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Nilai STS</th>
+                    <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Nilai SAS</th>
+                  </>) : (<>
+                    <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Peng.</th>
+                    <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Ket.</th>
+                    <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Sikap</th>
+                    <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase bg-primary/10">Akhir</th>
+                    <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Predikat</th>
+                  </>)}
                 </tr>
               </thead>
               <tbody className="divide-y">
@@ -176,15 +207,20 @@ export default function RaporPage() {
                   <tr key={r.id} className="hover:bg-gray-50">
                     <td className="px-4 py-3 text-sm text-gray-500">{i + 1}</td>
                     <td className="px-4 py-3 text-sm font-medium text-gray-900">{r.mapel_nama}</td>
-                    <td className="px-4 py-3 text-center text-sm">{r.nilai_pengetahuan}</td>
-                    <td className="px-4 py-3 text-center text-sm">{r.nilai_keterampilan}</td>
-                    <td className="px-4 py-3 text-center text-sm">{r.nilai_sikap}</td>
-                    <td className="px-4 py-3 text-center text-lg font-bold text-primary bg-primary/5">{r.nilai_akhir}</td>
-                    <td className="px-4 py-3 text-center">
-                      <span className={`px-2 py-1 rounded text-xs font-bold ${r.predikat === 'A' ? 'bg-green-100 text-green-700' : r.predikat === 'B' ? 'bg-blue-100 text-blue-700' : r.predikat === 'C' ? 'bg-yellow-100 text-yellow-700' : 'bg-red-100 text-red-700'}`}>
-                        {r.predikat}
-                      </span>
-                    </td>
+                    {jenis === 'sumatif' ? (<>
+                      <td className="px-4 py-3 text-center text-sm"><input type="number" min={0} max={100} value={stsSas[r.mapel_id]?.sts ?? ''} onChange={e => setStsSas(prev => ({ ...prev, [r.mapel_id]: { sts: e.target.value === '' ? '' : Math.max(0, Math.min(100, Number(e.target.value))), sas: prev[r.mapel_id]?.sas ?? '' } }))} className="w-20 px-2 py-1 border rounded text-center" /></td>
+                      <td className="px-4 py-3 text-center text-sm"><input type="number" min={0} max={100} value={stsSas[r.mapel_id]?.sas ?? ''} onChange={e => setStsSas(prev => ({ ...prev, [r.mapel_id]: { sts: prev[r.mapel_id]?.sts ?? '', sas: e.target.value === '' ? '' : Math.max(0, Math.min(100, Number(e.target.value))) } }))} className="w-20 px-2 py-1 border rounded text-center" /></td>
+                    </>) : (<>
+                      <td className="px-4 py-3 text-center text-sm">{r.nilai_pengetahuan}</td>
+                      <td className="px-4 py-3 text-center text-sm">{r.nilai_keterampilan}</td>
+                      <td className="px-4 py-3 text-center text-sm">{r.nilai_sikap}</td>
+                      <td className="px-4 py-3 text-center text-lg font-bold text-primary bg-primary/5">{r.nilai_akhir}</td>
+                      <td className="px-4 py-3 text-center">
+                        <span className={`px-2 py-1 rounded text-xs font-bold ${r.predikat === 'A' ? 'bg-green-100 text-green-700' : r.predikat === 'B' ? 'bg-blue-100 text-blue-700' : r.predikat === 'C' ? 'bg-yellow-100 text-yellow-700' : 'bg-red-100 text-red-700'}`}>
+                          {r.predikat}
+                        </span>
+                      </td>
+                    </>)}
                   </tr>
                 ))}
               </tbody>
@@ -197,20 +233,38 @@ export default function RaporPage() {
               <div key={r.id} className="bg-gray-50 rounded-lg p-3 border border-gray-100">
                 <div className="flex items-start justify-between gap-2 mb-2">
                   <p className="font-medium text-gray-900 text-sm min-w-0 break-words">{i + 1}. {r.mapel_nama}</p>
-                  <span className={`shrink-0 px-2 py-0.5 rounded text-xs font-bold ${r.predikat === 'A' ? 'bg-green-100 text-green-700' : r.predikat === 'B' ? 'bg-blue-100 text-blue-700' : r.predikat === 'C' ? 'bg-yellow-100 text-yellow-700' : 'bg-red-100 text-red-700'}`}>{r.predikat}</span>
                 </div>
-                <div className="grid grid-cols-4 gap-1 text-center text-xs">
-                  <div><p className="text-gray-500">Peng.</p><p className="font-medium">{r.nilai_pengetahuan}</p></div>
-                  <div><p className="text-gray-500">Ket.</p><p className="font-medium">{r.nilai_keterampilan}</p></div>
-                  <div><p className="text-gray-500">Sikap</p><p className="font-medium">{r.nilai_sikap}</p></div>
-                  <div className="bg-primary/5 rounded"><p className="text-gray-500">Akhir</p><p className="font-bold text-primary">{r.nilai_akhir}</p></div>
-                </div>
+                {jenis === 'sumatif' ? (
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <p className="text-xs text-gray-500">Nilai STS</p>
+                      <input type="number" min={0} max={100} value={stsSas[r.mapel_id]?.sts ?? ''} onChange={e => setStsSas(prev => ({ ...prev, [r.mapel_id]: { sts: e.target.value === '' ? '' : Math.max(0, Math.min(100, Number(e.target.value))), sas: prev[r.mapel_id]?.sas ?? '' } }))} className="w-full px-2 py-1.5 border rounded text-sm" />
+                    </div>
+                    <div>
+                      <p className="text-xs text-gray-500">Nilai SAS</p>
+                      <input type="number" min={0} max={100} value={stsSas[r.mapel_id]?.sas ?? ''} onChange={e => setStsSas(prev => ({ ...prev, [r.mapel_id]: { sts: prev[r.mapel_id]?.sts ?? '', sas: e.target.value === '' ? '' : Math.max(0, Math.min(100, Number(e.target.value))) } }))} className="w-full px-2 py-1.5 border rounded text-sm" />
+                    </div>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-4 gap-1 text-center text-xs">
+                    <div><p className="text-gray-500">Peng.</p><p className="font-medium">{r.nilai_pengetahuan}</p></div>
+                    <div><p className="text-gray-500">Ket.</p><p className="font-medium">{r.nilai_keterampilan}</p></div>
+                    <div><p className="text-gray-500">Sikap</p><p className="font-medium">{r.nilai_sikap}</p></div>
+                    <div className="bg-primary/5 rounded"><p className="text-gray-500">Akhir</p><p className="font-bold text-primary">{r.nilai_akhir}</p></div>
+                  </div>
+                )}
               </div>
             ))}
           </div>
           <div className="p-6 border-t bg-gray-50 text-xs text-gray-600">
-            <p><strong>Formula:</strong> Nilai Akhir = (Pengetahuan × 50%) + (Keterampilan × 30%) + (Sikap × 20%)</p>
-            <p className="mt-1"><strong>Predikat:</strong> A ≥ 90 | B ≥ 80 | C ≥ 70 | D &lt; 70</p>
+            {jenis === 'sumatif' ? (
+              <p><strong>STS:</strong> Sumatif Tengah Semester · <strong>SAS:</strong> Sumatif Akhir Semester. Nilai ini dipakai saat Generate Rapor (tengah/akhir).</p>
+            ) : (
+              <>
+                <p><strong>Formula:</strong> Nilai Akhir = (Pengetahuan × 50%) + (Keterampilan × 30%) + (Sikap × 20%)</p>
+                <p className="mt-1"><strong>Predikat:</strong> A ≥ 90 | B ≥ 80 | C ≥ 70 | D &lt; 70</p>
+              </>
+            )}
           </div>
         </div>
       )}
@@ -218,7 +272,9 @@ export default function RaporPage() {
       {selectedSiswa && rapor.length === 0 && (
         <div className="bg-white rounded-xl border p-12 text-center text-gray-400">
           <FileText size={48} className="mx-auto mb-4 opacity-50" />
-          <p>Belum ada rapor. Klik <strong>Generate Rapor</strong> untuk auto-generate dari penilaian harian.</p>
+          {jenis === 'sumatif'
+            ? <p>Belum ada nilai sumatif. Isi STS dan SAS lalu klik <strong>Simpan Nilai STS/SAS</strong>.</p>
+            : <p>Belum ada rapor. Klik <strong>Generate Rapor</strong> untuk auto-generate dari penilaian harian.</p>}
         </div>
       )}
 

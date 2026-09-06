@@ -60,9 +60,9 @@ function GtkRecapTable({ data }: { data: any[] }) {
             <th className="text-left px-4 py-3 font-medium text-gray-600">Nama GTK</th>
             <th className="text-left px-4 py-3 font-medium text-gray-600">NIP</th>
             <th className="text-left px-4 py-3 font-medium text-gray-600">Jabatan</th>
-            <th className="text-left px-4 py-3 font-medium text-gray-600">Mata Pelajaran</th>
-            <th className="text-left px-4 py-3 font-medium text-gray-600">Jadwal Mengajar</th>
-            <th className="text-center px-4 py-3 font-medium text-blue-600">Hadir</th>
+            <th className="text-left px-4 py-3 font-medium text-gray-600">Mata Pelajaran Diampu</th>
+            <th className="text-center px-4 py-3 font-medium text-gray-600">Jumlah JTM</th>
+            <th className="text-center px-4 py-3 font-medium text-emerald-600">Jumlah Kehadiran</th>
             <th className="text-center px-4 py-3 font-medium text-yellow-600">Sakit</th>
             <th className="text-center px-4 py-3 font-medium text-purple-600">Izin</th>
             <th className="text-center px-4 py-3 font-medium text-red-600">Alpha</th>
@@ -75,9 +75,9 @@ function GtkRecapTable({ data }: { data: any[] }) {
               <td className="px-4 py-3 font-medium text-gray-800">{gtk.nama}</td>
               <td className="px-4 py-3 text-gray-600 text-xs">{gtk.nip || '-'}</td>
               <td className="px-4 py-3 text-gray-600">{gtk.jabatan || '-'}</td>
-              <td className="px-4 py-3 text-gray-600 min-w-48">{gtk.mapel_nama?.length ? gtk.mapel_nama.join(', ') : '-'}</td>
-              <td className="px-4 py-3 text-gray-600 min-w-72"><div className="space-y-1">{gtk.jadwal_mengajar?.length ? gtk.jadwal_mengajar.map((j: any) => <div key={`${j.jadwal_id}-${j.tanggal}`} className="text-xs"><span className="font-medium">{j.tanggal} · {j.jam_mulai}-{j.jam_selesai}</span> · {j.mapel_nama || '-'} · {j.rombel_nama || '-'}</div>) : '-'}</div></td>
-              <td className="px-4 py-3 text-center font-medium text-blue-600">{gtk.hadir}</td>
+              <td className="px-4 py-3 text-gray-600 min-w-48">{gtk.mapel_list?.length ? gtk.mapel_list.join(', ') : '-'}</td>
+              <td className="px-4 py-3 text-center font-medium text-gray-800">{gtk.jml_jtm}</td>
+              <td className="px-4 py-3 text-center font-medium text-emerald-700">{gtk.jumlah_kehadiran}</td>
               <td className="px-4 py-3 text-center font-medium text-yellow-600">{gtk.sakit}</td>
               <td className="px-4 py-3 text-center font-medium text-purple-600">{gtk.izin}</td>
               <td className="px-4 py-3 text-center font-medium text-red-600">{gtk.alpha}</td>
@@ -109,7 +109,6 @@ export default function RekapAbsensiPage() {
   const [rekapSiswa, setRekapSiswa] = useState<any[]>([])
   const [rekapGtk, setRekapGtk] = useState<any[]>([])
   const [summary, setSummary] = useState<any>({ hadir: 0, sakit: 0, izin: 0, alpha: 0 })
-  const [schedule, setSchedule] = useState<any[]>([])
   const [breakdown, setBreakdown] = useState<any>({ granularity: 'record', items: [] })
   const [reportPeriod, setReportPeriod] = useState({ from: todayWib(), to: todayWib(), label: '' })
   const [semester, setSemester] = useState<'ganjil' | 'genap'>(() => Number(todayWib().slice(5, 7)) >= 7 ? 'ganjil' : 'genap')
@@ -156,7 +155,6 @@ export default function RekapAbsensiPage() {
       if (tab === 'siswa') setRekapSiswa(res.data.detail)
       else setRekapGtk(res.data.detail)
       setSummary(res.data.summary)
-      setSchedule(res.data.schedule || [])
       setBreakdown(res.data.breakdown || { granularity: 'record', items: [] })
       setReportPeriod({ from: res.data.from, to: res.data.to, label: res.data.label || '' })
     } catch { /* empty */ }
@@ -183,12 +181,12 @@ export default function RekapAbsensiPage() {
       ? ['No', 'Nama', 'NIS/NISN', 'Rombel', 'Kegiatan/Mapel', 'Hadir', 'Sakit', 'Izin', 'Alpha', 'Lain', 'Total', '% Hadir']
       : tab === 'siswa'
         ? ['No', 'Nama', 'NIS', 'Rombel', 'Hadir', 'Sakit', 'Izin', 'Alpha', '% Hadir']
-        : ['No', 'Nama GTK', 'NIP', 'Jabatan', 'Mata Pelajaran', 'Jadwal Mengajar', 'Hadir', 'Sakit', 'Izin', 'Alpha', '% Hadir']
+        : ['No', 'Nama GTK', 'NIP', 'Jabatan', 'Mata Pelajaran Diampu', 'Jumlah JTM', 'Jumlah Kehadiran', 'Sakit', 'Izin', 'Alpha', '% Hadir']
     const rows = data.map((d: any, i: number) => isCategory
       ? [i + 1, d.nama, d.nisn || d.nis || '', d.rombel_nama || '', d.kegiatan_nama || '', d.hadir, d.sakit, d.izin, d.alpha, d.lain, d.total, d.total > 0 ? Math.round(d.hadir / d.total * 100) + '%' : '0%']
       : tab === 'siswa'
         ? [i + 1, d.nama, d.nis || '', d.rombel_nama || '', d.hadir, d.sakit, d.izin, d.alpha, d.total > 0 ? Math.round(d.hadir / d.total * 100) + '%' : '0%']
-        : [i + 1, d.nama, d.nip || '', d.jabatan || '', (d.mapel_nama || []).join(', '), (d.jadwal_mengajar || []).map((j: any) => `${j.tanggal} ${j.jam_mulai}-${j.jam_selesai} ${j.mapel_nama || '-'} ${j.rombel_nama || '-'}`).join(' | '), d.hadir, d.sakit, d.izin, d.alpha, d.total > 0 ? Math.round(d.hadir / d.total * 100) + '%' : '0%'])
+        : [i + 1, d.nama, d.nip || '', d.jabatan || '', (d.mapel_list || []).join(', '), d.jml_jtm, d.jumlah_kehadiran, d.sakit, d.izin, d.alpha, d.total > 0 ? Math.round(d.hadir / d.total * 100) + '%' : '0%'])
     const ws = XLSX.utils.aoa_to_sheet([
       [`Rekapitulasi Absensi ${categoryLabel}`],
       [tenant.name],
@@ -276,13 +274,6 @@ export default function RekapAbsensiPage() {
         {mode === 'semester' && <><input value={tahunAjaran} onChange={e => setTahunAjaran(e.target.value)} placeholder="2026/2027" className="px-3 py-2 border rounded-lg text-sm w-32" /><select value={semester} onChange={e => setSemester(e.target.value as 'ganjil' | 'genap')} className="px-3 py-2 border rounded-lg text-sm"><option value="ganjil">Ganjil</option><option value="genap">Genap</option></select></>}
         <span className="text-xs text-gray-500">{reportPeriod.label}</span>
       </div>
-
-      {category === 'kehadiran' && tab === 'gtk' && schedule.length > 0 && (
-        <div className="bg-sky-50 border border-sky-100 rounded-xl p-4">
-          <h3 className="text-sm font-semibold text-sky-900">Jadwal mengajar guru pada periode ini</h3>
-          <div className="mt-2 flex flex-wrap gap-2">{schedule.map((j: any) => <span key={`${j.jadwal_id}-${j.tanggal}`} className="text-xs bg-white border border-sky-100 rounded-lg px-2 py-1">{j.tanggal} · {j.guru_nama || 'GTK'} · {j.mapel_nama || '-'} · {j.rombel_nama || '-'}</span>)}</div>
-        </div>
-      )}
 
       {category === 'kehadiran' && breakdown.items.length > 0 && (
         <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100">

@@ -7,6 +7,7 @@ const root = path.join(__dirname, '..')
 const read = file => fs.readFileSync(path.join(root, file), 'utf8')
 
 const soundLib = read('src/lib/feedbackSound.ts')
+const serverIndex = read('server/index.cjs')
 const guruCeklok = read('src/pages/guru/GuruAbsensiPage.tsx')
 const adminCeklok = read('src/pages/admin/CekLokAdminPage.tsx')
 const qrPage = read('src/pages/admin/AbsensiSiswaPage.tsx')
@@ -15,6 +16,8 @@ test('helper suara memakai WebAudio bawaan tanpa aset biner agar tetap jalan off
   assert.match(soundLib, /window\.AudioContext \|\| \(window as any\)\.webkitAudioContext/)
   assert.match(soundLib, /export function primeFeedbackSound\(\)/)
   assert.match(soundLib, /export function playFeedbackSound\(/)
+  assert.match(soundLib, /export function announceAttendanceSuccess\(/)
+  assert.match(soundLib, /export function announceStudentScanSuccess\(/)
   // Tidak boleh bergantung pada file audio eksternal.
   assert.doesNotMatch(soundLib, /\.mp3|\.wav|\.ogg|new Audio\(/)
 })
@@ -32,31 +35,43 @@ test('nada masuk dan pulang berbeda, plus nada khusus duplikat dan gagal', () =>
   const masuk = soundLib.match(/masuk:\s*\{[^}]*\}/)[0]
   const pulang = soundLib.match(/pulang:\s*\{[^}]*\}/)[0]
   assert.notEqual(masuk, pulang, 'nada masuk dan pulang tidak boleh identik')
+  assert.match(masuk, /gain: 0\.28/, 'nada sukses harus lebih keras')
 })
 
-test('ceklok guru membunyikan nada sesuai sesi masuk atau pulang', () => {
-  assert.match(guruCeklok, /import \{ playFeedbackSound, primeFeedbackSound \} from '\.\.\/\.\.\/lib\/feedbackSound'/)
+test('helper suara mengucapkan nama depan dengan TTS Indonesia yang jelas dan volume penuh', () => {
+  assert.match(soundLib, /window\.speechSynthesis/)
+  assert.match(soundLib, /SpeechSynthesisUtterance/)
+  assert.match(soundLib, /utterance\.lang = 'id-ID'/)
+  assert.match(soundLib, /utterance\.volume = 1/)
+  assert.match(soundLib, /utterance\.rate = 0\.88/)
+  assert.match(soundLib, /firstName\(name\)/)
+  assert.match(soundLib, /speakClear\(`\$\{nickname\} \$\{session\}`\)/)
+})
+
+test('ceklok guru membunyikan ucapan nama sesuai sesi masuk atau pulang', () => {
+  assert.match(guruCeklok, /import \{ announceAttendanceSuccess, playFeedbackSound, primeFeedbackSound \} from '\.\.\/\.\.\/lib\/feedbackSound'/)
   const handler = guruCeklok.slice(guruCeklok.indexOf('const handleCeklok'), guruCeklok.indexOf('return ('))
   assert.match(handler, /primeFeedbackSound\(\)/)
-  assert.match(handler, /playFeedbackSound\(type === 'masuk' \? 'masuk' : 'pulang'\)/)
+  assert.match(handler, /announceAttendanceSuccess\(res\.data\?\.gtk\?\.nama, type\)/)
   assert.match(handler, /playFeedbackSound\('error'\)/)
 })
 
-test('ceklok admin atau kepala juga berbunyi pada sesi masuk dan pulang', () => {
-  assert.match(adminCeklok, /import \{ playFeedbackSound, primeFeedbackSound \} from '\.\.\/\.\.\/lib\/feedbackSound'/)
+test('ceklok admin atau kepala juga mengucapkan nama pada sesi masuk dan pulang', () => {
+  assert.match(adminCeklok, /import \{ announceAttendanceSuccess, playFeedbackSound, primeFeedbackSound \} from '\.\.\/\.\.\/lib\/feedbackSound'/)
   const handler = adminCeklok.slice(adminCeklok.indexOf('const handleCeklok'), adminCeklok.indexOf('const filtered'))
   assert.match(handler, /primeFeedbackSound\(\)/)
-  assert.match(handler, /playFeedbackSound\(type === 'masuk' \? 'masuk' : 'pulang'\)/)
+  assert.match(handler, /announceAttendanceSuccess\(res\.data\?\.gtk\?\.nama, type\)/)
   assert.match(handler, /playFeedbackSound\('error'\)/)
 })
 
-test('scan QR siswa berbunyi sesuai sesi yang dikembalikan server, bukan sesi pilihan UI', () => {
-  assert.match(qrPage, /import \{ playFeedbackSound, primeFeedbackSound \} from '\.\.\/\.\.\/lib\/feedbackSound'/)
+test('scan QR siswa mengucapkan nama depan sesuai sesi yang dikembalikan server, bukan sesi pilihan UI', () => {
+  assert.match(qrPage, /import \{ announceStudentScanSuccess, playFeedbackSound, primeFeedbackSound \} from '\.\.\/\.\.\/lib\/feedbackSound'/)
   const announce = qrPage.slice(qrPage.indexOf('const announceScanResult'), qrPage.indexOf('const startQrCamera'))
   assert.notEqual(announce, '', 'helper announceScanResult belum ada')
+  assert.match(announce, /data\?\.siswa\?\.nama/)
   assert.match(announce, /data\?\.sesi === 'pulang' \? 'pulang' : 'masuk'/)
   assert.match(announce, /data\?\.already/)
-  assert.match(announce, /playFeedbackSound\('duplicate'\)/)
+  assert.match(announce, /announceStudentScanSuccess/)
 })
 
 test('kedua jalur scan QR (kamera dan token manual) memakai helper suara yang sama', () => {
@@ -66,6 +81,11 @@ test('kedua jalur scan QR (kamera dan token manual) memakai helper suara yang sa
   assert.match(manual, /announceScanResult\(r\.data\)/)
   assert.match(camera, /playFeedbackSound\('error'\)/)
   assert.match(manual, /playFeedbackSound\('error'\)/)
+})
+
+test('backend ceklok guru mengembalikan nama GTK untuk ucapan suara', () => {
+  const route = serverIndex.slice(serverIndex.indexOf("app.post('/api/guru/ceklok'"), serverIndex.indexOf('// ==================== JAMAAH'))
+  assert.match(route, /gtk: \{ id: gtk\.id, nama: gtk\.nama \}/)
 })
 
 test('AudioContext dibuka pada gestur pengguna agar autoplay policy tidak memblokir suara scan', () => {

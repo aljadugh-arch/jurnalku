@@ -3,7 +3,7 @@ import { MapPin, Clock, Loader2, CheckCircle } from 'lucide-react'
 import toast from 'react-hot-toast'
 import api from '../../services/api'
 import { useSettingsStore } from '../../stores/settingsStore'
-import { playFeedbackSound, primeFeedbackSound } from '../../lib/feedbackSound'
+import { announceAttendanceSuccess, playFeedbackSound, primeFeedbackSound } from '../../lib/feedbackSound'
 
 export default function GuruAbsensiPage() {
   const settings = useSettingsStore(s => s.settings)
@@ -48,7 +48,7 @@ export default function GuruAbsensiPage() {
         return
       }
       const res = await api.post('/guru/ceklok', { type, latitude: loc.lat, longitude: loc.lng, accuracy: loc.acc })
-      playFeedbackSound(type === 'masuk' ? 'masuk' : 'pulang')
+      announceAttendanceSuccess(res.data?.gtk?.nama, type)
       toast.success(type === 'masuk' ? `Ceklok masuk berhasil: ${res.data.waktu_masuk}` : `Ceklok pulang berhasil: ${res.data.waktu_pulang}`)
       loadData()
     } catch (err: any) {

@@ -1,18 +1,19 @@
 import { useState, useEffect } from 'react'
-import { Calendar, CheckSquare, Edit, Plus, Search, Square, Trash2, Users, X } from 'lucide-react'
+import { Calendar, CheckSquare, Edit, Plus, RefreshCw, Search, Square, Trash2, Users, X } from 'lucide-react'
 import toast from 'react-hot-toast'
 import api from '../../services/api'
 
 interface Ekskul {
   id: string; nama: string; pembina_id?: string; pembina_nama?: string
   hari?: string; jam_mulai?: string; jam_selesai?: string; deskripsi?: string; jumlah_anggota?: number
+  jenis_kegiatan?: string; scope_rombel?: string
 }
 
 interface Siswa { id: string; nis?: string; nama: string; rombel_id?: string; rombel_nama?: string; status?: string }
 interface Rombel { id: string; nama: string }
 
 const HARI = ['Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu', 'Minggu']
-const emptyForm = { nama: '', pembina_id: '', hari: '', jam_mulai: '', jam_selesai: '', deskripsi: '' }
+const emptyForm = { nama: '', pembina_id: '', hari: '', jam_mulai: '', jam_selesai: '', deskripsi: '', jenis_kegiatan: 'pilihan', scope_rombel: '' }
 
 export default function EkskulPage() {
   const [data, setData] = useState<Ekskul[]>([])
@@ -55,6 +56,18 @@ export default function EkskulPage() {
       toast.error(err.response?.data?.error || 'Gagal memuat anggota ekskul')
       setMemberEkskul(null)
     } finally { setMemberLoading(false) }
+  }
+
+  const setAutoMembers = async () => {
+    if (!memberEkskul) return
+    setMemberSaving(true)
+    try {
+      const res = await api.post('/ekskul/' + memberEkskul.id + '/anggota', { siswa_ids: [] })
+      toast.success(res.data?.message || `${res.data?.count || 0} anggota otomatis disinkronkan`)
+      setSelectedMembers(new Set((await api.get('/ekskul/' + memberEkskul.id + '/anggota')).data.map((item: Siswa) => item.id)))
+      fetchData()
+    } catch (err: any) { toast.error(err.response?.data?.error || 'Gagal sinkron anggota') }
+    finally { setMemberSaving(false) }
   }
 
   const visibleStudents = siswa.filter(s => {
@@ -106,7 +119,8 @@ export default function EkskulPage() {
   const handleEdit = (e: Ekskul) => {
     setForm({
       nama: e.nama, pembina_id: e.pembina_id || '', hari: e.hari || '',
-      jam_mulai: e.jam_mulai || '', jam_selesai: e.jam_selesai || '', deskripsi: e.deskripsi || ''
+      jam_mulai: e.jam_mulai || '', jam_selesai: e.jam_selesai || '', deskripsi: e.deskripsi || '',
+      jenis_kegiatan: e.jenis_kegiatan || 'pilihan', scope_rombel: e.scope_rombel || ''
     })
     setEditId(e.id); setShowModal(true)
   }
@@ -155,6 +169,9 @@ export default function EkskulPage() {
                     )}
                     {e.deskripsi && <p className="text-xs text-gray-400 mt-2 line-clamp-2">{e.deskripsi}</p>}
                     <p className="text-xs font-medium text-purple-600 mt-2">{e.jumlah_anggota || 0} siswa mengikuti</p>
+                    <span className={`inline-flex items-center gap-1 mt-2 text-[10px] font-bold px-2 py-0.5 rounded-full ${e.jenis_kegiatan === 'wajib' ? 'bg-amber-100 text-amber-700' : 'bg-sky-100 text-sky-700'}`}>
+                      {e.jenis_kegiatan === 'wajib' ? 'WAJIB' : 'PILIHAN'}{e.jenis_kegiatan === 'wajib' && e.scope_rombel ? ` • ${rombels.find(r => r.id === e.scope_rombel)?.nama || 'Rombel tertentu'}` : ''}
+                    </span>
                   </div>
                 </div>
                 <div className="flex flex-col gap-1 flex-shrink-0">
@@ -174,8 +191,13 @@ export default function EkskulPage() {
             <div className="flex items-start justify-between gap-3 px-4 sm:px-6 py-4 border-b">
               <div className="min-w-0">
                 <h2 className="text-lg font-bold text-gray-800">Atur Anggota {memberEkskul.nama}</h2>
-                <p className="text-sm text-gray-500 mt-0.5">Pilih siswa yang mengikuti kegiatan ini. Hanya siswa terpilih yang tampil di absensi.</p>
+                <p className="text-sm text-gray-500 mt-0.5">{memberEkskul.jenis_kegiatan === 'wajib' ? 'Anggota otomatis mengikuti seluruh siswa (atau rombel). Klik "Sinkron Otomatis" untuk memperbarui daftar.' : 'Pilih siswa yang mengikuti kegiatan ini. Hanya siswa terpilih yang tampil di absensi.'}</p>
               </div>
+              {memberEkskul.jenis_kegiatan === 'wajib' && (
+                <button onClick={setAutoMembers} disabled={memberSaving || memberLoading} className="inline-flex shrink-0 items-center gap-2 px-3 py-2 bg-amber-500 text-white rounded-lg text-sm hover:bg-amber-600 disabled:opacity-50">
+                  <RefreshCw size={15} /> {memberSaving ? 'Menyinkronkan...' : 'Sinkron Otomatis'}
+                </button>
+              )}
               <button aria-label="Tutup pemilih anggota" onClick={() => setMemberEkskul(null)} className="p-1.5 hover:bg-gray-100 rounded-lg shrink-0"><X size={20} /></button>
             </div>
             <div className="p-4 sm:px-6 border-b space-y-3">
@@ -223,6 +245,29 @@ export default function EkskulPage() {
                 <label className="block text-sm font-medium text-gray-600 mb-1">Nama Ekskul *</label>
                 <input type="text" value={form.nama} onChange={e => setForm({ ...form, nama: e.target.value })} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" placeholder="Pramuka, Tahfidz, Futsal, dll" />
               </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-600 mb-1.5">Jenis Kegiatan</label>
+                <div className="grid grid-cols-2 gap-2">
+                  <label className={`flex items-start gap-2 rounded-xl border p-3 cursor-pointer ${form.jenis_kegiatan === 'wajib' ? 'border-amber-400 bg-amber-50' : 'border-gray-200'}`}>
+                    <input type="radio" name="jenis_kegiatan" checked={form.jenis_kegiatan === 'wajib'} onChange={() => setForm({ ...form, jenis_kegiatan: 'wajib', scope_rombel: form.scope_rombel || '' })} className="mt-0.5 h-4 w-4 text-amber-600" />
+                    <span className="text-sm"><strong className="text-gray-800">WAJIB</strong><span className="block text-xs text-gray-500 mt-0.5">Seluruh siswa aktif ikut, atau dibatasi rombel tertentu.</span></span>
+                  </label>
+                  <label className={`flex items-start gap-2 rounded-xl border p-3 cursor-pointer ${form.jenis_kegiatan === 'pilihan' ? 'border-sky-400 bg-sky-50' : 'border-gray-200'}`}>
+                    <input type="radio" name="jenis_kegiatan" checked={form.jenis_kegiatan !== 'wajib'} onChange={() => setForm({ ...form, jenis_kegiatan: 'pilihan', scope_rombel: '' })} className="mt-0.5 h-4 w-4 text-sky-600" />
+                    <span className="text-sm"><strong className="text-gray-800">PILIHAN</strong><span className="block text-xs text-gray-500 mt-0.5">Siswa dipilih manual satu per satu.</span></span>
+                  </label>
+                </div>
+              </div>
+              {form.jenis_kegiatan === 'wajib' && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-600 mb-1">Scope Rombel <span className="text-gray-400">(opsional)</span></label>
+                  <select value={form.scope_rombel} onChange={e => setForm({ ...form, scope_rombel: e.target.value })} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm">
+                    <option value="">Seluruh siswa aktif</option>
+                    {rombels.map(r => <option key={r.id} value={r.id}>{r.nama}</option>)}
+                  </select>
+                  <p className="text-xs text-gray-400 mt-1">Kosongkan untuk mengikutkan semua siswa aktif lembaga.</p>
+                </div>
+              )}
               <div>
                 <label className="block text-sm font-medium text-gray-600 mb-1">Pembina</label>
                 <select value={form.pembina_id} onChange={e => setForm({ ...form, pembina_id: e.target.value })} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm">

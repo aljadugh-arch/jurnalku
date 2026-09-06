@@ -468,6 +468,8 @@ db.exec(`
     nilai_keterampilan INTEGER DEFAULT 0,
     nilai_sikap INTEGER DEFAULT 0,
     nilai_akhir INTEGER DEFAULT 0,
+    nilai_sts INTEGER DEFAULT 0,
+    nilai_sas INTEGER DEFAULT 0,
     predikat TEXT,
     deskripsi TEXT,
     kkm INTEGER DEFAULT 70,
@@ -578,6 +580,8 @@ db.exec(`
     jam_mulai TEXT,
     jam_selesai TEXT,
     deskripsi TEXT,
+    jenis_kegiatan TEXT DEFAULT 'pilihan',
+    scope_rombel TEXT,
     FOREIGN KEY (pembina_id) REFERENCES gtk(id)
   );
 
@@ -808,6 +812,25 @@ ensureTenantSettings(db, 'default')
 setupEkskulMembership(db)
 setupSubscriptionTables(db)
 migrateTenantSettings(db)
+
+// Migrasi ekskul: tambahkan kolom jenis_kegiatan (wajib/pilihan) dan scope_rombel
+// untuk database lama. CREATE TABLE IF NOT EXISTS tidak mengubah tabel yang sudah ada.
+try {
+  const ekskulCols = db.prepare('PRAGMA table_info(ekskul)').all()
+  if (!ekskulCols.some(col => col.name === 'jenis_kegiatan')) {
+    db.exec("ALTER TABLE ekskul ADD COLUMN jenis_kegiatan TEXT DEFAULT 'pilihan'")
+  }
+  if (!ekskulCols.some(col => col.name === 'scope_rombel')) {
+    db.exec('ALTER TABLE ekskul ADD COLUMN scope_rombel TEXT')
+  }
+} catch (e) { console.error('[migrate] ekskul jenis_kegiatan/scope_rombel failed', e.message) }
+
+// Migrasi rapor: kolom nilai_sts dan nilai_sas untuk input nilai sumatif.
+try {
+  const raporCols = db.prepare('PRAGMA table_info(rapor)').all()
+  if (!raporCols.some(col => col.name === 'nilai_sts')) db.exec('ALTER TABLE rapor ADD COLUMN nilai_sts INTEGER DEFAULT 0')
+  if (!raporCols.some(col => col.name === 'nilai_sas')) db.exec('ALTER TABLE rapor ADD COLUMN nilai_sas INTEGER DEFAULT 0')
+} catch (e) { console.error('[migrate] rapor nilai_sts/nilai_sas failed', e.message) }
 
 // Migrasi: kolom UNIQUE global (nip/nis/kode) peninggalan pra-multi-tenant bikin
 // import/edit gagal begitu ada NIP/NIS kosong kedua atau kode sama antar-sekolah.
@@ -2786,6 +2809,34 @@ app.delete('/api/rombel/:id', ADMIN, (req, res) => {
 })
 
 // ==================== EKSKUL ====================
+// Ekskul dapat bersifat WAJIB (semua siswa aktif ikut, atau dibatasi ke scope_rombel)
+// atau PILIHAN (siswa dipilih manual satu per satu). Ekskul wajib menghitung keanggotaan
+// efektif dari siswa aktif pada saat itu, sehingga siswa baru otomatis ikut serta.
+function ekskulJenis(db, ekskulId, tenantId) {
+  const row = db.prepare('SELECT jenis_kegiatan, scope_rombel FROM ekskul WHERE id=? AND tenant_id=?').get(ekskulId, tenantId)
+  return row || null
+}
+
+// Sinkronkan daftar anggota untuk ekskul WAJIB: penuhi dari seluruh siswa aktif tenant,
+// atau bila scope_rombel terisi, hanya siswa aktif pada rombel itu. Siswa di luar scope
+// dikeluarkan (misal pindah rombel). Ekskul PILIHAN tidak disentuh oleh otomatisasi ini.
+function syncWajibEkskulMembers(db, ekskulId, tenantId) {
+  const info = ekskulJenis(db, ekskulId, tenantId)
+  if (!info || String(info.jenis_kegiatan || 'pilihan') !== 'wajib') return 0
+  const scope = String(info.scope_rombel || '').trim()
+  const scopeClause = scope ? ' AND s.rombel_id=?' : ''
+  db.prepare(`DELETE FROM ekskul_anggota WHERE ekskul_id=? AND tenant_id=? AND siswa_id NOT IN (
+      SELECT s.id FROM siswa s WHERE s.tenant_id=? AND COALESCE(s.status,'aktif')='aktif'${scopeClause})`)
+    .run(...[ekskulId, tenantId, tenantId, ...(scope ? [scope] : [])])
+  const candidates = db.prepare(`SELECT id FROM siswa s WHERE s.tenant_id=? AND COALESCE(s.status,'aktif')='aktif'${scopeClause}`)
+    .all(...[tenantId, ...(scope ? [scope] : [])])
+  const insert = db.prepare('INSERT OR IGNORE INTO ekskul_anggota (id, ekskul_id, siswa_id, tenant_id) VALUES (?,?,?,?)')
+  let added = 0
+  db.transaction(() => {
+    for (const s of candidates) { insert.run(uuidv4(), ekskulId, s.id, tenantId); added++ }
+  })()
+  return added
+}
 app.get('/api/ekskul', authMiddleware, (req, res) => {
   const rows = db.prepare(`SELECT e.*, g.nama as pembina_nama,
     (SELECT COUNT(*) FROM ekskul_anggota ea WHERE ea.ekskul_id=e.id AND ea.tenant_id=e.tenant_id) as jumlah_anggota
@@ -2806,19 +2857,25 @@ app.get('/api/guru/ekskul', STAFF, (req, res) => {
 
 app.post('/api/ekskul', ADMIN, (req, res) => {
   const id = uuidv4()
-  const { nama, pembina_id, hari, jam_mulai, jam_selesai, deskripsi } = req.body
+  const { nama, pembina_id, hari, jam_mulai, jam_selesai, deskripsi, jenis_kegiatan, scope_rombel } = req.body
   if (!isStr(nama)) return res.status(400).json({ error: 'Nama ekstrakurikuler wajib diisi' })
   if (pembina_id && !db.prepare('SELECT id FROM gtk WHERE id=? AND tenant_id=?').get(pembina_id, req.tenantId)) return res.status(400).json({ error: 'Pembina tidak ditemukan pada lembaga ini' })
-  db.prepare('INSERT INTO ekskul (id, nama, pembina_id, hari, jam_mulai, jam_selesai, deskripsi, tenant_id) VALUES (?,?,?,?,?,?,?,?)').run(id, nama, pembina_id || null, hari, jam_mulai, jam_selesai, deskripsi || '', req.tenantId)
+  const jenis = ['wajib', 'pilihan'].includes(jenis_kegiatan) ? jenis_kegiatan : 'pilihan'
+  db.prepare('INSERT INTO ekskul (id, nama, pembina_id, hari, jam_mulai, jam_selesai, deskripsi, tenant_id, jenis_kegiatan, scope_rombel) VALUES (?,?,?,?,?,?,?,?,?,?)')
+    .run(id, nama, pembina_id || null, hari, jam_mulai, jam_selesai, deskripsi || '', req.tenantId, jenis, scope_rombel || null)
+  if (jenis === 'wajib') syncWajibEkskulMembers(db, id, req.tenantId)
   res.json({ id })
 })
 
 app.put('/api/ekskul/:id', ADMIN, (req, res) => {
-  const { nama, pembina_id, hari, jam_mulai, jam_selesai, deskripsi } = req.body
+  const { nama, pembina_id, hari, jam_mulai, jam_selesai, deskripsi, jenis_kegiatan, scope_rombel } = req.body
   if (!isStr(nama)) return res.status(400).json({ error: 'Nama ekstrakurikuler wajib diisi' })
   if (pembina_id && !db.prepare('SELECT id FROM gtk WHERE id=? AND tenant_id=?').get(pembina_id, req.tenantId)) return res.status(400).json({ error: 'Pembina tidak ditemukan pada lembaga ini' })
-  const result = db.prepare('UPDATE ekskul SET nama=?, pembina_id=?, hari=?, jam_mulai=?, jam_selesai=?, deskripsi=? WHERE id=? AND tenant_id=?').run(nama, pembina_id || null, hari, jam_mulai, jam_selesai, deskripsi || '', req.params.id, req.tenantId)
+  const jenis = ['wajib', 'pilihan'].includes(jenis_kegiatan) ? jenis_kegiatan : 'pilihan'
+  const result = db.prepare('UPDATE ekskul SET nama=?, pembina_id=?, hari=?, jam_mulai=?, jam_selesai=?, deskripsi=?, jenis_kegiatan=?, scope_rombel=? WHERE id=? AND tenant_id=?')
+    .run(nama, pembina_id || null, hari, jam_mulai, jam_selesai, deskripsi || '', jenis, scope_rombel || null, req.params.id, req.tenantId)
   if (!result.changes) return res.status(404).json({ error: 'Ekstrakurikuler tidak ditemukan' })
+  if (jenis === 'wajib') syncWajibEkskulMembers(db, req.params.id, req.tenantId)
   res.json({ success: true })
 })
 
@@ -2835,27 +2892,43 @@ app.delete('/api/ekskul/:id', ADMIN, (req, res) => {
 
 // Anggota ekskul: daftar siswa peserta ekskul
 app.get('/api/ekskul/:id/anggota', authMiddleware, (req, res) => {
-  const ekskul = db.prepare('SELECT 1 FROM ekskul WHERE id=? AND tenant_id=?').get(req.params.id, req.tenantId)
+  const ekskul = db.prepare('SELECT id, jenis_kegiatan, scope_rombel FROM ekskul WHERE id=? AND tenant_id=?').get(req.params.id, req.tenantId)
   if (!ekskul) return res.status(404).json({ error: 'Ekstrakurikuler tidak ditemukan' })
   if (isTeacherContext(req)) {
     const gtk = resolveGtkForUser(req.user.id, req.tenantId)
     if (!gtk || !db.prepare('SELECT 1 FROM ekskul WHERE id=? AND pembina_id=? AND tenant_id=?').get(req.params.id, gtk.id, req.tenantId)) return res.status(403).json({ error: 'Bukan pembina ekskul ini' })
   }
-  const rows = db.prepare(`SELECT s.id, s.nis, s.nama, r.nama as rombel_nama
-    FROM ekskul_anggota ea JOIN siswa s ON ea.siswa_id = s.id AND s.tenant_id = ea.tenant_id
-    LEFT JOIN rombel r ON s.rombel_id = r.id AND r.tenant_id = s.tenant_id
-    WHERE ea.ekskul_id = ? AND ea.tenant_id = ? ORDER BY s.nama`).all(req.params.id, req.tenantId)
+  const jenis = String(ekskul.jenis_kegiatan || 'pilihan')
+  // Ekskul wajib: keanggotaan efektif turun dari siswa aktif (atau scope_rombel),
+  // tanpa menyimpan baris manual. Ekskul pilihan: baca dari tabel ekskul_anggota.
+  const base = jenis === 'wajib'
+    ? `SELECT s.id, s.nis, s.nama, r.nama as rombel_nama
+      FROM siswa s LEFT JOIN rombel r ON r.id=s.rombel_id AND r.tenant_id=s.tenant_id
+      WHERE s.tenant_id=? AND COALESCE(s.status,'aktif')='aktif'${ekskul.scope_rombel ? ' AND s.rombel_id=?' : ''}`
+    : `SELECT s.id, s.nis, s.nama, r.nama as rombel_nama
+      FROM ekskul_anggota ea JOIN siswa s ON ea.siswa_id = s.id AND s.tenant_id = ea.tenant_id
+      LEFT JOIN rombel r ON s.rombel_id = r.id AND r.tenant_id = s.tenant_id
+      WHERE ea.ekskul_id = ? AND ea.tenant_id = ?`
+  const params = jenis === 'wajib'
+    ? (ekskul.scope_rombel ? [req.tenantId, ekskul.scope_rombel] : [req.tenantId])
+    : [req.params.id, req.tenantId]
+  const rows = db.prepare(base + ' ORDER BY s.nama').all(...params)
   res.json(rows)
 })
 
-// Set anggota (replace full list). body: { siswa_ids: [] }
+// Set anggota. Ekskul PILIHAN: daftar eksplisit siswa (replace full list).
+// Ekskul WAJIB: abaikan daftar manual dan otomatis isi dari scope-nya.
 app.post('/api/ekskul/:id/anggota', ADMIN, (req, res) => {
   if (!Array.isArray(req.body.siswa_ids)) return res.status(400).json({ error: 'Daftar siswa harus berupa array' })
-  const ids = [...new Set(req.body.siswa_ids.map(id => String(id || '').trim()).filter(Boolean))]
   const ekskul_id = req.params.id
-  if (!db.prepare('SELECT id FROM ekskul WHERE id=? AND tenant_id=?').get(ekskul_id, req.tenantId)) {
-    return res.status(404).json({ error: 'Ekstrakurikuler tidak ditemukan' })
+  const ekskul = db.prepare('SELECT id, jenis_kegiatan FROM ekskul WHERE id=? AND tenant_id=?').get(ekskul_id, req.tenantId)
+  if (!ekskul) return res.status(404).json({ error: 'Ekstrakurikuler tidak ditemukan' })
+  const jenis = String(ekskul.jenis_kegiatan || 'pilihan')
+  if (jenis === 'wajib') {
+    const added = syncWajibEkskulMembers(db, ekskul_id, req.tenantId)
+    return res.json({ success: true, count: added, wajib: true, message: 'Anggota otomatis mengikuti seluruh siswa pada ekskul wajib' })
   }
+  const ids = [...new Set(req.body.siswa_ids.map(id => String(id || '').trim()).filter(Boolean))]
   const validIds = ids.length
     ? db.prepare(`SELECT id FROM siswa WHERE tenant_id=? AND id IN (${ids.map(() => '?').join(',')})`).all(req.tenantId, ...ids).map(row => row.id)
     : []
@@ -3461,7 +3534,7 @@ app.post('/api/guru/ceklok', STAFF, (req, res) => {
       db.prepare('INSERT INTO absensi_guru (id, gtk_id, tanggal, waktu_masuk, latitude, longitude, status, tenant_id) VALUES (?,?,?,?,?,?,?,?)').run(id, gtk.id, today, now, latitude || null, longitude || null, statusMasuk, req.tenantId)
     }
     try { notificationMonitor.logActivity(db, { tenantId: req.tenantId, eventType: 'teacher_checkin', actorId: gtk.id, entityId: id, metadata: { type, status: statusMasuk } }) } catch {}
-    res.json({ id, waktu_masuk: now, status: statusMasuk })
+    res.json({ id, waktu_masuk: now, status: statusMasuk, gtk: { id: gtk.id, nama: gtk.nama } })
   } else {
     // Ceklok pulang. Jika belum ceklok masuk (mis. terlambat/lupa), tetap boleh:
     // buat record hari ini dgn waktu_masuk kosong, tandai status agar tercatat.
@@ -3470,12 +3543,12 @@ app.post('/api/guru/ceklok', STAFF, (req, res) => {
       db.prepare('INSERT INTO absensi_guru (id, gtk_id, tanggal, waktu_masuk, waktu_pulang, latitude, longitude, status, tenant_id) VALUES (?,?,?,?,?,?,?,?,?)')
         .run(id, gtk.id, today, null, now, latitude || null, longitude || null, 'tanpa_masuk', req.tenantId)
       try { notificationMonitor.logActivity(db, { tenantId: req.tenantId, eventType: 'teacher_checkout', actorId: gtk.id, entityId: id, metadata: { type, tanpa_masuk: true } }) } catch {}
-      return res.json({ id, waktu_pulang: now, warning: 'Ceklok pulang tercatat, namun Anda belum ceklok masuk hari ini.' })
+      return res.json({ id, waktu_pulang: now, warning: 'Ceklok pulang tercatat, namun Anda belum ceklok masuk hari ini.', gtk: { id: gtk.id, nama: gtk.nama } })
     }
     if (exists.waktu_pulang) return res.status(400).json({ error: 'Sudah ceklok pulang hari ini' })
     db.prepare('UPDATE absensi_guru SET waktu_pulang=? WHERE id=?').run(now, exists.id)
     try { notificationMonitor.logActivity(db, { tenantId: req.tenantId, eventType: 'teacher_checkout', actorId: gtk.id, entityId: exists.id, metadata: { type } }) } catch {}
-    res.json({ id: exists.id, waktu_pulang: now })
+    res.json({ id: exists.id, waktu_pulang: now, gtk: { id: gtk.id, nama: gtk.nama } })
   }
 })
 
@@ -5494,10 +5567,12 @@ app.post('/api/rapor/generate', STAFF, (req, res) => {
 
   const siswaList = db.prepare('SELECT id FROM siswa WHERE rombel_id = ? AND tenant_id=?').all(rombel_id, req.tenantId)
   let count = 0
-  const insert = db.prepare(`INSERT INTO rapor (id, siswa_id, mapel_id, tahun_ajaran, semester, jenis, nilai_pengetahuan, nilai_keterampilan, nilai_sikap, nilai_akhir, predikat, deskripsi, tenant_id, updated_at)
-    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,datetime('now'))
+  const insert = db.prepare(`INSERT INTO rapor (id, siswa_id, mapel_id, tahun_ajaran, semester, jenis, nilai_pengetahuan, nilai_keterampilan, nilai_sikap, nilai_akhir, nilai_sts, nilai_sas, predikat, deskripsi, tenant_id, updated_at)
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,datetime('now'))
     ON CONFLICT(siswa_id, mapel_id, tahun_ajaran, semester, jenis) DO UPDATE SET
-    nilai_pengetahuan=excluded.nilai_pengetahuan, nilai_keterampilan=excluded.nilai_keterampilan, nilai_sikap=excluded.nilai_sikap, nilai_akhir=excluded.nilai_akhir, predikat=excluded.predikat, updated_at=datetime('now')`)
+    nilai_pengetahuan=excluded.nilai_pengetahuan, nilai_keterampilan=excluded.nilai_keterampilan, nilai_sikap=excluded.nilai_sikap, nilai_akhir=excluded.nilai_akhir,
+    nilai_sts=COALESCE(excluded.nilai_sts, nilai_sts), nilai_sas=COALESCE(excluded.nilai_sas, nilai_sas),
+    predikat=excluded.predikat, updated_at=datetime('now')`)
 
   for (const s of siswaList) {
     const rekap = db.prepare(`SELECT mapel_id, AVG(pengetahuan) as p, AVG(keaktifan) as k, AVG(sikap) as sk
@@ -5506,8 +5581,13 @@ app.post('/api/rapor/generate', STAFF, (req, res) => {
       const peng = Math.round(r.p || 0)
       const ket = Math.round(r.k || 0)
       const sik = Math.round(r.sk || 0)
-      const akhir = Math.round((peng * 0.5) + (ket * 0.3) + (sik * 0.2))
-      insert.run(uuidv4(), s.id, r.mapel_id, tahun_ajaran, semester, jenisR, peng, ket, sik, akhir, predikatFromNilai(akhir), '', req.tenantId)
+      const stsRow = db.prepare(`SELECT nilai_sts, nilai_sas FROM rapor WHERE siswa_id=? AND mapel_id=? AND tahun_ajaran=? AND semester=? AND jenis='sumatif' AND tenant_id=?`).get(s.id, r.mapel_id, tahun_ajaran, semester, req.tenantId)
+      const sts = Number(stsRow?.nilai_sts) || 0
+      const sas = Number(stsRow?.nilai_sas) || 0
+      const akhir = sts || sas
+        ? Math.round((((peng * 0.5) + (ket * 0.3) + (sik * 0.2)) + ((sts + sas) / 2)) / 2)
+        : Math.round((peng * 0.5) + (ket * 0.3) + (sik * 0.2))
+      insert.run(uuidv4(), s.id, r.mapel_id, tahun_ajaran, semester, jenisR, peng, ket, sik, akhir, sts, sas, predikatFromNilai(akhir), '', req.tenantId)
       count++
     }
   }
@@ -5521,6 +5601,36 @@ app.put('/api/rapor/:id', STAFF, (req, res) => {
   db.prepare(`UPDATE rapor SET nilai_pengetahuan=?, nilai_keterampilan=?, nilai_sikap=?, nilai_akhir=?, predikat=?, deskripsi=?, updated_at=datetime('now') WHERE id=? AND tenant_id=?`)
     .run(nilai_pengetahuan||0, nilai_keterampilan||0, nilai_sikap||0, akhir, predikatFromNilai(akhir), deskripsi||'', req.params.id, req.tenantId)
   res.json({ success: true })
+})
+
+// Input/entry nilai STS (sumatif tengah semester) dan SAS (sumatif akhir semester).
+// body: { items: [{ siswa_id, mapel_id, nilai_sts?, nilai_sas? }], tahun_ajaran, semester }
+app.post('/api/rapor/nilai-sumatif', STAFF, (req, res) => {
+  const { tahun_ajaran, semester, items } = req.body
+  if (!isStr(tahun_ajaran) || !semester || !Array.isArray(items) || !items.length) {
+    return res.status(400).json({ error: 'tahun_ajaran, semester, dan items wajib diisi' })
+  }
+  const rows = items.slice(0, 500)
+  const upsert = db.prepare(`INSERT INTO rapor (id, siswa_id, mapel_id, tahun_ajaran, semester, jenis, nilai_sts, nilai_sas, kkm, tenant_id, created_at, updated_at)
+    VALUES (?,?,?,?,?, 'sumatif', ?, ?, 70, ?, datetime('now'), datetime('now'))
+    ON CONFLICT(siswa_id, mapel_id, tahun_ajaran, semester, jenis) DO UPDATE SET
+      nilai_sts=excluded.nilai_sts, nilai_sas=excluded.nilai_sas, updated_at=datetime('now')`)
+  const trx = db.transaction(() => {
+    let count = 0
+    for (const item of rows) {
+      const siswa_id = String(item.siswa_id || '').trim()
+      const mapel_id = String(item.mapel_id || '').trim()
+      if (!db.prepare('SELECT 1 FROM siswa WHERE id=? AND tenant_id=?').get(siswa_id, req.tenantId)) continue
+      if (!db.prepare('SELECT 1 FROM mapel WHERE id=? AND tenant_id=?').get(mapel_id, req.tenantId)) continue
+      const sts = Math.max(0, Math.min(100, Number(item.nilai_sts) || 0))
+      const sas = Math.max(0, Math.min(100, Number(item.nilai_sas) || 0))
+      upsert.run(uuidv4(), siswa_id, mapel_id, tahun_ajaran, semester, sts, sas, req.tenantId)
+      count++
+    }
+    return count
+  })
+  const count = trx()
+  res.json({ success: true, count, message: `${count} nilai sumatif berhasil disimpan` })
 })
 
 // Sync rapor akhir semester ke RDM (Rapor Digital Madrasah)

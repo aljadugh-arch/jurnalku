@@ -28,7 +28,7 @@ test('skema anggota ekskul dimigrasikan dan diindeks unik per tenant', () => {
 
 test('API simpan anggota menolak ekskul dan siswa milik tenant lain sebelum replace', () => {
   const route = routeBody("app.post('/api/ekskul/:id/anggota', ADMIN", '// Absensi ekskul')
-  assert.match(route, /SELECT id FROM ekskul WHERE id=\? AND tenant_id=\?/)
+  assert.match(route, /SELECT id, jenis_kegiatan FROM ekskul WHERE id=\? AND tenant_id=\?/)
   assert.match(route, /SELECT id FROM siswa WHERE tenant_id=\? AND id IN/)
   assert.match(route, /new Set/)
   assert.match(route, /Siswa tidak valid atau bukan milik lembaga ini/)
@@ -45,7 +45,7 @@ test('API simpan absensi memastikan kegiatan tenant aktif sebelum menerima anggo
 
 test('API daftar anggota hanya join siswa dan rombel pada tenant aktif', () => {
   const route = routeBody("app.get('/api/ekskul/:id/anggota', authMiddleware", '// Set anggota')
-  assert.match(route, /SELECT 1 FROM ekskul WHERE id=\? AND tenant_id=\?/)
+  assert.match(route, /SELECT id, jenis_kegiatan, scope_rombel FROM ekskul WHERE id=\? AND tenant_id=\?/)
   assert.match(route, /JOIN siswa s ON ea\.siswa_id = s\.id AND s\.tenant_id = ea\.tenant_id/)
   assert.match(route, /LEFT JOIN rombel r ON s\.rombel_id = r\.id AND r\.tenant_id = s\.tenant_id/)
   assert.match(route, /ea\.ekskul_id = \? AND ea\.tenant_id = \?/)

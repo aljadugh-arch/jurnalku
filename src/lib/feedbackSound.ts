@@ -6,16 +6,17 @@
 // karena suara hanyalah pelengkap; alur absensi tidak boleh ikut gagal.
 
 type Tone = 'masuk' | 'pulang' | 'duplicate' | 'error'
+type AttendanceSession = 'masuk' | 'pulang'
 
 type ToneSpec = { freq: number[]; step: number; duration: number; gain: number; type: OscillatorType }
 
 // Nada masuk naik (konfirmasi), pulang turun (penutup) supaya operator bisa
 // membedakan sesi tanpa melihat layar.
 const TONES: Record<Tone, ToneSpec> = {
-  masuk: { freq: [880, 1320], step: 0.09, duration: 0.13, gain: 0.16, type: 'sine' },
-  pulang: { freq: [1320, 880], step: 0.09, duration: 0.13, gain: 0.16, type: 'sine' },
-  duplicate: { freq: [740, 740], step: 0.11, duration: 0.08, gain: 0.12, type: 'triangle' },
-  error: { freq: [320, 220], step: 0.12, duration: 0.18, gain: 0.18, type: 'square' },
+  masuk: { freq: [880, 1320], step: 0.09, duration: 0.16, gain: 0.28, type: 'sine' },
+  pulang: { freq: [1320, 880], step: 0.09, duration: 0.16, gain: 0.28, type: 'sine' },
+  duplicate: { freq: [740, 740], step: 0.11, duration: 0.1, gain: 0.2, type: 'triangle' },
+  error: { freq: [320, 220], step: 0.12, duration: 0.2, gain: 0.25, type: 'square' },
 }
 
 let ctx: AudioContext | null = null
@@ -76,4 +77,43 @@ export function playFeedbackSound(tone: Tone = 'masuk') {
   } catch {
     // Diamkan: absensi tetap tersimpan walau suara gagal diputar.
   }
+}
+
+function firstName(name?: string | null) {
+  const clean = String(name || '').replace(/\s+/g, ' ').trim()
+  if (!clean) return ''
+  return clean.split(' ')[0]
+}
+
+function speakClear(text: string) {
+  if (typeof window === 'undefined') return
+  const synth = window.speechSynthesis
+  if (!synth || typeof SpeechSynthesisUtterance === 'undefined') return
+  try {
+    synth.cancel()
+    const utterance = new SpeechSynthesisUtterance(text)
+    utterance.lang = 'id-ID'
+    utterance.volume = 1
+    utterance.rate = 0.88
+    utterance.pitch = 1.08
+    const voices = synth.getVoices?.() || []
+    const idVoice = voices.find(v => /^id[-_]/i.test(v.lang)) || voices.find(v => /indonesia/i.test(v.name))
+    if (idVoice) utterance.voice = idVoice
+    window.setTimeout(() => {
+      try { synth.speak(utterance) } catch {}
+    }, 170)
+  } catch {
+    // TTS tidak didukung / diblokir: nada WebAudio tetap cukup sebagai fallback.
+  }
+}
+
+export function announceAttendanceSuccess(name: string | undefined | null, session: AttendanceSession) {
+  const nickname = firstName(name) || 'Berhasil'
+  playFeedbackSound(session)
+  speakClear(`${nickname} ${session}`)
+}
+
+export function announceStudentScanSuccess(name: string | undefined | null, session: AttendanceSession, already?: boolean) {
+  if (already) return playFeedbackSound('duplicate')
+  announceAttendanceSuccess(name, session)
 }

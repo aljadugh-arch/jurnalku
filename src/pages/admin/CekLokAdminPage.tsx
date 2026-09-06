@@ -3,7 +3,7 @@ import { MapPin, Clock, CheckCircle, XCircle, Search, UserCheck } from 'lucide-r
 import toast from 'react-hot-toast'
 import api from '../../services/api'
 import { todayWib } from '../../lib/dateFormat'
-import { playFeedbackSound, primeFeedbackSound } from '../../lib/feedbackSound'
+import { announceAttendanceSuccess, playFeedbackSound, primeFeedbackSound } from '../../lib/feedbackSound'
 
 interface CeklokRecord {
   id: string
@@ -81,8 +81,8 @@ export default function CekLokAdminPage() {
     setCeklokLoading(true)
     navigator.geolocation.getCurrentPosition(async pos => {
       try {
-        await api.post('/guru/ceklok', { type, latitude: pos.coords.latitude, longitude: pos.coords.longitude })
-        playFeedbackSound(type === 'masuk' ? 'masuk' : 'pulang')
+        const res = await api.post('/guru/ceklok', { type, latitude: pos.coords.latitude, longitude: pos.coords.longitude })
+        announceAttendanceSuccess(res.data?.gtk?.nama, type)
         toast.success(`Ceklok ${type} berhasil`)
         await Promise.all([fetchPersonal(), fetchData()])
       } catch (err: any) {
