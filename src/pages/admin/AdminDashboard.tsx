@@ -8,6 +8,7 @@ import api from '../../services/api'
 import { PageHeader, Card, StatCard, Badge } from '../../components/ui'
 import { Link } from 'react-router-dom'
 import MobileMenuGrid from '../../components/MobileMenuGrid'
+import MobileAdminDashboard from './MobileAdminDashboard'
 
 const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899']
 
@@ -72,9 +73,12 @@ export default function AdminDashboard() {
   ]
 
   return (
-    <div className="space-y-3">
-      <PageHeader title="Dashboard" subtitle="Ringkasan data sekolah/madrasah hari ini" />
-      <MobileMenuGrid />
+    <>
+      <MobileAdminDashboard stats={stats} loading={loading} />
+
+      <div className="hidden lg:block space-y-3">
+        <PageHeader title="Dashboard" subtitle="Ringkasan data sekolah/madrasah hari ini" />
+        <MobileMenuGrid />
 
       {/* Stat Cards */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5">
@@ -244,6 +248,7 @@ export default function AdminDashboard() {
           )}
         </Card>
       </div>
-    </div>
+      </div>
+    </>
   )
 }

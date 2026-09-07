@@ -2365,7 +2365,9 @@ app.delete('/api/settings/kts-template/:side', ADMIN, (req, res) => {
 app.put('/api/settings/jam-absensi', ADMIN, (req, res) => {
   const f = req.body || {}
   const id = canonicalSettingsId(req.tenantId)
-  const cols = ['sesi_masuk_mulai','sesi_masuk_selesai','sesi_pulang_mulai','sesi_pulang_selesai','ceklok_masuk_mulai','ceklok_masuk_selesai','ceklok_pulang_mulai','ceklok_pulang_selesai']
+  const teacherClockCols = ['ceklok_masuk_mulai','ceklok_masuk_selesai','ceklok_pulang_mulai','ceklok_pulang_selesai']
+  const legacyStudentQrCols = ['sesi_masuk_mulai','sesi_masuk_selesai','sesi_pulang_mulai','sesi_pulang_selesai']
+  const cols = tenantUsesLegacyStudentQrWindow(req.tenantId) ? teacherClockCols.concat(legacyStudentQrCols) : teacherClockCols
   // Pastikan baris settings tenant ada
   db.prepare(`INSERT INTO settings (id, tenant_id, updated_at) VALUES (?,?,datetime('now')) ON CONFLICT(id) DO NOTHING`).run(id, req.tenantId)
   for (const c of cols) {
@@ -3122,6 +3124,73 @@ function teacherCanAccessStudentOnDate(req, siswaId, tanggal) {
   return !!db.prepare(`SELECT 1 FROM siswa s WHERE s.id=? AND s.tenant_id=? AND COALESCE(s.status,'aktif')='aktif'
     AND s.rombel_id IN (SELECT rombel_id FROM jadwal WHERE gtk_id=? AND tenant_id=? AND lower(hari)=? AND jenis_kegiatan='mapel')`)
     .get(siswaId, req.tenantId, gtk.id, req.tenantId, day)
+}
+
+function tenantUsesClassTeacherDailyAttendance(tenantId) {
+  const jenjang = String(getTenantSettings(db, tenantId, 'jenjang')?.jenjang || '').trim()
+  return ['RA', 'MI'].includes(jenjang)
+}
+
+function tenantUsesLegacyStudentQrWindow(tenantId) {
+  const jenjang = String(getTenantSettings(db, tenantId, 'jenjang')?.jenjang || '').trim()
+  return ['MTs', 'MA', 'PT', 'NF'].includes(jenjang)
+}
+
+// Absensi harian masuk/pulang untuk RA/TK dan MI/SD hanya boleh dicatat guru
+// kelas/wali kelas atau guru yang mempunyai jadwal mapel pada rombel itu di
+// tanggal yang dipilih. Admin tetap dapat membaca rekap, tetapi tidak menulis.
+function requireTeacherDailyAttendanceAccess(req, siswaId, tanggal) {
+  if (!isTeacherContext(req)) return { allowed: true }
+  if (!tenantUsesClassTeacherDailyAttendance(req.tenantId)) {
+    return { allowed: false, status: 403, error: 'Absensi harian oleh guru hanya berlaku untuk jenjang RA/TK dan MI/SD' }
+  }
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(tanggal || ''))) {
+    return { allowed: false, status: 400, error: 'Tanggal absensi tidak valid' }
+  }
+  const gtk = resolveGtkForUser(req.user.id, req.tenantId)
+  if (!gtk) return { allowed: false, status: 403, error: 'Akun guru belum terhubung GTK' }
+  const day = HARI_ID[new Date(`${tanggal}T12:00:00+07:00`).getUTCDay()]
+  const allowed = db.prepare(`SELECT 1 FROM siswa s
+    JOIN rombel r ON r.id=s.rombel_id AND r.tenant_id=s.tenant_id
+    WHERE s.id=? AND s.tenant_id=? AND COALESCE(s.status,'aktif')='aktif'
+      AND (r.wali_kelas_id=? OR EXISTS (
+        SELECT 1 FROM jadwal j WHERE j.rombel_id=s.rombel_id AND j.gtk_id=?
+          AND j.tenant_id=s.tenant_id AND lower(j.hari)=? AND j.jenis_kegiatan='mapel'
+      )) LIMIT 1`).get(siswaId, req.tenantId, gtk.id, gtk.id, day)
+  return allowed
+    ? { allowed: true }
+    : { allowed: false, status: 403, error: 'Siswa bukan kelas wali atau kelas terjadwal Anda pada tanggal ini' }
+}
+
+function requireTeacherDailyRombelAccess(req, rombelId, tanggal) {
+  if (!isTeacherContext(req)) return { allowed: true }
+  if (!tenantUsesClassTeacherDailyAttendance(req.tenantId)) {
+    return { allowed: false, status: 403, error: 'Absensi harian oleh guru hanya berlaku untuk jenjang RA/TK dan MI/SD' }
+  }
+  if (!rombelId || !/^\d{4}-\d{2}-\d{2}$/.test(String(tanggal || ''))) {
+    return { allowed: false, status: 400, error: 'Rombel dan tanggal wajib valid' }
+  }
+  const gtk = resolveGtkForUser(req.user.id, req.tenantId)
+  if (!gtk) return { allowed: false, status: 403, error: 'Akun guru belum terhubung GTK' }
+  const day = HARI_ID[new Date(`${tanggal}T12:00:00+07:00`).getUTCDay()]
+  const allowed = db.prepare(`SELECT 1 FROM rombel r WHERE r.id=? AND r.tenant_id=?
+    AND (r.wali_kelas_id=? OR EXISTS (
+      SELECT 1 FROM jadwal j WHERE j.rombel_id=r.id AND j.gtk_id=?
+        AND j.tenant_id=r.tenant_id AND lower(j.hari)=? AND j.jenis_kegiatan='mapel'
+    )) LIMIT 1`).get(rombelId, req.tenantId, gtk.id, gtk.id, day)
+  return allowed
+    ? { allowed: true }
+    : { allowed: false, status: 403, error: 'Rombel bukan kelas wali atau kelas terjadwal Anda pada tanggal ini' }
+}
+
+function requireAdminDailyAttendanceWriteAccess(req) {
+  if (isTeacherContext(req) || !tenantUsesClassTeacherDailyAttendance(req.tenantId)) return { allowed: true }
+  return { allowed: false, status: 403, error: 'Untuk jenjang RA/TK dan MI/SD, admin hanya memantau dan merekap absensi harian siswa' }
+}
+
+function requireRombelDepartureConfigJenjang(req) {
+  if (tenantUsesClassTeacherDailyAttendance(req.tenantId)) return { allowed: true }
+  return { allowed: false, status: 403, error: 'Jam pulang per rombel hanya tersedia untuk jenjang RA/TK dan MI/SD' }
 }
 
 function teacherScheduleForDay(gtkId, tenantId, day, date) {
@@ -4633,9 +4702,13 @@ app.post('/api/tahfidz/pertemuan', STAFF, (req,res)=>{
 
 // ==================== JAM PULANG ROMBEL ====================
 app.get('/api/rombel-jam-pulang', ADMIN, (req, res) => {
+  const access = requireRombelDepartureConfigJenjang(req)
+  if (!access.allowed) return res.status(access.status).json({ error: access.error })
   res.json(db.prepare('SELECT rombel_id,hari,jam_pulang,aktif FROM rombel_jam_pulang WHERE tenant_id=? ORDER BY rombel_id,hari').all(req.tenantId))
 })
 app.put('/api/rombel-jam-pulang', ADMIN, (req, res) => {
+  const access = requireRombelDepartureConfigJenjang(req)
+  if (!access.allowed) return res.status(access.status).json({ error: access.error })
   const rows = Array.isArray(req.body.rows) ? req.body.rows : []
   const days = new Set(['senin', 'selasa', 'rabu', 'kamis', 'jumat', 'sabtu', 'minggu'])
   const time = /^(?:[01]\d|2[0-3]):[0-5]\d$/
@@ -4649,6 +4722,8 @@ app.put('/api/rombel-jam-pulang', ADMIN, (req, res) => {
 
 
 app.put('/api/rombel-jam-pulang/:rombel_id/:hari', ADMIN, (req, res) => {
+  const access = requireRombelDepartureConfigJenjang(req)
+  if (!access.allowed) return res.status(access.status).json({ error: access.error })
   const { rombel_id, hari } = req.params
   const jam = req.body?.jam_pulang
   if (!/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(jam || '')) return res.status(400).json({ error: 'Jam pulang tidak valid' })
@@ -4808,11 +4883,18 @@ app.put('/api/tahun-ajaran/:id/activate', ADMIN, (req, res) => {
 
 // ==================== ABSENSI SISWA ====================
 app.get('/api/absensi-siswa', authMiddleware, (req, res) => {
-  const { tanggal, rombel_id } = req.query
+  const { tanggal, rombel_id, siswa_id } = req.query
+  if (isTeacherContext(req)) {
+    const access = siswa_id
+      ? requireTeacherDailyAttendanceAccess(req, String(siswa_id), String(tanggal || ''))
+      : requireTeacherDailyRombelAccess(req, String(rombel_id || ''), String(tanggal || ''))
+    if (!access.allowed) return res.status(access.status).json({ error: access.error })
+  }
   let sql = `SELECT a.*, s.nama as siswa_nama, s.nis FROM absensi_siswa a LEFT JOIN siswa s ON a.siswa_id = s.id WHERE a.tenant_id = ?`
   const params = [req.tenantId]
   if (tanggal) { sql += ' AND a.tanggal = ?'; params.push(tanggal) }
   if (rombel_id) { sql += ' AND a.rombel_id = ?'; params.push(rombel_id) }
+  if (siswa_id) { sql += ' AND a.siswa_id = ?'; params.push(siswa_id) }
   sql += ' ORDER BY s.nama'
   res.json(db.prepare(sql).all(...params))
 })
@@ -4821,6 +4903,10 @@ app.post('/api/absensi-siswa', STAFF, (req, res) => {
   // jenis: 'masuk' (default) | 'pulang'. Kalau 'pulang', field yang diupdate adalah waktu_pulang & status_pulang.
   const { siswa_id, rombel_id, tanggal, status, waktu_absen, metode, keterangan, jenis } = req.body
   const isPulang = jenis === 'pulang'
+  const adminWrite = requireAdminDailyAttendanceWriteAccess(req)
+  if (!adminWrite.allowed) return res.status(adminWrite.status).json({ error: adminWrite.error })
+  const teacherAccess = requireTeacherDailyAttendanceAccess(req, siswa_id, tanggal)
+  if (!teacherAccess.allowed) return res.status(teacherAccess.status).json({ error: teacherAccess.error })
   try { assertKbmActive(req, tanggal) } catch (e) { return res.status(400).json({ error: e.message }) }
   const jam = waktu_absen || null
   const id = uuidv4()
@@ -4852,13 +4938,16 @@ app.post('/api/absensi-siswa/bulk', STAFF, (req, res) => {
   // jenis: 'masuk' (default) | 'pulang' — bulk seragam untuk 1 sesi
   const { tanggal, rombel_id, data, jenis } = req.body
   const isPulang = jenis === 'pulang'
+  const adminWrite = requireAdminDailyAttendanceWriteAccess(req)
+  if (!adminWrite.allowed) return res.status(adminWrite.status).json({ error: adminWrite.error })
   if (!data || !Array.isArray(data) || !data.length) return res.status(400).json({ error: 'Data harus berupa array yang tidak kosong' })
   const validAttendanceStatuses = new Set(['hadir', 'sakit', 'izin', 'alpha'])
   for (const d of data) {
     if (!d?.siswa_id || !validAttendanceStatuses.has(d.status)) return res.status(400).json({ error: 'Status absensi tidak valid' })
     const studentExists = db.prepare("SELECT id FROM siswa WHERE id=? AND tenant_id=? AND COALESCE(status,'aktif')='aktif'").get(d.siswa_id, req.tenantId)
     if (!studentExists) return res.status(400).json({ error: 'Siswa tidak valid untuk tenant aktif' })
-    if (isTeacherContext(req) && !teacherCanAccessStudentOnDate(req, d.siswa_id, tanggal)) return res.status(403).json({ error: 'Siswa bukan dalam akses mengajar Anda' })
+    const teacherAccess = requireTeacherDailyAttendanceAccess(req, d.siswa_id, tanggal)
+    if (!teacherAccess.allowed) return res.status(teacherAccess.status).json({ error: teacherAccess.error })
   }
   try { assertKbmActive(req, tanggal) } catch (e) { return res.status(400).json({ error: e.message }) }
   let count = 0
@@ -4890,6 +4979,9 @@ app.post('/api/absensi-siswa/bulk', STAFF, (req, res) => {
 
 app.post('/api/absensi-siswa/bulk-range', STAFF, (req, res) => {
   const { mulai, selesai, rombel_id, status, jenis } = req.body
+  const adminWrite = requireAdminDailyAttendanceWriteAccess(req)
+  if (!adminWrite.allowed) return res.status(adminWrite.status).json({ error: adminWrite.error })
+  if (isTeacherContext(req)) return res.status(403).json({ error: 'Simpan rentang hanya tersedia untuk admin pada jenjang non RA/MI' })
   const dates = dateRange(mulai, selesai).filter(d => !isHolidayDate(d, req.tenantId))
   if (!rombel_id || !dates.length) return res.status(400).json({ error: 'Rombel dan rentang tanggal wajib valid' })
   const siswa = db.prepare("SELECT id FROM siswa WHERE rombel_id=? AND status='aktif' AND tenant_id=? ORDER BY nama").all(rombel_id, req.tenantId)
@@ -4960,7 +5052,11 @@ app.post('/api/absensi-siswa/qr-scan', STAFF, (req, res) => {
   // Fallback: QR lama/manual mungkin memuat NIS/NISN.
   if (!siswa) siswa = db.prepare('SELECT * FROM siswa WHERE (nis = ? OR nisn = ?) AND tenant_id = ?').get(token, token, req.tenantId)
   if (!siswa) return res.status(404).json({ error: 'QR tidak dikenali / siswa tidak ditemukan' })
-  const tanggal = todayJakarta()
+  const tanggal = /^\d{4}-\d{2}-\d{2}$/.test(String(req.body.tanggal || '')) ? String(req.body.tanggal) : todayJakarta()
+  const adminWrite = requireAdminDailyAttendanceWriteAccess(req)
+  if (!adminWrite.allowed) return res.status(adminWrite.status).json({ error: adminWrite.error })
+  const teacherAccess = requireTeacherDailyAttendanceAccess(req, siswa.id, tanggal)
+  if (!teacherAccess.allowed) return res.status(teacherAccess.status).json({ error: teacherAccess.error })
   try { assertKbmActive(req, tanggal) } catch (e) { return res.status(400).json({ error: e.message }) }
   const waktu = timeJakarta()
   // Batas rombel/hari paling spesifik; settings lama menjadi fallback.

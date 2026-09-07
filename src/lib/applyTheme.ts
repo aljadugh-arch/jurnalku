@@ -1,10 +1,29 @@
 import { readLocalDark, setResolvedDark } from '../stores/themeStore'
 
-interface ThemeSettings {
+export interface ThemeSettings {
   primary_color?: string
   accent_color?: string
   sidebar_color?: string
   theme?: string
+}
+
+function cssVar(name: string): string {
+  return (typeof document !== 'undefined' && document.documentElement.style.getPropertyValue(name).trim()) || ''
+}
+
+/**
+ * Warna hero/gradient untuk dashboard mobile. Mengutamakan primary lembaga
+ * (dari settings), lalu sidebar/akcent; di mode gelap memakai varian lebih
+ * gelap dari sidebar agar tidak menyilaukan dan tetap ikut dark theme.
+ */
+export function heroColors(settings?: Partial<ThemeSettings>, dark = false): string {
+  const primary = settings?.primary_color || cssVar('--color-primary')
+  const sidebar = settings?.sidebar_color || cssVar('--color-sidebar')
+  const accent = settings?.accent_color || cssVar('--color-accent')
+  const base = primary || 'var(--color-primary, #2563eb)'
+  const fallback = sidebar || accent || base
+  // dark mode: gelapkan warna tenant agar hero tetap senada tanpa menyilaukan.
+  return dark && /^#[0-9a-f]{6}$/i.test(fallback) ? shade(fallback, -38) : (dark ? fallback : base)
 }
 
 function shade(hex: string, percent: number): string {

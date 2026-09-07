@@ -9,6 +9,8 @@ import { QRCodeCanvas } from 'qrcode.react'
 import QRCode from 'qrcode'
 import FoundationTenantPicker from '../../components/FoundationTenantPicker'
 import { announceStudentScanSuccess, playFeedbackSound, primeFeedbackSound } from '../../lib/feedbackSound'
+import { useSettingsStore } from '../../stores/settingsStore'
+import { isGuruKelasJenjang } from '../../lib/jenjang'
 
 const statusColors: Record<string, string> = {
   hadir: 'bg-green-100 text-green-700',
@@ -80,6 +82,8 @@ export default function AbsensiSiswaPage() {
   const [loading, setLoading] = useState(false)
   const [range, setRange] = useState({ mulai: todayWib(), selesai: todayWib(), status: 'hadir' })
   const [qrToken, setQrToken] = useState('')
+  const { settings } = useSettingsStore()
+  const readOnly = isGuruKelasJenjang(settings.jenjang as string) // MI/SD & RA/TK: admin hanya monitor
   const [qrOpen, setQrOpen] = useState(false)
   const [lastQr, setLastQr] = useState('')
   const [scanBusy, setScanBusy] = useState(false)
@@ -288,19 +292,19 @@ export default function AbsensiSiswaPage() {
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-gray-800 font-display">Absensi Siswa</h1>
-          <p className="text-gray-500 text-sm mt-1">QR Code & Manual oleh Wali Kelas</p>
+          <h1 className="text-2xl font-bold text-gray-800 font-display">{readOnly ? 'Rekap Absensi Siswa' : 'Absensi Siswa'}</h1>
+          <p className="text-gray-500 text-sm mt-1">{readOnly ? 'Monitoring & rekap — absensi diinput guru kelas' : 'QR Code & Manual oleh Wali Kelas'}</p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <button onClick={startQrCamera} className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg text-sm hover:bg-purple-700">
+          {!readOnly && <button onClick={startQrCamera} className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg text-sm hover:bg-purple-700">
             <QrCode size={16} /> Scan Kamera
-          </button>
-          <button onClick={() => setShowQr(true)} className="flex items-center gap-2 px-4 py-2 bg-white border border-purple-300 text-purple-700 rounded-lg text-sm hover:bg-purple-50">
+          </button>}
+          {!readOnly && <button onClick={() => setShowQr(true)} className="flex items-center gap-2 px-4 py-2 bg-white border border-purple-300 text-purple-700 rounded-lg text-sm hover:bg-purple-50">
             <QrCode size={16} /> Lihat QR Siswa
-          </button>
-          <button onClick={handleSave} disabled={loading} className="flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-lg text-sm hover:bg-primary-dark disabled:opacity-50">
+          </button>}
+          {!readOnly && <button onClick={handleSave} disabled={loading} className="flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-lg text-sm hover:bg-primary-dark disabled:opacity-50">
             <Save size={16} /> {loading ? 'Menyimpan...' : 'Simpan Absensi'}
-          </button>
+          </button>}
         </div>
       </div>
 
@@ -348,22 +352,24 @@ export default function AbsensiSiswaPage() {
           {rombels.map(r => <option key={r.id} value={r.id}>{r.nama}</option>)}
         </select>
         </div>
-        <div className="flex flex-col lg:flex-row gap-3">
-          <div id="qr-file-reader" className="hidden"></div><button onClick={startQrCamera} className="w-full lg:w-auto px-4 py-2 bg-purple-600 text-white rounded-lg text-sm text-center">Scan Kamera</button>
-          <label className="flex w-full lg:w-auto items-center justify-center px-4 py-2 bg-gray-100 rounded-lg text-sm text-center cursor-pointer">Scan Foto<input type="file" accept="image/*" className="hidden" onChange={e => scanQrImage(e.target.files?.[0])} /></label>
-          {['hadir','sakit','izin','alpha'].map(st => <button key={st} onClick={() => setAll(st)} className="px-3 py-2 bg-gray-100 rounded-lg text-sm capitalize">Semua {st}</button>)}
-        </div>
-        <div className="flex flex-col lg:flex-row gap-3">
-          <input type="date" value={range.mulai} onChange={e => setRange({...range, mulai: e.target.value})} className="px-3 py-2 border rounded-lg text-sm" />
-          <input type="date" value={range.selesai} onChange={e => setRange({...range, selesai: e.target.value})} className="px-3 py-2 border rounded-lg text-sm" />
-          <select value={range.status} onChange={e => setRange({...range, status: e.target.value})} className="px-3 py-2 border rounded-lg text-sm"><option value="hadir">Hadir</option><option value="sakit">Sakit</option><option value="izin">Izin</option><option value="alpha">Alpha</option></select>
-          <button onClick={handleRangeSave} className="px-4 py-2 bg-primary text-white rounded-lg text-sm">Simpan Rentang Rombel</button>
-        </div>
+        {!readOnly && <>
+          <div className="flex flex-col lg:flex-row gap-3">
+            <div id="qr-file-reader" className="hidden"></div><button onClick={startQrCamera} className="w-full lg:w-auto px-4 py-2 bg-purple-600 text-white rounded-lg text-sm text-center">Scan Kamera</button>
+            <label className="flex w-full lg:w-auto items-center justify-center px-4 py-2 bg-gray-100 rounded-lg text-sm text-center cursor-pointer">Scan Foto<input type="file" accept="image/*" className="hidden" onChange={e => scanQrImage(e.target.files?.[0])} /></label>
+            {['hadir','sakit','izin','alpha'].map(st => <button key={st} onClick={() => setAll(st)} className="px-3 py-2 bg-gray-100 rounded-lg text-sm capitalize">Semua {st}</button>)}
+          </div>
+          <div className="flex flex-col lg:flex-row gap-3">
+            <input type="date" value={range.mulai} onChange={e => setRange({...range, mulai: e.target.value})} className="px-3 py-2 border rounded-lg text-sm" />
+            <input type="date" value={range.selesai} onChange={e => setRange({...range, selesai: e.target.value})} className="px-3 py-2 border rounded-lg text-sm" />
+            <select value={range.status} onChange={e => setRange({...range, status: e.target.value})} className="px-3 py-2 border rounded-lg text-sm"><option value="hadir">Hadir</option><option value="sakit">Sakit</option><option value="izin">Izin</option><option value="alpha">Alpha</option></select>
+            <button onClick={handleRangeSave} className="px-4 py-2 bg-primary text-white rounded-lg text-sm">Simpan Rentang Rombel</button>
+          </div>
+        </>}
       </div>
 
-      {qrOpen && <div className="fixed inset-0 z-[100] bg-black/60 flex items-center justify-center p-4"><div className="bg-white rounded-2xl p-4 w-full max-w-sm"><p className="text-sm text-gray-600 mb-3">Kamera tetap terbuka. Arahkan ke QR KTS siswa berikutnya.</p><div id="qr-reader"></div><p className="text-xs text-gray-400 mt-2">Terakhir: {qrToken || '-'}</p><button onClick={stopQrCamera} className="mt-3 w-full px-4 py-2 bg-gray-800 text-white rounded-lg text-sm">Tutup</button></div></div>}
+      {!readOnly && qrOpen && <div className="fixed inset-0 z-[100] bg-black/60 flex items-center justify-center p-4"><div className="bg-white rounded-2xl p-4 w-full max-w-sm"><p className="text-sm text-gray-600 mb-3">Kamera tetap terbuka. Arahkan ke QR KTS siswa berikutnya.</p><div id="qr-reader"></div><p className="text-xs text-gray-400 mt-2">Terakhir: {qrToken || '-'}</p><button onClick={stopQrCamera} className="mt-3 w-full px-4 py-2 bg-gray-800 text-white rounded-lg text-sm">Tutup</button></div></div>}
 
-      {showQr && <div className="fixed inset-0 z-[100] bg-black/60 flex items-center justify-center p-3"><div className="bg-white rounded-2xl p-4 sm:p-6 w-full max-w-3xl max-h-[90vh] overflow-auto">
+      {!readOnly && showQr && <div className="fixed inset-0 z-[100] bg-black/60 flex items-center justify-center p-3"><div className="bg-white rounded-2xl p-4 sm:p-6 w-full max-w-3xl max-h-[90vh] overflow-auto">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4"><div><h2 className="font-bold text-gray-800">QR Siswa</h2><p className="text-xs text-gray-500">QR dan login memakai NISN bila tersedia; jika kosong memakai NIS.</p></div><div className="flex gap-2"><button onClick={downloadAllStudentQr} disabled={loading || qrIdentifiers.length === 0} className="inline-flex items-center justify-center gap-2 px-3 py-2 bg-purple-600 text-white rounded-lg text-sm disabled:opacity-50"><Download size={15}/>{loading ? 'Menyiapkan...' : 'Unduh Semua'}</button><button onClick={() => setShowQr(false)} className="px-3 py-2 bg-gray-100 rounded-lg text-sm">Tutup</button></div></div>
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">{qrIdentifiers.map(s => <div key={s.id} className="border rounded-xl p-3 text-center"><QRCodeCanvas id={`student-qr-preview-${s.id}`} value={s.identifier} size={240} level="M" marginSize={2} className="mx-auto max-w-full h-auto"/><p className="font-medium text-sm text-gray-800 mt-2 truncate">{s.nama}</p><p className="text-xs text-gray-500 break-all">{s.identifier_type}: {s.identifier}</p><button onClick={() => downloadStudentQr(s)} className="mt-3 inline-flex w-full items-center justify-center gap-2 px-3 py-2 bg-purple-50 text-purple-700 rounded-lg text-xs font-medium hover:bg-purple-100"><Download size={14}/>Unduh PNG</button></div>)}</div>
         {qrIdentifiers.length === 0 && <p className="py-8 text-center text-sm text-gray-400">Belum ada siswa pada rombel ini.</p>}
@@ -394,7 +400,7 @@ export default function AbsensiSiswaPage() {
                   <td className="px-4 py-3 font-medium text-gray-800">{s.nama}</td>
                   {['hadir', 'sakit', 'izin', 'alpha'].map(st => (
                     <td key={st} className="text-center px-4 py-3">
-                      <input type="radio" name={`abs-${s.id}`} checked={absensi[s.id] === st} onChange={() => setStatus(s.id, st)} className="w-4 h-4 text-primary" />
+                      <input type="radio" name={`abs-${s.id}`} checked={absensi[s.id] === st} onChange={() => setStatus(s.id, st)} disabled={readOnly} className="w-4 h-4 text-primary disabled:cursor-not-allowed disabled:opacity-60" />
                     </td>
                   ))}
                 </tr>

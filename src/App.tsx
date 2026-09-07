@@ -57,6 +57,7 @@ import GuruPenilaianHarianPage from './pages/guru/GuruPenilaianHarianPage'
 import GuruPostingPage from './pages/guru/GuruPostingPage'
 import GuruCatatanKepribadianPage from './pages/guru/GuruCatatanKepribadianPage'
 import GuruAbsensiEkskulPage from './pages/guru/GuruAbsensiEkskulPage'
+import GuruAbsensiSiswaQRPage from './pages/guru/GuruAbsensiSiswaQRPage'
 import SiswaDashboard from './pages/siswa/SiswaDashboard'
 import SiswaAbsensiPage from './pages/siswa/SiswaAbsensiPage'
 import SiswaJadwalPage from './pages/siswa/SiswaJadwalPage'
@@ -243,11 +244,12 @@ export default function App() {
           <Route path="posting" element={<GuruPostingPage />} />
           <Route path="catatan-kepribadian" element={<GuruCatatanKepribadianPage />} />
           <Route path="absensi-ekskul" element={<GuruAbsensiEkskulPage />} />
+          <Route path="absensi-harian" element={<GuruAbsensiSiswaQRPage />} />
         </Route>
 
         {/* Siswa Routes */}
         <Route path="/siswa" element={
-          <ProtectedRoute allowedRoles={['siswa']}>
+          <ProtectedRoute allowedRoles={['siswa', 'wali_murid']}>
             <SubscriptionGate>
               <DashboardLayout />
             </SubscriptionGate>

@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { BarChart3, CreditCard, DollarSign, MapPin, PiggyBank, Users } from 'lucide-react'
 import api from '../../services/api'
 import FinanceExcelPanel from '../../components/FinanceExcelPanel'
+import MobileBendaharaDashboard from './MobileBendaharaDashboard'
 
 export default function BendaharaDashboard() {
   const navigate = useNavigate()
@@ -13,9 +14,11 @@ export default function BendaharaDashboard() {
     { label: 'Tagihan Belum Bayar', value: money(data?.tagihan_belum?.nominal), sub: `${data?.tagihan_belum?.jumlah || 0} tagihan`, icon: <DollarSign size={20} />, path: '/admin/tagihan' },
     { label: 'Lunas Bulan Ini', value: money(data?.lunas_bulan_ini?.nominal), sub: `${data?.lunas_bulan_ini?.jumlah || 0} pembayaran`, icon: <CreditCard size={20} />, path: '/admin/tagihan' },
     { label: 'Saldo Tabungan', value: money(data?.saldo_tabungan), sub: 'total saldo siswa', icon: <PiggyBank size={20} />, path: '/admin/tabungan' },
-    { label: 'Siswa Aktif', value: data?.siswa_aktif?.jumlah || 0, sub: 'data siswa', icon: <Users size={20} />, path: '/admin/siswa' },
+    { label: 'Siswa Aktif', value: data?.siswa_aktif || 0, sub: 'data siswa', icon: <Users size={20} />, path: '/admin/siswa' },
   ]
-  return <div className="space-y-6 pb-24 lg:pb-6">
+  return <>
+    <div className="lg:hidden"><MobileBendaharaDashboard data={data} /></div>
+    <div className="hidden space-y-6 pb-24 lg:block lg:pb-6">
     <div className="rounded-3xl bg-gradient-to-r from-emerald-600 to-teal-500 text-white p-5 sm:p-6 shadow-sm">
       <h1 className="text-2xl font-bold">Dashboard Bendahara</h1>
       <p className="text-emerald-50 text-sm mt-1">Kelola tagihan, pembayaran, tabungan, dan laporan keuangan.</p>
@@ -31,5 +34,6 @@ export default function BendaharaDashboard() {
       <button onClick={() => navigate('/admin/tabungan')} className="inline-flex items-center justify-center gap-2 rounded-2xl bg-white border border-gray-100 p-4 text-sm font-semibold text-gray-700"><BarChart3 size={18}/> Laporan</button>
     </div>
     <div id="laporan"><FinanceExcelPanel /></div>
-  </div>
+    </div>
+  </>
 }

@@ -64,7 +64,7 @@ test('menu kelas wali hanya ditampilkan untuk role wali_kelas', () => {
   assert.doesNotMatch(sharedMenu, /Kelas Wali Saya|\/guru\/rombel/)
   assert.match(menuItems, /role === 'wali_kelas'.*\/guru\/rombel/s)
 
-  const bottomGuru = teacherMenuBlock(bottomNavigation, "if (role === 'guru' || role === 'wali_kelas')", "if (role === 'siswa')")
+  const bottomGuru = teacherMenuBlock(bottomNavigation, "if (role === 'guru' || role === 'wali_kelas')", "if (role === 'siswa' || role === 'wali_murid')")
   assert.match(bottomGuru, /role === 'wali_kelas'.*\/guru\/rombel/s)
 })
 

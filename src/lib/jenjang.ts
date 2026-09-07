@@ -46,6 +46,11 @@ export function composeNama(jenjang: string, tingkat: string, paralel: string): 
 // RA:30, MI:35, MTs:40, MA/MAK:45 menit.
 export const JTM_MENIT: Record<string, number> = { RA: 30, MI: 35, MTs: 40, MA: 45 }
 
+/** RA/TK dan MI/SD: absensi siswa via guru kelas/wali kelas (bukan admin). */
+export function isGuruKelasJenjang(jenjang?: string): boolean {
+  return jenjang === 'RA' || jenjang === 'MI'
+}
+
 export function jtmMenit(jenjang: string): number {
   return JTM_MENIT[jenjang] || 45 // fallback MA/umum
 }

@@ -5,10 +5,11 @@ import api from '../../services/api'
 import { applyTheme } from '../../lib/applyTheme'
 import { clearLocalTheme } from '../../stores/themeStore'
 import { useSettingsStore } from '../../stores/settingsStore'
-import { JENJANG_OPTIONS } from '../../lib/jenjang'
+import { isGuruKelasJenjang, JENJANG_OPTIONS } from '../../lib/jenjang'
 import MapPicker from '../../components/MapPicker'
 import JamPulangSiswa from '../../components/JamPulangSiswa'
 import FeatureSettings from '../../components/FeatureSettings'
+
 
 const HARI_OPTIONS = [
   { value: 'senin', label: 'Senin' }, { value: 'selasa', label: 'Selasa' }, { value: 'rabu', label: 'Rabu' },
@@ -38,6 +39,7 @@ export default function SettingsPage() {
   })
   const [savingJam, setSavingJam] = useState(false)
   const setSettings = useSettingsStore(s => s.setSettings)
+
 
   useEffect(() => {
     api.get('/settings').then(res => {
@@ -516,7 +518,7 @@ export default function SettingsPage() {
 
       <FeatureSettings />
 
-      <JamPulangSiswa />
+      {isGuruKelasJenjang(form.jenjang) && <JamPulangSiswa />}
 
       <div className="bg-white rounded-xl p-4 sm:p-6 shadow-sm border border-gray-100">
         <div className="mb-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
@@ -529,13 +531,16 @@ export default function SettingsPage() {
           </button>
         </div>
 
-        <h3 className="text-sm font-semibold text-gray-700 mb-2">Jendela QR Siswa (legacy fallback)</h3>
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
-          <div><label className="block text-xs text-gray-500 mb-1">Masuk mulai</label><input type="time" value={jam.sesi_masuk_mulai} onChange={e => setJam({...jam, sesi_masuk_mulai: e.target.value})} className="w-full px-3 py-2 border rounded-lg text-sm" /></div>
-          <div><label className="block text-xs text-gray-500 mb-1">Masuk selesai</label><input type="time" value={jam.sesi_masuk_selesai} onChange={e => setJam({...jam, sesi_masuk_selesai: e.target.value})} className="w-full px-3 py-2 border rounded-lg text-sm" /></div>
-          <div><label className="block text-xs text-gray-500 mb-1">Pulang mulai</label><input type="time" value={jam.sesi_pulang_mulai} onChange={e => setJam({...jam, sesi_pulang_mulai: e.target.value})} className="w-full px-3 py-2 border rounded-lg text-sm" /></div>
-          <div><label className="block text-xs text-gray-500 mb-1">Pulang selesai</label><input type="time" value={jam.sesi_pulang_selesai} onChange={e => setJam({...jam, sesi_pulang_selesai: e.target.value})} className="w-full px-3 py-2 border rounded-lg text-sm" /></div>
-        </div>
+        {!isGuruKelasJenjang(form.jenjang) && <>
+          <h3 className="text-sm font-semibold text-gray-700 mb-2">Jendela QR Siswa (legacy fallback)</h3>
+          <p className="mb-3 text-xs text-gray-500">Untuk jenjang MTs/SMP, MA/SMA/SMK/MAK, perguruan tinggi, dan lembaga nonformal yang memakai jam pulang seragam.</p>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
+            <div><label className="block text-xs text-gray-500 mb-1">Masuk mulai</label><input type="time" value={jam.sesi_masuk_mulai} onChange={e => setJam({...jam, sesi_masuk_mulai: e.target.value})} className="w-full px-3 py-2 border rounded-lg text-sm" /></div>
+            <div><label className="block text-xs text-gray-500 mb-1">Masuk selesai</label><input type="time" value={jam.sesi_masuk_selesai} onChange={e => setJam({...jam, sesi_masuk_selesai: e.target.value})} className="w-full px-3 py-2 border rounded-lg text-sm" /></div>
+            <div><label className="block text-xs text-gray-500 mb-1">Pulang mulai</label><input type="time" value={jam.sesi_pulang_mulai} onChange={e => setJam({...jam, sesi_pulang_mulai: e.target.value})} className="w-full px-3 py-2 border rounded-lg text-sm" /></div>
+            <div><label className="block text-xs text-gray-500 mb-1">Pulang selesai</label><input type="time" value={jam.sesi_pulang_selesai} onChange={e => setJam({...jam, sesi_pulang_selesai: e.target.value})} className="w-full px-3 py-2 border rounded-lg text-sm" /></div>
+          </div>
+        </>}
 
         <h3 className="text-sm font-semibold text-gray-700 mb-2">Batas Ceklok GTK / Guru · format 24 jam HH:mm WIB</h3>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">

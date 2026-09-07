@@ -3,6 +3,7 @@ import { Calendar, CheckCircle, BookOpen, Activity, ChevronRight, Clock, Clipboa
 import { useLocation, useNavigate } from 'react-router-dom'
 import api from '../../services/api'
 import { Card, StatCard, Badge, Avatar } from '../../components/ui'
+import MobileSiswaDashboard from './MobileSiswaDashboard'
 
 function greetingByHour() {
   const h = new Date().getHours()
@@ -65,7 +66,14 @@ export default function SiswaDashboard() {
   const tanggal = new Date().toLocaleDateString('id-ID', { timeZone: 'Asia/Jakarta', weekday: 'long', day: 'numeric', month: 'long' })
 
   return (
-    <div className="space-y-3">
+    <>
+      {/* Mobile / Tablet view */}
+      <div className="lg:hidden">
+        <MobileSiswaDashboard />
+      </div>
+
+      {/* Desktop view */}
+      <div className="hidden lg:block space-y-3">
       {/* Greeting header */}
       <div className="flex flex-col items-center text-center sm:flex-row sm:items-center sm:text-left gap-2.5 min-w-0">
         <Avatar src={data.siswa?.foto || null} name={data.siswa?.nama} size={64} className="shrink-0" />
@@ -277,6 +285,7 @@ export default function SiswaDashboard() {
           })}
         </div>
       </Card>
-    </div>
+      </div>
+    </>
   )
 }

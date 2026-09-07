@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom'
 import api from '../../services/api'
 import toast from 'react-hot-toast'
 import { Card, StatCard, Badge, Avatar } from '../../components/ui'
+import MobileGuruDashboard from './MobileGuruDashboard'
 
 function greetingByHour() {
   const h = new Date().getHours()
@@ -98,6 +99,14 @@ export default function GuruDashboard() {
   const tanggal = new Date().toLocaleDateString('id-ID', { timeZone: 'Asia/Jakarta', weekday: 'long', day: 'numeric', month: 'long' })
 
   return (
+    <>
+      {/* Mobile/Tablet only */}
+      <div className="lg:hidden">
+        <MobileGuruDashboard />
+      </div>
+
+      {/* Desktop only */}
+      <div className="hidden lg:block">
     <div className="space-y-3">
       {/* Greeting header */}
       <div className="flex flex-col items-center text-center sm:flex-row sm:items-center sm:text-left gap-2.5 min-w-0">
@@ -283,6 +292,13 @@ export default function GuruDashboard() {
           <h4 className="font-medium text-gray-800 text-sm">Absensi Siswa</h4>
           <p className="text-xs text-gray-500 mt-0.5">Input absensi kelas</p>
         </button>
+        <button onClick={() => navigate('/guru/absensi-harian')} className="bg-white rounded-xl p-3 shadow-sm border border-gray-100 hover:shadow-md transition-shadow text-left">
+          <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-amber-500 to-orange-600 flex items-center justify-center text-white mb-2">
+            <ClipboardCheck size={16} />
+          </div>
+          <h4 className="font-medium text-gray-800 text-sm">Absensi Harian</h4>
+          <p className="text-xs text-gray-500 mt-0.5">QR scan masuk/pulang</p>
+        </button>
         <button onClick={() => navigate('/guru/modul-ajar')} className="bg-white rounded-xl p-3 shadow-sm border border-gray-100 hover:shadow-md transition-shadow text-left">
           <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white mb-2">
             <BookOpen size={16} />
@@ -292,5 +308,7 @@ export default function GuruDashboard() {
         </button>
       </div>
     </div>
+    </div>
+    </>
   )
 }

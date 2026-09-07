@@ -13,15 +13,17 @@ export default function DashboardLayout() {
   const role = useAuthStore(s => s.user?.role)
 
   return (
-    <div className="h-screen overflow-hidden bg-gray-50">
+    <div className="h-screen overflow-hidden bg-gray-50 dark:bg-gray-950">
       <Sidebar />
       <div className={clsx(
         'flex h-full flex-col transition-all duration-300',
         isOpen ? 'lg:ml-64' : 'lg:ml-20'
       )}>
-        <Header />
+        <div className="hidden lg:block">
+          <Header />
+        </div>
         {isReadOnly(role) && (
-          <div className="bg-amber-50 border-b border-amber-200 text-amber-800 text-xs px-4 sm:px-6 py-2 flex items-center gap-2">
+          <div className="bg-amber-50 dark:bg-amber-950/40 border-b border-amber-200 dark:border-amber-900 text-amber-800 dark:text-amber-200 text-xs px-4 sm:px-6 py-2 flex items-center gap-2">
             <Eye size={14} /> Mode Pimpinan (Kepala Madrasah/Sekolah) — akses hanya-lihat, tidak dapat mengubah data.
           </div>
         )}

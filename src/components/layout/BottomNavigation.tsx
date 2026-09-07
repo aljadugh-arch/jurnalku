@@ -57,7 +57,7 @@ function roleItems(role?: string, hideStaffCeklok?: boolean): NavItem[] {
       : teacherItems
   }
 
-  if (role === 'siswa') {
+  if (role === 'siswa' || role === 'wali_murid') {
     return [
       { label: 'Home', path: '/siswa', icon: <Home size={iconSize} /> },
       { label: 'Hadir', path: '/siswa#kehadiran', icon: <UserCheck size={iconSize} /> },
