@@ -1,50 +1,42 @@
 import { useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import {
+  Bell,
+  BarChart3,
+  Calendar,
+  CalendarClock,
   ChevronRight,
-  GraduationCap, Users, BookOpen, Layers,
-  ClipboardList, DollarSign, FileText,
-  Calendar, MapPin, School,
-  BarChart3, Activity, TrendingUp,
+  ClipboardList,
+  FileText,
+  GraduationCap,
+  MapPin,
+  School,
+  Star,
+  UserCheck,
+  Users,
+  Wallet,
 } from 'lucide-react'
-import {
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
-  ResponsiveContainer,
-} from 'recharts'
 import { useAuthStore } from '../../stores/authStore'
 import { useSettingsStore } from '../../stores/settingsStore'
 import { useThemeStore } from '../../stores/themeStore'
-import { Card } from '../../components/ui'
 import { heroColors } from '../../lib/applyTheme'
 import MobileHeader from '../../components/MobileHeader'
 import MobileMenuSheet from '../../components/MobileMenuSheet'
 
-/* ─── menu items for 2-col grid ─── */
-const MENU_ITEMS = [
-  { label: 'Absensi Siswa', icon: <ClipboardList size={22} />, color: 'bg-emerald-100 text-emerald-700', path: '/admin/absensi-siswa' },
-  { label: 'Absensi Guru', icon: <MapPin size={22} />, color: 'bg-blue-100 text-blue-700', path: '/admin/absensi-guru' },
-  { label: 'Jurnal Kelas', icon: <FileText size={22} />, color: 'bg-purple-100 text-purple-700', path: '/admin/jurnal' },
-  { label: 'Penilaian', icon: <Activity size={22} />, color: 'bg-indigo-100 text-indigo-700', path: '/admin/rapor' },
-  { label: 'Rapor', icon: <GraduationCap size={22} />, color: 'bg-rose-100 text-rose-700', path: '/admin/rapor' },
-  { label: 'Agenda Guru', icon: <Calendar size={22} />, color: 'bg-amber-100 text-amber-700', path: '/admin/jadwal' },
-  { label: 'Pembayaran SPP', icon: <DollarSign size={22} />, color: 'bg-teal-100 text-teal-700', path: '/admin/tagihan' },
-  { label: 'Lainnya', icon: <School size={22} />, color: 'bg-gray-100 text-gray-600', path: '/admin' },
-]
-
-/* ─── greeting helper ─── */
-function getGreetingName(user: any): string {
-  if (!user?.nama) return 'Admin'
-  return user.nama.split(' ')[0] || 'Admin'
-}
-
+/* ─── greeting helpers ─── */
 function getGreeting(): string {
   const h = new Date().getHours()
-  if (h < 12) return 'Selamat Pagi'
-  if (h < 17) return 'Selamat Siang'
-  return 'Selamat Malam'
+  if (h < 11) return 'Selamat pagi'
+  if (h < 15) return 'Selamat siang'
+  if (h < 19) return 'Selamat sore'
+  return 'Selamat malam'
 }
 
-/* ─── component ─── */
+function initialsOf(name?: string) {
+  if (!name) return '?'
+  return name.trim().split(/\s+/).slice(0, 2).map(w => w.charAt(0).toUpperCase()).join('')
+}
+
 interface Props {
   stats: any
   loading?: boolean
@@ -59,228 +51,281 @@ export default function MobileAdminDashboard({ stats }: Props) {
   const hero = heroColors(settings, dark)
 
   const greeting = useMemo(() => getGreeting(), [])
-  const greetingName = useMemo(() => getGreetingName(user), [user])
 
-  const initials = useMemo(() => {
-    if (!user?.nama) return '?'
-    return user.nama.split(/\s+/).map(w => w.charAt(0)).slice(0, 2).join('').toUpperCase()
-  }, [user])
+  const totalSiswa = stats?.total_siswa ?? 0
+  const siswaAktif = stats?.siswa_aktif ?? totalSiswa
 
-  /* ─── stat cards data ─── */
-  const statCards = [
-    {
-      label: 'Siswa',
-      value: stats?.total_siswa ?? 0,
-      icon: <GraduationCap size={20} />,
-      borderColor: 'border-l-blue-500',
-      iconBg: 'bg-blue-100 text-blue-600',
-      path: '/admin/siswa',
-    },
-    {
-      label: 'Guru',
-      value: stats?.total_gtk ?? 0,
-      icon: <Users size={20} />,
-      borderColor: 'border-l-emerald-500',
-      iconBg: 'bg-emerald-100 text-emerald-600',
-      path: '/admin/gtk',
-    },
-    {
-      label: 'Kelas',
-      value: stats?.total_rombel ?? 0,
-      icon: <Layers size={20} />,
-      borderColor: 'border-l-purple-500',
-      iconBg: 'bg-purple-100 text-purple-600',
-      path: '/admin/rombel',
-    },
-    {
-      label: 'Mapel',
-      value: stats?.total_mapel ?? 0,
-      icon: <BookOpen size={20} />,
-      borderColor: 'border-l-orange-500',
-      iconBg: 'bg-orange-100 text-orange-600',
-      path: '/admin/mapel',
-    },
+  /* ─── quick actions (baris pintasan atas) ─── */
+  const quickActions = [
+    { label: 'Kelola Siswa', icon: <UserCheck size={20} />, tile: 'bg-emerald-600', path: '/admin/siswa' },
+    { label: 'Kelola GTK', icon: <Users size={20} />, tile: 'bg-sky-500', path: '/admin/gtk' },
+    { label: 'Jadwal', icon: <Calendar size={20} />, tile: 'bg-violet-500', path: '/admin/jadwal' },
+    { label: 'Laporan', icon: <FileText size={20} />, tile: 'bg-orange-500', path: '/admin/rapor' },
   ]
 
-  /* ─── chart data ─── */
-  const chartData = stats?.rekap_absensi ?? []
+  /* ─── menu layanan ─── */
+  const serviceMenu = [
+    { label: 'Absensi Siswa', icon: <ClipboardList size={20} />, tile: 'bg-emerald-600', path: '/admin/absensi-siswa' },
+    { label: 'Ceklok GTK', icon: <MapPin size={20} />, tile: 'bg-sky-500', path: '/admin/absensi-guru' },
+    { label: 'Penilaian', icon: <Star size={20} />, tile: 'bg-violet-500', path: '/admin/rapor' },
+    { label: 'Keuangan', icon: <Wallet size={20} />, tile: 'bg-orange-500', path: '/admin/tagihan' },
+  ]
+
+  /* ─── notifikasi: diturunkan dari data nyata dashboard ─── */
+  const notifications = useMemo(() => {
+    const list: { id: string; title: string; subtitle: string; time: string; tone: string; icon: any; path: string }[] = []
+
+    const absensiTotal = stats?.absensi_siswa?.total ?? 0
+    const absensiHadir = stats?.absensi_siswa?.hadir ?? 0
+    if (absensiTotal === 0) {
+      list.push({
+        id: 'absensi',
+        title: 'Presensi hari ini belum lengkap',
+        subtitle: 'Belum ada absensi siswa tercatat',
+        time: 'Hari ini',
+        tone: 'bg-orange-100 text-orange-600',
+        icon: <ClipboardList size={16} />,
+        path: '/admin/absensi-siswa',
+      })
+    } else {
+      list.push({
+        id: 'absensi',
+        title: 'Presensi siswa tercatat',
+        subtitle: `${absensiHadir} hadir dari ${absensiTotal} tercatat`,
+        time: 'Hari ini',
+        tone: 'bg-emerald-100 text-emerald-600',
+        icon: <ClipboardList size={16} />,
+        path: '/admin/absensi-siswa',
+      })
+    }
+
+    const jurnalTerbaru = stats?.jurnal_terbaru?.[0]
+    if (jurnalTerbaru) {
+      list.push({
+        id: 'jurnal',
+        title: 'Jurnal mengajar terbaru',
+        subtitle: `${jurnalTerbaru.mapel_nama || 'Mapel'} · ${jurnalTerbaru.rombel_nama || '-'}`,
+        time: String(jurnalTerbaru.created_at || '').slice(11, 16) || '—',
+        tone: 'bg-violet-100 text-violet-600',
+        icon: <CalendarClock size={16} />,
+        path: '/admin/jurnal',
+      })
+    }
+
+    const belumBayar = stats?.tagihan?.belum_bayar ?? 0
+    if (belumBayar > 0) {
+      list.push({
+        id: 'tagihan',
+        title: 'Tagihan belum dibayar',
+        subtitle: `${belumBayar} tagihan menunggu pembayaran`,
+        time: 'Hari ini',
+        tone: 'bg-rose-100 text-rose-600',
+        icon: <Wallet size={16} />,
+        path: '/admin/tagihan',
+      })
+    }
+
+    return list.slice(0, 3)
+  }, [stats])
 
   return (
-    <div className="lg:hidden min-h-screen -mx-4 -mt-3 bg-gray-50 dark:bg-gray-950">
-      {/* ─── HEADER ─── */}
-      <div className="px-4 pt-5 pb-8 text-white" style={{ background: `linear-gradient(135deg, ${hero}, #0f172a)` }}>
-        <div className="flex items-center justify-between mb-6">
-          <div className="flex items-center gap-3 min-w-0">
-            {settings.logo ? (
-              <img src={settings.logo} alt="Logo" className="w-10 h-10 rounded-full object-cover bg-white shadow-sm" />
-            ) : (
-              <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center">
-                <span className="text-white font-bold text-sm">{initials}</span>
-              </div>
-            )}
-            <div className="min-w-0">
-              <h1 className="text-white font-bold text-sm leading-tight truncate">
+    <div className="lg:hidden min-h-screen -mx-4 -mt-3 bg-slate-50 dark:bg-gray-950 pb-6">
+      {/* ── HEADER: aksi akun kanan atas, identitas lembaga lebar penuh di bawah ── */}
+      <div className="bg-white px-4 pt-4 pb-3 dark:bg-gray-900">
+        <div className="flex flex-col gap-2">
+          <div data-mobile-account-row="true" className="relative z-30 flex shrink-0 items-center justify-end gap-2">
+            <button
+              onClick={() => navigate('/admin/posting')}
+              aria-label="Notifikasi"
+              className="relative flex h-10 w-10 items-center justify-center rounded-2xl bg-slate-50 text-slate-700 ring-1 ring-slate-100 active:scale-95 transition dark:bg-gray-800 dark:text-gray-100 dark:ring-gray-700"
+            >
+              <Bell size={19} />
+              {notifications.length > 0 && (
+                <span className="absolute -right-1 -top-1 flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-rose-500 px-1 text-[10px] font-bold text-white">
+                  {notifications.length}
+                </span>
+              )}
+            </button>
+            <MobileHeader
+              basePath="/admin"
+              onBell={() => navigate('/admin/posting')}
+              showBell={false}
+              variant="light"
+            />
+          </div>
+
+          <div data-admin-school-header="true" className="flex items-center gap-3 min-w-0">
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-emerald-600 text-white shadow-sm">
+              {settings.logo
+                ? <img src={settings.logo} alt="Logo" className="h-full w-full object-cover" />
+                : <School size={22} />}
+            </div>
+            <div className="min-w-0 flex-1">
+              <h1 className="truncate text-[15px] font-bold leading-tight text-slate-900 dark:text-white">
                 {settings.nama_lembaga || 'Jurnal Madrasah'}
               </h1>
-              <p className="text-white/80 text-xs">Admin Sekolah</p>
+              <p className="text-xs text-slate-500 dark:text-gray-400">Admin Sekolah</p>
             </div>
           </div>
-          <div className="flex items-center gap-3">
-            <MobileHeader basePath="/admin" onBell={() => navigate('/admin/posting')} />
-          </div>
-        </div>
-
-        {/* ─── GREETING CARD ─── */}
-        <div className="bg-white/15 backdrop-blur-sm rounded-2xl p-4">
-          <p className="text-white font-bold text-lg leading-tight">
-            {greeting}, {greetingName} 👋
-          </p>
-          <p className="text-white/80 text-xs mt-1">
-            Jurnal Madrasah — Semoga hari ini penuh keberkahan
-          </p>
-          <button
-            onClick={() => setMenuOpen(true)}
-            className="inline-flex items-center gap-1 mt-3 bg-white/20 hover:bg-white/30 active:scale-95 text-white text-xs font-medium px-3 py-1.5 rounded-full transition"
-          >
-            Lihat Semua
-            <ChevronRight size={14} />
-          </button>
         </div>
       </div>
 
-      <div className="px-4 -mt-3 space-y-4 pb-6">
-        {/* ─── STAT CARDS ─── */}
-        <div className="grid grid-cols-2 gap-3">
-          {statCards.map(card => (
-            <Link
-              key={card.label}
-              to={card.path}
-              className={`bg-white dark:bg-gray-900 rounded-xl p-3 shadow-sm border border-gray-100 dark:border-gray-800 border-l-4 ${card.borderColor} active:scale-[0.97] transition-transform`}
-            >
-              <div className="flex items-center gap-2.5">
-                <div className={`w-9 h-9 rounded-lg flex items-center justify-center ${card.iconBg}`}>
-                  {card.icon}
-                </div>
-                <div>
-                  <p className="text-2xl font-bold text-gray-800 dark:text-gray-100 leading-none">{card.value}</p>
-                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{card.label}</p>
-                </div>
-              </div>
-            </Link>
-          ))}
+      <div className="px-4 pt-4 space-y-4">
+        {/* ── GREETING ── */}
+        <div data-admin-greeting="true">
+          <p className="text-[13px] text-slate-500 dark:text-gray-400">{greeting},</p>
+          <h2 className="text-xl font-bold leading-tight text-slate-900 dark:text-white">
+            {user?.nama || 'Admin Sekolah'} 👋
+          </h2>
+          <p className="mt-1 text-[13px] leading-snug text-slate-500 dark:text-gray-400">
+            Semoga hari ini berjalan dengan lancar dan penuh keberkahan.
+          </p>
         </div>
 
-        {/* ─── MENU GRID ─── */}
-        <Card className="!rounded-2xl">
-          <div className="flex items-center justify-between mb-3">
-            <h3 className="text-sm font-semibold text-gray-800 dark:text-gray-100">Menu Layanan</h3>
-            <button
-              type="button"
-              onClick={() => setMenuOpen(true)}
-              className="text-xs text-emerald-600 dark:text-emerald-400 font-medium active:scale-95 transition-transform"
-            >
-              Lihat Semua →
-            </button>
+        {/* ── HERO: Total Siswa ── */}
+        <Link
+          to="/admin/siswa"
+          data-admin-hero="true"
+          className="relative block overflow-hidden rounded-3xl p-4 text-white shadow-lg active:scale-[0.99] transition"
+          style={{ background: `linear-gradient(135deg, ${hero}, #064e3b)` }}
+        >
+          <div className="absolute inset-0 overflow-hidden pointer-events-none">
+            <div className="absolute -right-8 -top-10 h-32 w-32 rounded-full bg-white/10" />
           </div>
-          <div className="grid grid-cols-4 gap-x-2 gap-y-4">
-            {MENU_ITEMS.map(item => (
+          <div className="relative z-10 flex items-center gap-3">
+            <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-white/20 backdrop-blur-sm">
+              <School size={24} />
+            </span>
+            <div className="min-w-0 flex-1">
+              <p className="text-[12px] font-medium text-white/80">Total Siswa</p>
+              <p className="flex items-baseline gap-1.5">
+                <span data-admin-hero-value="true" className="text-3xl font-bold leading-none">{totalSiswa}</span>
+                <span className="text-[12px] text-white/80">aktif {siswaAktif !== totalSiswa ? `dari ${totalSiswa}` : ''}</span>
+              </p>
+            </div>
+            <ChevronRight size={20} className="shrink-0 text-white/80" />
+          </div>
+        </Link>
+
+        {/* ── QUICK ACTIONS ── */}
+        <div data-admin-quick-row="true" className="rounded-3xl bg-white p-3 shadow-sm dark:bg-gray-900">
+          <div className="grid grid-cols-4 gap-2">
+            {quickActions.map(a => (
               <Link
-                key={item.label}
-                to={item.path}
-                className="flex flex-col items-center text-center group active:scale-95 transition-transform"
+                key={a.label}
+                to={a.path}
+                className="flex flex-col items-center gap-1.5 rounded-2xl py-1.5 text-center active:scale-95 transition"
               >
-                <span className={`w-12 h-12 rounded-2xl flex items-center justify-center ${item.color} transition-transform group-active:scale-90`}>
-                  {item.icon}
+                <span className={`flex h-11 w-11 items-center justify-center rounded-2xl ${a.tile} text-white shadow-sm`}>
+                  {a.icon}
                 </span>
-                <span className="mt-2 text-[11px] leading-4 font-medium text-gray-600 dark:text-gray-300 line-clamp-2">
-                  {item.label}
-                </span>
+                <span className="text-[10px] font-medium leading-tight text-slate-600 dark:text-gray-300">{a.label}</span>
               </Link>
             ))}
           </div>
-        </Card>
+        </div>
 
-        {/* ─── CHART: REKAP ABSENSI ─── */}
-        {chartData.length > 0 && (
-          <Card className="!rounded-2xl" title="Rekap Absensi (7 Hari)" icon={<BarChart3 size={16} className="text-emerald-600" />}>
-            <ResponsiveContainer width="100%" height={200}>
-              <BarChart data={chartData} margin={{ top: 5, right: 5, left: -20, bottom: 5 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                <XAxis dataKey="hari" tick={{ fontSize: 11 }} />
-                <YAxis tick={{ fontSize: 11 }} />
-                <Tooltip />
-                <Bar dataKey="siswa_hadir" name="Hadir" fill="#10b981" radius={[4, 4, 0, 0]} />
-                <Bar dataKey="siswa_sakit" name="Sakit" fill="#f59e0b" radius={[4, 4, 0, 0]} />
-                <Bar dataKey="siswa_izin" name="Izin" fill="#8b5cf6" radius={[4, 4, 0, 0]} />
-                <Bar dataKey="siswa_alpha" name="Alpha" fill="#ef4444" radius={[4, 4, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          </Card>
-        )}
+        {/* ── MENU LAYANAN ── */}
+        <section className="rounded-3xl bg-white p-4 shadow-sm dark:bg-gray-900">
+          <div className="mb-3 flex items-center justify-between">
+            <h3 className="text-sm font-bold text-slate-900 dark:text-white">Menu Layanan</h3>
+            <button
+              type="button"
+              onClick={() => setMenuOpen(true)}
+              className="flex items-center gap-0.5 text-[11px] font-semibold text-emerald-600 active:opacity-70 transition"
+            >
+              Lihat Semua
+              <ChevronRight size={13} />
+            </button>
+          </div>
+          <div data-admin-menu-grid="true" className="grid grid-cols-4 gap-2">
+            {serviceMenu.map(item => (
+              <Link
+                key={item.label}
+                to={item.path}
+                className="flex flex-col items-center gap-1.5 rounded-2xl py-1.5 text-center active:scale-95 transition"
+              >
+                <span className={`flex h-11 w-11 items-center justify-center rounded-2xl ${item.tile} text-white shadow-sm`}>
+                  {item.icon}
+                </span>
+                <span className="text-[10px] font-medium leading-tight text-slate-600 dark:text-gray-300">{item.label}</span>
+              </Link>
+            ))}
+          </div>
+        </section>
 
-        {/* ─── KEGIATAN HARI INI ─── */}
-        <Card className="!rounded-2xl" title="Kegiatan Hari Ini" icon={<Activity size={16} className="text-emerald-600" />}>
-          {stats?.jurnal_terbaru?.length > 0 ? (
-            <div className="space-y-2.5">
-              {stats.jurnal_terbaru.slice(0, 4).map((j: any) => (
-                <div key={j.id} className="flex items-center justify-between gap-2 p-3 bg-gray-50 dark:bg-gray-800/60 rounded-xl">
-                  <div className="flex items-center gap-3 min-w-0">
-                    <div className="w-9 h-9 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center shrink-0">
-                      <ClipboardList size={16} />
-                    </div>
-                    <div className="min-w-0">
-                      <p className="text-sm font-medium text-gray-800 dark:text-gray-100 truncate">{j.guru_nama || '-'}</p>
-                      <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
-                        {j.mapel_nama} • {j.rombel_nama}
-                      </p>
-                    </div>
-                  </div>
-                  <span className={`shrink-0 text-[10px] font-semibold px-2 py-0.5 rounded-full ${
-                    j.status === 'approved' ? 'bg-emerald-100 text-emerald-700'
-                      : j.status === 'submitted' ? 'bg-blue-100 text-blue-700'
-                      : 'bg-amber-100 text-amber-700'
-                  }`}>
-                    {j.status}
+        {/* ── NOTIFIKASI TERBARU ── */}
+        <section data-admin-notif-card="true" className="rounded-3xl bg-white p-4 shadow-sm dark:bg-gray-900">
+          <div className="mb-3 flex items-center justify-between">
+            <h3 className="flex items-center gap-2 text-sm font-bold text-slate-900 dark:text-white">
+              <span className="relative">
+                <Bell size={16} className="text-amber-500" />
+                {notifications.length > 0 && (
+                  <span className="absolute -right-1.5 -top-1.5 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-rose-500 text-[9px] font-bold text-white">
+                    {notifications.length}
                   </span>
-                </div>
+                )}
+              </span>
+              Notifikasi Terbaru
+            </h3>
+            <button
+              type="button"
+              onClick={() => navigate('/admin/posting')}
+              className="flex items-center gap-0.5 text-[11px] font-semibold text-emerald-600 active:opacity-70 transition"
+            >
+              Lihat Semua
+              <ChevronRight size={13} />
+            </button>
+          </div>
+
+          {notifications.length === 0 ? (
+            <p className="py-4 text-center text-xs text-slate-400">Belum ada notifikasi</p>
+          ) : (
+            <div className="divide-y divide-slate-100 dark:divide-gray-800">
+              {notifications.map(n => (
+                <button
+                  key={n.id}
+                  data-admin-notif-row="true"
+                  onClick={() => navigate(n.path)}
+                  className="flex w-full items-center gap-3 py-2.5 text-left first:pt-0 last:pb-0 active:opacity-70 transition"
+                >
+                  <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full ${n.tone}`}>
+                    {n.icon}
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-[13px] font-semibold text-slate-900 dark:text-white">{n.title}</span>
+                    <span className="block truncate text-[11px] text-slate-500 dark:text-gray-400">{n.subtitle}</span>
+                  </span>
+                  <span data-admin-notif-time="true" className="shrink-0 text-[11px] text-slate-400">{n.time}</span>
+                </button>
               ))}
             </div>
-          ) : (
-            <div className="py-6 text-center">
-              <ClipboardList size={32} className="mx-auto text-gray-300 mb-2" />
-              <p className="text-sm text-gray-400">Belum ada kegiatan hari ini</p>
-            </div>
           )}
-        </Card>
+        </section>
 
-        {/* ─── QUICK STATS ROW ─── */}
-        {stats && (
-          <div className="grid grid-cols-2 gap-3">
-            <Card className="!rounded-2xl">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-emerald-100 text-emerald-600 flex items-center justify-center">
-                  <TrendingUp size={20} />
-                </div>
-                <div>
-                  <p className="text-xs text-gray-500 dark:text-gray-400">Jurnal Hari Ini</p>
-                  <p className="text-xl font-bold text-gray-800 dark:text-gray-100">{stats.jurnal_hari_ini ?? 0}</p>
-                </div>
+        {/* ── RINGKASAN LEMBAGA ── */}
+        <section className="rounded-3xl bg-white p-4 shadow-sm dark:bg-gray-900">
+          <h3 className="mb-3 flex items-center gap-2 text-sm font-bold text-slate-900 dark:text-white">
+            <BarChart3 size={16} className="text-emerald-600" />
+            Ringkasan Lembaga
+          </h3>
+          <div className="grid grid-cols-2 gap-2">
+            {[
+              { label: 'Total GTK', value: stats?.total_gtk ?? 0, caption: 'aktif', icon: <Users size={18} />, tile: 'bg-emerald-100 text-emerald-700' },
+              { label: 'Rombel', value: stats?.total_rombel ?? 0, caption: 'kelas', icon: <GraduationCap size={18} />, tile: 'bg-sky-100 text-sky-700' },
+              { label: 'Mata Pelajaran', value: stats?.total_mapel ?? 0, caption: 'mapel', icon: <FileText size={18} />, tile: 'bg-violet-100 text-violet-700' },
+              { label: 'Jurnal Hari Ini', value: stats?.jurnal_hari_ini ?? 0, caption: 'jurnal', icon: <ClipboardList size={18} />, tile: 'bg-orange-100 text-orange-700' },
+            ].map(s => (
+              <div key={s.label} className="rounded-2xl bg-slate-50 p-3 dark:bg-gray-800/60">
+                <span className={`flex h-9 w-9 items-center justify-center rounded-xl ${s.tile}`}>{s.icon}</span>
+                <p className="mt-2 text-xl font-bold leading-none text-slate-900 dark:text-white">{s.value}</p>
+                <p className="mt-1 text-[11px] text-slate-500 dark:text-gray-400">{s.label} · {s.caption}</p>
               </div>
-            </Card>
-            <Card className="!rounded-2xl">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-rose-100 text-rose-600 flex items-center justify-center">
-                  <DollarSign size={20} />
-                </div>
-                <div>
-                  <p className="text-xs text-gray-500">Tagihan Belum Bayar</p>
-                  <p className="text-xl font-bold text-gray-800">{stats.tagihan?.belum_bayar ?? 0}</p>
-                </div>
-              </div>
-            </Card>
+            ))}
           </div>
-        )}
+        </section>
       </div>
+
       <MobileMenuSheet open={menuOpen} onClose={() => setMenuOpen(false)} />
     </div>
   )

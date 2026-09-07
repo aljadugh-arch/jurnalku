@@ -1,6 +1,18 @@
-import { useState, useEffect } from 'react'
-import { BookOpen, ClipboardCheck, ClipboardList, Clock, PenLine, ScrollText, CheckCircle2, AlertCircle } from 'lucide-react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import {
+  Bell,
+  BookOpen,
+  Calendar,
+  CalendarDays,
+  ChevronRight,
+  Fingerprint,
+  LogIn,
+  Star,
+  Target,
+  Users,
+} from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
+import toast from 'react-hot-toast'
 import api from '../../services/api'
 import MobileHeader from '../../components/MobileHeader'
 import { useSettingsStore } from '../../stores/settingsStore'
@@ -10,10 +22,20 @@ import { heroColors } from '../../lib/applyTheme'
 /* ─── helpers ─── */
 function greetingByHour() {
   const h = new Date().getHours()
-  if (h < 11) return 'Selamat Pagi'
-  if (h < 15) return 'Selamat Siang'
-  if (h < 19) return 'Selamat Sore'
-  return 'Selamat Malam'
+  if (h < 11) return 'Selamat pagi'
+  if (h < 15) return 'Selamat siang'
+  if (h < 19) return 'Selamat sore'
+  return 'Selamat malam'
+}
+
+function longDateJakarta() {
+  return new Date().toLocaleDateString('id-ID', {
+    timeZone: 'Asia/Jakarta',
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+  })
 }
 
 function nowMinutes() {
@@ -26,13 +48,8 @@ function nowMinutes() {
 
 function toMinutes(t: string) {
   if (!t) return -1
-  const [h, m] = t.split(':').map(Number)
+  const [h, m] = String(t).split(':').map(Number)
   return (Number.isFinite(h) ? h : 0) * 60 + (Number.isFinite(m) ? m : 0)
-}
-
-function teacherDisplayName(gtk: any) {
-  const name = gtk?.nama || 'Guru'
-  return `${String(gtk?.jenis_kelamin || '').toUpperCase() === 'P' ? 'Ibu' : 'Pak'} ${name}`
 }
 
 function initials(name?: string) {
@@ -53,279 +70,309 @@ export default function MobileGuruDashboard() {
   const [data, setData] = useState<any>({
     jadwal_hari_ini: [], sesi_kelas_aktif: null,
     rekap_jurnal: { draft: 0, submitted: 0, approved: 0, total: 0 },
-    rombel_count: 0, gtk: null,
+    rombel_count: 0, gtk: null, siswa_rombel_count: 0, nilai_siswa_count: 0,
+    absensi_hari_ini: 0,
   })
-  const [loading, setLoading] = useState(true)
+  const [busy, setBusy] = useState(false)
   const navigate = useNavigate()
   const settings = useSettingsStore(s => s.settings)
   const dark = useThemeStore(s => s.dark)
   const hero = heroColors(settings, dark)
 
-  useEffect(() => {
-    api.get('/guru/dashboard')
-      .then(res => setData(res.data))
-      .catch(() => {})
-      .finally(() => setLoading(false))
-  }, [])
-
-  const cur = nowMinutes()
-  const rekap = data.rekap_jurnal || {}
-  const draft = rekap.draft ?? 0
-  const submitted = rekap.submitted ?? 0
-  const approved = rekap.approved ?? 0
-  const totalJurnal = (draft + submitted + approved) || (rekap.total ?? 0)
-  const persenApproved = totalJurnal > 0 ? Math.round((approved / totalJurnal) * 100) : 0
-
-  // Find currently active schedule
-  const activeJadwal = data.jadwal_hari_ini?.find((j: any) => getJadwalStatus(j, cur) === 'active')
-
-  // Sort jadwal by start time
-  const sortedJadwal = [...(data.jadwal_hari_ini || [])].sort(
-    (a: any, b: any) => toMinutes(a.jam_mulai) - toMinutes(b.jam_mulai)
+  const load = useCallback(
+    () => api.get('/guru/dashboard').then(res => setData(res.data)).catch(() => {}),
+    [],
   )
 
+  useEffect(() => { load() }, [load])
+
+  const cur = nowMinutes()
+
+  const sortedJadwal = useMemo(
+    () => [...(data.jadwal_hari_ini || [])].sort(
+      (a: any, b: any) => toMinutes(a.jam_mulai) - toMinutes(b.jam_mulai),
+    ),
+    [data.jadwal_hari_ini],
+  )
+
+  // Reference hero shows the class the teacher should enter next:
+  // the one running now, otherwise the earliest upcoming one.
+  const nextClass = useMemo(() => {
+    const active = sortedJadwal.find((j: any) => getJadwalStatus(j, cur) === 'active')
+    if (active) return active
+    return sortedJadwal.find((j: any) => getJadwalStatus(j, cur) === 'upcoming') || null
+  }, [sortedJadwal, cur])
+
+  const pendingJurnal = useMemo(() => {
+    const r = data.rekap_jurnal || {}
+    const draft = r.draft ?? 0
+    const submitted = r.submitted ?? 0
+    return draft + submitted
+  }, [data.rekap_jurnal])
+
+  const enterClass = async (jadwal: any) => {
+    if (!jadwal?.id) return toast.error('Tidak ada jadwal mengajar hari ini')
+    setBusy(true)
+    try {
+      await api.post('/guru/sesi-kelas/masuk', { jadwal_id: jadwal.id })
+      toast.success(`Masuk kelas ${jadwal.rombel_nama || ''}`.trim())
+      await load()
+      navigate(`/guru/jurnal?jadwal_id=${encodeURIComponent(jadwal.id)}`)
+    } catch (err: any) {
+      toast.error(err.response?.data?.error || 'Gagal mencatat masuk kelas')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const quickActions = [
+    {
+      label: 'Jadwal Mengajar',
+      subtitle: `Hari ini ${sortedJadwal.length} jadwal`,
+      icon: <BookOpen size={20} />,
+      tile: 'bg-blue-500',
+      bg: 'bg-blue-50',
+      path: '/guru/jadwal',
+    },
+    {
+      label: 'Ceklok Kehadiran',
+      subtitle: 'Absen masuk/pulang',
+      icon: <Fingerprint size={20} />,
+      tile: 'bg-emerald-600',
+      bg: 'bg-emerald-50',
+      path: '/guru/absensi-guru',
+    },
+    {
+      label: 'Absensi Siswa',
+      subtitle: `${data.absensi_hari_ini ?? 0} siswa hari ini`,
+      icon: <Users size={20} />,
+      tile: 'bg-rose-500',
+      bg: 'bg-rose-50',
+      path: '/guru/absensi-siswa',
+    },
+    {
+      label: 'Penilaian Siswa',
+      subtitle: `${data.nilai_siswa_count ?? 0} penilaian`,
+      icon: <Star size={20} />,
+      tile: 'bg-violet-500',
+      bg: 'bg-violet-50',
+      path: '/guru/penilaian-harian',
+    },
+  ]
+
   return (
-    <div className="min-h-[100dvh] bg-gray-50 dark:bg-gray-950">
-      {/* ── HEADER: hero gradient, aksi akun di baris sendiri agar tidak tertimpa ── */}
-      <div className="px-4 pt-6 pb-6 text-white relative" style={{ background: `linear-gradient(135deg, ${hero}, #0f172a)` }}>
-        {/* decorative circles dikurung agar hero tidak perlu overflow-hidden (dropdown akun tetap utuh) */}
-        <div className="absolute inset-0 overflow-hidden pointer-events-none">
-          <div className="absolute -right-10 -top-10 w-32 h-32 bg-white/[0.07] rounded-full" />
-          <div className="absolute right-12 -bottom-14 w-24 h-24 bg-white/[0.05] rounded-full" />
-        </div>
-
-        {/* Baris aksi akun (bell, tema, profil/logout) — terpisah dari nama */}
-        <div data-mobile-account-row="true" className="relative z-30 flex items-center justify-end">
-          <MobileHeader basePath="/guru" onBell={() => navigate('/guru/posting')} />
-        </div>
-
-        {/* Baris identitas: nama tidak lagi berbagi ruang dengan tombol aksi */}
-        <div data-mobile-identity-row="true" className="relative z-10 mt-3 flex items-center gap-3 min-w-0">
-          <div className="w-11 h-11 rounded-full bg-white/20 backdrop-blur-sm flex items-center justify-center text-white font-bold text-sm shrink-0 border-2 border-white/30">
-            {data.gtk?.foto ? (
-              <img src={data.gtk.foto} alt={data.gtk?.nama} className="w-full h-full rounded-full object-cover" />
-            ) : (
-              initials(data.gtk?.nama)
-            )}
+    <div className="min-h-[100dvh] bg-slate-50 dark:bg-gray-950 pb-6">
+      {/* ── HEADER: greeting kiri, aksi akun kanan (sesuai desain referensi) ── */}
+      <div className="px-4 pt-5 pb-3">
+        <div className="flex flex-col gap-2">
+          <div data-mobile-account-row="true" className="relative z-30 flex shrink-0 items-center justify-end gap-2">
+            <button
+              data-guru-bell="true"
+              onClick={() => navigate('/guru/posting')}
+              aria-label="Notifikasi"
+              className="relative flex h-10 w-10 items-center justify-center rounded-2xl bg-white text-slate-800 shadow-sm ring-1 ring-slate-100 active:scale-95 transition dark:bg-gray-900 dark:text-gray-100 dark:ring-gray-800"
+            >
+              <Bell size={19} />
+              {pendingJurnal > 0 && (
+                <span
+                  data-guru-bell-badge="true"
+                  className="absolute -right-1 -top-1 flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-rose-500 px-1 text-[10px] font-bold text-white"
+                >
+                  {pendingJurnal > 9 ? '9+' : pendingJurnal}
+                </span>
+              )}
+            </button>
+            <MobileHeader
+              basePath="/guru"
+              onBell={() => navigate('/guru/posting')}
+              showBell={false}
+              variant="light"
+            />
           </div>
-          <div className="min-w-0 flex-1">
-            <p className="text-white/80 text-[10px] font-medium tracking-wide leading-none">Guru</p>
-            <h1 className="text-base font-bold leading-tight truncate mt-0.5">{data.gtk?.nama || 'Guru'}</h1>
-            <p className="text-white/70 text-[11px] leading-none mt-0.5">{data.rombel_count} rombel</p>
+
+          <div data-guru-greeting="true" data-mobile-identity-row="true" className="flex items-center gap-3 min-w-0">
+            <div className="relative shrink-0">
+              <div className="flex h-14 w-14 items-center justify-center overflow-hidden rounded-full bg-slate-200 text-base font-bold text-slate-700 ring-2 ring-white shadow-sm">
+                {data.gtk?.foto
+                  ? <img src={data.gtk.foto} alt={data.gtk?.nama} className="h-full w-full object-cover" />
+                  : initials(data.gtk?.nama)}
+              </div>
+              <span className="absolute bottom-0 right-0 h-3.5 w-3.5 rounded-full bg-emerald-500 ring-2 ring-white" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="text-[13px] text-slate-500 dark:text-gray-400">{greetingByHour()},</p>
+              <h1 className="truncate text-lg font-bold leading-tight text-slate-900 dark:text-white">
+                {data.gtk?.nama_tampilan || data.gtk?.nama || 'Guru'}
+              </h1>
+              <p data-guru-date-row="true" className="mt-0.5 flex items-center gap-1.5 text-[12px] text-slate-500 dark:text-gray-400">
+                <CalendarDays size={13} className="shrink-0 text-blue-600" />
+                <span>{longDateJakarta()}</span>
+              </p>
+            </div>
           </div>
         </div>
       </div>
 
-      {/* ── Content (lifts over header) ── */}
-      <div data-mobile-compact-dashboard="true" className="px-3 -mt-2 relative z-10 pb-5 space-y-3">
+      <div data-mobile-compact-dashboard="true" className="px-4 space-y-4">
+        {/* ── HERO: Fokus Hari Ini ── */}
+        <section
+          data-guru-focus-card="true"
+          className="relative overflow-hidden rounded-3xl p-4 text-white shadow-lg"
+          style={{ background: `linear-gradient(135deg, ${hero}, #1e3a8a)` }}
+        >
+          <div className="absolute inset-0 overflow-hidden pointer-events-none">
+            <div className="absolute -right-8 -top-10 h-32 w-32 rounded-full bg-white/10" />
+            <div className="absolute -right-2 bottom-8 h-20 w-20 rounded-full bg-white/[0.07]" />
+          </div>
 
-        {/* ── GREETING + CURRENT ACTIVITY ── */}
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-3">
-          <p className="text-gray-800 font-bold text-sm">
-            {greetingByHour()}, {teacherDisplayName(data.gtk)} 👋
-          </p>
+          <button
+            onClick={() => navigate('/guru/jurnal')}
+            className="relative z-10 w-full text-left active:scale-[0.99] transition"
+          >
+            <span className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wider text-white/80">
+              <Target size={14} />
+              Fokus Hari Ini
+              <ChevronRight size={16} className="ml-auto text-white/80" />
+            </span>
+            <h2 className="mt-2 text-2xl font-bold leading-tight">Jurnal Mengajar</h2>
+            <p className="mt-1 max-w-[240px] text-[13px] leading-snug text-white/80">
+              Catat kegiatan pembelajaran hari ini dengan mudah.
+            </p>
+          </button>
 
-          {/* Current activity */}
-          <div className="mt-2 rounded-xl bg-gradient-to-br from-blue-50 to-indigo-50 border border-blue-100 p-3">
-            <div className="flex items-center gap-2 mb-1">
-              <span className="w-2 h-2 rounded-full bg-blue-500 animate-pulse" />
-              <p className="text-[11px] font-bold uppercase tracking-wider text-blue-700">Sedang Berlangsung</p>
-            </div>
-            {activeJadwal ? (
-              <div>
-                <p className="font-bold text-gray-800 text-sm">{activeJadwal.mapel_nama}</p>
-                <p className="text-gray-600 text-xs mt-0.5">
-                  {activeJadwal.rombel_nama} · {activeJadwal.jam_mulai} – {activeJadwal.jam_selesai}
-                </p>
+          {/* nested white next-class card */}
+          <div data-guru-next-class="true" className="relative z-10 mt-4 rounded-2xl bg-white p-3 shadow-sm dark:bg-gray-900">
+            {nextClass ? (
+              <div className="flex items-center gap-3">
+                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-600 dark:bg-blue-500/15">
+                  <BookOpen size={20} />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-bold text-slate-900 dark:text-white">{nextClass.mapel_nama}</p>
+                  <p className="truncate text-xs text-slate-500 dark:text-gray-400">
+                    {nextClass.jam_mulai} - {nextClass.jam_selesai}
+                    {nextClass.rombel_nama ? ` · ${nextClass.rombel_nama}` : ''}
+                  </p>
+                </div>
+                <button
+                  onClick={() => enterClass(nextClass)}
+                  disabled={busy}
+                  className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-emerald-600 px-3 py-2 text-xs font-semibold text-white active:scale-95 transition disabled:opacity-60"
+                >
+                  <LogIn size={14} />
+                  Masuk Kelas
+                </button>
               </div>
             ) : (
-              <p className="text-gray-400 text-xs">Tidak ada jadwal aktif</p>
+              <div className="flex items-center gap-3">
+                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-slate-100 text-slate-400 dark:bg-gray-800">
+                  <BookOpen size={20} />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-bold text-slate-900 dark:text-white">Tidak ada kelas berikutnya</p>
+                  <p className="text-xs text-slate-500 dark:text-gray-400">Jadwal hari ini sudah selesai</p>
+                </div>
+              </div>
             )}
           </div>
+        </section>
+
+        {/* ── QUICK ACTIONS 2x2 ── */}
+        <div data-guru-quick-grid="true" className="grid grid-cols-2 gap-3">
+          {quickActions.map(a => (
+            <button
+              key={a.label}
+              onClick={() => navigate(a.path)}
+              className={`${a.bg} dark:bg-gray-900 rounded-2xl p-3 text-left active:scale-[0.97] transition`}
+            >
+              <div className="flex items-start justify-between">
+                <span className={`flex h-10 w-10 items-center justify-center rounded-xl ${a.tile} text-white shadow-sm`}>
+                  {a.icon}
+                </span>
+                <ChevronRight size={16} className="text-slate-400" />
+              </div>
+              <p className="mt-2.5 text-[13px] font-bold leading-tight text-slate-900 dark:text-white">{a.label}</p>
+              <p data-guru-quick-subtitle="true" className="mt-0.5 text-[11px] leading-tight text-slate-500 dark:text-gray-400">
+                {a.subtitle}
+              </p>
+            </button>
+          ))}
         </div>
 
-        {/* ── JADWAL HARI INI ── */}
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-3">
-          <div className="flex items-center justify-between mb-2">
-            <h2 className="font-bold text-gray-800 text-sm">Jadwal Hari Ini</h2>
-            <button onClick={() => navigate('/guru/jadwal')} className="text-[11px] font-semibold text-blue-600 active:text-blue-800 transition">
+        {/* ── SCHEDULE LIST ── */}
+        <section className="rounded-3xl bg-white p-4 shadow-sm dark:bg-gray-900">
+          <div className="mb-3 flex items-center justify-between">
+            <h2 className="flex items-center gap-2 text-sm font-bold text-slate-900 dark:text-white">
+              <Calendar size={16} className="text-blue-600" />
+              Jadwal Mengajar Hari Ini
+            </h2>
+            <button
+              onClick={() => navigate('/guru/jadwal')}
+              className="flex items-center gap-0.5 text-[11px] font-semibold text-blue-600 active:opacity-70 transition"
+            >
               Lihat Semua
+              <ChevronRight size={13} />
             </button>
           </div>
 
           {sortedJadwal.length === 0 ? (
-            <p className="text-gray-400 text-xs text-center py-3">Tidak ada jadwal hari ini</p>
+            <p className="py-5 text-center text-xs text-slate-400">Tidak ada jadwal hari ini</p>
           ) : (
-            <div className="space-y-1.5">
+            <div className="space-y-2">
               {sortedJadwal.map((j: any, i: number) => {
                 const status = getJadwalStatus(j, cur)
-                const isActive = status === 'active'
                 const isDone = status === 'done'
-
                 return (
-                  <button
+                  <div
                     key={j.id || i}
-                    onClick={() => navigate(`/guru/jurnal?jadwal_id=${encodeURIComponent(j.id)}`)}
-                    className={`w-full text-left flex items-center gap-3 p-3 rounded-xl transition-all active:scale-[0.98] ${
-                      isActive
-                        ? 'bg-blue-600 text-white shadow-md shadow-blue-600/25'
-                        : isDone
-                          ? 'bg-gray-50 text-gray-400 opacity-60'
-                          : 'bg-white border border-gray-100 hover:border-gray-200'
+                    data-guru-schedule-row="true"
+                    className={`flex items-center gap-3 rounded-2xl border p-2.5 transition ${
+                      status === 'active'
+                        ? 'border-blue-200 bg-blue-50/60 dark:border-blue-500/30 dark:bg-blue-500/10'
+                        : 'border-slate-100 bg-white dark:border-gray-800 dark:bg-gray-900'
                     }`}
                   >
-                    {/* Time column */}
-                    <div className={`w-14 text-center shrink-0 rounded-lg py-1.5 ${isActive ? 'bg-white/20' : isDone ? 'bg-gray-100' : 'bg-gray-50'}`}>
-                      <p className={`text-sm font-bold leading-none ${isActive ? 'text-white' : isDone ? 'text-gray-400' : 'text-gray-700'}`}>
-                        {j.jam_mulai}
-                      </p>
-                      <p className={`text-[10px] mt-0.5 ${isActive ? 'text-white/70' : 'text-gray-400'}`}>
-                        {j.jam_selesai}
-                      </p>
+                    <div
+                      data-guru-schedule-time="true"
+                      className="flex w-[52px] shrink-0 flex-col items-center rounded-xl bg-slate-100 py-1.5 dark:bg-gray-800"
+                    >
+                      <span className="text-[13px] font-bold leading-none text-slate-800 dark:text-gray-100">{j.jam_mulai}</span>
+                      <span className="mt-0.5 text-[10px] leading-none text-slate-400">{j.jam_selesai}</span>
                     </div>
 
-                    {/* Info */}
-                    <div className="flex-1 min-w-0">
-                      <p className={`text-sm font-semibold truncate ${isActive ? 'text-white' : isDone ? 'text-gray-400' : 'text-gray-800'}`}>
+                    <div className="min-w-0 flex-1">
+                      <p className={`truncate text-[13px] font-semibold ${isDone ? 'text-slate-400' : 'text-slate-900 dark:text-white'}`}>
                         {j.mapel_nama}
                       </p>
-                      <p className={`text-xs truncate ${isActive ? 'text-white/70' : 'text-gray-500'}`}>
+                      <p className="mt-0.5 flex items-center gap-1 truncate text-[11px] text-slate-500 dark:text-gray-400">
+                        <Users size={11} className="shrink-0" />
                         {j.rombel_nama}
                       </p>
                     </div>
 
-                    {/* Status indicator */}
-                    {isActive && (
-                      <span className="inline-flex items-center gap-1 bg-white/20 text-white text-[10px] font-bold px-2 py-1 rounded-full shrink-0">
-                        <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
-                        Aktif
-                      </span>
-                    )}
-                    {isDone && <CheckCircle2 size={16} className="text-gray-300 shrink-0" />}
-                    {status === 'upcoming' && <Clock size={16} className="text-gray-300 shrink-0" />}
-                  </button>
+                    <div data-guru-schedule-action="true" className="shrink-0">
+                      {isDone ? (
+                        <span className="rounded-full bg-slate-100 px-2.5 py-1.5 text-[11px] font-semibold text-slate-400 dark:bg-gray-800">
+                          Selesai
+                        </span>
+                      ) : (
+                        <button
+                          onClick={() => enterClass(j)}
+                          disabled={busy}
+                          className="inline-flex items-center gap-1 rounded-full bg-emerald-600 px-2.5 py-1.5 text-[11px] font-semibold text-white active:scale-95 transition disabled:opacity-60"
+                        >
+                          <LogIn size={12} />
+                          Masuk
+                        </button>
+                      )}
+                    </div>
+                  </div>
                 )
               })}
             </div>
           )}
-        </div>
-
-        {/* ── QUICK ACCESS GRID (2x2) ── */}
-        <div className="grid grid-cols-2 gap-2">
-          <QuickCard
-            label="Absensi Harian"
-            color="from-amber-400 to-amber-500"
-            bg="bg-amber-50"
-            icon={<AlertCircle size={20} className="text-amber-500" />}
-            onClick={() => navigate('/guru/absensi-harian')}
-          />
-          <QuickCard
-            label="Catatan Kepribadian"
-            color="from-orange-400 to-orange-500"
-            bg="bg-orange-50"
-            icon={<ScrollText size={20} className="text-orange-500" />}
-            onClick={() => navigate('/guru/catatan-kepribadian')}
-          />
-          <QuickCard
-            label="Modul Ajar AI"
-            color="from-blue-500 to-blue-600"
-            bg="bg-blue-50"
-            icon={<BookOpen size={20} className="text-blue-500" />}
-            onClick={() => navigate('/guru/modul-ajar')}
-          />
-          <QuickCard
-            label="Jurnal"
-            color="from-emerald-400 to-emerald-500"
-            bg="bg-emerald-50"
-            icon={<ClipboardList size={20} className="text-emerald-500" />}
-            onClick={() => navigate('/guru/jurnal')}
-          />
-        </div>
-
-        {/* ── REKAP JURNAL ── */}
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-3">
-          <h2 className="font-bold text-gray-800 text-sm mb-2">Rekap Jurnal</h2>
-
-          {/* Progress bar */}
-          <div className="flex items-center justify-between text-[11px] text-gray-500 mb-1.5">
-            <span>{approved} disetujui dari {totalJurnal} jurnal</span>
-            <span className="font-bold text-blue-600">{persenApproved}%</span>
-          </div>
-          <div className="w-full bg-gray-100 rounded-full h-2.5 overflow-hidden">
-            <div
-              className="bg-gradient-to-r from-blue-500 to-indigo-500 h-full rounded-full transition-all duration-500"
-              style={{ width: persenApproved + '%' }}
-            />
-          </div>
-
-          {/* Count breakdown */}
-          <div className="grid grid-cols-3 gap-2 mt-2.5">
-            <div className="rounded-xl bg-gray-50 p-2 text-center">
-              <p className="text-lg font-bold text-gray-700">{draft}</p>
-              <p className="text-[10px] text-gray-400 font-medium">Draft</p>
-            </div>
-            <div className="rounded-xl bg-amber-50 p-2 text-center">
-              <p className="text-lg font-bold text-amber-600">{submitted}</p>
-              <p className="text-[10px] text-gray-400 font-medium">Terkirim</p>
-            </div>
-            <div className="rounded-xl bg-emerald-50 p-2 text-center">
-              <p className="text-lg font-bold text-emerald-600">{approved}</p>
-              <p className="text-[10px] text-gray-400 font-medium">Disetujui</p>
-            </div>
-          </div>
-        </div>
-
-        {/* ── QUICK ACTIONS (bottom) ── */}
-        <div className="grid grid-cols-3 gap-2">
-          <button
-            onClick={() => navigate('/guru/absensi-guru')}
-            className="flex flex-col items-center gap-1.5 p-3 bg-white rounded-xl border border-gray-100 shadow-sm active:scale-95 transition"
-          >
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-green-500 to-emerald-600 flex items-center justify-center text-white">
-              <ClipboardCheck size={18} />
-            </div>
-            <span className="text-[11px] font-medium text-gray-600 text-center leading-tight">Ceklok Kehadiran</span>
-          </button>
-          <button
-            onClick={() => navigate('/guru/absensi-siswa')}
-            className="flex flex-col items-center gap-1.5 p-3 bg-white rounded-xl border border-gray-100 shadow-sm active:scale-95 transition"
-          >
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-purple-500 to-fuchsia-600 flex items-center justify-center text-white">
-              <AlertCircle size={18} />
-            </div>
-            <span className="text-[11px] font-medium text-gray-600 text-center leading-tight">Absensi Siswa</span>
-          </button>
-          <button
-            onClick={() => navigate('/guru/jurnal')}
-            className="flex flex-col items-center gap-1.5 p-3 bg-white rounded-xl border border-gray-100 shadow-sm active:scale-95 transition"
-          >
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-600 to-indigo-600 flex items-center justify-center text-white">
-              <PenLine size={18} />
-            </div>
-            <span className="text-[11px] font-medium text-gray-600 text-center leading-tight">Isi Jurnal</span>
-          </button>
-        </div>
-
+        </section>
       </div>
     </div>
-  )
-}
-
-/* ── Quick Access Card ── */
-function QuickCard({
-  label, color, bg, icon, onClick,
-}: {
-  label: string; color: string; bg: string; icon: React.ReactNode; onClick: () => void
-}) {
-  return (
-    <button
-      onClick={onClick}
-      className={`${bg} rounded-2xl p-3 flex flex-col items-center justify-center gap-2 min-h-[104px] active:scale-[0.97] transition-all text-center`}
-    >
-      <div className={`w-10 h-10 rounded-xl bg-gradient-to-br ${color} flex items-center justify-center text-white shadow-sm`}>
-        {icon}
-      </div>
-      <span className="text-xs font-semibold text-gray-700 leading-tight">{label}</span>
-    </button>
   )
 }

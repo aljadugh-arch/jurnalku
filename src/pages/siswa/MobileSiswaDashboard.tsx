@@ -1,17 +1,16 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
-  Clock,
-  BookOpen,
-  Activity,
   Calendar,
   ClipboardCheck,
-  FileText,
   Award,
-  GraduationCap,
-  CalendarCheck,
-  NotebookPen,
+  FileText,
+  Wallet,
+  BookOpen,
+  LayoutGrid,
   ChevronRight,
+  CheckCircle2,
+  Sparkles,
 } from 'lucide-react'
 import api from '../../services/api'
 import MobileHeader from '../../components/MobileHeader'
@@ -23,26 +22,10 @@ import { heroColors } from '../../lib/applyTheme'
 
 function greetingByHour() {
   const h = new Date().getHours()
-  if (h < 11) return 'Selamat Pagi'
-  if (h < 15) return 'Selamat Siang'
-  if (h < 19) return 'Selamat Sore'
-  return 'Selamat Malam'
-}
-
-function getDayName() {
-  return new Date().toLocaleDateString('id-ID', {
-    weekday: 'long',
-    timeZone: 'Asia/Jakarta',
-  })
-}
-
-function getFormattedDate() {
-  return new Date().toLocaleDateString('id-ID', {
-    day: 'numeric',
-    month: 'long',
-    year: 'numeric',
-    timeZone: 'Asia/Jakarta',
-  })
+  if (h < 11) return 'Selamat pagi,'
+  if (h < 15) return 'Selamat siang,'
+  if (h < 19) return 'Selamat sore,'
+  return 'Selamat malam,'
 }
 
 function getInitials(name?: string) {
@@ -66,114 +49,56 @@ function toMinutes(t: string) {
   return h * 60 + m
 }
 
-// ─── attendance ring (pure CSS conic-gradient) ──────────────────────────────────
+// ─── SVG circular progress ring ────────────────────────────────────────────────
 
-function AttendanceRing({
-  hadir,
-  sakit,
-  izin,
-  alpha,
-}: {
-  hadir: number
-  sakit: number
-  izin: number
-  alpha: number
-}) {
-  const total = hadir + sakit + izin + alpha
-  if (total === 0) {
-    return (
-      <div className="flex flex-col items-center gap-2">
-        <div className="relative w-28 h-28 rounded-full border-[9px] border-gray-100 flex items-center justify-center">
-          <span className="text-sm text-gray-400 text-center px-2">Belum ada data</span>
-        </div>
-      </div>
-    )
-  }
-
-  const pctHadir = (hadir / total) * 100
-  const pctSakit = (sakit / total) * 100
-  const pctIzin = (izin / total) * 100
-  // alpha fills the remainder
-
-  const gradParts: string[] = []
-  let cum = 0
-  if (hadir > 0) {
-    gradParts.push(`#22c55e ${cum}% ${cum + pctHadir}%`)
-    cum += pctHadir
-  }
-  if (sakit > 0) {
-    gradParts.push(`#f59e0b ${cum}% ${cum + pctSakit}%`)
-    cum += pctSakit
-  }
-  if (izin > 0) {
-    gradParts.push(`#3b82f6 ${cum}% ${cum + pctIzin}%`)
-    cum += pctIzin
-  }
-  if (alpha > 0) {
-    gradParts.push(`#ef4444 ${cum}% 100%`)
-  }
-
-  const bg = `conic-gradient(${gradParts.join(', ')})`
-
-  const legend = [
-    { label: 'Hadir', value: hadir, color: 'bg-green-500' },
-    { label: 'Sakit', value: sakit, color: 'bg-amber-500' },
-    { label: 'Izin', value: izin, color: 'bg-blue-500' },
-    { label: 'Alpha', value: alpha, color: 'bg-red-500' },
-  ]
+function CircularProgress({ percentage = 100, size = 64, strokeWidth = 6 }: { percentage: number; size?: number; strokeWidth?: number }) {
+  const radius = (size - strokeWidth) / 2
+  const circumference = 2 * Math.PI * radius
+  const offset = circumference - (Math.min(100, Math.max(0, percentage)) / 100) * circumference
 
   return (
-    <div className="flex flex-col items-center gap-3">
-      {/* Ring */}
-      <div className="relative w-28 h-28" style={{ background: bg, borderRadius: '50%' }}>
-        {/* inner circle to create donut */}
-        <div className="absolute inset-0 m-auto w-[76px] h-[76px] rounded-full bg-white flex flex-col items-center justify-center">
-          <span className="text-xl font-bold text-gray-800">{total}</span>
-          <span className="text-[10px] text-gray-400 -mt-0.5">total hari</span>
-        </div>
-      </div>
-
-      {/* Legend */}
-      <div className="grid w-full grid-cols-2 gap-x-4 gap-y-1">
-        {legend.map((l) => (
-          <div key={l.label} className="flex items-center gap-2">
-            <span className={`w-2.5 h-2.5 rounded-full ${l.color} shrink-0`} />
-            <span className="text-xs text-gray-500">{l.label}</span>
-            <span className="text-xs font-semibold text-gray-700 ml-auto">{l.value}</span>
-          </div>
-        ))}
-      </div>
+    <div className="relative flex items-center justify-center" style={{ width: size, height: size }}>
+      <svg width={size} height={size} className="transform -rotate-90">
+        <circle
+          cx={size / 2}
+          cy={size / 2}
+          r={radius}
+          stroke="#E2E8F0"
+          strokeWidth={strokeWidth}
+          fill="transparent"
+        />
+        <circle
+          cx={size / 2}
+          cy={size / 2}
+          r={radius}
+          stroke="#22C55E"
+          strokeWidth={strokeWidth}
+          fill="transparent"
+          strokeDasharray={circumference}
+          strokeDashoffset={offset}
+          strokeLinecap="round"
+          className="transition-all duration-500 ease-out"
+        />
+      </svg>
+      <span className="absolute text-xs font-bold text-emerald-600">
+        {Math.round(percentage)}%
+      </span>
     </div>
   )
 }
 
-// ─── schedule item colours ──────────────────────────────────────────────────────
-
-const SCHEDULE_COLORS = [
-  'bg-blue-500',
-  'bg-emerald-500',
-  'bg-violet-500',
-  'bg-amber-500',
-  'bg-rose-500',
-  'bg-cyan-500',
-  'bg-indigo-500',
-  'bg-pink-500',
-]
-
-// ─── menu grid config ───────────────────────────────────────────────────────────
+// ─── quick action menu items (2 rows x 4 columns) ──────────────────────────────
 
 const MENU_ITEMS = [
-  { label: 'Absensi', icon: ClipboardCheck, path: '/siswa/absensi', color: 'bg-emerald-500' },
-  { label: 'Jadwal', icon: Calendar, path: '/siswa/jadwal', color: 'bg-blue-500' },
-  { label: 'Tugas', icon: FileText, path: '/siswa/tugas', color: 'bg-orange-500' },
-  { label: 'Nilai', icon: Award, path: '/siswa/nilai', color: 'bg-violet-500' },
-  { label: 'Absensi Mapel', icon: GraduationCap, path: '/siswa/absensi-mapel', color: 'bg-indigo-500' },
-  { label: 'Kegiatan', icon: CalendarCheck, path: '/siswa/kegiatan', color: 'bg-cyan-500' },
-  { label: 'Ujian', icon: BookOpen, path: '/siswa/ujian', color: 'bg-rose-500' },
-  { label: 'Tugas Siswa', icon: NotebookPen, path: '/siswa/tugas-siswa', color: 'bg-pink-500' },
+  { label: 'Jadwal', icon: Calendar, path: '/siswa/jadwal', color: 'bg-blue-500 text-white' },
+  { label: 'Absensi', icon: ClipboardCheck, path: '/siswa/absensi', color: 'bg-emerald-500 text-white' },
+  { label: 'Nilai', icon: Award, path: '/siswa/nilai', color: 'bg-purple-500 text-white' },
+  { label: 'Tugas', icon: FileText, path: '/siswa/tugas', color: 'bg-orange-500 text-white' },
+  { label: 'Keuangan', icon: Wallet, path: '/siswa/tagihan', color: 'bg-pink-500 text-white' },
+  { label: 'Tabungan', icon: Wallet, path: '/siswa/tabungan', color: 'bg-sky-500 text-white' },
+  { label: 'Perpus', icon: BookOpen, path: '/siswa/perpustakaan', color: 'bg-emerald-600 text-white' },
+  { label: 'Lainnya', icon: LayoutGrid, path: '/siswa/menu', color: 'bg-slate-400 text-white' },
 ]
-
-// ─── main component ─────────────────────────────────────────────────────────────
 
 export default function MobileSiswaDashboard() {
   const [data, setData] = useState<any>({
@@ -183,8 +108,6 @@ export default function MobileSiswaDashboard() {
   })
   const navigate = useNavigate()
   const settings = useSettingsStore(s => s.settings)
-  const dark = useThemeStore(s => s.dark)
-  const hero = heroColors(settings, dark)
 
   useEffect(() => {
     api
@@ -201,171 +124,147 @@ export default function MobileSiswaDashboard() {
   }
 
   const { siswa, jadwal_hari_ini, rekap } = data
+  const totalHari = (rekap.hadir || 0) + (rekap.sakit || 0) + (rekap.izin || 0) + (rekap.alpha || 0)
+  const attendancePct = totalHari > 0 ? ((rekap.hadir || 0) / totalHari) * 100 : 100
+  const dark = useThemeStore(s => s.dark)
+  const hero = heroColors(settings, dark)
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-950 pb-6">
-      {/* ─── 1. HEADER: aksi akun terpisah dari nama agar tidak saling tertimpa ─── */}
-      <div className="px-4 pt-6 pb-6 text-white relative" style={{ background: `linear-gradient(135deg, ${hero}, #0f172a)` }}>
-        {/* dekorasi dikurung sendiri; hero tidak overflow-hidden agar dropdown akun/logout utuh */}
-        <div className="absolute inset-0 overflow-hidden pointer-events-none">
-          <div className="absolute -right-10 -top-10 w-32 h-32 rounded-full bg-white/10" />
-          <div className="absolute -left-6 bottom-0 w-24 h-24 rounded-full bg-white/5" />
+    <div className="min-h-screen bg-[#F8FAFC] dark:bg-gray-950 pb-8 text-slate-800 dark:text-gray-100">
+      {/* ─── 1. TOP HEADER & GREETING ─────────────────────────────────── */}
+      <div className="bg-white dark:bg-gray-900 px-4 pt-4 pb-3 border-b border-slate-100 dark:border-gray-800 shadow-sm">
+        {/* Baris Aksi Akun (Kanan Atas) */}
+        <div data-mobile-account-row="true" className="flex items-center justify-end mb-2">
+          <MobileHeader basePath="/siswa" onBell={() => navigate('/siswa/posting')} variant="light" />
         </div>
 
-        {/* Baris aksi akun */}
-        <div data-mobile-account-row="true" className="relative z-30 flex items-center justify-end">
-          <MobileHeader basePath="/siswa" onBell={() => navigate('/siswa/posting')} />
-        </div>
-
-        {/* Baris identitas siswa */}
-        <div data-mobile-identity-row="true" className="relative z-10 mt-3 flex items-center gap-3 min-w-0">
-          <div className="w-11 h-11 rounded-full bg-white/20 backdrop-blur-sm flex items-center justify-center shrink-0 text-base font-bold border-2 border-white/30">
+        {/* Baris Profil & Greeting */}
+        <div data-mobile-identity-row="true" className="flex items-center gap-3">
+          <div className="w-12 h-12 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 text-white flex items-center justify-center font-bold text-lg shadow-md shrink-0 border-2 border-white dark:border-gray-800">
             {getInitials(siswa?.nama)}
           </div>
           <div className="min-w-0 flex-1">
-            <p className="text-[11px] text-blue-100 leading-none">
-              {greetingByHour()}, 👋
-            </p>
-            <h1 className="text-base font-bold leading-tight truncate mt-0.5">
+            <p className="text-xs text-slate-400 dark:text-gray-400 font-medium">{greetingByHour()}</p>
+            <h1 className="text-base font-bold text-slate-900 dark:text-white truncate">
               {siswa?.nama || 'Siswa'}
             </h1>
-            {siswa?.kelas_nama && (
-              <p className="text-[11px] text-blue-200 mt-0.5 truncate leading-none">{siswa.kelas_nama}</p>
-            )}
+            <p className="text-[11px] text-slate-500 dark:text-gray-400 truncate">
+              {siswa?.kelas_nama ? `Kelas ${siswa.kelas_nama}` : 'Siswa'} {settings?.nama_lembaga ? `• ${settings.nama_lembaga}` : ''}
+            </p>
           </div>
         </div>
       </div>
 
-      <div data-mobile-compact-dashboard="true" className="px-3 -mt-2 relative z-10 pb-5 space-y-3">
-        {/* ─── 2. DATE INFO CARD ───────────────────────────────────── */}
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-3">
-          <div className="flex items-center gap-2 mb-2">
-            <div className="w-7 h-7 rounded-lg bg-blue-100 flex items-center justify-center">
-              <Calendar size={15} className="text-blue-600" />
+      <div data-mobile-compact-dashboard="true" className="px-4 pt-4 space-y-3.5">
+        {/* ─── 2. MOTIVATIONAL BANNER (Semangat Belajar) ─────────────── */}
+        <div 
+          className="relative overflow-hidden rounded-2xl p-4 text-white shadow-md"
+          style={{ background: `linear-gradient(135deg, ${hero}, #1e1b4b)` }}
+        >
+          <div className="absolute right-0 top-0 translate-x-4 -translate-y-4 w-28 h-28 bg-white/10 rounded-full blur-xl pointer-events-none" />
+          <div className="relative z-10 max-w-[75%]">
+            <div className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-white/20 text-[10px] font-medium backdrop-blur-sm mb-1.5">
+              <Sparkles size={11} /> Semangat Baru
             </div>
-            <h2 className="text-sm font-semibold text-gray-800">Informasi Hari Ini</h2>
+            <h2 className="text-base font-bold leading-tight">
+              Semangat belajar hari ini!
+            </h2>
+            <p className="text-xs text-blue-100 mt-1 leading-snug">
+              Jadilah versi terbaik dari dirimu setiap hari.
+            </p>
           </div>
-          <div className="grid grid-cols-3 gap-2 text-center">
+        </div>
+
+        {/* ─── 3. ATTENDANCE PROGRESS CARD ──────────────────────────── */}
+        <div className="bg-white dark:bg-gray-900 rounded-2xl p-3.5 shadow-sm border border-slate-100 dark:border-gray-800 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 flex items-center justify-center shrink-0">
+              <CheckCircle2 size={22} />
+            </div>
             <div>
-              <p className="text-[10px] text-gray-400 uppercase tracking-wide mb-0.5">Hari</p>
-              <p className="text-sm font-bold text-gray-800">{getDayName()}</p>
-            </div>
-            <div className="border-x border-gray-100 px-2">
-              <p className="text-[10px] text-gray-400 uppercase tracking-wide mb-0.5">Tanggal</p>
-              <p className="text-sm font-bold text-gray-800 leading-tight">{getFormattedDate()}</p>
-            </div>
-            <div>
-              <p className="text-[10px] text-gray-400 uppercase tracking-wide mb-0.5">Jam Sekolah</p>
-              <p className="text-sm font-bold text-gray-800">07:00 – 15:00</p>
+              <p className="text-xs text-slate-400 dark:text-gray-400 font-medium">Total Kehadiran</p>
+              <p className="text-sm font-bold text-slate-900 dark:text-white">
+                {rekap.hadir || 0} <span className="text-xs font-normal text-slate-400">/ {totalHari || 0} hari</span>
+              </p>
             </div>
           </div>
+          <CircularProgress percentage={attendancePct} size={52} strokeWidth={5} />
         </div>
 
-        {/* ─── 3. ATTENDANCE RING ──────────────────────────────────── */}
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-3">
-          <div className="flex items-center gap-2 mb-3">
-            <div className="w-7 h-7 rounded-lg bg-green-100 flex items-center justify-center">
-              <Activity size={15} className="text-green-600" />
-            </div>
-            <h2 className="text-sm font-semibold text-gray-800">Rekap Kehadiran</h2>
-          </div>
-          <AttendanceRing
-            hadir={rekap.hadir}
-            sakit={rekap.sakit}
-            izin={rekap.izin}
-            alpha={rekap.alpha}
-          />
-        </div>
-
-        {/* ─── 4. SCHEDULE LIST ────────────────────────────────────── */}
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-3">
-          <div className="flex items-center justify-between mb-2">
-            <div className="flex items-center gap-2">
-              <div className="w-7 h-7 rounded-lg bg-indigo-100 flex items-center justify-center">
-                <Clock size={15} className="text-indigo-600" />
-              </div>
-              <h2 className="text-sm font-semibold text-gray-800">Jadwal Hari Ini</h2>
-            </div>
-            <button
-              onClick={() => navigate('/siswa/jadwal')}
-              className="text-xs text-blue-600 font-medium active:opacity-60 transition"
-            >
-              Lihat Semua
-            </button>
-          </div>
-
-          {jadwal_hari_ini.length === 0 ? (
-            <p className="text-gray-400 text-sm text-center py-4">Tidak ada jadwal hari ini</p>
-          ) : (
-            <div className="space-y-1.5">
-              {jadwal_hari_ini.map((j: any, i: number) => {
-                const active = isCurrent(j)
-                const accentColor = SCHEDULE_COLORS[i % SCHEDULE_COLORS.length]
-
-                return (
-                  <div
-                    key={j.id || i}
-                    className={`flex items-center gap-3 p-3 rounded-xl border transition ${
-                      active
-                        ? 'border-blue-200 bg-blue-50/60 ring-1 ring-blue-100'
-                        : 'border-gray-100 bg-white'
-                    }`}
-                  >
-                    {/* left colour accent */}
-                    <div className={`w-1 self-stretch rounded-full shrink-0 ${accentColor} ${active ? 'opacity-100' : 'opacity-60'}`} />
-
-                    {/* time block */}
-                    <div
-                      className={`flex flex-col items-center justify-center min-w-[52px] rounded-lg px-2 py-1.5 shrink-0 ${
-                        active ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600'
-                      }`}
-                    >
-                      <span className="text-xs font-bold leading-none">{j.jam_mulai}</span>
-                      <span className="text-[9px] opacity-80 mt-0.5">{j.jam_selesai}</span>
-                    </div>
-
-                    {/* subject info */}
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-semibold text-gray-800 truncate">{j.mapel_nama}</p>
-                      <p className="text-[11px] text-gray-500 truncate flex items-center gap-1 mt-0.5">
-                        <BookOpen size={10} className="shrink-0" />
-                        {j.guru_nama}
-                        {j.ruang ? ` · ${j.ruang}` : ''}
-                      </p>
-                    </div>
-
-                    {active && <ChevronRight size={16} className="text-blue-500 shrink-0" />}
-                  </div>
-                )
-              })}
-            </div>
-          )}
-        </div>
-
-        {/* ─── 5. MENU GRID ────────────────────────────────────────── */}
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-3">
-          <h2 className="text-sm font-semibold text-gray-800 mb-2">Menu</h2>
-          <div className="grid grid-cols-4 gap-2">
+        {/* ─── 4. QUICK ACTION GRID (8 TILES) ───────────────────────── */}
+        <div className="bg-white dark:bg-gray-900 rounded-2xl p-3.5 shadow-sm border border-slate-100 dark:border-gray-800">
+          <div className="grid grid-cols-4 gap-y-3.5 gap-x-2">
             {MENU_ITEMS.map((item) => {
               const Icon = item.icon
               return (
                 <button
                   key={item.label}
                   onClick={() => navigate(item.path)}
-                  className="flex flex-col items-center gap-1.5 py-2 rounded-xl active:bg-gray-50 active:scale-95 transition"
+                  className="flex flex-col items-center gap-1.5 active:scale-95 transition group"
                 >
-                  <div
-                    className={`w-10 h-10 rounded-xl ${item.color} flex items-center justify-center text-white shadow-sm`}
-                  >
-                    <Icon size={18} />
+                  <div className={`w-11 h-11 rounded-2xl ${item.color} flex items-center justify-center shadow-sm group-hover:shadow transition`}>
+                    <Icon size={20} />
                   </div>
-                  <span className="text-[10px] font-medium text-gray-600 leading-tight text-center">
+                  <span className="text-[11px] font-medium text-slate-600 dark:text-gray-300 truncate w-full text-center">
                     {item.label}
                   </span>
                 </button>
               )
             })}
           </div>
+        </div>
+
+        {/* ─── 5. JADWAL HARI INI ───────────────────────────────────── */}
+        <div className="bg-white dark:bg-gray-900 rounded-2xl p-3.5 shadow-sm border border-slate-100 dark:border-gray-800">
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2">
+              <Calendar size={16} className="text-blue-600" />
+              <h2 className="text-sm font-bold text-slate-900 dark:text-white">Jadwal Hari Ini</h2>
+            </div>
+            <button
+              onClick={() => navigate('/siswa/jadwal')}
+              className="text-xs font-semibold text-blue-600 hover:text-blue-700 flex items-center gap-0.5 active:opacity-70 transition"
+            >
+              Lihat Semua
+              <ChevronRight size={13} />
+            </button>
+          </div>
+
+          {jadwal_hari_ini.length === 0 ? (
+            <div className="py-6 text-center text-xs text-slate-400">
+              Tidak ada jadwal pelajaran hari ini
+            </div>
+          ) : (
+            <div className="divide-y divide-slate-100 dark:divide-gray-800">
+              {jadwal_hari_ini.map((j: any, idx: number) => {
+                const active = isCurrent(j)
+                return (
+                  <div key={j.id || idx} className="py-2.5 first:pt-0 last:pb-0 flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 font-bold text-xs ${
+                        active 
+                          ? 'bg-blue-600 text-white shadow-sm' 
+                          : 'bg-blue-50 dark:bg-blue-950/40 text-blue-600'
+                      }`}>
+                        {j.jam_ke || idx + 1}
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-xs font-bold text-slate-900 dark:text-white truncate">
+                          {j.mapel_nama || j.mata_pelajaran || 'Mata Pelajaran'}
+                        </p>
+                        <p className="text-[11px] text-slate-400 truncate">
+                          {j.jam_mulai || '07:00'} - {j.jam_selesai || '08:00'} {j.guru_nama ? `• ${j.guru_nama}` : ''}
+                        </p>
+                      </div>
+                    </div>
+                    <span className="px-2 py-0.5 text-[10px] font-semibold text-emerald-700 bg-emerald-50 dark:bg-emerald-950/50 dark:text-emerald-300 rounded-full border border-emerald-200 dark:border-emerald-800 shrink-0">
+                      Hadir
+                    </span>
+                  </div>
+                )
+              })}
+            </div>
+          )}
         </div>
       </div>
     </div>
