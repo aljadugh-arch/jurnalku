@@ -2298,7 +2298,10 @@ app.put('/api/settings', ADMIN, (req, res) => {
   const bg_position_v = bg_position || 'center'
   const bg_repeat_v = bg_repeat || 'no-repeat'
   const bg_blur_v = bg_blur || 0
-  const quickMenus = JSON.stringify(Array.isArray(dashboard_quick_menus) ? dashboard_quick_menus.slice(0, 8) : [])
+  const previousQuickMenus = getTenantSettings(db, req.tenantId, 'dashboard_quick_menus')?.dashboard_quick_menus || '[]'
+  const quickMenus = Array.isArray(dashboard_quick_menus)
+    ? JSON.stringify(dashboard_quick_menus.slice(0, 8))
+    : previousQuickMenus
   db.prepare(`INSERT INTO settings (id, tenant_id, nama_lembaga, alamat, telepon, email, theme, primary_color, accent_color, sidebar_color, geo_latitude, geo_longitude, geo_radius, jenjang, hari_libur, bg_size, bg_position, bg_repeat, bg_blur, pwa_enabled, pwa_name, pwa_theme_color, pwa_bg_color, dashboard_quick_menus, updated_at)
     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,datetime('now'))
     ON CONFLICT(id) DO UPDATE SET tenant_id=excluded.tenant_id, nama_lembaga=excluded.nama_lembaga, alamat=excluded.alamat, telepon=excluded.telepon, email=excluded.email, theme=excluded.theme, primary_color=excluded.primary_color, accent_color=excluded.accent_color, sidebar_color=excluded.sidebar_color, geo_latitude=excluded.geo_latitude, geo_longitude=excluded.geo_longitude, geo_radius=excluded.geo_radius, jenjang=excluded.jenjang, hari_libur=excluded.hari_libur, bg_size=excluded.bg_size, bg_position=excluded.bg_position, bg_repeat=excluded.bg_repeat, bg_blur=excluded.bg_blur, pwa_enabled=excluded.pwa_enabled, pwa_name=excluded.pwa_name, pwa_theme_color=excluded.pwa_theme_color, pwa_bg_color=excluded.pwa_bg_color, dashboard_quick_menus=excluded.dashboard_quick_menus, updated_at=datetime('now')`)
@@ -5826,6 +5829,7 @@ app.get('/api/absensi-siswa/ringkasan', DASHBOARD_ROLES, (req, res) => {
     LEFT JOIN absensi_siswa a ON a.siswa_id=s.id AND a.tenant_id=r.tenant_id AND a.tanggal=?
     WHERE r.tenant_id=? GROUP BY r.id,r.nama ORDER BY r.nama`).all(tanggal, req.tenantId).map(row => ({
       ...row,
+      alpha: Math.max(0, Number(row.total_siswa) - Number(row.hadir) - Number(row.sakit) - Number(row.izin)),
       persentase: row.total_siswa ? Math.round((Number(row.hadir) / Number(row.total_siswa)) * 100) : 0
     }))
   const totals = rows.reduce((sum, row) => ({ hadir: sum.hadir + Number(row.hadir), sakit: sum.sakit + Number(row.sakit), izin: sum.izin + Number(row.izin), alpha: sum.alpha + Number(row.alpha) }), { hadir: 0, sakit: 0, izin: 0, alpha: 0 })

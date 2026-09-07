@@ -33,6 +33,7 @@ test('settings persists tenant-specific dashboard shortcut choices', () => {
   assert.match(SETTINGS, /Pintasan Dashboard/)
   assert.match(SETTINGS, /dashboard_quick_menus/)
   assert.match(SERVER, /dashboard_quick_menus/)
+  assert.match(SERVER, /previousQuickMenus/)
 })
 
 test('calendar selection loads configured teaching schedule', () => {
@@ -47,6 +48,7 @@ test('presence summary has four statuses and per-rombel percentages', () => {
   for (const status of ['Hadir', 'Sakit', 'Izin', 'Alpha']) assert.match(PRES, new RegExp(status))
   assert.match(PRES, /Persentase Tiap Kelas\/Rombel/)
   assert.match(PRES, /\/absensi-siswa\/ringkasan/)
+  assert.match(SERVER, /Math\.max\(0, Number\(row\.total_siswa\)/)
 })
 
 test('staff clock has tabs, digital clock, and today/week histories', () => {
