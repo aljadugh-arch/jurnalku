@@ -4,6 +4,7 @@ import toast from 'react-hot-toast'
 import api from '../../services/api'
 import { todayWib } from '../../lib/dateFormat'
 import { announceAttendanceSuccess, playFeedbackSound, primeFeedbackSound } from '../../lib/feedbackSound'
+import MobileCeklok from './MobileCeklok'
 
 interface CeklokRecord {
   id: string
@@ -28,7 +29,8 @@ interface Summary {
 }
 
 interface PersonalCeklok {
-  today: { waktu_masuk?: string | null; waktu_pulang?: string | null; status?: string } | null
+  today: { id?: string; tanggal?: string; waktu_masuk?: string | null; waktu_pulang?: string | null; status?: string } | null
+  history: Array<{ id?: string; tanggal?: string; waktu_masuk?: string | null; waktu_pulang?: string | null; status?: string }>
 }
 
 export default function CekLokAdminPage() {
@@ -39,7 +41,7 @@ export default function CekLokAdminPage() {
   const [tanggal, setTanggal] = useState(today)
   const [search, setSearch] = useState('')
   const [filterStatus, setFilterStatus] = useState('')
-  const [personal, setPersonal] = useState<PersonalCeklok>({ today: null })
+  const [personal, setPersonal] = useState<PersonalCeklok>({ today: null, history: [] })
   const [personalLoading, setPersonalLoading] = useState(true)
   const [ceklokLoading, setCeklokLoading] = useState(false)
 
@@ -64,7 +66,7 @@ export default function CekLokAdminPage() {
     setPersonalLoading(true)
     try {
       const res = await api.get('/guru/absensi-saya')
-      setPersonal({ today: res.data.today || null })
+      setPersonal({ today: res.data.today || null, history: res.data.history || [] })
     } catch {
       toast.error('Gagal memuat ceklok saya')
     } finally {
@@ -120,6 +122,8 @@ export default function CekLokAdminPage() {
 
   return (
     <div className="space-y-4">
+      <MobileCeklok today={personal.today} history={personal.history} loading={personalLoading} busy={ceklokLoading} onCeklok={handleCeklok} />
+      <div className="hidden lg:block space-y-4">
       {/* Header */}
       <div>
         <h1 className="text-2xl font-bold text-gray-800 font-display">Ceklok Guru</h1>
@@ -263,6 +267,7 @@ export default function CekLokAdminPage() {
             )
           })}
         </div>
+      </div>
       </div>
     </div>
   )

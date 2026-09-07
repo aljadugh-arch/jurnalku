@@ -2292,16 +2292,17 @@ app.get('/api/geocode/search', async (req, res) => {
 })
 
 app.put('/api/settings', ADMIN, (req, res) => {
-  const { nama_lembaga, alamat, telepon, email, theme, primary_color, accent_color, sidebar_color, geo_latitude, geo_longitude, geo_radius, jenjang, hari_libur, bg_size, bg_position, bg_repeat, bg_blur, pwa_enabled, pwa_name, pwa_theme_color, pwa_bg_color } = req.body
+  const { nama_lembaga, alamat, telepon, email, theme, primary_color, accent_color, sidebar_color, geo_latitude, geo_longitude, geo_radius, jenjang, hari_libur, bg_size, bg_position, bg_repeat, bg_blur, pwa_enabled, pwa_name, pwa_theme_color, pwa_bg_color, dashboard_quick_menus } = req.body
   const id = canonicalSettingsId(req.tenantId)
   const bg_size_v = bg_size || 'cover'
   const bg_position_v = bg_position || 'center'
   const bg_repeat_v = bg_repeat || 'no-repeat'
   const bg_blur_v = bg_blur || 0
-  db.prepare(`INSERT INTO settings (id, tenant_id, nama_lembaga, alamat, telepon, email, theme, primary_color, accent_color, sidebar_color, geo_latitude, geo_longitude, geo_radius, jenjang, hari_libur, bg_size, bg_position, bg_repeat, bg_blur, pwa_enabled, pwa_name, pwa_theme_color, pwa_bg_color, updated_at)
-    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,datetime('now'))
-    ON CONFLICT(id) DO UPDATE SET tenant_id=excluded.tenant_id, nama_lembaga=excluded.nama_lembaga, alamat=excluded.alamat, telepon=excluded.telepon, email=excluded.email, theme=excluded.theme, primary_color=excluded.primary_color, accent_color=excluded.accent_color, sidebar_color=excluded.sidebar_color, geo_latitude=excluded.geo_latitude, geo_longitude=excluded.geo_longitude, geo_radius=excluded.geo_radius, jenjang=excluded.jenjang, hari_libur=excluded.hari_libur, bg_size=excluded.bg_size, bg_position=excluded.bg_position, bg_repeat=excluded.bg_repeat, bg_blur=excluded.bg_blur, pwa_enabled=excluded.pwa_enabled, pwa_name=excluded.pwa_name, pwa_theme_color=excluded.pwa_theme_color, pwa_bg_color=excluded.pwa_bg_color, updated_at=datetime('now')`)
-    .run(id, req.tenantId, nama_lembaga, alamat, telepon, email, theme, primary_color, accent_color, sidebar_color, geo_latitude || null, geo_longitude || null, geo_radius || 200, jenjang || '', JSON.stringify(hari_libur || []), bg_size_v, bg_position_v, bg_repeat_v, bg_blur_v, pwa_enabled ? 1 : 0, pwa_name || '', pwa_theme_color || '#1e40af', pwa_bg_color || '#ffffff')
+  const quickMenus = JSON.stringify(Array.isArray(dashboard_quick_menus) ? dashboard_quick_menus.slice(0, 8) : [])
+  db.prepare(`INSERT INTO settings (id, tenant_id, nama_lembaga, alamat, telepon, email, theme, primary_color, accent_color, sidebar_color, geo_latitude, geo_longitude, geo_radius, jenjang, hari_libur, bg_size, bg_position, bg_repeat, bg_blur, pwa_enabled, pwa_name, pwa_theme_color, pwa_bg_color, dashboard_quick_menus, updated_at)
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,datetime('now'))
+    ON CONFLICT(id) DO UPDATE SET tenant_id=excluded.tenant_id, nama_lembaga=excluded.nama_lembaga, alamat=excluded.alamat, telepon=excluded.telepon, email=excluded.email, theme=excluded.theme, primary_color=excluded.primary_color, accent_color=excluded.accent_color, sidebar_color=excluded.sidebar_color, geo_latitude=excluded.geo_latitude, geo_longitude=excluded.geo_longitude, geo_radius=excluded.geo_radius, jenjang=excluded.jenjang, hari_libur=excluded.hari_libur, bg_size=excluded.bg_size, bg_position=excluded.bg_position, bg_repeat=excluded.bg_repeat, bg_blur=excluded.bg_blur, pwa_enabled=excluded.pwa_enabled, pwa_name=excluded.pwa_name, pwa_theme_color=excluded.pwa_theme_color, pwa_bg_color=excluded.pwa_bg_color, dashboard_quick_menus=excluded.dashboard_quick_menus, updated_at=datetime('now')`)
+    .run(id, req.tenantId, nama_lembaga, alamat, telepon, email, theme, primary_color, accent_color, sidebar_color, geo_latitude || null, geo_longitude || null, geo_radius || 200, jenjang || '', JSON.stringify(hari_libur || []), bg_size_v, bg_position_v, bg_repeat_v, bg_blur_v, pwa_enabled ? 1 : 0, pwa_name || '', pwa_theme_color || '#1e40af', pwa_bg_color || '#ffffff', quickMenus)
   res.json({ success: true })
 })
 
@@ -3624,7 +3625,7 @@ app.post('/api/guru/ceklok', STAFF, (req, res) => {
 
 // ==================== JAMAAH / PORTAL / PWA PATCH ====================
 db.exec(`CREATE TABLE IF NOT EXISTS jamaah_sesi (id TEXT PRIMARY KEY, nama TEXT, mulai TEXT, selesai TEXT, minimal_hadir INTEGER DEFAULT 10, tenant_id TEXT DEFAULT 'default', created_at TEXT DEFAULT (datetime('now')))`)
-for (const [name, definition] of [['pwa_enabled','INTEGER DEFAULT 0'], ['pwa_name','TEXT DEFAULT ""'], ['pwa_icon','TEXT DEFAULT ""'], ['pwa_bg_color','TEXT DEFAULT "#ffffff"'], ['pwa_theme_color','TEXT DEFAULT "#1e40af"']]) if (!db.prepare('PRAGMA table_info(settings)').all().some(c => c.name === name)) db.exec(`ALTER TABLE settings ADD COLUMN ${name} ${definition}`)
+for (const [name, definition] of [['pwa_enabled','INTEGER DEFAULT 0'], ['pwa_name','TEXT DEFAULT ""'], ['pwa_icon','TEXT DEFAULT ""'], ['pwa_bg_color','TEXT DEFAULT "#ffffff"'], ['pwa_theme_color','TEXT DEFAULT "#1e40af"'], ['dashboard_quick_menus','TEXT DEFAULT "[]"']]) if (!db.prepare('PRAGMA table_info(settings)').all().some(c => c.name === name)) db.exec(`ALTER TABLE settings ADD COLUMN ${name} ${definition}`)
 
 function linkedStudentIds(req) {
   const ids = db.prepare('SELECT student_id FROM user_students WHERE tenant_id=? AND user_id=? ORDER BY student_id').all(req.tenantId, req.user.id).map(x => x.student_id)
@@ -4271,6 +4272,17 @@ app.get('/api/jadwal/hari-ini', ADMIN, (req, res) => {
     WHERE j.tenant_id=? AND lower(j.hari)=?
     ORDER BY j.jam_mulai, r.nama, m.nama, j.nama_kegiatan`).all(req.tenantId, hari)
   res.json({ hari, tanggal: todayJakarta(), rows })
+})
+
+app.get('/api/jadwal/tanggal', DASHBOARD_ROLES, (req, res) => {
+  const tanggal = /^\d{4}-\d{2}-\d{2}$/.test(String(req.query.tanggal || '')) ? String(req.query.tanggal) : todayJakarta()
+  const hari = HARI_ID[new Date(`${tanggal}T12:00:00+07:00`).getUTCDay()]
+  const rows = tenantIsHoliday(req.tenantId, tanggal) ? [] : db.prepare(`SELECT j.*,m.nama AS mapel_nama,r.nama AS rombel_nama,g.nama AS guru_nama
+    FROM jadwal j LEFT JOIN mapel m ON m.id=j.mapel_id AND m.tenant_id=j.tenant_id
+    LEFT JOIN rombel r ON r.id=j.rombel_id AND r.tenant_id=j.tenant_id
+    LEFT JOIN gtk g ON g.id=j.gtk_id AND g.tenant_id=j.tenant_id
+    WHERE j.tenant_id=? AND lower(j.hari)=? ORDER BY j.jam_mulai,r.nama,m.nama`).all(req.tenantId, hari)
+  res.json({ tanggal, hari, rows })
 })
 
 app.get('/api/jadwal', authMiddleware, (req, res) => {
@@ -5803,6 +5815,23 @@ app.post('/api/rapor/sync-rdm', ADMIN, async (req, res) => {
 })
 
 // ==================== DASHBOARD STATS ====================
+app.get('/api/absensi-siswa/ringkasan', DASHBOARD_ROLES, (req, res) => {
+  const tanggal = /^\d{4}-\d{2}-\d{2}$/.test(String(req.query.tanggal || '')) ? String(req.query.tanggal) : todayJakarta()
+  const rows = db.prepare(`SELECT r.id,r.nama,COUNT(s.id) AS total_siswa,
+    SUM(CASE WHEN a.status='hadir' THEN 1 ELSE 0 END) AS hadir,
+    SUM(CASE WHEN a.status='sakit' THEN 1 ELSE 0 END) AS sakit,
+    SUM(CASE WHEN a.status='izin' THEN 1 ELSE 0 END) AS izin,
+    SUM(CASE WHEN a.status='alpha' THEN 1 ELSE 0 END) AS alpha
+    FROM rombel r LEFT JOIN siswa s ON s.rombel_id=r.id AND s.tenant_id=r.tenant_id AND COALESCE(s.status,'aktif')='aktif'
+    LEFT JOIN absensi_siswa a ON a.siswa_id=s.id AND a.tenant_id=r.tenant_id AND a.tanggal=?
+    WHERE r.tenant_id=? GROUP BY r.id,r.nama ORDER BY r.nama`).all(tanggal, req.tenantId).map(row => ({
+      ...row,
+      persentase: row.total_siswa ? Math.round((Number(row.hadir) / Number(row.total_siswa)) * 100) : 0
+    }))
+  const totals = rows.reduce((sum, row) => ({ hadir: sum.hadir + Number(row.hadir), sakit: sum.sakit + Number(row.sakit), izin: sum.izin + Number(row.izin), alpha: sum.alpha + Number(row.alpha) }), { hadir: 0, sakit: 0, izin: 0, alpha: 0 })
+  res.json({ tanggal, totals, rombel: rows })
+})
+
 app.get('/api/dashboard/stats', DASHBOARD_ROLES, (req, res) => {
   const today = todayJakarta()
   const tid = req.tenantId

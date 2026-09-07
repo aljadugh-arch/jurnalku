@@ -11,6 +11,7 @@ import FoundationTenantPicker from '../../components/FoundationTenantPicker'
 import { announceStudentScanSuccess, playFeedbackSound, primeFeedbackSound } from '../../lib/feedbackSound'
 import { useSettingsStore } from '../../stores/settingsStore'
 import { isGuruKelasJenjang } from '../../lib/jenjang'
+import MobileAttendanceSummary from './MobileAttendanceSummary'
 
 const statusColors: Record<string, string> = {
   hadir: 'bg-green-100 text-green-700',
@@ -290,7 +291,8 @@ export default function AbsensiSiswaPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      <MobileAttendanceSummary tanggal={tanggal} />
+      <div className="hidden lg:flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-gray-800 font-display">{readOnly ? 'Rekap Absensi Siswa' : 'Absensi Siswa'}</h1>
           <p className="text-gray-500 text-sm mt-1">{readOnly ? 'Monitoring & rekap — absensi diinput guru kelas' : 'QR Code & Manual oleh Wali Kelas'}</p>
@@ -308,6 +310,7 @@ export default function AbsensiSiswaPage() {
         </div>
       </div>
 
+      <div className="hidden lg:block">
       {/* Foundation Tenant Picker (Cross-tenant data) */}
       <FoundationTenantPicker
         selectedTenantId={foundationTenantId}
@@ -408,6 +411,7 @@ export default function AbsensiSiswaPage() {
             </tbody>
           </table>
         </div>
+      </div>
       </div>
     </div>
   )

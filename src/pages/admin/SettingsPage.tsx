@@ -9,6 +9,7 @@ import { isGuruKelasJenjang, JENJANG_OPTIONS } from '../../lib/jenjang'
 import MapPicker from '../../components/MapPicker'
 import JamPulangSiswa from '../../components/JamPulangSiswa'
 import FeatureSettings from '../../components/FeatureSettings'
+import { adminDashboardShortcuts, defaultAdminDashboardShortcutKeys, parseAdminDashboardShortcutKeys } from '../../lib/adminDashboardShortcuts'
 
 
 const HARI_OPTIONS = [
@@ -22,7 +23,8 @@ export default function SettingsPage() {
     theme: 'light', primary_color: '#1e40af', accent_color: '#059669', sidebar_color: '#1e293b',
     geo_latitude: '', geo_longitude: '', geo_radius: '200', jenjang: '', hari_libur: ['jumat'] as string[],
     bg_size: 'cover', bg_position: 'center', bg_repeat: 'no-repeat', bg_blur: 0,
-    pwa_enabled: false, pwa_name: '', pwa_theme_color: '#1e40af', pwa_bg_color: '#ffffff'
+    pwa_enabled: false, pwa_name: '', pwa_theme_color: '#1e40af', pwa_bg_color: '#ffffff',
+    dashboard_quick_menus: defaultAdminDashboardShortcutKeys as string[]
   })
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -57,7 +59,8 @@ export default function SettingsPage() {
         pwa_enabled: s.pwa_enabled === true || s.pwa_enabled === 1,
         pwa_name: s.pwa_name || '',
         pwa_theme_color: s.pwa_theme_color || '#1e40af',
-        pwa_bg_color: s.pwa_bg_color || '#ffffff'
+        pwa_bg_color: s.pwa_bg_color || '#ffffff',
+        dashboard_quick_menus: parseAdminDashboardShortcutKeys(s.dashboard_quick_menus)
       })
       setJam(j => ({
         sesi_masuk_mulai: s.sesi_masuk_mulai || j.sesi_masuk_mulai,
@@ -188,7 +191,7 @@ export default function SettingsPage() {
         </button>
       </div>
 
-      <div className="bg-white rounded-xl p-4 sm:p-6 shadow-sm border border-gray-100">
+      <div id="identitas" className="bg-white rounded-xl p-4 sm:p-6 shadow-sm border border-gray-100 scroll-mt-24">
         <h2 className="text-lg font-semibold text-gray-800 mb-4">Identitas Lembaga</h2>
         <div className="space-y-4">
           <div>
@@ -331,7 +334,22 @@ export default function SettingsPage() {
         </div>
       </div>
 
-      <div className="bg-white rounded-xl p-4 sm:p-6 shadow-sm border border-gray-100">
+      <div id="pintasan-dashboard" className="bg-white rounded-xl p-4 sm:p-6 shadow-sm border border-gray-100 scroll-mt-24">
+        <h2 className="text-lg font-semibold text-gray-800 mb-1">Pintasan Dashboard</h2>
+        <p className="mb-4 text-xs text-gray-500">Pilih tepat 8 menu dan atur urutannya untuk grid Home admin/kepala.</p>
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+          {adminDashboardShortcuts.map(item => {
+            const selected = form.dashboard_quick_menus.includes(item.key)
+            const order = form.dashboard_quick_menus.indexOf(item.key)
+            return <div key={item.key} className={`rounded-xl border p-3 ${selected ? 'border-primary bg-primary/5' : 'border-gray-200'}`}>
+              <label className="flex cursor-pointer items-center gap-2 text-xs font-semibold text-gray-700"><input type="checkbox" checked={selected} disabled={!selected && form.dashboard_quick_menus.length >= 8} onChange={e => setForm({ ...form, dashboard_quick_menus: e.target.checked ? [...form.dashboard_quick_menus, item.key].slice(0, 8) : form.dashboard_quick_menus.filter(key => key !== item.key) })} /> {item.label}</label>
+              {selected && <div className="mt-2 flex gap-1"><button type="button" disabled={order === 0} onClick={() => { const next = [...form.dashboard_quick_menus]; [next[order - 1], next[order]] = [next[order], next[order - 1]]; setForm({ ...form, dashboard_quick_menus: next }) }} className="rounded bg-gray-100 px-2 py-1 text-[10px] disabled:opacity-30">Naik</button><button type="button" disabled={order === form.dashboard_quick_menus.length - 1} onClick={() => { const next = [...form.dashboard_quick_menus]; [next[order + 1], next[order]] = [next[order], next[order + 1]]; setForm({ ...form, dashboard_quick_menus: next }) }} className="rounded bg-gray-100 px-2 py-1 text-[10px] disabled:opacity-30">Turun</button><span className="ml-auto text-[10px] text-gray-400">#{order + 1}</span></div>}
+            </div>
+          })}
+        </div>
+      </div>
+
+      <div id="tampilan" className="bg-white rounded-xl p-4 sm:p-6 shadow-sm border border-gray-100 scroll-mt-24">
         <h2 className="text-lg font-semibold text-gray-800 mb-4">Tampilan & Theme</h2>
         <div className="space-y-4">
           <div>
@@ -378,7 +396,7 @@ export default function SettingsPage() {
         </div>
       </div>
 
-      <div className="bg-white rounded-xl p-4 sm:p-6 shadow-sm border border-gray-100">
+      <div id="pwa" className="bg-white rounded-xl p-4 sm:p-6 shadow-sm border border-gray-100 scroll-mt-24">
         <div className="flex items-center gap-2 mb-4">
           <Smartphone size={20} className="text-primary shrink-0" />
           <h2 className="text-lg font-semibold text-gray-800">Pengaturan PWA &amp; Aplikasi</h2>
@@ -474,7 +492,7 @@ export default function SettingsPage() {
         </div>
       </div>
 
-      <div className="bg-white rounded-xl p-4 sm:p-6 shadow-sm border border-gray-100">
+      <div id="ceklok" className="bg-white rounded-xl p-4 sm:p-6 shadow-sm border border-gray-100 scroll-mt-24">
         <div className="mb-4">
           <h2 className="text-lg font-semibold text-gray-800">Geolokasi Ceklok Guru</h2>
           <p className="text-sm text-gray-500 mt-1">Klik pada peta atau geser marker untuk menentukan titik sekolah. Guru hanya bisa ceklok dalam radius yang ditentukan.</p>

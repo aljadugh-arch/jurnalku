@@ -5,6 +5,7 @@ import { useAuthStore } from '../../stores/authStore'
 import { useSettingsStore } from '../../stores/settingsStore'
 import { useSubscriptionStore } from '../../stores/subscriptionStore'
 import { pathEnabled } from '../../lib/featureAccess'
+import MobileMenuSheet from '../MobileMenuSheet'
 import {
   BarChart3,
   BookOpen,
@@ -157,10 +158,12 @@ export default function BottomNavigation() {
   const primary = items.slice(0, 4)
   const more = items.slice(4)
   const activeMore = more.some(item => isActive(location.pathname, item.path))
+  const adminRole = ['admin', 'super_admin', 'kepala', 'operator', 'tata_usaha', 'tu'].includes(navigationRole || '')
 
   return (
     <>
-      {open && (
+      {adminRole && <MobileMenuSheet open={open} onClose={() => setOpen(false)} variant="settings" />}
+      {open && !adminRole && (
         <div className="fixed inset-0 z-50 bg-black/40 lg:hidden" onClick={() => setOpen(false)}>
           <div
             className="absolute inset-x-3 bottom-24 max-h-[70vh] overflow-y-auto rounded-3xl bg-white p-3 shadow-2xl dark:bg-gray-900"

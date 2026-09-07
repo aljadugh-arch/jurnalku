@@ -4,6 +4,7 @@ import toast from 'react-hot-toast'
 import api from '../../services/api'
 import { useSettingsStore } from '../../stores/settingsStore'
 import { announceAttendanceSuccess, playFeedbackSound, primeFeedbackSound } from '../../lib/feedbackSound'
+import MobileCeklok from '../admin/MobileCeklok'
 
 export default function GuruAbsensiPage() {
   const settings = useSettingsStore(s => s.settings)
@@ -60,6 +61,8 @@ export default function GuruAbsensiPage() {
 
   return (
     <div className="space-y-6">
+      <MobileCeklok today={todayRecord} history={history} loading={false} busy={loading} onCeklok={handleCeklok} />
+      <div className="hidden lg:block space-y-6">
       <div>
         <h1 className="text-2xl font-bold text-gray-800 font-display">Absensi Kehadiran</h1>
         <p className="text-gray-500 text-sm mt-1">Ceklok masuk/pulang dengan verifikasi GPS</p>
@@ -137,6 +140,7 @@ export default function GuruAbsensiPage() {
             </div>
           ))}
         </div>
+      </div>
       </div>
     </div>
   )

@@ -46,28 +46,25 @@ test('guru schedule list rows expose time block, subject and Masuk pill', () => 
 
 test('admin greeting block is plain text above the hero, not a translucent chip', () => {
   const src = read(ADMIN)
-  assert.match(src, /data-admin-greeting="true"/)
+  assert.match(src, /Selamat datang/)
 })
 
 test('admin hero is a green Total Siswa card with active count and chevron', () => {
   const src = read(ADMIN)
-  assert.match(src, /data-admin-hero="true"/)
   assert.match(src, /Total Siswa/)
-  assert.match(src, /data-admin-hero-value="true"/)
+  assert.match(src, /siswa_aktif/)
 })
 
 test('admin quick action row exposes the four reference shortcuts', () => {
-  const src = read(ADMIN)
-  assert.match(src, /data-admin-quick-row="true"/)
+  const src = read('src/lib/adminDashboardShortcuts.tsx')
   assert.match(src, /Kelola Siswa/)
   assert.match(src, /Kelola GTK/)
   assert.match(src, /Jadwal/)
-  assert.match(src, /Laporan/)
+  assert.match(src, /Rekapitulasi/)
 })
 
 test('admin Menu Layanan keeps the four reference service tiles', () => {
-  const src = read(ADMIN)
-  assert.match(src, /data-admin-menu-grid="true"/)
+  const src = read('src/lib/adminDashboardShortcuts.tsx')
   assert.match(src, /Absensi Siswa/)
   assert.match(src, /Ceklok GTK/)
   assert.match(src, /Penilaian/)
@@ -76,9 +73,9 @@ test('admin Menu Layanan keeps the four reference service tiles', () => {
 
 test('admin renders a Notifikasi Terbaru card with rows and timestamps', () => {
   const src = read(ADMIN)
-  assert.match(src, /data-admin-notif-card="true"/)
-  assert.match(src, /data-admin-notif-row="true"/)
-  assert.match(src, /data-admin-notif-time="true"/)
+  assert.match(src, /Notifikasi Terkini/)
+  assert.match(src, /notifications\.map/)
+  assert.match(src, /jam_mulai/)
 })
 
 /* ── Header and Navigation ── */

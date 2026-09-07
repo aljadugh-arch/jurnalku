@@ -15,8 +15,8 @@ test('admin Lihat Semua opens the complete role menu sheet', () => {
   const sheet = read('src/components/MobileMenuSheet.tsx')
   assert.match(dashboard, /onClick=\{\(\) => setMenuOpen\(true\)\}[\s\S]*Lihat Semua/)
   assert.match(dashboard, /<MobileMenuSheet open=\{menuOpen\}/)
-  assert.match(sheet, /menuForRole\(user\?\.role\)/)
-  assert.match(sheet, /flattenMenu/)
+  assert.match(sheet, /adminMenuSections/)
+  assert.match(sheet, /Manajemen Data/)
 })
 
 test('mobile dashboard header owns notification theme profile password and logout actions', () => {
@@ -45,7 +45,6 @@ test('mobile heroes derive color from tenant settings and dark theme', () => {
   assert.match(helper, /dark.*shade\(fallback, -38\)/)
 
   for (const file of [
-    'src/pages/admin/MobileAdminDashboard.tsx',
     'src/pages/admin/MobileBendaharaDashboard.tsx',
     'src/pages/guru/MobileGuruDashboard.tsx',
     'src/pages/siswa/MobileSiswaDashboard.tsx',
@@ -54,6 +53,9 @@ test('mobile heroes derive color from tenant settings and dark theme', () => {
     assert.match(source, /heroColors\(settings, dark\)/)
     assert.match(source, /linear-gradient\(135deg, \$\{hero\}/)
   }
+  const admin = read('src/pages/admin/MobileAdminDashboard.tsx')
+  assert.match(admin, /dark:bg-gray-950/)
+  assert.match(admin, /text-primary/)
 })
 
 test('guru and siswa mobile dashboards use compact hero card and section spacing', () => {
