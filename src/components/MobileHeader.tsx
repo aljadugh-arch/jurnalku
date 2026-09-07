@@ -1,42 +1,53 @@
-import { useMemo, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { Bell, Moon, Sun, LogOut, Lock, User, ChevronDown } from 'lucide-react'
+import { useState } from 'react'
+import { useNavigate, useLocation } from 'react-router-dom'
+import { Bell, Moon, Sun, User, Lock, LogOut, ChevronDown, Repeat2 } from 'lucide-react'
 import { useAuthStore } from '../stores/authStore'
 import { useThemeStore } from '../stores/themeStore'
 import Avatar from './ui/Avatar'
-import { roleLabel } from '../lib/roles'
+
+function roleLabel(role?: string) {
+  switch (role) {
+    case 'guru': return 'Guru'
+    case 'wali_kelas': return 'Wali Kelas'
+    case 'siswa': return 'Siswa'
+    case 'kepala': return 'Kepala Sekolah'
+    case 'admin': return 'Admin'
+    case 'bendahara': return 'Bendahara'
+    default: return 'User'
+  }
+}
 
 /**
- * Header mobile/tablet untuk dashboard (admin, guru, siswa, bendahara).
- * Menggantikan fungsi Header global (profil, ganti password, logout, toggle theme)
- * yang disembunyikan di mobile — tombol theme berdampingan dengan bell notifikasi,
- * dan foto profil admin/avatar menggantikan dropdown profil header.
+ * MobileHeader — header minimalis untuk dashboard mobile.
+ * Hanya: avatar + nama + role di kiri, bell notifikasi di kanan.
+ * Menu Profil/Ubah Password/Keluar dipindah ke dropdown avatar (klik avatar).
+ * Switch role Kepala↔Guru tersedia di dropdown untuk user kepala dengan can_teach.
  */
 export default function MobileHeader({
   basePath,
   onBell,
   showBell = true,
-  variant = 'hero',
 }: {
   basePath: string
   onBell: () => void
-  /** Set false when the page already renders its own notification button (reference design). */
+  /** Set false jika halaman sudah render tombol bell sendiri. */
   showBell?: boolean
-  /** 'hero' = white-on-gradient (default). 'light' = for light page backgrounds. */
-  variant?: 'hero' | 'light'
 }) {
   const navigate = useNavigate()
+  const location = useLocation()
   const { user, logout } = useAuthStore()
   const { dark, toggle: toggleDark } = useThemeStore()
   const [menuOpen, setMenuOpen] = useState(false)
 
-  const base = useMemo(() => {
+  const teacherMode = user?.role === 'kepala' && !!user?.can_teach && location.pathname.startsWith('/guru')
+
+  const base = (() => {
     if (basePath) return basePath
     if (!user?.role) return '/'
     if (user.role === 'siswa' || user.role === 'wali_murid') return '/siswa'
     if (user.role === 'guru' || user.role === 'wali_kelas') return '/guru'
     return '/admin'
-  }, [basePath, user?.role])
+  })()
 
   const handleLogout = () => {
     setMenuOpen(false)
@@ -44,91 +55,96 @@ export default function MobileHeader({
     navigate('/login')
   }
 
-  const light = variant === 'light'
-  const btnClass = light
-    ? 'bg-slate-50 text-slate-700 ring-1 ring-slate-100 dark:bg-gray-800 dark:text-gray-100 dark:ring-gray-700'
-    : 'bg-white/15 text-white backdrop-blur-sm'
-  const chevronClass = light ? 'text-slate-500 dark:text-gray-300' : 'text-white/90'
-  const avatarRing = light ? '!border-2 !border-slate-200 !shadow-none' : '!border-2 !border-white/40 !shadow-none'
-
   return (
-    <div className="flex items-center gap-2 shrink-0">
-      {/* Bell notifikasi (fungsi header asli sudah dipindah dari Header global) */}
+    <div className="flex items-center justify-between w-full gap-3">
+      {/* Kiri: avatar + nama + role */}
+      <div className="flex items-center gap-3 min-w-0 flex-1">
+        <button
+          onClick={() => setMenuOpen(o => !o)}
+          className="relative shrink-0 active:scale-95 transition"
+          aria-label="Menu akun"
+        >
+          <Avatar
+            src={user?.avatar}
+            name={user?.nama}
+            size={42}
+            className="!border-2 !border-slate-200 dark:!border-gray-700 shadow-sm"
+          />
+          <ChevronDown size={10} className="absolute -bottom-0.5 -right-0.5 text-slate-400 bg-white dark:bg-gray-900 rounded-full border border-slate-200 dark:border-gray-700 p-[1px] w-3.5 h-3.5" />
+        </button>
+        <div className="min-w-0 flex-1">
+          <p className="text-[13px] font-bold text-slate-900 dark:text-white truncate leading-tight">
+            {user?.nama || 'User'}
+          </p>
+          <p className="text-[11px] text-slate-500 dark:text-gray-400 leading-tight">
+            {roleLabel(user?.role)}{teacherMode ? ' • Mode Guru' : ''}
+          </p>
+        </div>
+      </div>
+
+      {/* Kanan: bell notifikasi */}
       {showBell && (
         <button
           onClick={onBell}
-          className={`relative flex h-10 w-10 shrink-0 items-center justify-center rounded-full active:scale-95 transition ${btnClass}`}
-          aria-label="Posting"
+          className="relative flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-slate-600 hover:bg-slate-100 dark:text-gray-300 dark:hover:bg-gray-800 active:scale-95 transition"
+          aria-label="Notifikasi"
         >
-          <Bell size={20} />
+          <Bell size={19} />
         </button>
       )}
 
-      {/* Theme toggle. Pada varian 'light' tombol ini pindah ke dalam dropdown akun
-          agar baris header tidak memakan lebar nama (desain referensi). */}
-      {!light && (
-        <button
-          onClick={toggleDark}
-          className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full active:scale-95 transition ${btnClass}`}
-          title={dark ? 'Mode Terang' : 'Mode Gelap'}
-        >
-          {dark ? <Sun size={20} /> : <Moon size={20} />}
-        </button>
-      )}
-
-      {/* Foto profil: menggantikan dropdown header (profil, ganti password, logout) */}
-      <div className="relative">
-        <button
-          onClick={() => setMenuOpen(o => !o)}
-          className={`flex items-center gap-1.5 rounded-full p-0.5 pr-1.5 active:scale-95 transition ${btnClass}`}
-          aria-label="Menu akun"
-        >
-          <Avatar src={user?.avatar} name={user?.nama} size={34} className={avatarRing} />
-          <ChevronDown size={14} className={chevronClass} />
-        </button>
-
-        {menuOpen && (
-          <>
-            <div
-              className="fixed inset-0 z-[90]"
-              onClick={() => setMenuOpen(false)}
-            />
-            <div className="absolute right-0 mt-2 w-52 z-[100] rounded-lg border bg-white shadow-xl dark:bg-gray-900 dark:border-gray-700 overflow-hidden">
-              <div className="border-b border-gray-100 dark:border-gray-700 px-4 py-2.5">
-                <p className="truncate text-sm font-semibold text-gray-800 dark:text-gray-100">{user?.nama || 'User'}</p>
-                <p className="text-xs text-gray-500 dark:text-gray-400">{roleLabel(user?.role)}</p>
-              </div>
-              <button
-                onClick={() => { setMenuOpen(false); navigate(base + '/profile') }}
-                className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800"
-              >
-                <User size={16} /> Profil Saya
-              </button>
-              <button
-                onClick={() => { setMenuOpen(false); navigate(base + '/change-password') }}
-                className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800"
-              >
-                <Lock size={16} /> Ubah Password
-              </button>
-              {light && (
-                <button
-                  onClick={() => { setMenuOpen(false); toggleDark() }}
-                  className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800"
-                >
-                  {dark ? <Sun size={16} /> : <Moon size={16} />}
-                  {dark ? 'Mode Terang' : 'Mode Gelap'}
-                </button>
-              )}
-              <button
-                onClick={handleLogout}
-                className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20"
-              >
-                <LogOut size={16} /> Keluar
-              </button>
+      {/* Dropdown akun */}
+      {menuOpen && (
+        <>
+          <div
+            className="fixed inset-0 z-[90]"
+            onClick={() => setMenuOpen(false)}
+          />
+          <div className="absolute left-0 top-full mt-2 w-52 z-[100] rounded-xl border bg-white shadow-xl dark:bg-gray-900 dark:border-gray-700 overflow-hidden">
+            <div className="border-b border-gray-100 dark:border-gray-700 px-4 py-2.5">
+              <p className="truncate text-sm font-semibold text-gray-800 dark:text-gray-100">{user?.nama || 'User'}</p>
+              <p className="text-xs text-gray-500 dark:text-gray-400">{roleLabel(user?.role)}</p>
             </div>
-          </>
-        )}
-      </div>
+
+            {/* Switch role Kepala ↔ Guru */}
+            {user?.role === 'kepala' && !!user?.can_teach && (
+              <button
+                onClick={() => { setMenuOpen(false); navigate(teacherMode ? '/admin' : '/guru') }}
+                className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-blue-700 dark:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-900/20"
+              >
+                <Repeat2 size={16} />
+                {teacherMode ? 'Mode Manajemen' : 'Mode Guru'}
+              </button>
+            )}
+
+            <button
+              onClick={() => { setMenuOpen(false); navigate(base + '/profile') }}
+              className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800"
+            >
+              <User size={16} /> Profil Saya
+            </button>
+            <button
+              onClick={() => { setMenuOpen(false); navigate(base + '/change-password') }}
+              className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800"
+            >
+              <Lock size={16} /> Ubah Password
+            </button>
+            <button
+              onClick={() => { setMenuOpen(false); toggleDark() }}
+              className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800"
+            >
+              {dark ? <Sun size={16} /> : <Moon size={16} />}
+              {dark ? 'Mode Terang' : 'Mode Gelap'}
+            </button>
+            <button
+              onClick={handleLogout}
+              className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 border-t border-gray-100 dark:border-gray-700"
+            >
+              <LogOut size={16} /> Keluar
+            </button>
+          </div>
+        </>
+      )}
     </div>
   )
 }

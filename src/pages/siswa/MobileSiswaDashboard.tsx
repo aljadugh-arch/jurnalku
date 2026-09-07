@@ -28,13 +28,6 @@ function greetingByHour() {
   return 'Selamat malam,'
 }
 
-function getInitials(name?: string) {
-  if (!name) return 'S'
-  const parts = name.trim().split(/\s+/)
-  if (parts.length === 1) return parts[0][0].toUpperCase()
-  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase()
-}
-
 function nowMinutes() {
   const d = new Date()
   return d.getHours() * 60 + d.getMinutes()
@@ -131,28 +124,9 @@ export default function MobileSiswaDashboard() {
 
   return (
     <div className="min-h-screen bg-[#F8FAFC] dark:bg-gray-950 pb-8 text-slate-800 dark:text-gray-100">
-      {/* ─── 1. TOP HEADER & GREETING ─────────────────────────────────── */}
-      <div className="bg-white dark:bg-gray-900 px-4 pt-4 pb-3 border-b border-slate-100 dark:border-gray-800 shadow-sm">
-        {/* Baris Aksi Akun (Kanan Atas) */}
-        <div data-mobile-account-row="true" className="flex items-center justify-end mb-2">
-          <MobileHeader basePath="/siswa" onBell={() => navigate('/siswa/posting')} variant="light" />
-        </div>
-
-        {/* Baris Profil & Greeting */}
-        <div data-mobile-identity-row="true" className="flex items-center gap-3">
-          <div className="w-12 h-12 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 text-white flex items-center justify-center font-bold text-lg shadow-md shrink-0 border-2 border-white dark:border-gray-800">
-            {getInitials(siswa?.nama)}
-          </div>
-          <div className="min-w-0 flex-1">
-            <p className="text-xs text-slate-400 dark:text-gray-400 font-medium">{greetingByHour()}</p>
-            <h1 className="text-base font-bold text-slate-900 dark:text-white truncate">
-              {siswa?.nama || 'Siswa'}
-            </h1>
-            <p className="text-[11px] text-slate-500 dark:text-gray-400 truncate">
-              {siswa?.kelas_nama ? `Kelas ${siswa.kelas_nama}` : 'Siswa'} {settings?.nama_lembaga ? `• ${settings.nama_lembaga}` : ''}
-            </p>
-          </div>
-        </div>
+      {/* ─── 1. HEADER MINIMALIS (avatar + nama kiri, bell kanan) ─── */}
+      <div className="px-4 pt-4 pb-2">
+        <MobileHeader basePath="/siswa" onBell={() => navigate('/siswa/posting')} />
       </div>
 
       <div data-mobile-compact-dashboard="true" className="px-4 pt-4 space-y-3.5">

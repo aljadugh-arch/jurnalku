@@ -162,55 +162,9 @@ export default function MobileGuruDashboard() {
 
   return (
     <div className="min-h-[100dvh] bg-slate-50 dark:bg-gray-950 pb-6">
-      {/* ── HEADER: greeting kiri, aksi akun kanan (sesuai desain referensi) ── */}
-      <div className="px-4 pt-5 pb-3">
-        <div className="flex flex-col gap-2">
-          <div data-mobile-account-row="true" className="relative z-30 flex shrink-0 items-center justify-end gap-2">
-            <button
-              data-guru-bell="true"
-              onClick={() => navigate('/guru/posting')}
-              aria-label="Notifikasi"
-              className="relative flex h-10 w-10 items-center justify-center rounded-2xl bg-white text-slate-800 shadow-sm ring-1 ring-slate-100 active:scale-95 transition dark:bg-gray-900 dark:text-gray-100 dark:ring-gray-800"
-            >
-              <Bell size={19} />
-              {pendingJurnal > 0 && (
-                <span
-                  data-guru-bell-badge="true"
-                  className="absolute -right-1 -top-1 flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-rose-500 px-1 text-[10px] font-bold text-white"
-                >
-                  {pendingJurnal > 9 ? '9+' : pendingJurnal}
-                </span>
-              )}
-            </button>
-            <MobileHeader
-              basePath="/guru"
-              onBell={() => navigate('/guru/posting')}
-              showBell={false}
-              variant="light"
-            />
-          </div>
-
-          <div data-guru-greeting="true" data-mobile-identity-row="true" className="flex items-center gap-3 min-w-0">
-            <div className="relative shrink-0">
-              <div className="flex h-14 w-14 items-center justify-center overflow-hidden rounded-full bg-slate-200 text-base font-bold text-slate-700 ring-2 ring-white shadow-sm">
-                {data.gtk?.foto
-                  ? <img src={data.gtk.foto} alt={data.gtk?.nama} className="h-full w-full object-cover" />
-                  : initials(data.gtk?.nama)}
-              </div>
-              <span className="absolute bottom-0 right-0 h-3.5 w-3.5 rounded-full bg-emerald-500 ring-2 ring-white" />
-            </div>
-            <div className="min-w-0 flex-1">
-              <p className="text-[13px] text-slate-500 dark:text-gray-400">{greetingByHour()},</p>
-              <h1 className="truncate text-lg font-bold leading-tight text-slate-900 dark:text-white">
-                {data.gtk?.nama_tampilan || data.gtk?.nama || 'Guru'}
-              </h1>
-              <p data-guru-date-row="true" className="mt-0.5 flex items-center gap-1.5 text-[12px] text-slate-500 dark:text-gray-400">
-                <CalendarDays size={13} className="shrink-0 text-blue-600" />
-                <span>{longDateJakarta()}</span>
-              </p>
-            </div>
-          </div>
-        </div>
+      {/* ── HEADER MINIMALIS: avatar + nama di kiri, bell notif di kanan ── */}
+      <div className="px-4 pt-4 pb-2">
+        <MobileHeader basePath="/guru" onBell={() => navigate('/guru/posting')} />
       </div>
 
       <div data-mobile-compact-dashboard="true" className="px-4 space-y-4">

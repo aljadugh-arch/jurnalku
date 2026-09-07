@@ -24,6 +24,7 @@ import {
   UserCheck,
   Users,
   X,
+  Wallet,
 } from 'lucide-react'
 
 type NavItem = {
@@ -42,13 +43,12 @@ function roleItems(role?: string, hideStaffCeklok?: boolean): NavItem[] {
   if (role === 'guru' || role === 'wali_kelas') {
     const teacherItems = [
       { label: 'Home', path: '/guru', icon: <Home size={iconSize} /> },
-      { label: 'Posting', path: '/guru/posting', icon: <FileText size={iconSize} /> },
       { label: 'Ceklok', path: '/guru/absensi-guru', icon: <MapPin size={iconSize} /> },
       { label: 'Jadwal', path: '/guru/jadwal', icon: <Calendar size={iconSize} /> },
       { label: 'Absensi', path: '/guru/absensi-siswa', icon: <UserCheck size={iconSize} /> },
       { label: 'Jurnal', path: '/guru/jurnal', icon: <ClipboardList size={iconSize} /> },
       { label: 'Nilai', path: '/guru/penilaian-harian', icon: <BookOpen size={iconSize} /> },
-      { label: 'Tugas', path: '/guru#tugas', icon: <ClipboardCheck size={iconSize} /> },
+      { label: 'Posting', path: '/guru/posting', icon: <FileText size={iconSize} /> },
       { label: 'Catatan', path: '/guru/catatan-kepribadian', icon: <FileText size={iconSize} /> },
       { label: 'Modul', path: '/guru/modul-ajar', icon: <FileText size={iconSize} /> },
     ]
@@ -60,12 +60,14 @@ function roleItems(role?: string, hideStaffCeklok?: boolean): NavItem[] {
   if (role === 'siswa' || role === 'wali_murid') {
     return [
       { label: 'Home', path: '/siswa', icon: <Home size={iconSize} /> },
-      { label: 'Hadir', path: '/siswa#kehadiran', icon: <UserCheck size={iconSize} /> },
-      { label: 'Tagihan', path: '/siswa#tagihan', icon: <CreditCard size={iconSize} /> },
-      { label: 'Tabungan', path: '/siswa#tabungan', icon: <CreditCard size={iconSize} /> },
-      { label: 'Nilai', path: '/siswa#nilai', icon: <BookOpen size={iconSize} /> },
-      { label: 'Jadwal', path: '/siswa#jadwal', icon: <Calendar size={iconSize} /> },
-      { label: 'Tugas', path: '/siswa#tugas', icon: <ClipboardCheck size={iconSize} /> },
+      { label: 'Absensi', path: '/siswa/absensi', icon: <UserCheck size={iconSize} /> },
+      { label: 'Jadwal', path: '/siswa/jadwal', icon: <Calendar size={iconSize} /> },
+      { label: 'Nilai', path: '/siswa/nilai', icon: <BookOpen size={iconSize} /> },
+      { label: 'Tugas', path: '/siswa/tugas', icon: <ClipboardCheck size={iconSize} /> },
+      { label: 'Tagihan', path: '/siswa/tagihan', icon: <DollarSign size={iconSize} /> },
+      { label: 'Tabungan', path: '/siswa/tabungan', icon: <Wallet size={iconSize} /> },
+      { label: 'Perpus', path: '/siswa/perpustakaan', icon: <BookOpen size={iconSize} /> },
+      { label: 'Posting', path: '/siswa/posting', icon: <FileText size={iconSize} /> },
     ]
   }
 
@@ -149,7 +151,6 @@ export default function BottomNavigation() {
   const features = useSubscriptionStore(s => s.subscription?.features)
   const location = useLocation()
   const [open, setOpen] = useState(false)
-  // Demo tenant (demo.jurnalmadrasah.web.id): ceklok hanya untuk guru, sembunyikan dari admin/kepala.
   const isDemo = typeof window !== 'undefined' && window.location.hostname.startsWith('demo.')
   const navigationRole = role === 'kepala' && user?.can_teach && location.pathname.startsWith('/guru') ? 'guru' : role
   const items = useMemo(() => roleItems(navigationRole, isDemo).filter(item => pathEnabled(item.path, features)), [navigationRole, isDemo, features])

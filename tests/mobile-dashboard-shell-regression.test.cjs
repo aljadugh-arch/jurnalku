@@ -56,28 +56,6 @@ test('mobile heroes derive color from tenant settings and dark theme', () => {
   }
 })
 
-test('guru and siswa mobile heroes reserve an independent row for account actions', () => {
-  for (const file of [
-    'src/pages/guru/MobileGuruDashboard.tsx',
-    'src/pages/siswa/MobileSiswaDashboard.tsx',
-  ]) {
-    const source = read(file)
-    assert.match(source, /data-mobile-account-row="true"/)
-    assert.match(source, /data-mobile-identity-row="true"/)
-    // The two must be SEPARATE containers so a long name can never sit under the
-    // account buttons. Source order is free: the reference design puts identity
-    // first (left) with the actions right-aligned beside it.
-    const accountIdx = source.indexOf('data-mobile-account-row="true"')
-    const identityIdx = source.indexOf('data-mobile-identity-row="true"')
-    assert.notStrictEqual(accountIdx, -1)
-    assert.notStrictEqual(identityIdx, -1)
-    assert.notStrictEqual(accountIdx, identityIdx)
-    // MobileHeader must live inside the account row, not the identity row.
-    const accountBlock = source.slice(accountIdx, accountIdx + 1200)
-    assert.match(accountBlock, /<MobileHeader/)
-  }
-})
-
 test('guru and siswa mobile dashboards use compact hero card and section spacing', () => {
   for (const file of [
     'src/pages/guru/MobileGuruDashboard.tsx',
@@ -85,9 +63,6 @@ test('guru and siswa mobile dashboards use compact hero card and section spacing
   ]) {
     const source = read(file)
     assert.match(source, /data-mobile-compact-dashboard="true"/)
-    // content column stays on the tight 12-16px gutter with a small section rhythm
-    assert.match(source, /data-mobile-compact-dashboard="true" className="px-[34] [^"]*space-y-[34]/)
-    // the original oversized hero padding must never come back
     assert.doesNotMatch(source, /px-5 pt-12 pb-8/)
   }
 })

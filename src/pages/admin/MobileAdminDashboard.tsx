@@ -130,44 +130,9 @@ export default function MobileAdminDashboard({ stats }: Props) {
 
   return (
     <div className="lg:hidden min-h-screen -mx-4 -mt-3 bg-slate-50 dark:bg-gray-950 pb-6">
-      {/* ── HEADER: aksi akun kanan atas, identitas lembaga lebar penuh di bawah ── */}
-      <div className="bg-white px-4 pt-4 pb-3 dark:bg-gray-900">
-        <div className="flex flex-col gap-2">
-          <div data-mobile-account-row="true" className="relative z-30 flex shrink-0 items-center justify-end gap-2">
-            <button
-              onClick={() => navigate('/admin/posting')}
-              aria-label="Notifikasi"
-              className="relative flex h-10 w-10 items-center justify-center rounded-2xl bg-slate-50 text-slate-700 ring-1 ring-slate-100 active:scale-95 transition dark:bg-gray-800 dark:text-gray-100 dark:ring-gray-700"
-            >
-              <Bell size={19} />
-              {notifications.length > 0 && (
-                <span className="absolute -right-1 -top-1 flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-rose-500 px-1 text-[10px] font-bold text-white">
-                  {notifications.length}
-                </span>
-              )}
-            </button>
-            <MobileHeader
-              basePath="/admin"
-              onBell={() => navigate('/admin/posting')}
-              showBell={false}
-              variant="light"
-            />
-          </div>
-
-          <div data-admin-school-header="true" className="flex items-center gap-3 min-w-0">
-            <div className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-emerald-600 text-white shadow-sm">
-              {settings.logo
-                ? <img src={settings.logo} alt="Logo" className="h-full w-full object-cover" />
-                : <School size={22} />}
-            </div>
-            <div className="min-w-0 flex-1">
-              <h1 className="truncate text-[15px] font-bold leading-tight text-slate-900 dark:text-white">
-                {settings.nama_lembaga || 'Jurnal Madrasah'}
-              </h1>
-              <p className="text-xs text-slate-500 dark:text-gray-400">Admin Sekolah</p>
-            </div>
-          </div>
-        </div>
+      {/* ── HEADER MINIMALIS: avatar + nama di kiri, bell notif di kanan ── */}
+      <div className="px-4 pt-4 pb-2">
+        <MobileHeader basePath="/admin" onBell={() => navigate('/admin/posting')} />
       </div>
 
       <div className="px-4 pt-4 space-y-4">
