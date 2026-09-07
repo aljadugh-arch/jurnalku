@@ -17,7 +17,7 @@ const SERVER = read('server/index.cjs')
 
 test('admin home has configurable eight shortcuts, notifications and charts', () => {
   assert.match(DASH, /dashboard_quick_menus/)
-  for (const label of ['Kelola Siswa', 'Kelola GTK', 'Jadwal', 'Rekapitulasi', 'Absensi Siswa', 'Ceklok GTK', 'Penilaian', 'Keuangan']) assert.match(SHORTCUTS, new RegExp(label))
+  for (const label of ['Kelola Siswa', 'Kelola GTK', 'Jadwal', 'Rekapitulasi', 'Absensi QR Siswa', 'Ceklok GTK', 'Penilaian', 'Keuangan']) assert.match(SHORTCUTS, new RegExp(label))
   assert.match(DASH, /Presensi Hari Ini/)
   assert.match(DASH, /Jadwal Mengajar Hari Ini/)
   assert.match(DASH, /Rekap Absensi Siswa \(7 Hari Terakhir\)/)
@@ -63,9 +63,12 @@ test('staff clock has tabs, digital clock, and today/week histories', () => {
 test('bottom navigation has Home Calendar Presensi Ceklok and Lainnya for admin kepala', () => {
   for (const label of ['Home', 'Kalender', 'Presensi', 'Ceklok']) assert.match(NAV, new RegExp(`label: '${label}'`))
   assert.match(NAV, />Lainnya</)
-  assert.match(NAV, /variant="settings"/)
+  assert.match(NAV, /variant="all"/)
 })
 
-test('other menu groups institution and system management links', () => {
-  for (const label of ['Identitas Lembaga', 'Manajemen Sistem', 'Profil Sekolah', 'Jenjang & Kurikulum', 'Tahun Ajaran', 'Hari Libur', 'Tampilan & Theme', 'PWA', 'Ceklok Setting', 'Fitur Aktif\/Nonaktif', 'Backup & Restore', 'Konfigurasi WhatsApp', 'Cashless', 'Developer Mode']) assert.match(MENUS, new RegExp(label.replace('&', '\\&')))
+test('other menu points to existing features instead of settings anchors', () => {
+  for (const label of ['Absensi QR Siswa', 'Absensi GTK', 'Rekap Absensi', 'Jurnal Mengajar', 'Kelas / Rombel', 'Broadcast', 'WA Gateway', 'Backup & Restore']) assert.match(MENUS, new RegExp(label.replace('&', '\\&')))
+  assert.match(MENUS, /Absensi QR Siswa', path: '\/admin\/absensi-siswa'/)
+  const allMenu = MENUS.slice(MENUS.indexOf('const adminMenuSections'), MENUS.indexOf('const settingsMenuSections'))
+  assert.doesNotMatch(allMenu, /\/admin\/settings[#']/)
 })

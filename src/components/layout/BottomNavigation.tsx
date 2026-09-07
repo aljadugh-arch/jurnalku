@@ -162,7 +162,7 @@ export default function BottomNavigation() {
 
   return (
     <>
-      {adminRole && <MobileMenuSheet open={open} onClose={() => setOpen(false)} variant="settings" />}
+      {adminRole && <MobileMenuSheet open={open} onClose={() => setOpen(false)} variant="all" />}
       {open && !adminRole && (
         <div className="fixed inset-0 z-50 bg-black/40 lg:hidden" onClick={() => setOpen(false)}>
           <div

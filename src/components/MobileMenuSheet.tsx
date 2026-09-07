@@ -1,7 +1,7 @@
 import { Link } from 'react-router-dom'
 import {
-  BookOpen, Code2, DatabaseBackup, DollarSign, GraduationCap, Layers, MessageSquare,
-  Receipt, Settings, ShoppingCart, UserCheck, Users, Wallet,
+  BookOpen, Code2, DatabaseBackup, DollarSign, FileText, GraduationCap, Layers, MapPin,
+  MessageSquare, QrCode, Receipt, Settings, ShoppingCart, UserCheck, Users, Wallet,
 } from 'lucide-react'
 import PortalSheet from './ui/PortalSheet'
 import { useAuthStore } from '../stores/authStore'
@@ -15,10 +15,13 @@ const adminMenuSections: MenuSection[] = [
   {
     title: 'Menu Layanan',
     items: [
-      { label: 'Absensi Siswa', path: '/admin/absensi-siswa', icon: <UserCheck size={19} /> },
+      { label: 'Absensi QR Siswa', path: '/admin/absensi-siswa', icon: <QrCode size={19} /> },
       { label: 'Ceklok GTK', path: '/admin/ceklok', icon: <UserCheck size={19} /> },
+      { label: 'Absensi GTK', path: '/admin/absensi-guru', icon: <MapPin size={19} /> },
+      { label: 'Rekap Absensi', path: '/admin/rekap-absensi', icon: <Receipt size={19} /> },
       { label: 'Penilaian', path: '/admin/rapor', icon: <BookOpen size={19} /> },
       { label: 'Jadwal', path: '/admin/jadwal', icon: <BookOpen size={19} /> },
+      { label: 'Posting', path: '/admin/posting', icon: <FileText size={19} /> },
     ],
   },
   {
@@ -34,8 +37,10 @@ const adminMenuSections: MenuSection[] = [
     items: [
       { label: 'Kelas / Rombel', path: '/admin/rombel', icon: <Layers size={19} /> },
       { label: 'Mata Pelajaran', path: '/admin/mapel', icon: <BookOpen size={19} /> },
+      { label: 'Pengajar', path: '/admin/pengajar', icon: <Users size={19} /> },
       { label: 'Jurnal Mengajar', path: '/admin/jurnal', icon: <Receipt size={19} /> },
       { label: 'Kalender Akademik', path: '/admin/kalender-kbm', icon: <BookOpen size={19} /> },
+      { label: 'Ekstrakurikuler', path: '/admin/ekskul', icon: <Layers size={19} /> },
     ],
   },
   {
@@ -44,6 +49,15 @@ const adminMenuSections: MenuSection[] = [
       { label: 'Tagihan & Pembayaran', path: '/admin/tagihan', icon: <DollarSign size={19} /> },
       { label: 'Tabungan', path: '/admin/tabungan', icon: <Wallet size={19} /> },
       { label: 'Laporan', path: '/admin/rekap-absensi', icon: <Receipt size={19} /> },
+      { label: 'Backup & Restore', path: '/admin/backup-restore', icon: <DatabaseBackup size={19} /> },
+    ],
+  },
+  {
+    title: 'Komunikasi',
+    items: [
+      { label: 'Broadcast', path: '/admin/broadcast', icon: <MessageSquare size={19} /> },
+      { label: 'Notifikasi WA', path: '/admin/notif-settings', icon: <MessageSquare size={19} /> },
+      { label: 'WA Gateway', path: '/admin/wa-gateway', icon: <MessageSquare size={19} /> },
     ],
   },
 ]

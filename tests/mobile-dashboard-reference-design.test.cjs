@@ -65,7 +65,7 @@ test('admin quick action row exposes the four reference shortcuts', () => {
 
 test('admin Menu Layanan keeps the four reference service tiles', () => {
   const src = read('src/lib/adminDashboardShortcuts.tsx')
-  assert.match(src, /Absensi Siswa/)
+  assert.match(src, /Absensi QR Siswa/)
   assert.match(src, /Ceklok GTK/)
   assert.match(src, /Penilaian/)
   assert.match(src, /Keuangan/)

@@ -1,4 +1,4 @@
-import { Calendar, ClipboardList, FileText, GraduationCap, MapPin, Star, UserCheck, Users, Wallet } from 'lucide-react'
+import { Calendar, FileText, GraduationCap, MapPin, QrCode, Star, UserCheck, Users, Wallet } from 'lucide-react'
 
 export interface AdminDashboardShortcut {
   key: string
@@ -13,7 +13,7 @@ export const adminDashboardShortcuts: AdminDashboardShortcut[] = [
   { key: 'gtk', label: 'Kelola GTK', path: '/admin/gtk', icon: <Users size={20} />, tile: 'bg-sky-500' },
   { key: 'jadwal', label: 'Jadwal', path: '/admin/jadwal', icon: <Calendar size={20} />, tile: 'bg-violet-500' },
   { key: 'rekap', label: 'Rekapitulasi', path: '/admin/rekap-absensi', icon: <FileText size={20} />, tile: 'bg-orange-500' },
-  { key: 'absensi', label: 'Absensi Siswa', path: '/admin/absensi-siswa', icon: <ClipboardList size={20} />, tile: 'bg-teal-600' },
+  { key: 'absensi', label: 'Absensi QR Siswa', path: '/admin/absensi-siswa', icon: <QrCode size={20} />, tile: 'bg-teal-600' },
   { key: 'ceklok', label: 'Ceklok GTK', path: '/admin/ceklok', icon: <MapPin size={20} />, tile: 'bg-cyan-600' },
   { key: 'penilaian', label: 'Penilaian', path: '/admin/rapor', icon: <Star size={20} />, tile: 'bg-fuchsia-600' },
   { key: 'keuangan', label: 'Keuangan', path: '/admin/tagihan', icon: <Wallet size={20} />, tile: 'bg-amber-600' },
