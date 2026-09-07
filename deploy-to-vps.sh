@@ -2,9 +2,9 @@
 # Deploy JURNALKU dist + server ke VPS A (jurnal.cc.cd)
 set -e
 
-VPS_IP="129.226.82.94"
-VPS_USER="root"
-VPS_PASS="Sekolah0838#"
+VPS_IP="${VPS_IP:?Set VPS_IP via environment}"
+VPS_USER="${VPS_USER:-root}"
+VPS_PASS="${VPS_PASS:?Set VPS_PASS via environment}"
 VPS_DIR="/www/wwwroot/jurnal.cc.cd"
 LOCAL_DIST="dist"
 TARBALL="jurnalku-deploy.tar.gz"

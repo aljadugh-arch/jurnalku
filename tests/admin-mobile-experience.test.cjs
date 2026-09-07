@@ -11,6 +11,9 @@ const MENUS = read('src/components/MobileMenuSheet.tsx')
 const NAV = read('src/components/layout/BottomNavigation.tsx')
 const CAL = read('src/pages/admin/KalenderKBMPage.tsx')
 const PRES = read('src/pages/admin/MobileAttendanceSummary.tsx')
+const ABSENSI = read('src/pages/admin/AbsensiSiswaPage.tsx')
+const APP = read('src/App.tsx')
+const ROLE_MENUS = read('src/lib/menuItems.tsx')
 const CLOCK = read('src/pages/admin/MobileCeklok.tsx')
 const SETTINGS = read('src/pages/admin/SettingsPage.tsx')
 const SERVER = read('server/index.cjs')
@@ -43,12 +46,31 @@ test('calendar selection loads configured teaching schedule', () => {
   assert.match(SERVER, /\/api\/jadwal\/tanggal/)
 })
 
-test('presence summary has four statuses and per-rombel percentages', () => {
+test('presence summary has four statuses, clickable rombels, and QR entry below', () => {
   assert.match(PRES, /Presensi Siswa/)
   for (const status of ['Hadir', 'Sakit', 'Izin', 'Alpha']) assert.match(PRES, new RegExp(status))
   assert.match(PRES, /Persentase Tiap Kelas\/Rombel/)
   assert.match(PRES, /\/absensi-siswa\/ringkasan/)
+  assert.match(PRES, /navigate\(`\/admin\/absensi-siswa\/kelas\/\$\{row\.id\}`\)/)
+  assert.match(PRES, /to="\/admin\/absensi-qr-siswa"/)
+  assert.match(PRES, /Scan QR Siswa/)
   assert.match(SERVER, /Math\.max\(0, Number\(row\.total_siswa\)/)
+})
+
+test('QR attendance uses the old complete scanner and student QR features', () => {
+  assert.match(APP, /path="absensi-qr-siswa" element=\{<AbsensiSiswaPage qrMode/)
+  assert.match(ABSENSI, /Scan Kamera/)
+  assert.match(ABSENSI, /Scan Foto/)
+  assert.match(ABSENSI, /Lihat QR Siswa/)
+  assert.match(ABSENSI, /Unduh Semua/)
+})
+
+test('all-menu sheet derives from the complete role menu and retains settings and teaching schedule', () => {
+  assert.match(MENUS, /flattenMenu\(menuForRole\(role\)\)/)
+  assert.match(ROLE_MENUS, /label: 'Pengaturan'.*path: '\/admin\/settings'/)
+  assert.match(ROLE_MENUS, /label: 'Kelola Jadwal'.*path: '\/admin\/jadwal'/)
+  assert.match(ROLE_MENUS, /label: 'Pengajar'.*path: '\/admin\/pengajar'/)
+  assert.match(ROLE_MENUS, /label: 'Absensi QR Siswa'.*path: '\/admin\/absensi-qr-siswa'/)
 })
 
 test('staff clock has tabs, digital clock, and today/week histories', () => {
@@ -66,9 +88,11 @@ test('bottom navigation has Home Calendar Presensi Ceklok and Lainnya for admin 
   assert.match(NAV, /variant="all"/)
 })
 
-test('other menu points to existing features instead of settings anchors', () => {
-  for (const label of ['Absensi QR Siswa', 'Absensi GTK', 'Rekap Absensi', 'Jurnal Mengajar', 'Kelas / Rombel', 'Broadcast', 'WA Gateway', 'Backup & Restore']) assert.match(MENUS, new RegExp(label.replace('&', '\\&')))
-  assert.match(MENUS, /Absensi QR Siswa', path: '\/admin\/absensi-siswa'/)
-  const allMenu = MENUS.slice(MENUS.indexOf('const adminMenuSections'), MENUS.indexOf('const settingsMenuSections'))
-  assert.doesNotMatch(allMenu, /\/admin\/settings[#']/)
+test('other menu points to the complete existing feature set', () => {
+  assert.match(MENUS, /flattenMenu\(menuForRole\(role\)\)/)
+  assert.match(MENUS, /pathEnabled\(item\.path/)
+  assert.match(ROLE_MENUS, /Absensi QR Siswa/)
+  assert.match(ROLE_MENUS, /\/admin\/absensi-qr-siswa/)
+  assert.match(ROLE_MENUS, /Pengaturan/)
+  assert.match(ROLE_MENUS, /\/admin\/settings/)
 })

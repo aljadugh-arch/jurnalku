@@ -41,7 +41,8 @@ const adminMenuItems: MenuItem[] = [
   {
     label: 'Absensi', icon: <UserCheck size={20} />,
     children: [
-      { label: 'Absensi Siswa', path: '/admin/absensi-siswa' },
+      { label: 'Presensi Siswa', path: '/admin/absensi-siswa' },
+      { label: 'Absensi QR Siswa', path: '/admin/absensi-qr-siswa' },
       { label: 'Absensi Guru (Geolokasi)', path: '/admin/absensi-guru' },
       { label: 'Rekapitulasi', path: '/admin/rekap-absensi' },
       { label: 'Ekstrakurikuler', path: '/admin/ekskul' },
@@ -133,7 +134,8 @@ const kepalaMenuItems: MenuItem[] = [
   {
     label: 'Absensi', icon: <UserCheck size={20} />,
     children: [
-      { label: 'Absensi Siswa', path: '/admin/absensi-siswa' },
+      { label: 'Presensi Siswa', path: '/admin/absensi-siswa' },
+      { label: 'Absensi QR Siswa', path: '/admin/absensi-qr-siswa' },
       { label: 'Absensi Guru (Geolokasi)', path: '/admin/absensi-guru' },
       { label: 'Rekapitulasi', path: '/admin/rekap-absensi' },
     ]

@@ -32,7 +32,8 @@ export const adminMenuItems: MenuItem[] = [
   {
     label: 'Absensi', icon: <UserCheck size={20} />,
     children: [
-      { label: 'Absensi Siswa', path: '/admin/absensi-siswa' },
+      { label: 'Presensi Siswa', path: '/admin/absensi-siswa' },
+      { label: 'Absensi QR Siswa', path: '/admin/absensi-qr-siswa' },
       { label: 'Absensi Guru (Geolokasi)', path: '/admin/absensi-guru' },
       { label: 'Rekapitulasi', path: '/admin/rekap-absensi' },
       { label: 'Ekstrakurikuler', path: '/admin/ekskul' },
@@ -118,7 +119,8 @@ export const kepalaMenuItems: MenuItem[] = [
   {
     label: 'Absensi', icon: <UserCheck size={20} />,
     children: [
-      { label: 'Absensi Siswa', path: '/admin/absensi-siswa' },
+      { label: 'Presensi Siswa', path: '/admin/absensi-siswa' },
+      { label: 'Absensi QR Siswa', path: '/admin/absensi-qr-siswa' },
       { label: 'Absensi Guru (Geolokasi)', path: '/admin/absensi-guru' },
       { label: 'Rekapitulasi', path: '/admin/rekap-absensi' },
     ]
@@ -136,7 +138,7 @@ export const kepalaMenuItems: MenuItem[] = [
 // Pilih daftar menu sesuai role.
 export function menuForRole(role?: string): MenuItem[] {
   const items = role === 'kepala' ? kepalaMenuItems
-    : role === 'admin' || role === 'super_admin' ? adminMenuItems
+    : ['admin', 'super_admin', 'operator', 'tata_usaha', 'tu'].includes(role || '') ? adminMenuItems
     : role === 'guru' || role === 'wali_kelas' ? guruMenuItems
     : siswaMenuItems
   const visible = items.filter(item => item.path !== '/admin/tenants' || role === 'super_admin')
@@ -163,7 +165,7 @@ export function flattenMenu(items: MenuItem[]): FlatMenu[] {
 // Admin/kepala pakai daftar tetap sesuai permintaan; role lain ambil 7 pertama.
 const adminPrimaryGrid: FlatMenu[] = [
   { label: 'Kelola Jadwal', path: '/admin/jadwal', icon: <Calendar size={20} /> },
-  { label: 'Absensi Siswa', path: '/admin/absensi-siswa', icon: <UserCheck size={20} /> },
+  { label: 'Absensi QR Siswa', path: '/admin/absensi-qr-siswa', icon: <QrCode size={20} /> },
   { label: 'Absensi GTK', path: '/admin/absensi-guru', icon: <MapPin size={20} /> },
   { label: 'Posting', path: '/admin/posting', icon: <FileText size={20} /> },
   { label: 'Rekapitulasi', path: '/admin/rekap-absensi', icon: <ClipboardList size={20} /> },

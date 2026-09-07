@@ -18,7 +18,7 @@ interface MenuItem {
 const MENU_ITEMS: MenuItem[] = [
   { label: 'Pengajar', icon: UserCheck, path: '/admin/pengajar', roles: ['admin', 'kepala', 'operator'], color: 'bg-purple-500' },
   { label: 'Jadwal', icon: Calendar, path: '/admin/jadwal', roles: ['admin', 'kepala', 'operator'], color: 'bg-orange-500' },
-  { label: 'Absensi Siswa', icon: ClipboardList, path: '/admin/absensi-siswa', roles: ['admin', 'kepala', 'operator'], color: 'bg-cyan-500' },
+  { label: 'Absensi QR Siswa', icon: ClipboardList, path: '/admin/absensi-qr-siswa', roles: ['admin', 'kepala', 'operator'], color: 'bg-cyan-500' },
   { label: 'Absensi Guru', icon: UserCheck, path: '/admin/absensi-guru', roles: ['admin', 'kepala', 'operator'], color: 'bg-sky-500' },
   { label: 'Rapor', icon: BarChart, path: '/admin/rapor', roles: ['admin', 'kepala', 'operator'], color: 'bg-fuchsia-500' },
   { label: 'Modul Ajar', icon: BookOpen, path: '/admin/modul-ajar', roles: ['admin', 'kepala', 'operator'], color: 'bg-amber-500' },

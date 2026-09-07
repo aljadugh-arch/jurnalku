@@ -171,6 +171,8 @@ export default function App() {
           <Route path="wali-kelas" element={<WaliKelasPage />} />
           <Route path="jurnal" element={<JurnalPage />} />
           <Route path="absensi-siswa" element={<AbsensiSiswaPage />} />
+          <Route path="absensi-siswa/kelas/:rombelId" element={<AbsensiSiswaPage />} />
+          <Route path="absensi-qr-siswa" element={<AbsensiSiswaPage qrMode />} />
           <Route path="absensi-ekskul" element={<AbsensiEkskulPage />} />
           <Route path="absensi-kokurikuler" element={<AbsensiKokurikulerPage />} />
           <Route path="absensi-kegiatan" element={<AbsensiKegiatanPage />} />

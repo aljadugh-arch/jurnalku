@@ -15,7 +15,7 @@ test('admin Lihat Semua opens the complete role menu sheet', () => {
   const sheet = read('src/components/MobileMenuSheet.tsx')
   assert.match(dashboard, /onClick=\{\(\) => setMenuOpen\(true\)\}[\s\S]*Lihat Semua/)
   assert.match(dashboard, /<MobileMenuSheet open=\{menuOpen\}/)
-  assert.match(sheet, /adminMenuSections/)
+  assert.match(sheet, /flattenMenu\(menuForRole\(role\)\)/)
   assert.match(sheet, /Manajemen Data/)
 })
 
