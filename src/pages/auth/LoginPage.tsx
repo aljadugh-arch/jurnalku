@@ -1,11 +1,13 @@
 import { useState } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
-import { Eye, EyeOff, ArrowLeft, ArrowRight } from 'lucide-react'
+import { Eye, EyeOff, ArrowLeft, ArrowRight, Moon, Sun } from 'lucide-react'
 import { useAuthStore } from '../../stores/authStore'
 import { useSettingsStore } from '../../stores/settingsStore'
+import { useThemeStore } from '../../stores/themeStore'
 
 export default function LoginPage() {
   const { settings } = useSettingsStore()
+  const { dark, toggle: toggleDark } = useThemeStore()
   const logo = settings.logo || '/logo-jurnalku-256.png'
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -50,82 +52,95 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen flex flex-col lg:flex-row">
+    <div className="min-h-screen flex flex-col lg:flex-row bg-slate-50 dark:bg-gray-950 text-slate-900 dark:text-gray-100">
       {/* Left panel — marketing (desktop only) */}
-      <div className="hidden lg:flex lg:w-1/2 xl:w-[45%] bg-gray-900 items-center justify-center relative overflow-hidden">
+      <div className="hidden lg:flex lg:w-1/2 xl:w-[45%] bg-slate-900 dark:bg-black items-center justify-center relative overflow-hidden">
         {/* Background blobs */}
         <div className="absolute inset-0">
-          <div className="absolute top-20 left-20 w-72 h-72 bg-primary/20 rounded-full blur-3xl" />
-          <div className="absolute bottom-20 right-20 w-96 h-96 bg-indigo-500/15 rounded-full blur-3xl" />
+          <div className="absolute top-20 left-20 w-72 h-72 bg-blue-600/20 rounded-full blur-3xl" />
+          <div className="absolute bottom-20 right-20 w-96 h-96 bg-indigo-600/20 rounded-full blur-3xl" />
         </div>
         <div className="relative z-10 px-12 xl:px-16 max-w-lg">
           {/* Logo + brand */}
           <div className="flex items-center gap-3 mb-8">
-            <div className="w-12 h-12 bg-white rounded-xl flex items-center justify-center overflow-hidden">
+            <div className="w-12 h-12 bg-white rounded-2xl flex items-center justify-center overflow-hidden shadow-lg p-2">
               <img src={logo} alt="Logo" className="w-full h-full object-contain" />
             </div>
-            <span className="text-2xl font-extrabold text-white">JURNALKU</span>
+            <div>
+              <span className="text-2xl font-black text-white tracking-tight">JURNALKU</span>
+              <p className="text-[11px] text-slate-400 font-medium">{settings.nama_lembaga || 'Sistem Informasi Madrasah'}</p>
+            </div>
           </div>
           {/* Headline */}
           <h2 className="text-3xl xl:text-4xl font-extrabold text-white leading-tight mb-4">
             Kelola Sekolah<br />
-            <span className="text-gray-400">Jadi Lebih Mudah.</span>
+            <span className="text-blue-400">Jadi Lebih Mudah.</span>
           </h2>
-          <p className="text-gray-400 text-lg leading-relaxed mb-8">
-            Platform SIMS/M terpadu untuk madrasah &amp; sekolah. Data siswa, jadwal, absensi,
-            keuangan — semua dalam satu tempat.
+          <p className="text-slate-300 text-sm leading-relaxed mb-8">
+            Platform SIMS/M terpadu untuk madrasah &amp; sekolah. Presensi, jurnal KBM, nilai,
+            keuangan, dan komunikasi sekolah dalam satu genggaman.
           </p>
           {/* Trust indicator */}
-          <div className="flex items-center gap-3 text-sm text-gray-500">
+          <div className="flex items-center gap-3 text-xs text-slate-400">
             <div className="flex -space-x-2">
               {['A', 'S', 'B', 'R'].map((l, i) => (
                 <div
                   key={i}
-                  className="w-8 h-8 bg-gradient-to-br from-primary to-indigo-600 rounded-full flex items-center justify-center text-white text-xs font-bold border-2 border-gray-900"
+                  className="w-7 h-7 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-full flex items-center justify-center text-white text-[10px] font-bold border-2 border-slate-900"
                 >
                   {l}
                 </div>
               ))}
             </div>
-            <span>Dipercaya 100+ lembaga</span>
+            <span>Dipercaya ratusan tenaga pendidik</span>
           </div>
         </div>
       </div>
 
       {/* Right panel — login form */}
-      <div className="flex-1 flex items-center justify-center p-4 sm:p-8 bg-gray-50">
-        <div className="w-full max-w-md">
+      <div className="flex-1 flex flex-col justify-between p-4 sm:p-8 bg-slate-50 dark:bg-gray-950">
+        <div className="flex justify-end p-2">
+          <button
+            onClick={toggleDark}
+            className="p-2.5 rounded-full text-slate-500 hover:bg-slate-200 dark:text-gray-400 dark:hover:bg-gray-800 transition"
+            title={dark ? 'Mode Terang' : 'Mode Gelap'}
+          >
+            {dark ? <Sun size={18} className="text-amber-500" /> : <Moon size={18} />}
+          </button>
+        </div>
+
+        <div className="w-full max-w-md mx-auto my-auto">
           {/* Mobile branding */}
-          <div className="text-center lg:hidden mb-8">
-            <div className="w-14 h-14 bg-white rounded-2xl flex items-center justify-center mx-auto mb-3 shadow-sm border border-gray-200 overflow-hidden">
+          <div className="text-center lg:hidden mb-6">
+            <div className="w-14 h-14 bg-white dark:bg-gray-900 rounded-2xl flex items-center justify-center mx-auto mb-3 shadow-md border border-slate-100 dark:border-gray-800 overflow-hidden p-2">
               <img src={logo} alt="Logo" className="w-full h-full object-contain" />
             </div>
-            <h1 className="text-xl font-extrabold text-gray-900">JURNALKU</h1>
+            <h1 className="text-xl font-black text-slate-900 dark:text-white">JURNALKU</h1>
+            <p className="text-xs text-slate-500 dark:text-gray-400 mt-0.5">{settings.nama_lembaga || 'Sistem Informasi Sekolah'}</p>
           </div>
 
-          <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6 sm:p-8">
+          <div className="bg-white dark:bg-gray-900 rounded-3xl shadow-xl shadow-slate-200/50 dark:shadow-none border border-slate-100 dark:border-gray-800 p-6 sm:p-8">
             {/* Back link + heading */}
             <div className="mb-6">
               <Link
                 to="/"
-                className="inline-flex items-center gap-1 text-xs text-gray-400 hover:text-gray-600 mb-4 transition-colors"
+                className="inline-flex items-center gap-1 text-xs font-semibold text-slate-400 hover:text-slate-700 dark:hover:text-gray-200 mb-3 transition-colors"
               >
-                <ArrowLeft size={14} /> Kembali
+                <ArrowLeft size={13} /> Kembali
               </Link>
-              <h2 className="text-xl font-bold text-gray-900">Masuk ke Akun</h2>
-              <p className="text-sm text-gray-500 mt-1">Masukkan email/kode guru atau NISN/NIS siswa</p>
+              <h2 className="text-xl font-bold text-slate-900 dark:text-white">Masuk ke Akun</h2>
+              <p className="text-xs text-slate-500 dark:text-gray-400 mt-1">Masukkan email/kode guru atau NISN/NIS siswa</p>
             </div>
 
             {error && (
-              <div className="bg-red-50 border border-red-100 text-red-600 text-sm px-4 py-3 rounded-xl mb-4">
+              <div className="bg-rose-50 dark:bg-rose-950/40 border border-rose-100 dark:border-rose-900 text-rose-600 dark:text-rose-400 text-xs font-medium px-4 py-3 rounded-2xl mb-4">
                 {error}
               </div>
             )}
 
             <form onSubmit={handleLogin} className="space-y-4">
-              {/* Email / kode guru */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                <label className="block text-xs font-bold text-slate-700 dark:text-gray-300 mb-1.5">
                   Email / Kode Guru / NISN / NIS
                 </label>
                 <input
@@ -135,15 +150,14 @@ export default function LoginPage() {
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="email, kode guru, NISN, atau NIS"
-                  className="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary text-sm transition-all"
+                  className="w-full px-4 py-2.5 bg-slate-50 dark:bg-gray-800 border border-slate-200 dark:border-gray-700 rounded-2xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 text-sm transition-all text-slate-900 dark:text-white"
                 />
               </div>
 
-              {/* Password */}
               <div>
                 <div className="flex items-center justify-between mb-1.5">
-                  <label className="text-sm font-medium text-gray-700">Password</label>
-                  <Link to="/forgot-password" className="text-xs text-primary hover:underline font-medium">
+                  <label className="text-xs font-bold text-slate-700 dark:text-gray-300">Password</label>
+                  <Link to="/forgot-password" className="text-xs text-blue-600 hover:underline font-semibold">
                     Lupa?
                   </Link>
                 </div>
@@ -153,23 +167,22 @@ export default function LoginPage() {
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     placeholder="Masukkan password"
-                    className="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary pr-10 text-sm transition-all"
+                    className="w-full px-4 py-2.5 bg-slate-50 dark:bg-gray-800 border border-slate-200 dark:border-gray-700 rounded-2xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 pr-10 text-sm transition-all text-slate-900 dark:text-white"
                   />
                   <button
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-gray-300"
                   >
-                    {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                    {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
                   </button>
                 </div>
               </div>
 
-              {/* Submit */}
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full bg-gray-900 text-white py-2.5 rounded-xl font-semibold text-sm hover:bg-gray-800 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+                className="w-full bg-blue-600 text-white py-3 rounded-2xl font-bold text-sm hover:bg-blue-700 shadow-md shadow-blue-500/20 transition-all disabled:opacity-50 flex items-center justify-center gap-2 active:scale-98"
               >
                 {loading ? 'Memproses...' : (
                   <>Masuk <ArrowRight size={16} /></>
@@ -177,35 +190,34 @@ export default function LoginPage() {
               </button>
             </form>
 
-
             {['jurnal.cc.cd','jurnalmadrasah.web.id'].includes(window.location.hostname) && (
-            <div className="mt-5 rounded-2xl border border-blue-100 bg-blue-50 p-3">
-              <p className="text-sm font-bold text-gray-800 mb-2">Akun demo</p>
-              <div className="grid grid-cols-2 gap-2">
+            <div className="mt-5 rounded-2xl border border-blue-100 dark:border-blue-900/40 bg-blue-50/70 dark:bg-blue-950/30 p-3">
+              <p className="text-xs font-bold text-slate-800 dark:text-gray-200 mb-2">Akun Demo Cepat</p>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
                 {['admin','kepala','guru','bendahara','siswa'].map(role => (
-                  <button key={role} type="button" onClick={() => handleDemo(role)} className="rounded-xl bg-white px-3 py-2 text-xs font-semibold text-primary border border-blue-100 hover:bg-blue-100 capitalize">
-                    Demo {role.replace('_',' ')}
+                  <button key={role} type="button" onClick={() => handleDemo(role)} className="rounded-xl bg-white dark:bg-gray-800 px-2.5 py-1.5 text-xs font-semibold text-blue-600 dark:text-blue-400 border border-blue-100 dark:border-gray-700 hover:bg-blue-50 dark:hover:bg-gray-700 capitalize shadow-xs">
+                    {role.replace('_',' ')}
                   </button>
                 ))}
               </div>
             </div>
             )}
 
-            {/* Register link */}
             <div className="mt-6 text-center">
-              <p className="text-sm text-gray-500">
+              <p className="text-xs text-slate-500 dark:text-gray-400">
                 Belum punya akun?{' '}
-                <Link to="/register" className="text-primary font-semibold hover:underline">
+                <Link to="/register" className="text-blue-600 dark:text-blue-400 font-bold hover:underline">
                   Daftar gratis
                 </Link>
               </p>
             </div>
           </div>
 
-          <p className="text-center text-xs text-gray-400 mt-6">
-            © 2026 JURNALKU — SIMS/M Terpadu
+          <p className="text-center text-[11px] text-slate-400 dark:text-gray-600 mt-6 font-medium">
+            © 2026 JURNALKU — Sistem Informasi Madrasah & Sekolah
           </p>
         </div>
+        <div />
       </div>
     </div>
   )

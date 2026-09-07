@@ -45,9 +45,9 @@ function roleItems(role?: string, hideStaffCeklok?: boolean): NavItem[] {
       { label: 'Home', path: '/guru', icon: <Home size={iconSize} /> },
       { label: 'Ceklok', path: '/guru/absensi-guru', icon: <MapPin size={iconSize} /> },
       { label: 'Jadwal', path: '/guru/jadwal', icon: <Calendar size={iconSize} /> },
+      { label: 'Nilai', path: '/guru/penilaian-harian', icon: <BookOpen size={iconSize} /> },
       { label: 'Absensi', path: '/guru/absensi-siswa', icon: <UserCheck size={iconSize} /> },
       { label: 'Jurnal', path: '/guru/jurnal', icon: <ClipboardList size={iconSize} /> },
-      { label: 'Nilai', path: '/guru/penilaian-harian', icon: <BookOpen size={iconSize} /> },
       { label: 'Posting', path: '/guru/posting', icon: <FileText size={iconSize} /> },
       { label: 'Catatan', path: '/guru/catatan-kepribadian', icon: <FileText size={iconSize} /> },
       { label: 'Modul', path: '/guru/modul-ajar', icon: <FileText size={iconSize} /> },
@@ -161,7 +161,7 @@ export default function BottomNavigation() {
   return (
     <>
       {open && (
-        <div className="fixed inset-0 z-40 bg-black/40 lg:hidden" onClick={() => setOpen(false)}>
+        <div className="fixed inset-0 z-50 bg-black/40 lg:hidden" onClick={() => setOpen(false)}>
           <div
             className="absolute inset-x-3 bottom-24 max-h-[70vh] overflow-y-auto rounded-3xl bg-white p-3 shadow-2xl dark:bg-gray-900"
             onClick={e => e.stopPropagation()}
@@ -215,7 +215,7 @@ export default function BottomNavigation() {
         </div>
       )}
 
-      <nav className="fixed inset-x-0 bottom-0 z-50 border-t border-gray-200 bg-white/95 px-2 pb-[max(env(safe-area-inset-bottom),0.5rem)] pt-2 shadow-[0_-10px_30px_rgba(15,23,42,0.12)] backdrop-blur-xl dark:border-gray-800 dark:bg-gray-950/95 lg:hidden">
+      <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-gray-200 bg-white/95 px-2 pb-[max(env(safe-area-inset-bottom),0.5rem)] pt-2 shadow-[0_-10px_30px_rgba(15,23,42,0.12)] backdrop-blur-xl dark:border-gray-800 dark:bg-gray-950/95 lg:hidden">
         <div className="mx-auto grid max-w-xl grid-cols-5 gap-1">
           {primary.map(item => (
             <Link
