@@ -3525,7 +3525,7 @@ app.get('/api/siswa/qr-identifiers', STAFF, (req, res) => {
   res.json(data)
 })
 
-app.get('/api/guru/absensi-saya', authMiddleware, (req, res) => {
+app.get('/api/guru/absensi-saya', STAFF, (req, res) => {
   const gtk = resolveGtkForUser(req.user.id, req.tenantId)
   if (!gtk) {
     // Buat GTK dummy untuk admin/kepala supaya bisa ceklok
@@ -3534,7 +3534,7 @@ app.get('/api/guru/absensi-saya', authMiddleware, (req, res) => {
       const gid = uuidv4()
       const nm = req.user.nama || req.user.email || 'Admin'
       try { db.prepare("INSERT INTO gtk (id,nama,jenis_kelamin,email,jabatan,status_kepegawaian,tenant_id) VALUES (?,?,'L',?,'Admin','Tetap',?)").run(gid,nm,req.user.email||'',req.tenantId) } catch {}
-      try { db.prepare('UPDATE users SET gtk_id=? WHERE id=?').run(gid, req.user.id) } catch {}
+      try { db.prepare('UPDATE users SET gtk_id=? WHERE id=? AND tenant_id=?').run(gid, req.user.id, req.tenantId) } catch {}
       const gtk2 = db.prepare('SELECT * FROM gtk WHERE id=?').get(gid)
       if (gtk2) {
         const today2 = todayJakarta()
@@ -3559,7 +3559,7 @@ app.post('/api/guru/ceklok', STAFF, (req, res) => {
       const gid2 = uuidv4()
       const nm2 = req.user.nama || req.user.email || 'Admin'
       try { db.prepare("INSERT INTO gtk (id,nama,jenis_kelamin,email,jabatan,status_kepegawaian,tenant_id) VALUES (?,?,'L',?,'Admin','Tetap',?)").run(gid2,nm2,req.user.email||'',req.tenantId) } catch {}
-      try { db.prepare('UPDATE users SET gtk_id=? WHERE id=?').run(gid2, req.user.id) } catch {}
+      try { db.prepare('UPDATE users SET gtk_id=? WHERE id=? AND tenant_id=?').run(gid2, req.user.id, req.tenantId) } catch {}
       gtk = db.prepare('SELECT * FROM gtk WHERE id=?').get(gid2)
     }
     if (!gtk) return res.status(400).json({ error: 'Akun Anda belum terhubung ke data GTK. Minta admin buatkan akun dari menu Data GTK (Buat Akun Guru).' })

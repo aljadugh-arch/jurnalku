@@ -56,6 +56,8 @@ test('staff clock has tabs, digital clock, and today/week histories', () => {
   assert.match(CLOCK, /toLocaleTimeString/)
   assert.match(CLOCK, /Riwayat Ceklok Hari Ini/)
   assert.match(CLOCK, /Riwayat Ceklok Pekan Ini/)
+  assert.match(SERVER, /app\.get\('\/api\/guru\/absensi-saya', STAFF/)
+  assert.match(SERVER, /UPDATE users SET gtk_id=\? WHERE id=\? AND tenant_id=\?/)
 })
 
 test('bottom navigation has Home Calendar Presensi Ceklok and Lainnya for admin kepala', () => {
