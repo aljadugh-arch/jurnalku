@@ -87,7 +87,6 @@ export default function AbsensiSiswaPage({ qrMode = false }: { qrMode?: boolean 
   const [qrToken, setQrToken] = useState('')
   const { settings } = useSettingsStore()
   const readOnly = isGuruKelasJenjang(settings.jenjang as string)
-  const inputReadOnly = !qrMode && readOnly // ringkasan admin tetap monitor-only; rute QR memulihkan alat lama lengkap
   const [qrOpen, setQrOpen] = useState(false)
   const [lastQr, setLastQr] = useState('')
   const [scanBusy, setScanBusy] = useState(false)
@@ -309,13 +308,13 @@ export default function AbsensiSiswaPage({ qrMode = false }: { qrMode?: boolean 
           <p className="text-gray-500 text-sm mt-1">{qrMode ? 'Scan kamera, scan foto, lihat QR siswa, dan absensi manual lengkap' : readOnly ? 'Monitoring & rekap — absensi diinput guru kelas' : 'QR Code & Manual oleh Wali Kelas'}</p>
         </div>
         <div className="flex flex-wrap gap-2">
-          {!inputReadOnly && <button onClick={startQrCamera} className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg text-sm hover:bg-purple-700">
+          {!readOnly && <button onClick={startQrCamera} className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg text-sm hover:bg-purple-700">
             <QrCode size={16} /> Scan Kamera
           </button>}
-          {!inputReadOnly && <button onClick={() => setShowQr(true)} className="flex items-center gap-2 px-4 py-2 bg-white border border-purple-300 text-purple-700 rounded-lg text-sm hover:bg-purple-50">
+          <button onClick={() => setShowQr(true)} className="flex items-center gap-2 px-4 py-2 bg-white border border-purple-300 text-purple-700 rounded-lg text-sm hover:bg-purple-50">
             <QrCode size={16} /> Lihat QR Siswa
-          </button>}
-          {!inputReadOnly && <button onClick={handleSave} disabled={loading} className="flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-lg text-sm hover:bg-primary-dark disabled:opacity-50">
+          </button>
+          {!readOnly && <button onClick={handleSave} disabled={loading} className="flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-lg text-sm hover:bg-primary-dark disabled:opacity-50">
             <Save size={16} /> {loading ? 'Menyimpan...' : 'Simpan Absensi'}
           </button>}
         </div>
@@ -366,7 +365,7 @@ export default function AbsensiSiswaPage({ qrMode = false }: { qrMode?: boolean 
           {rombels.map(r => <option key={r.id} value={r.id}>{r.nama}</option>)}
         </select>
         </div>
-        {!inputReadOnly && <>
+        {!readOnly && <>
           <div className="flex flex-col lg:flex-row gap-3">
             <div id="qr-file-reader" className="hidden"></div><button onClick={startQrCamera} className="w-full lg:w-auto px-4 py-2 bg-purple-600 text-white rounded-lg text-sm text-center">Scan Kamera</button>
             <label className="flex w-full lg:w-auto items-center justify-center px-4 py-2 bg-gray-100 rounded-lg text-sm text-center cursor-pointer">Scan Foto<input type="file" accept="image/*" className="hidden" onChange={e => scanQrImage(e.target.files?.[0])} /></label>
@@ -381,9 +380,9 @@ export default function AbsensiSiswaPage({ qrMode = false }: { qrMode?: boolean 
         </>}
       </div>
 
-      {!inputReadOnly && qrOpen && <div className="fixed inset-0 z-[100] bg-black/60 flex items-center justify-center p-4"><div className="bg-white rounded-2xl p-4 w-full max-w-sm"><p className="text-sm text-gray-600 mb-3">Kamera tetap terbuka. Arahkan ke QR KTS siswa berikutnya.</p><div id="qr-reader"></div><p className="text-xs text-gray-400 mt-2">Terakhir: {qrToken || '-'}</p><button onClick={stopQrCamera} className="mt-3 w-full px-4 py-2 bg-gray-800 text-white rounded-lg text-sm">Tutup</button></div></div>}
+      {!readOnly && qrOpen && <div className="fixed inset-0 z-[100] bg-black/60 flex items-center justify-center p-4"><div className="bg-white rounded-2xl p-4 w-full max-w-sm"><p className="text-sm text-gray-600 mb-3">Kamera tetap terbuka. Arahkan ke QR KTS siswa berikutnya.</p><div id="qr-reader"></div><p className="text-xs text-gray-400 mt-2">Terakhir: {qrToken || '-'}</p><button onClick={stopQrCamera} className="mt-3 w-full px-4 py-2 bg-gray-800 text-white rounded-lg text-sm">Tutup</button></div></div>}
 
-      {!inputReadOnly && showQr && <div className="fixed inset-0 z-[100] bg-black/60 flex items-center justify-center p-3"><div className="bg-white rounded-2xl p-4 sm:p-6 w-full max-w-3xl max-h-[90vh] overflow-auto">
+      {showQr && <div className="fixed inset-0 z-[100] bg-black/60 flex items-center justify-center p-3"><div className="bg-white rounded-2xl p-4 sm:p-6 w-full max-w-3xl max-h-[90vh] overflow-auto">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4"><div><h2 className="font-bold text-gray-800">QR Siswa</h2><p className="text-xs text-gray-500">QR dan login memakai NISN bila tersedia; jika kosong memakai NIS.</p></div><div className="flex gap-2"><button onClick={downloadAllStudentQr} disabled={loading || qrIdentifiers.length === 0} className="inline-flex items-center justify-center gap-2 px-3 py-2 bg-purple-600 text-white rounded-lg text-sm disabled:opacity-50"><Download size={15}/>{loading ? 'Menyiapkan...' : 'Unduh Semua'}</button><button onClick={() => setShowQr(false)} className="px-3 py-2 bg-gray-100 rounded-lg text-sm">Tutup</button></div></div>
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">{qrIdentifiers.map(s => <div key={s.id} className="border rounded-xl p-3 text-center"><QRCodeCanvas id={`student-qr-preview-${s.id}`} value={s.identifier} size={240} level="M" marginSize={2} className="mx-auto max-w-full h-auto"/><p className="font-medium text-sm text-gray-800 mt-2 truncate">{s.nama}</p><p className="text-xs text-gray-500 break-all">{s.identifier_type}: {s.identifier}</p><button onClick={() => downloadStudentQr(s)} className="mt-3 inline-flex w-full items-center justify-center gap-2 px-3 py-2 bg-purple-50 text-purple-700 rounded-lg text-xs font-medium hover:bg-purple-100"><Download size={14}/>Unduh PNG</button></div>)}</div>
         {qrIdentifiers.length === 0 && <p className="py-8 text-center text-sm text-gray-400">Belum ada siswa pada rombel ini.</p>}

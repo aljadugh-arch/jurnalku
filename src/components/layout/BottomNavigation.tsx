@@ -5,6 +5,7 @@ import { useAuthStore } from '../../stores/authStore'
 import { useSettingsStore } from '../../stores/settingsStore'
 import { useSubscriptionStore } from '../../stores/subscriptionStore'
 import { pathEnabled } from '../../lib/featureAccess'
+import { flattenMenu, menuForRole } from '../../lib/menuItems'
 import MobileMenuSheet from '../MobileMenuSheet'
 import {
   BarChart3,
@@ -154,7 +155,12 @@ export default function BottomNavigation() {
   const [open, setOpen] = useState(false)
   const isDemo = typeof window !== 'undefined' && window.location.hostname.startsWith('demo.')
   const navigationRole = role === 'kepala' && user?.can_teach && location.pathname.startsWith('/guru') ? 'guru' : role
-  const items = useMemo(() => roleItems(navigationRole, isDemo).filter(item => pathEnabled(item.path, features)), [navigationRole, isDemo, features])
+  const items = useMemo(() => {
+    const base = roleItems(navigationRole, isDemo)
+    if (!['operator', 'tata_usaha', 'tu'].includes(navigationRole || '')) return base.filter(item => pathEnabled(item.path, features))
+    const allowedPaths = new Set(flattenMenu(menuForRole(navigationRole)).map(item => item.path))
+    return base.filter(item => allowedPaths.has(item.path) && pathEnabled(item.path, features))
+  }, [navigationRole, isDemo, features])
   const primary = items.slice(0, 4)
   const more = items.slice(4)
   const activeMore = more.some(item => isActive(location.pathname, item.path))

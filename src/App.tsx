@@ -182,12 +182,18 @@ export default function App() {
           <Route path="tahun-ajaran" element={<TahunAjaranPage />} />
           <Route path="tagihan" element={<TagihanPage />} />
           <Route path="tabungan" element={<TabunganPage />} />
-          <Route path="settings" element={<SettingsPage />} />
+          <Route path="settings" element={
+            <ProtectedRoute allowedRoles={['admin', 'super_admin']}><SettingsPage /></ProtectedRoute>
+          } />
           <Route path="developer-api" element={
             <ProtectedRoute allowedRoles={['admin', 'super_admin']}><DeveloperApiPage /></ProtectedRoute>
           } />
-          <Route path="wa-gateway" element={<WAGatewayPage />} />
-          <Route path="notif-settings" element={<NotifSettingsPage />} />
+          <Route path="wa-gateway" element={
+            <ProtectedRoute allowedRoles={['admin', 'super_admin']}><WAGatewayPage /></ProtectedRoute>
+          } />
+          <Route path="notif-settings" element={
+            <ProtectedRoute allowedRoles={['admin', 'super_admin']}><NotifSettingsPage /></ProtectedRoute>
+          } />
           <Route path="tenants" element={
             <ProtectedRoute allowedRoles={['super_admin']}><TenantManagementPage /></ProtectedRoute>
           } />
@@ -206,7 +212,9 @@ export default function App() {
           <Route path="supervisi" element={<SupervisiPage />} />
           <Route path="beasiswa" element={<BeasiswaPage />} />
           <Route path="cashless" element={<CashlessPage />} />
-          <Route path="backup-restore" element={<BackupRestorePage />} />
+          <Route path="backup-restore" element={
+            <ProtectedRoute allowedRoles={['admin', 'super_admin']}><BackupRestorePage /></ProtectedRoute>
+          } />
           <Route path="ceklok" element={<CekLokAdminPage />} />
           <Route path="absensi-saya" element={<GuruAbsensiPage />} />
           <Route path="bendahara" element={<BendaharaDashboard />} />

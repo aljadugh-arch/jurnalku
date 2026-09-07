@@ -136,12 +136,28 @@ export const kepalaMenuItems: MenuItem[] = [
 ]
 
 // Pilih daftar menu sesuai role.
+const restrictedAdminPaths = new Set([
+  '/admin/developer-api', '/admin/users', '/admin/settings', '/admin/backup-restore',
+  '/admin/wa-gateway', '/admin/notif-settings', '/admin/tenants',
+])
+
+function filterRoleItems(items: MenuItem[], role?: string): MenuItem[] {
+  const isLimitedStaff = role === 'operator' || role === 'tata_usaha' || role === 'tu'
+  return items.flatMap(item => {
+    if (item.path === '/admin/tenants' && role !== 'super_admin') return []
+    if (isLimitedStaff && item.path && restrictedAdminPaths.has(item.path)) return []
+    if (!item.children) return [item]
+    const children = isLimitedStaff ? item.children.filter(child => !restrictedAdminPaths.has(child.path)) : item.children
+    return children.length ? [{ ...item, children }] : []
+  })
+}
+
 export function menuForRole(role?: string): MenuItem[] {
   const items = role === 'kepala' ? kepalaMenuItems
     : ['admin', 'super_admin', 'operator', 'tata_usaha', 'tu'].includes(role || '') ? adminMenuItems
     : role === 'guru' || role === 'wali_kelas' ? guruMenuItems
     : siswaMenuItems
-  const visible = items.filter(item => item.path !== '/admin/tenants' || role === 'super_admin')
+  const visible = filterRoleItems(items, role)
   return role === 'wali_kelas'
     ? [...visible, { label: 'Kelas Wali Saya', icon: <Layers size={20} />, path: '/guru/rombel' }]
     : visible

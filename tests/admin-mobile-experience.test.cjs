@@ -14,9 +14,12 @@ const PRES = read('src/pages/admin/MobileAttendanceSummary.tsx')
 const ABSENSI = read('src/pages/admin/AbsensiSiswaPage.tsx')
 const APP = read('src/App.tsx')
 const ROLE_MENUS = read('src/lib/menuItems.tsx')
+const SIDEBAR = read('src/components/layout/Sidebar.tsx')
+const BOTTOM_NAV = read('src/components/layout/BottomNavigation.tsx')
 const CLOCK = read('src/pages/admin/MobileCeklok.tsx')
 const SETTINGS = read('src/pages/admin/SettingsPage.tsx')
 const SERVER = read('server/index.cjs')
+const FEATURES = read('src/lib/featureAccess.ts')
 
 test('admin home has configurable eight shortcuts, notifications and charts', () => {
   assert.match(DASH, /dashboard_quick_menus/)
@@ -63,6 +66,33 @@ test('QR attendance uses the old complete scanner and student QR features', () =
   assert.match(ABSENSI, /Scan Foto/)
   assert.match(ABSENSI, /Lihat QR Siswa/)
   assert.match(ABSENSI, /Unduh Semua/)
+})
+
+test('RA and MI admin QR routes stay monitor-only like the server policy', () => {
+  assert.match(ABSENSI, /const readOnly = isGuruKelasJenjang/)
+  assert.doesNotMatch(ABSENSI, /const inputReadOnly = !qrMode && readOnly/)
+  assert.match(ABSENSI, /disabled=\{readOnly\}/)
+  assert.match(SERVER, /requireAdminDailyAttendanceWriteAccess/)
+})
+
+test('operator and TU menus and direct routes omit destinations restricted to admin roles', () => {
+  assert.match(ROLE_MENUS, /restrictedAdminPaths/)
+  assert.match(ROLE_MENUS, /role === 'operator' \|\| role === 'tata_usaha' \|\| role === 'tu'/)
+  for (const path of ['/admin/developer-api', '/admin/users', '/admin/settings', '/admin/backup-restore', '/admin/wa-gateway', '/admin/notif-settings']) {
+    assert.match(ROLE_MENUS, new RegExp(path.replaceAll('/', '\\/')))
+  }
+  for (const route of ['settings', 'backup-restore', 'wa-gateway', 'notif-settings']) {
+    assert.match(APP, new RegExp(`path="${route}" element=\\{\\s*<ProtectedRoute allowedRoles=\\{\\['admin', 'super_admin'\\]\\}>`))
+  }
+})
+
+test('operator and TU restrictions are shared by desktop and mobile navigation', () => {
+  assert.match(SIDEBAR, /menuForRole\(user\?\.role\)/)
+  assert.match(BOTTOM_NAV, /menuForRole\(navigationRole\)/)
+})
+
+test('website menu obeys the website subscription feature flag', () => {
+  assert.match(FEATURES, /\['website',\['\/admin\/website-lembaga'\]\]/)
 })
 
 test('all-menu sheet derives from the complete role menu and retains settings and teaching schedule', () => {

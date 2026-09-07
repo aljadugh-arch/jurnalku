@@ -14,6 +14,7 @@ import { clsx } from 'clsx'
 import { roleLabel } from '../../lib/roles'
 import { useSubscriptionStore } from '../../stores/subscriptionStore'
 import { pathEnabled } from '../../lib/featureAccess'
+import { menuForRole } from '../../lib/menuItems'
 
 interface MenuItem {
   label: string
@@ -175,14 +176,12 @@ export default function Sidebar() {
       ? bendaharaMenuItems
       : user?.role === 'kepala'
         ? teacherMode ? guruMenuItems : kepalaMenuItems
-        : user?.role === 'admin' || user?.role === 'super_admin'
-          ? adminMenuItems
-          : user?.role === 'operator' || user?.role === 'tata_usaha' || user?.role === 'tu'
-            ? adminMenuItems
-            : user?.role === 'guru' || user?.role === 'wali_kelas'
-              ? guruMenuItems
-              : siswaMenuItems
-  ).filter(item => item.path !== '/admin/tenants' || user?.role === 'super_admin')
+        : user?.role === 'admin' || user?.role === 'super_admin' || user?.role === 'operator' || user?.role === 'tata_usaha' || user?.role === 'tu'
+          ? menuForRole(user?.role)
+          : user?.role === 'guru' || user?.role === 'wali_kelas'
+            ? guruMenuItems
+            : siswaMenuItems
+  )
     .concat(user?.role === 'wali_kelas' ? [{ label: 'Kelas Wali Saya', icon: <Layers size={20} />, path: '/guru/rombel' }] : [])
     .map(item => ({ ...item, children: item.children?.filter(child => pathEnabled(child.path, features)) }))
     .filter(item => item.path ? pathEnabled(item.path, features) : !!item.children?.length)
