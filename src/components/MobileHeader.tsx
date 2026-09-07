@@ -72,10 +72,10 @@ export default function MobileHeader({
         {menuOpen && (
           <>
             <div
-              className="fixed inset-0 z-40"
+              className="fixed inset-0 z-[90]"
               onClick={() => setMenuOpen(false)}
             />
-            <div className="absolute right-0 mt-2 w-52 z-50 rounded-lg border bg-white shadow-xl dark:bg-gray-900 dark:border-gray-700 overflow-hidden">
+            <div className="absolute right-0 mt-2 w-52 z-[100] rounded-lg border bg-white shadow-xl dark:bg-gray-900 dark:border-gray-700 overflow-hidden">
               <div className="border-b border-gray-100 dark:border-gray-700 px-4 py-2.5">
                 <p className="truncate text-sm font-semibold text-gray-800 dark:text-gray-100">{user?.nama || 'User'}</p>
                 <p className="text-xs text-gray-500 dark:text-gray-400">{roleLabel(user?.role)}</p>

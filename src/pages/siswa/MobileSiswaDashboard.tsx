@@ -82,8 +82,8 @@ function AttendanceRing({
   const total = hadir + sakit + izin + alpha
   if (total === 0) {
     return (
-      <div className="flex flex-col items-center gap-3">
-        <div className="relative w-36 h-36 rounded-full border-[10px] border-gray-100 flex items-center justify-center">
+      <div className="flex flex-col items-center gap-2">
+        <div className="relative w-28 h-28 rounded-full border-[9px] border-gray-100 flex items-center justify-center">
           <span className="text-sm text-gray-400 text-center px-2">Belum ada data</span>
         </div>
       </div>
@@ -123,18 +123,18 @@ function AttendanceRing({
   ]
 
   return (
-    <div className="flex flex-col items-center gap-4">
+    <div className="flex flex-col items-center gap-3">
       {/* Ring */}
-      <div className="relative w-36 h-36" style={{ background: bg, borderRadius: '50%' }}>
+      <div className="relative w-28 h-28" style={{ background: bg, borderRadius: '50%' }}>
         {/* inner circle to create donut */}
-        <div className="absolute inset-0 m-auto w-[96px] h-[96px] rounded-full bg-white flex flex-col items-center justify-center">
-          <span className="text-2xl font-bold text-gray-800">{total}</span>
+        <div className="absolute inset-0 m-auto w-[76px] h-[76px] rounded-full bg-white flex flex-col items-center justify-center">
+          <span className="text-xl font-bold text-gray-800">{total}</span>
           <span className="text-[10px] text-gray-400 -mt-0.5">total hari</span>
         </div>
       </div>
 
       {/* Legend */}
-      <div className="grid grid-cols-2 gap-x-6 gap-y-1.5">
+      <div className="grid w-full grid-cols-2 gap-x-4 gap-y-1">
         {legend.map((l) => (
           <div key={l.label} className="flex items-center gap-2">
             <span className={`w-2.5 h-2.5 rounded-full ${l.color} shrink-0`} />
@@ -204,45 +204,48 @@ export default function MobileSiswaDashboard() {
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-950 pb-6">
-      {/* ─── 1. HEADER ─────────────────────────────────────────────── */}
-      <div className="px-5 pt-12 pb-8 text-white relative overflow-hidden" style={{ background: `linear-gradient(135deg, ${hero}, #0f172a)` }}>
-        {/* decorative blobs */}
-        <div className="absolute -right-10 -top-10 w-40 h-40 rounded-full bg-white/10" />
-        <div className="absolute -left-6 bottom-0 w-28 h-28 rounded-full bg-white/5" />
+      {/* ─── 1. HEADER: aksi akun terpisah dari nama agar tidak saling tertimpa ─── */}
+      <div className="px-4 pt-6 pb-6 text-white relative" style={{ background: `linear-gradient(135deg, ${hero}, #0f172a)` }}>
+        {/* dekorasi dikurung sendiri; hero tidak overflow-hidden agar dropdown akun/logout utuh */}
+        <div className="absolute inset-0 overflow-hidden pointer-events-none">
+          <div className="absolute -right-10 -top-10 w-32 h-32 rounded-full bg-white/10" />
+          <div className="absolute -left-6 bottom-0 w-24 h-24 rounded-full bg-white/5" />
+        </div>
 
-        <div className="relative z-10 flex items-start justify-between">
-          <div className="flex items-center gap-3 min-w-0">
-            {/* avatar circle with initials */}
-            <div className="w-12 h-12 rounded-full bg-white/20 backdrop-blur-sm flex items-center justify-center shrink-0 text-lg font-bold border-2 border-white/30">
-              {getInitials(siswa?.nama)}
-            </div>
-            <div className="min-w-0">
-              <p className="text-sm text-blue-100">
-                {greetingByHour()}, 👋
-              </p>
-              <h1 className="text-lg font-bold leading-tight truncate">
-                {siswa?.nama || 'Siswa'}
-              </h1>
-              {siswa?.kelas_nama && (
-                <p className="text-xs text-blue-200 mt-0.5 truncate">{siswa.kelas_nama}</p>
-              )}
-            </div>
-          </div>
-
+        {/* Baris aksi akun */}
+        <div data-mobile-account-row="true" className="relative z-30 flex items-center justify-end">
           <MobileHeader basePath="/siswa" onBell={() => navigate('/siswa/posting')} />
+        </div>
+
+        {/* Baris identitas siswa */}
+        <div data-mobile-identity-row="true" className="relative z-10 mt-3 flex items-center gap-3 min-w-0">
+          <div className="w-11 h-11 rounded-full bg-white/20 backdrop-blur-sm flex items-center justify-center shrink-0 text-base font-bold border-2 border-white/30">
+            {getInitials(siswa?.nama)}
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="text-[11px] text-blue-100 leading-none">
+              {greetingByHour()}, 👋
+            </p>
+            <h1 className="text-base font-bold leading-tight truncate mt-0.5">
+              {siswa?.nama || 'Siswa'}
+            </h1>
+            {siswa?.kelas_nama && (
+              <p className="text-[11px] text-blue-200 mt-0.5 truncate leading-none">{siswa.kelas_nama}</p>
+            )}
+          </div>
         </div>
       </div>
 
-      <div className="px-4 -mt-4 space-y-4">
+      <div data-mobile-compact-dashboard="true" className="px-3 -mt-2 relative z-10 pb-5 space-y-3">
         {/* ─── 2. DATE INFO CARD ───────────────────────────────────── */}
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4">
-          <div className="flex items-center gap-2 mb-3">
-            <div className="w-8 h-8 rounded-lg bg-blue-100 flex items-center justify-center">
-              <Calendar size={16} className="text-blue-600" />
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-3">
+          <div className="flex items-center gap-2 mb-2">
+            <div className="w-7 h-7 rounded-lg bg-blue-100 flex items-center justify-center">
+              <Calendar size={15} className="text-blue-600" />
             </div>
             <h2 className="text-sm font-semibold text-gray-800">Informasi Hari Ini</h2>
           </div>
-          <div className="grid grid-cols-3 gap-3 text-center">
+          <div className="grid grid-cols-3 gap-2 text-center">
             <div>
               <p className="text-[10px] text-gray-400 uppercase tracking-wide mb-0.5">Hari</p>
               <p className="text-sm font-bold text-gray-800">{getDayName()}</p>
@@ -259,10 +262,10 @@ export default function MobileSiswaDashboard() {
         </div>
 
         {/* ─── 3. ATTENDANCE RING ──────────────────────────────────── */}
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
-          <div className="flex items-center gap-2 mb-5">
-            <div className="w-8 h-8 rounded-lg bg-green-100 flex items-center justify-center">
-              <Activity size={16} className="text-green-600" />
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-3">
+          <div className="flex items-center gap-2 mb-3">
+            <div className="w-7 h-7 rounded-lg bg-green-100 flex items-center justify-center">
+              <Activity size={15} className="text-green-600" />
             </div>
             <h2 className="text-sm font-semibold text-gray-800">Rekap Kehadiran</h2>
           </div>
@@ -275,11 +278,11 @@ export default function MobileSiswaDashboard() {
         </div>
 
         {/* ─── 4. SCHEDULE LIST ────────────────────────────────────── */}
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4">
-          <div className="flex items-center justify-between mb-3">
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-3">
+          <div className="flex items-center justify-between mb-2">
             <div className="flex items-center gap-2">
-              <div className="w-8 h-8 rounded-lg bg-indigo-100 flex items-center justify-center">
-                <Clock size={16} className="text-indigo-600" />
+              <div className="w-7 h-7 rounded-lg bg-indigo-100 flex items-center justify-center">
+                <Clock size={15} className="text-indigo-600" />
               </div>
               <h2 className="text-sm font-semibold text-gray-800">Jadwal Hari Ini</h2>
             </div>
@@ -292,9 +295,9 @@ export default function MobileSiswaDashboard() {
           </div>
 
           {jadwal_hari_ini.length === 0 ? (
-            <p className="text-gray-400 text-sm text-center py-6">Tidak ada jadwal hari ini</p>
+            <p className="text-gray-400 text-sm text-center py-4">Tidak ada jadwal hari ini</p>
           ) : (
-            <div className="space-y-2.5">
+            <div className="space-y-1.5">
               {jadwal_hari_ini.map((j: any, i: number) => {
                 const active = isCurrent(j)
                 const accentColor = SCHEDULE_COLORS[i % SCHEDULE_COLORS.length]
@@ -340,21 +343,21 @@ export default function MobileSiswaDashboard() {
         </div>
 
         {/* ─── 5. MENU GRID ────────────────────────────────────────── */}
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4">
-          <h2 className="text-sm font-semibold text-gray-800 mb-3">Menu</h2>
-          <div className="grid grid-cols-4 gap-3">
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-3">
+          <h2 className="text-sm font-semibold text-gray-800 mb-2">Menu</h2>
+          <div className="grid grid-cols-4 gap-2">
             {MENU_ITEMS.map((item) => {
               const Icon = item.icon
               return (
                 <button
                   key={item.label}
                   onClick={() => navigate(item.path)}
-                  className="flex flex-col items-center gap-2 py-3 rounded-xl active:bg-gray-50 active:scale-95 transition"
+                  className="flex flex-col items-center gap-1.5 py-2 rounded-xl active:bg-gray-50 active:scale-95 transition"
                 >
                   <div
-                    className={`w-11 h-11 rounded-xl ${item.color} flex items-center justify-center text-white shadow-sm`}
+                    className={`w-10 h-10 rounded-xl ${item.color} flex items-center justify-center text-white shadow-sm`}
                   >
-                    <Icon size={20} />
+                    <Icon size={18} />
                   </div>
                   <span className="text-[10px] font-medium text-gray-600 leading-tight text-center">
                     {item.label}

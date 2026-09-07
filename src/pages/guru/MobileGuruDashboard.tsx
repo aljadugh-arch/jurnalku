@@ -86,44 +86,48 @@ export default function MobileGuruDashboard() {
 
   return (
     <div className="min-h-[100dvh] bg-gray-50 dark:bg-gray-950">
-      {/* ── HEADER: dark blue gradient ── */}
-      <div className="px-5 pt-12 pb-8 text-white relative overflow-hidden" style={{ background: `linear-gradient(135deg, ${hero}, #0f172a)` }}>
-        {/* decorative circles */}
-        <div className="absolute -right-10 -top-10 w-40 h-40 bg-white/[0.07] rounded-full" />
-        <div className="absolute right-12 -bottom-14 w-28 h-28 bg-white/[0.05] rounded-full" />
+      {/* ── HEADER: hero gradient, aksi akun di baris sendiri agar tidak tertimpa ── */}
+      <div className="px-4 pt-6 pb-6 text-white relative" style={{ background: `linear-gradient(135deg, ${hero}, #0f172a)` }}>
+        {/* decorative circles dikurung agar hero tidak perlu overflow-hidden (dropdown akun tetap utuh) */}
+        <div className="absolute inset-0 overflow-hidden pointer-events-none">
+          <div className="absolute -right-10 -top-10 w-32 h-32 bg-white/[0.07] rounded-full" />
+          <div className="absolute right-12 -bottom-14 w-24 h-24 bg-white/[0.05] rounded-full" />
+        </div>
 
-        <div className="relative z-10 flex items-center justify-between">
-          <div className="flex items-center gap-3 min-w-0">
-            {/* Avatar circle */}
-            <div className="w-12 h-12 rounded-full bg-white/20 backdrop-blur-sm flex items-center justify-center text-white font-bold text-base shrink-0 border-2 border-white/30">
-              {data.gtk?.foto ? (
-                <img src={data.gtk.foto} alt={data.gtk?.nama} className="w-full h-full rounded-full object-cover" />
-              ) : (
-                initials(data.gtk?.nama)
-              )}
-            </div>
-            <div className="min-w-0">
-              <p className="text-white/80 text-[11px] font-medium tracking-wide">Guru</p>
-              <h1 className="text-lg font-bold leading-tight truncate">{data.gtk?.nama || 'Guru'}</h1>
-              <p className="text-white/70 text-xs">{data.rombel_count} rombel</p>
-            </div>
-          </div>
+        {/* Baris aksi akun (bell, tema, profil/logout) — terpisah dari nama */}
+        <div data-mobile-account-row="true" className="relative z-30 flex items-center justify-end">
           <MobileHeader basePath="/guru" onBell={() => navigate('/guru/posting')} />
+        </div>
+
+        {/* Baris identitas: nama tidak lagi berbagi ruang dengan tombol aksi */}
+        <div data-mobile-identity-row="true" className="relative z-10 mt-3 flex items-center gap-3 min-w-0">
+          <div className="w-11 h-11 rounded-full bg-white/20 backdrop-blur-sm flex items-center justify-center text-white font-bold text-sm shrink-0 border-2 border-white/30">
+            {data.gtk?.foto ? (
+              <img src={data.gtk.foto} alt={data.gtk?.nama} className="w-full h-full rounded-full object-cover" />
+            ) : (
+              initials(data.gtk?.nama)
+            )}
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="text-white/80 text-[10px] font-medium tracking-wide leading-none">Guru</p>
+            <h1 className="text-base font-bold leading-tight truncate mt-0.5">{data.gtk?.nama || 'Guru'}</h1>
+            <p className="text-white/70 text-[11px] leading-none mt-0.5">{data.rombel_count} rombel</p>
+          </div>
         </div>
       </div>
 
       {/* ── Content (lifts over header) ── */}
-      <div className="px-4 -mt-3 relative z-10 pb-8 space-y-4">
+      <div data-mobile-compact-dashboard="true" className="px-3 -mt-2 relative z-10 pb-5 space-y-3">
 
         {/* ── GREETING + CURRENT ACTIVITY ── */}
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4">
-          <p className="text-gray-800 font-bold text-base">
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-3">
+          <p className="text-gray-800 font-bold text-sm">
             {greetingByHour()}, {teacherDisplayName(data.gtk)} 👋
           </p>
 
           {/* Current activity */}
-          <div className="mt-3 rounded-xl bg-gradient-to-br from-blue-50 to-indigo-50 border border-blue-100 p-3.5">
-            <div className="flex items-center gap-2 mb-1.5">
+          <div className="mt-2 rounded-xl bg-gradient-to-br from-blue-50 to-indigo-50 border border-blue-100 p-3">
+            <div className="flex items-center gap-2 mb-1">
               <span className="w-2 h-2 rounded-full bg-blue-500 animate-pulse" />
               <p className="text-[11px] font-bold uppercase tracking-wider text-blue-700">Sedang Berlangsung</p>
             </div>
@@ -141,8 +145,8 @@ export default function MobileGuruDashboard() {
         </div>
 
         {/* ── JADWAL HARI INI ── */}
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4">
-          <div className="flex items-center justify-between mb-3">
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-3">
+          <div className="flex items-center justify-between mb-2">
             <h2 className="font-bold text-gray-800 text-sm">Jadwal Hari Ini</h2>
             <button onClick={() => navigate('/guru/jadwal')} className="text-[11px] font-semibold text-blue-600 active:text-blue-800 transition">
               Lihat Semua
@@ -150,9 +154,9 @@ export default function MobileGuruDashboard() {
           </div>
 
           {sortedJadwal.length === 0 ? (
-            <p className="text-gray-400 text-xs text-center py-4">Tidak ada jadwal hari ini</p>
+            <p className="text-gray-400 text-xs text-center py-3">Tidak ada jadwal hari ini</p>
           ) : (
-            <div className="space-y-2">
+            <div className="space-y-1.5">
               {sortedJadwal.map((j: any, i: number) => {
                 const status = getJadwalStatus(j, cur)
                 const isActive = status === 'active'
@@ -207,7 +211,7 @@ export default function MobileGuruDashboard() {
         </div>
 
         {/* ── QUICK ACCESS GRID (2x2) ── */}
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-2 gap-2">
           <QuickCard
             label="Absensi Harian"
             color="from-amber-400 to-amber-500"
@@ -239,8 +243,8 @@ export default function MobileGuruDashboard() {
         </div>
 
         {/* ── REKAP JURNAL ── */}
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4">
-          <h2 className="font-bold text-gray-800 text-sm mb-3">Rekap Jurnal</h2>
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-3">
+          <h2 className="font-bold text-gray-800 text-sm mb-2">Rekap Jurnal</h2>
 
           {/* Progress bar */}
           <div className="flex items-center justify-between text-[11px] text-gray-500 mb-1.5">
@@ -255,16 +259,16 @@ export default function MobileGuruDashboard() {
           </div>
 
           {/* Count breakdown */}
-          <div className="grid grid-cols-3 gap-2 mt-3">
-            <div className="rounded-xl bg-gray-50 p-2.5 text-center">
+          <div className="grid grid-cols-3 gap-2 mt-2.5">
+            <div className="rounded-xl bg-gray-50 p-2 text-center">
               <p className="text-lg font-bold text-gray-700">{draft}</p>
               <p className="text-[10px] text-gray-400 font-medium">Draft</p>
             </div>
-            <div className="rounded-xl bg-amber-50 p-2.5 text-center">
+            <div className="rounded-xl bg-amber-50 p-2 text-center">
               <p className="text-lg font-bold text-amber-600">{submitted}</p>
               <p className="text-[10px] text-gray-400 font-medium">Terkirim</p>
             </div>
-            <div className="rounded-xl bg-emerald-50 p-2.5 text-center">
+            <div className="rounded-xl bg-emerald-50 p-2 text-center">
               <p className="text-lg font-bold text-emerald-600">{approved}</p>
               <p className="text-[10px] text-gray-400 font-medium">Disetujui</p>
             </div>
@@ -316,9 +320,9 @@ function QuickCard({
   return (
     <button
       onClick={onClick}
-      className={`${bg} rounded-2xl p-4 flex flex-col items-center justify-center gap-2.5 aspect-square active:scale-[0.97] transition-all text-center`}
+      className={`${bg} rounded-2xl p-3 flex flex-col items-center justify-center gap-2 min-h-[104px] active:scale-[0.97] transition-all text-center`}
     >
-      <div className={`w-11 h-11 rounded-xl bg-gradient-to-br ${color} flex items-center justify-center text-white shadow-sm`}>
+      <div className={`w-10 h-10 rounded-xl bg-gradient-to-br ${color} flex items-center justify-center text-white shadow-sm`}>
         {icon}
       </div>
       <span className="text-xs font-semibold text-gray-700 leading-tight">{label}</span>

@@ -55,3 +55,27 @@ test('mobile heroes derive color from tenant settings and dark theme', () => {
     assert.match(source, /linear-gradient\(135deg, \$\{hero\}/)
   }
 })
+
+test('guru and siswa mobile heroes reserve an independent row for account actions', () => {
+  for (const file of [
+    'src/pages/guru/MobileGuruDashboard.tsx',
+    'src/pages/siswa/MobileSiswaDashboard.tsx',
+  ]) {
+    const source = read(file)
+    assert.match(source, /data-mobile-account-row="true"/)
+    assert.match(source, /data-mobile-identity-row="true"/)
+    assert.match(source, /data-mobile-account-row="true"[\s\S]*<MobileHeader[\s\S]*data-mobile-identity-row="true"/)
+  }
+})
+
+test('guru and siswa mobile dashboards use compact hero card and section spacing', () => {
+  for (const file of [
+    'src/pages/guru/MobileGuruDashboard.tsx',
+    'src/pages/siswa/MobileSiswaDashboard.tsx',
+  ]) {
+    const source = read(file)
+    assert.match(source, /data-mobile-compact-dashboard="true"/)
+    assert.match(source, /px-3 -mt-2 relative z-10 pb-5 space-y-3/)
+    assert.doesNotMatch(source, /px-5 pt-12 pb-8/)
+  }
+})
