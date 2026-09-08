@@ -42,7 +42,7 @@ STG="$1"; ARCHIVE="$2"; DEPLOY_ID="$3"; PM2_APP="$4"; HEALTH_URL="$5"
 WORK="$STG/.deploy-$DEPLOY_ID"
 cleanup() { rm -rf "$WORK"; rm -f "$ARCHIVE"; }
 trap cleanup EXIT
-mkdir -p "$WORK"
+mkdir -p "$WORK" "$STG/server"
 tar -xzf "$ARCHIVE" -C "$WORK"
 test -s "$WORK/dist/index.html"
 node -c "$WORK/server/index.cjs"
