@@ -9,6 +9,7 @@ const teacherAttendancePage = fs.readFileSync(path.join(__dirname, '..', 'src', 
 const settingsPage = fs.readFileSync(path.join(__dirname, '..', 'src', 'pages', 'admin', 'SettingsPage.tsx'), 'utf8')
 const appPage = fs.readFileSync(path.join(__dirname, '..', 'src', 'App.tsx'), 'utf8')
 const bottomNavigation = fs.readFileSync(path.join(__dirname, '..', 'src', 'components', 'layout', 'BottomNavigation.tsx'), 'utf8')
+const featureAccess = fs.readFileSync(path.join(__dirname, '..', 'src', 'lib', 'featureAccess.ts'), 'utf8')
 
 function routeBody(start, end) {
   const from = server.indexOf(start)
@@ -79,6 +80,7 @@ test('navigasi guru memisahkan absensi harian QR/manual dari absensi per mata pe
   assert.match(menuItems, /Absensi Mapel.*\/guru\/absensi-mapel/s)
   assert.match(appPage, /path="absensi-siswa" element=\{<GuruAbsensiSiswaQRPage \/>\}/)
   assert.match(appPage, /path="absensi-mapel" element=\{<GuruAbsensiSiswaPage \/>\}/)
+  assert.match(featureAccess, /'\/guru\/absensi-mapel'/)
 })
 
 test('admin RA/MI monitor-only dan konfigurasi jendela QR terpisah dari jam pulang per rombel', () => {
