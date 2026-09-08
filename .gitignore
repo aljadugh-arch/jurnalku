@@ -13,3 +13,6 @@ server/*.db
 backups/
 dist.*/
 server.pre-*/
+server/index.cjs.rollback*
+server/index.cjs.pre-*
+server/index.cjs.failed-*

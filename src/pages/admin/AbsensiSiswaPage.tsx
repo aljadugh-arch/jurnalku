@@ -298,14 +298,14 @@ export default function AbsensiSiswaPage({ qrMode = false }: { qrMode?: boolean 
       {(qrMode || rombelId) && <div className="lg:hidden space-y-3">
         <div>
           <h1 className="text-xl font-bold text-slate-900 dark:text-white">{qrMode ? 'Absensi QR Siswa' : 'Absensi Per Kelas'}</h1>
-          <p className="text-xs text-slate-500">{qrMode ? 'Scan QR siswa, lihat QR siswa, dan absensi manual lengkap.' : 'Detail absensi kelas/rombel terpilih.'}</p>
+          <p className="text-xs text-slate-500">{qrMode ? (readOnly ? 'Monitoring presensi serta lihat dan unduh QR siswa.' : 'Scan QR siswa, lihat QR siswa, dan absensi manual lengkap.') : 'Detail absensi kelas/rombel terpilih.'}</p>
         </div>
         <Link to="/admin/absensi-siswa" className="inline-flex text-xs font-semibold text-primary">← Kembali ke ringkasan presensi</Link>
       </div>}
       <div className={`${qrMode || rombelId ? 'flex' : 'hidden lg:flex'} flex-col sm:flex-row sm:items-center sm:justify-between gap-4`}>
         <div>
           <h1 className="text-2xl font-bold text-gray-800 font-display">{qrMode ? 'Absensi QR Siswa' : readOnly ? 'Rekap Absensi Siswa' : 'Absensi Siswa'}</h1>
-          <p className="text-gray-500 text-sm mt-1">{qrMode ? 'Scan kamera, scan foto, lihat QR siswa, dan absensi manual lengkap' : readOnly ? 'Monitoring & rekap — absensi diinput guru kelas' : 'QR Code & Manual oleh Wali Kelas'}</p>
+          <p className="text-gray-500 text-sm mt-1">{qrMode ? (readOnly ? 'Monitoring presensi serta lihat dan unduh QR siswa' : 'Scan kamera, scan foto, lihat QR siswa, dan absensi manual lengkap') : readOnly ? 'Monitoring & rekap — absensi diinput guru kelas' : 'QR Code & Manual oleh Wali Kelas'}</p>
         </div>
         <div className="flex flex-wrap gap-2">
           {!readOnly && <button onClick={startQrCamera} className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg text-sm hover:bg-purple-700">

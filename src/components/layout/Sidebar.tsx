@@ -7,8 +7,8 @@ import {
   LayoutDashboard, Users, GraduationCap, BookOpen, Calendar,
   ClipboardList, UserCheck, QrCode, MapPin,
   X, ChevronDown, ChevronRight, LogOut, School, Layers,
-  Activity, Globe, Sparkles, DollarSign, Settings, MessageSquare, FileText,
-  Newspaper, NotebookPen, ClipboardCheck, PiggyBank, DatabaseBackup, Code2
+  Activity, Globe, Sparkles, DollarSign, FileText,
+  Newspaper, NotebookPen, ClipboardCheck, PiggyBank
 } from 'lucide-react'
 import { clsx } from 'clsx'
 import { roleLabel } from '../../lib/roles'
@@ -24,75 +24,6 @@ interface MenuItem {
   children?: { label: string; path: string; external?: string }[]
 }
 
-const adminMenuItems: MenuItem[] = [
-  { label: 'Dashboard', icon: <LayoutDashboard size={20} />, path: '/admin' },
-  { label: 'Posting', icon: <Newspaper size={20} />, path: '/admin/posting' },
-  { label: 'Data Siswa', icon: <GraduationCap size={20} />, path: '/admin/siswa' },
-  { label: 'Data GTK', icon: <Users size={20} />, path: '/admin/gtk' },
-  { label: 'Mata Pelajaran', icon: <BookOpen size={20} />, path: '/admin/mapel' },
-  { label: 'Rombongan Belajar', icon: <Layers size={20} />, path: '/admin/rombel' },
-  { label: 'Kalender KBM', icon: <Calendar size={20} />, path: '/admin/kalender-kbm' },
-  {
-    label: 'Jadwal Pelajaran', icon: <Calendar size={20} />,
-    children: [
-      { label: 'Kelola Jadwal', path: '/admin/jadwal' },
-      { label: 'Pengajar', path: '/admin/pengajar' },
-    ]
-  },
-  {
-    label: 'Absensi', icon: <UserCheck size={20} />,
-    children: [
-      { label: 'Presensi Siswa', path: '/admin/absensi-siswa' },
-      { label: 'Absensi QR Siswa', path: '/admin/absensi-qr-siswa' },
-      { label: 'Absensi Guru (Geolokasi)', path: '/admin/absensi-guru' },
-      { label: 'Rekapitulasi', path: '/admin/rekap-absensi' },
-      { label: 'Ekstrakurikuler', path: '/admin/ekskul' },
-      { label: 'Absensi Ekskul', path: '/admin/absensi-ekskul' },
-      { label: 'Absensi Jamaah', path: '/admin/absensi-jamaah' },
-      { label: 'Absensi Kokurikuler', path: '/admin/absensi-kokurikuler' },
-      { label: 'Absensi Kegiatan', path: '/admin/absensi-kegiatan' },
-    ]
-  },
-  { label: 'Ceklok Saya', icon: <MapPin size={20} />, path: '/admin/ceklok' },
-  { label: 'Absensi Saya', icon: <MapPin size={20} />, path: '/admin/absensi-saya' },
-  { label: 'Jurnal Mengajar', icon: <ClipboardList size={20} />, path: '/admin/jurnal' },
-  { label: 'Rapor Siswa', icon: <FileText size={20} />, path: '/admin/rapor' },
-  { label: 'Catatan Kepribadian', icon: <NotebookPen size={20} />, path: '/admin/catatan-kepribadian' },
-  { label: 'Generator AI Guru', icon: <Sparkles size={20} />, path: '/admin/modul-ajar' },
-  { label: 'Tahun Ajaran', icon: <School size={20} />, path: '/admin/tahun-ajaran' },
-  {
-    label: 'Keuangan', icon: <DollarSign size={20} />,
-    children: [
-      { label: 'Tagihan & Pembayaran', path: '/admin/tagihan' },
-      { label: 'Tabungan Siswa', path: '/admin/tabungan' },
-    ]
-  },
-  {
-    label: 'WhatsApp', icon: <MessageSquare size={20} />,
-    children: [
-      { label: 'Broadcast', path: '/admin/broadcast' },
-      { label: 'Konfigurasi Gateway', path: '/admin/wa-gateway' },
-      { label: 'Notifikasi Otomatis', path: '/admin/notif-settings' },
-    ]
-  },
-  { label: 'Pengaturan', icon: <Settings size={20} />, path: '/admin/settings' },
-  { label: 'REST API Developer', icon: <Code2 size={20} />, path: '/admin/developer-api' },
-  { label: 'Manajemen Pengguna', icon: <UserCheck size={20} />, path: '/admin/users' },
-  { label: 'Manajemen Lembaga', icon: <Globe size={20} />, path: '/admin/tenants' },
-  { label: 'Backup & Restore', icon: <DatabaseBackup size={20} />, path: '/admin/backup-restore' },
-  { label: 'Kelola Website', icon: <Globe size={20} />, path: '/admin/website-lembaga', external: 'https://fazacloud.my.id' },
-  {
-    label: 'E-Kantin & Cashless',
-    icon: <DollarSign size={20} />,
-    children: [
-      { label: 'Menu Kantin', path: '/admin/kantin-menu' },
-      { label: 'Order Kantin', path: '/admin/kantin-orders' },
-      { label: 'Verifikasi Topup Manual', path: '/admin/cashless-topup' },
-      { label: 'Konfigurasi Bank Transfer', path: '/admin/cashless-bank-config' },
-      { label: 'Kasir QR Scanner', path: '/admin/kantin-scanner' },
-    ]
-  },
-]
 
 const guruMenuItems: MenuItem[] = [
   { label: 'Dashboard', icon: <LayoutDashboard size={20} />, path: '/guru' },

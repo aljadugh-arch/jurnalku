@@ -1,189 +1,120 @@
-# DEPLOYMENT MANUAL - JURNALKU Fix Item #3
+# JURNALKU — Panduan Deployment
 
-**Tanggal:** 2026-07-13  
-**Target:** VPS A (jurnal.cc.cd)  
-**Perubahan:** Tambah menu Ceklok untuk role admin/operator/kepala
+Deployment production wajib memakai variabel environment. Jangan menulis IP, password, token, atau secret ke repository.
 
----
+## Prasyarat
 
-## ✅ PERUBAHAN YANG SUDAH DILAKUKAN
+- Node.js sesuai `package.json`
+- `npm`, `sshpass`, `ssh`, `scp`, `tar`, dan `curl`
+- Host key VPS sudah diverifikasi dan disimpan di `~/.ssh/known_hosts`
+- `JWT_SECRET` production berupa nilai acak minimal 32 karakter
+- `PUBLIC_IP` production berisi alamat publik server aktif
 
-### File Modified: `src/components/layout/BottomNavigation.tsx`
+## Variabel lokal
 
-**1. Role `kepala` (line 63-73):**
-```typescript
-// SEBELUM:
-{ label: 'Home', path: '/admin', icon: <Home size={iconSize} /> },
-{ label: 'Presensi', path: '/admin/rekap-absensi', icon: <UserCheck size={iconSize} /> },
-...
-
-// SESUDAH:
-{ label: 'Home', path: '/admin', icon: <Home size={iconSize} /> },
-{ label: 'Ceklok', path: '/guru/absensi-guru', icon: <MapPin size={iconSize} /> },  // ← BARU
-{ label: 'Presensi', path: '/admin/rekap-absensi', icon: <UserCheck size={iconSize} /> },
-...
-```
-
-**2. Role `admin`/`operator` (default, line 76-100):**
-```typescript
-// SEBELUM:
-{ label: 'Rekap', path: '/admin', icon: <BarChart3 size={iconSize} /> },
-{ label: 'Siswa', path: '/admin/siswa', icon: <GraduationCap size={iconSize} /> },
-...
-
-// SESUDAH:
-{ label: 'Rekap', path: '/admin', icon: <BarChart3 size={iconSize} /> },
-{ label: 'Ceklok', path: '/guru/absensi-guru', icon: <MapPin size={iconSize} /> },  // ← BARU
-{ label: 'Siswa', path: '/admin/siswa', icon: <GraduationCat size={iconSize} /> },
-...
-```
-
----
-
-## 🚀 CARA DEPLOY
-
-### Opsi 1: Otomatis via Script (RECOMMENDED)
+Set di shell atau secret manager, bukan di file tracked:
 
 ```bash
-cd ~/Downloads/JURNALKU
-./deploy-to-vps.sh
+export VPS_IP='alamat-server-aktif'
+export VPS_USER='root'
+export VPS_PASS='password-dari-secret-manager'
+export SSH_KNOWN_HOSTS="$HOME/.ssh/known_hosts"
 ```
 
-Script akan:
-1. ✓ Cek build dist/
-2. ✓ Buat tarball
-3. ✓ Upload ke VPS via scp
-4. ✓ Backup dist lama
-5. ✓ Extract dist baru
-6. ✓ Restart PM2 jurnalku
+Verifikasi fingerprint host melalui kanal tepercaya sebelum menambahkannya ke `known_hosts`. Jangan memakai `StrictHostKeyChecking=no`.
 
----
+## Verifikasi sebelum deployment
 
-### Opsi 2: Manual Step-by-Step
-
-#### Step 1: Upload tarball
 ```bash
-cd ~/Downloads/JURNALKU
-sshpass -p 'Sekolah0838#' scp dist/jurnalku-dist-*.tar.gz root@129.226.82.94:/tmp/
-```
-
-#### Step 2: SSH ke VPS & deploy
-```bash
-sshpass -p 'Sekolah0838#' ssh root@129.226.82.94
-```
-
-Di VPS, jalankan:
-```bash
-cd /www/wwwroot/jurnal.cc.cd
-
-# Backup dist lama
-mv dist dist.bak-$(date +%Y%m%d-%H%M%S)
-
-# Extract dist baru
-mkdir -p dist
-cd dist
-tar -xzf /tmp/jurnalku-dist-*.tar.gz
-rm /tmp/jurnalku-dist-*.tar.gz
-
-# Restart PM2
-pm2 restart jurnalku
-
-# Cek status
-pm2 logs jurnalku --lines 20
-```
-
----
-
-## ✅ VERIFIKASI SETELAH DEPLOY
-
-1. **Buka browser**: https://jurnal.cc.cd
-2. **Hard refresh**: `Ctrl + Shift + R` (clear cache)
-3. **Login sebagai:**
-   - Admin/Operator
-   - Kepala Sekolah
-4. **Cek bottom navigation (mobile)** atau **sidebar (desktop)**
-5. **Pastikan menu "Ceklok" muncul**
-6. **Klik "Ceklok"** → redirect ke `/guru/absensi-guru`
-7. **Test GPS ceklok**:
-   - Klik "Ceklok Masuk"
-   - Browser minta izin lokasi → Allow
-   - Jam masuk tercatat
-   - Klik "Ceklok Pulang" (setelah masuk)
-   - Jam pulang tercatat
-
----
-
-## 📊 RINGKASAN SEMUA 6 FITUR
-
-| No | Fitur | Status | File |
-|----|-------|--------|------|
-| 1 | Absensi siswa jam masuk/pulang | ✅ DONE | AbsensiSiswaPage.tsx |
-| 2 | Catatan Sikap + Catatan WK | ✅ DONE | CatatanKepribadianPage.tsx |
-| 3 | Ceklok admin/operator/kepala | ✅ DONE | BottomNavigation.tsx (FIXED) |
-| 4 | Rekap mingguan/bulanan/semester | ✅ DONE | RekapAbsensiPage.tsx |
-| 5 | Jurnal auto-isi mapel & rombel | ✅ DONE | GuruJurnalPage.tsx |
-| 6 | Geolokasi presisi + search | ✅ DONE | MapPicker.tsx |
-
----
-
-## 🎯 YANG BARU DI FIX INI
-
-**Role admin/operator/kepala sekarang punya akses:**
-- Menu "Ceklok" di posisi ke-2 (setelah Home/Rekap)
-- Route: `/guru/absensi-guru` (halaman ceklok GPS guru)
-- Fitur sama seperti guru: Ceklok Masuk/Pulang dengan verifikasi GPS
-- Riwayat kehadiran tampil di bawah form
-
-**Kenapa route `/guru/absensi-guru`?**
-- Backend sudah support role admin/operator/kepala untuk akses endpoint `/api/guru/ceklok`
-- Tidak perlu duplikasi halaman, cukup beri akses route yang sudah ada
-- Admin/operator yang juga mengajar bisa pakai fitur ceklok
-
----
-
-## 🔥 TROUBLESHOOTING
-
-### Build gagal
-```bash
-cd ~/Downloads/JURNALKU
-rm -rf node_modules dist
-npm install
+npm ci
+node --test tests/*.test.cjs
+npm run lint
 npm run build
 ```
 
-### PM2 tidak restart
+Pastikan service production memiliki environment wajib tanpa mencetak nilainya:
+
 ```bash
-ssh root@129.226.82.94
-pm2 restart jurnalku
-pm2 logs jurnalku --lines 50
+pm2 env jurnalku-api | grep -q '^JWT_SECRET:'
+pm2 env jurnalku-api | grep -q '^PUBLIC_IP:'
 ```
 
-### Menu tidak muncul setelah deploy
-1. Hard refresh browser: `Ctrl + Shift + R`
-2. Clear browser cache
-3. Cek console browser (F12) untuk error
-4. Pastikan file `dist/assets/index-*.js` ter-update (cek timestamp)
+## Deployment frontend langsung
 
-### GPS tidak bekerja
-1. Pastikan browser support geolocation
-2. Pastikan akses HTTPS (bukan HTTP)
-3. Allow izin lokasi saat browser minta
-4. Cek setting lat/long di `/admin/settings` sudah terisi
+`deploy-to-vps.sh` mengunggah artefak unik, memvalidasi hasil ekstraksi, menukar direktori `dist` secara atomik, melakukan health check, dan rollback otomatis jika gagal.
 
----
-
-## 📝 BACKUP
-
-Backup database sudah ada di:
-```
-~/Downloads/JURNALKU/backups/jurnalku-before-6changes-20260713-164608.db
+```bash
+./deploy-to-vps.sh
 ```
 
-Backup repository:
-```
-~/Downloads/JURNALKU/backups/repo-before-6changes-20260713-153454.tgz
+Override opsional:
+
+```bash
+export VPS_DIR='/www/wwwroot/jurnal.cc.cd'
+export PM2_APP='jurnalku-api'
+export DEPLOY_HEALTH_URL='https://jurnal.cc.cd/api/health'
 ```
 
----
+## Alur staging lalu production
 
-**Selesai! Semua 6 fitur revisi sudah COMPLETE & VERIFIED ✅**
+```bash
+scripts/deploy-staging.sh
+```
+
+Uji staging, lalu:
+
+```bash
+scripts/promote-live.sh
+```
+
+Promosi meminta konfirmasi `LIVE`, membuat snapshot kode dan DB, memvalidasi source, me-restart PM2, melakukan health check, serta rollback otomatis bila health check gagal.
+
+## Rollback kode
+
+```bash
+scripts/rollback-live.sh
+```
+
+Rollback meminta konfirmasi `ROLLBACK`. DB tidak dipulihkan otomatis agar data baru tidak hilang.
+
+## Sinkronisasi DB live ke staging
+
+Perintah ini menimpa DB staging:
+
+```bash
+scripts/sync-db-to-staging.sh
+```
+
+Skrip meminta konfirmasi `SYNC`, membuat snapshot SQLite konsisten, memeriksa integritas, lalu memverifikasi health staging.
+
+## Environment PM2 production
+
+Konfigurasikan melalui secret manager atau environment proses:
+
+```bash
+export NODE_ENV='production'
+export JWT_SECRET='nilai-acak-minimal-32-karakter'
+export PUBLIC_IP='alamat-server-aktif'
+pm2 restart jurnalku-api --update-env
+```
+
+Jangan menyalin nilai nyata ke dokumentasi, shell history, issue, atau log.
+
+## Verifikasi pascadeployment
+
+```bash
+curl --fail --silent --show-error https://jurnal.cc.cd/api/health
+curl --fail --silent --show-error https://jurnalmadrasah.web.id/api/health
+```
+
+Periksa asset HTML kedua domain dan jalankan smoke test untuk login, dashboard, Presensi, Absensi QR Siswa, serta route admin sensitif.
+
+## Troubleshooting
+
+```bash
+pm2 status
+pm2 logs jurnalku-api --lines 100
+nginx -t
+```
+
+Jika deployment gagal, jangan menonaktifkan verifikasi host atau memasukkan credential ke argumen `sshpass -p`. Perbaiki konfigurasi `known_hosts`, environment, atau health endpoint terlebih dahulu.

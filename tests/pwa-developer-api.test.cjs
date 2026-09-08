@@ -45,7 +45,7 @@ test('service worker melakukan aktivasi segera dan tidak menyimpan respons API',
 test('halaman Developer API dapat dijangkau dari route dan menu admin', () => {
   assert.match(app, /path="developer-api"/)
   assert.match(app, /<DeveloperApiPage\s*\/>/)
-  assert.match(sidebar, /REST API Developer.*\/admin\/developer-api/)
+  assert.match(sidebar, /menuForRole/)
   assert.match(bottomNavigation, /REST API.*\/admin\/developer-api/)
   assert.match(menuItems, /REST API Developer.*\/admin\/developer-api/)
 })

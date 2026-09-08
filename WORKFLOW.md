@@ -1,65 +1,95 @@
-# JURNALKU — Alur Development Aman (Safe Dev Workflow)
+# JURNALKU — Workflow Staging dan Production
 
-Tujuan: fix bug / tambah fitur TANPA mengganggu sistem live (jurnal.cc.cd).
+## Tujuan
 
-## Arsitektur 2 Environment
+Semua perubahan diuji di staging sebelum dipromosikan ke production. Seluruh target server dan credential berasal dari environment atau secret manager.
 
-| Environment | URL | Port | DB | PM2 | Dir server |
-|-------------|-----|------|----|----|------------|
-| **LIVE** (produksi) | https://jurnal.cc.cd | 3001 | jurnalku.db (data asli) | `jurnalku` | /www/wwwroot/jurnal.cc.cd |
-| **STAGING** (uji) | https://staging.jurnal.cc.cd | 3002 | jurnalku.db (copy) | `jurnalku-staging` | /www/wwwroot/staging.jurnal.cc.cd |
-
-- Keduanya TERPISAH penuh: dir sendiri, DB sendiri, node_modules sendiri, PM2 app sendiri, port sendiri.
-- Utak-atik staging TIDAK PERNAH menyentuh live.
-- Cert SSL: wildcard `*.jurnal.cc.cd` sudah cover staging.
-
-## Alur Kerja (setiap fix bug / fitur baru)
-
-```
-1. Edit kode di lokal (~/Downloads/JURNALKU)
-2. scripts/deploy-staging.sh      → build + kirim ke staging
-3. Buka https://staging.jurnal.cc.cd, tes manual di browser
-   (opsional: node scripts/e2e_comprehensive.mjs untuk smoke test)
-4. Kalau OK → scripts/promote-live.sh  → deploy ke live (auto-backup + auto-rollback)
-5. Kalau live bermasalah → scripts/rollback-live.sh  → balik ke versi sebelumnya
-```
-
-## Script
-
-| Script | Fungsi |
-|--------|--------|
-| `scripts/deploy-staging.sh` | Build lokal → deploy ke staging (port 3002). Live aman. |
-| `scripts/promote-live.sh` | Staging → live. Auto-backup dist+server+DB. Auto-rollback jika health check gagal. Minta konfirmasi ketik `LIVE`. |
-| `scripts/rollback-live.sh` | Pulihkan live ke versi sebelum deploy terakhir (dari `.rollback`). Minta konfirmasi ketik `ROLLBACK`. |
-| `scripts/sync-db-to-staging.sh` | Refresh DB staging pakai snapshot terbaru live (buat tes dgn data real). |
-
-## Aturan Emas
-
-1. **JANGAN edit langsung di server live.** Selalu lewat lokal → staging → promote.
-2. **Selalu tes di staging dulu** sebelum promote-live.
-3. **DB tidak pernah di-rollback otomatis** (risiko hilang data user). Backup DB pre-deploy tersimpan di `/root/backups/jurnalku/jurnalku.db.pre-deploy-*`.
-4. **Backup harian otomatis** sudah jalan (cron 02:00, retensi 7 hari) di `/root/backups/jurnalku/`.
-
-## Restore DB manual (darurat, hanya jika perlu)
+## Persiapan shell
 
 ```bash
-ssh root@129.226.82.94
-pm2 stop jurnalku
-cp /root/backups/jurnalku/jurnalku.db.pre-deploy-<TIMESTAMP> /www/wwwroot/jurnal.cc.cd/server/jurnalku.db
-rm -f /www/wwwroot/jurnal.cc.cd/server/jurnalku.db-wal /www/wwwroot/jurnal.cc.cd/server/jurnalku.db-shm
-pm2 start jurnalku
+export VPS_IP='alamat-server-aktif'
+export VPS_USER='root'
+export VPS_PASS='password-dari-secret-manager'
+export SSH_KNOWN_HOSTS="$HOME/.ssh/known_hosts"
 ```
 
-## Catatan Teknis
+Fingerprint host harus diverifikasi melalui kanal tepercaya. Jangan memakai `StrictHostKeyChecking=no` atau `sshpass -p`.
 
-- Staging punya node_modules terpisah + `dotenv` terinstall (baca `.env` untuk PORT 3002).
-- Live TIDAK punya dotenv → pakai fallback PORT 3001 & JWT_SECRET default. (Catatan: JWT_SECRET live masih default hardcoded — perbaiki di deploy berikutnya via .env + install dotenv, uji di staging dulu.)
-- Nginx: vhost `staging.jurnal.cc.cd.conf` proxy ke 3002; exact-match menang atas wildcard `*.jurnal.cc.cd`.
+## Environment service
 
-## Git (versioning lokal)
+Service staging dan production wajib memiliki:
 
 ```bash
-git add -A && git commit -m "deskripsi perubahan"   # sebelum tiap deploy
-git log --oneline                                    # riwayat
-git checkout <commit> -- <file>                      # ambil versi lama file tertentu
+NODE_ENV=production
+JWT_SECRET=nilai-acak-minimal-32-karakter
+PUBLIC_IP=alamat-server-aktif
 ```
+
+`JWT_SECRET` tidak memiliki fallback. Service gagal start bila secret hilang atau terlalu pendek. Jangan mencetak nilai secret ketika memeriksa konfigurasi.
+
+## Alur rutin
+
+1. Ubah kode lokal.
+2. Jalankan gate lokal:
+
+   ```bash
+   node --test tests/*.test.cjs
+   npm run lint
+   npm run build
+   ```
+
+3. Deploy staging:
+
+   ```bash
+   scripts/deploy-staging.sh
+   ```
+
+4. Uji staging: login, dashboard, operasi CRUD yang berubah, API health, dan layout mobile.
+5. Promosikan setelah staging lulus:
+
+   ```bash
+   scripts/promote-live.sh
+   ```
+
+6. Verifikasi kedua domain production:
+
+   ```bash
+   curl --fail --silent --show-error https://jurnal.cc.cd/api/health
+   curl --fail --silent --show-error https://jurnalmadrasah.web.id/api/health
+   ```
+
+## Rollback
+
+```bash
+scripts/rollback-live.sh
+```
+
+Skrip memulihkan snapshot kode dari promosi terakhir dan tidak mengubah DB. Pemulihan DB harus menjadi keputusan terpisah karena dapat menghapus data baru.
+
+## Sinkronisasi data uji
+
+```bash
+scripts/sync-db-to-staging.sh
+```
+
+Perintah ini menimpa DB staging dengan snapshot konsisten dari live. Jangan jalankan jika data staging masih dibutuhkan.
+
+## Aturan keamanan
+
+- Jangan simpan IP deployment, password, token, atau JWT secret di repository.
+- Jangan baca credential dari path workstation tertentu di skrip tracked.
+- Gunakan nama artefak deployment unik untuk mencegah tabrakan proses paralel.
+- Validasi artefak sebelum aktivasi.
+- Gunakan health check dan rollback otomatis.
+- Rahasia yang pernah ter-commit harus dirotasi. Menghapusnya dari working tree tidak menghapus Git history.
+- Jangan membersihkan Git history tanpa koordinasi karena operasi itu menulis ulang seluruh branch dan tag.
+
+## Diagnostik
+
+```bash
+pm2 status
+pm2 logs jurnalku-api --lines 100
+nginx -t
+```
+
+Jika health check gagal, pertahankan atau pulihkan versi sehat terakhir. Jangan mengakali kegagalan dengan menonaktifkan SSH host verification.

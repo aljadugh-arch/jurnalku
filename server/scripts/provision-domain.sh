@@ -1,7 +1,7 @@
 #!/bin/bash
 # provision-domain.sh — Auto-provision custom domain for JURNALKU
 # Usage: bash provision-domain.sh <domain>
-# Called by Node app after DNS verified as pointing to 129.226.82.94
+# Called by Node app after DNS is verified against PUBLIC_IP.
 # Must be run as root (or with sudo for nginx reload + acme.sh)
 
 set -euo pipefail

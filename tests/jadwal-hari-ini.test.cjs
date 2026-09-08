@@ -38,9 +38,9 @@ test('production navigation contract keeps updated features reachable', () => {
     'E-Kantin & Cashless',
     'Notifikasi Otomatis',
   ]) {
-    assert.match(sidebar, new RegExp(marker))
     assert.match(menus, new RegExp(marker))
   }
   assert.match(bottom, /REST API/)
   assert.match(bottom, /Backup/)
+  assert.match(sidebar, /menuForRole/)
 })

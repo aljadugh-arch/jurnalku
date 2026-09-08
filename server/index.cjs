@@ -13,7 +13,7 @@ const bcrypt = require('bcryptjs')
 const jwt = require('jsonwebtoken')
 const { v4: uuidv4 } = require('uuid')
 const multer = require('multer')
-const { execSync } = require('child_process')
+const { execFileSync } = require('child_process')
 const { setupTenantTables, tenantMiddleware, registerTenantRoutes } = require('./tenant.cjs')
 const { canonicalSettingsId, getTenantSettings, ensureTenantSettings, migrateTenantSettings } = require('./tenant-settings.cjs')
 const { normalizeHolidayDays } = require('./holiday-rules.cjs')
@@ -40,15 +40,12 @@ const { setupEkskulMembership } = require('./extracurricular-membership.cjs')
 const app = express()
 const PORT = process.env.PORT || 3001
 const IS_PROD = process.env.NODE_ENV === 'production'
-const JWT_SECRET = process.env.JWT_SECRET || 'jurnalku-secret-key-2024'
+const JWT_SECRET = process.env.JWT_SECRET || (!IS_PROD ? crypto.randomBytes(32).toString('hex') : '')
 const todayJakarta = () => new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Jakarta' })
 const timeJakarta = () => new Date().toLocaleTimeString('en-GB', { timeZone: 'Asia/Jakarta', hour: '2-digit', minute: '2-digit', hour12: false })
 
-// FATAL: refuse to boot in production with the default secret
-if (IS_PROD && JWT_SECRET === 'jurnalku-secret-key-2024') {
-  console.error('FATAL: JWT_SECRET tidak diset di production. Set env JWT_SECRET dengan nilai acak.')
-  process.exit(1)
-}
+if (IS_PROD && !JWT_SECRET) throw new Error('JWT_SECRET wajib diisi di production')
+if (JWT_SECRET && JWT_SECRET.length < 32) throw new Error('JWT_SECRET wajib memiliki minimal 32 karakter')
 
 app.set('trust proxy', 1) // behind nginx reverse proxy
 
@@ -1981,14 +1978,16 @@ app.post('/api/tenant/verify-domain', authMiddleware, (req, res) => {
   const domain = tenant.domain_custom
   // Check DNS resolve
   try {
-    const out = execSync(`dig +short ${domain} A @8.8.8.8`, { timeout: 10000 }).toString().trim()
+    const publicIp = process.env.PUBLIC_IP
+    if (!publicIp) return res.status(503).json({ error: 'PUBLIC_IP belum dikonfigurasi di server' })
+    const out = execFileSync('dig', ['+short', domain, 'A', '@8.8.8.8'], { timeout: 10000 }).toString().trim()
     const ips = out.split('\n').map(s => s.trim()).filter(Boolean)
-    if (!ips.includes('129.226.82.94')) {
+    if (!ips.includes(publicIp)) {
       return res.json({
         success: false,
         status: 'dns_pending',
-        message: `DNS belum mengarah ke server. Record A harus 129.226.82.94 (saat ini: ${ips.join(', ') || 'belum ada record'})`,
-        expected_ip: '129.226.82.94',
+        message: `DNS belum mengarah ke server. Periksa Record A (saat ini: ${ips.join(', ') || 'belum ada record'})`,
+        expected_ip: publicIp,
         current_ips: ips
       })
     }
@@ -2003,7 +2002,7 @@ app.post('/api/tenant/verify-domain', authMiddleware, (req, res) => {
   // DNS OK — trigger provisioning script
   try {
     const script = path.join(__dirname, 'scripts', 'provision-domain.sh')
-    execSync(`bash ${script} ${domain}`, { timeout: 120000, stdio: 'pipe' })
+    execFileSync('bash', [script, domain], { timeout: 120000, stdio: 'pipe' })
     db.prepare('UPDATE tenants SET domain_status = ? WHERE id = ?').run('active', tenant.id)
     res.json({ success: true, status: 'active', message: `Domain ${domain} berhasil diaktifkan!`, url: `https://${domain}` })
   } catch (e) {
@@ -2017,7 +2016,7 @@ app.post('/api/tenant/verify-domain', authMiddleware, (req, res) => {
 app.get('/api/tenant/domain-status', authMiddleware, (req, res) => {
   const t = db.prepare('SELECT domain_custom, domain_status, slug FROM tenants WHERE id = ?').get(req.user.tenant_id)
   if (!t) return res.status(404).json({ error: 'Tenant tidak ditemukan' })
-  res.json(t)
+  res.json({ ...t, dns_target_ip: process.env.PUBLIC_IP || null })
 })
 
 app.post('/api/auth/forgot-password', (req, res) => {

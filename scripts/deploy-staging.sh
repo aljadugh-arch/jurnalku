@@ -1,43 +1,65 @@
-#!/bin/bash
-# ═══════════════════════════════════════════════════════════════
-#  JURNALKU — Deploy ke STAGING (aman, tidak ganggu live)
-#  Build lokal → kirim ke staging.jurnal.cc.cd (port 3002)
-#  Live (jurnal.cc.cd:3001) TIDAK tersentuh.
-# ═══════════════════════════════════════════════════════════════
-set -e
+#!/usr/bin/env bash
+# Build lokal lalu deploy kode ke staging. Production tidak disentuh.
+set -euo pipefail
 cd "$(dirname "$0")/.."
 
-VPS=root@129.226.82.94
-STG=/www/wwwroot/staging.jurnal.cc.cd
-export SSHPASS=$(sed -n 's/^pass=//p' /home/aljadugh/Documents/mdigi/KREDENSIAL-VPS-AB.txt | sed -n '2p')
-SSH="sshpass -e ssh -o StrictHostKeyChecking=no $VPS"
+VPS_IP="${VPS_IP:?Set VPS_IP via environment}"
+VPS_USER="${VPS_USER:-root}"
+VPS_PASS="${VPS_PASS:?Set VPS_PASS via environment}"
+SSH_KNOWN_HOSTS="${SSH_KNOWN_HOSTS:-$HOME/.ssh/known_hosts}"
+STG="${STG_DIR:-/www/wwwroot/staging.jurnal.cc.cd}"
+STG_PM2_APP="${STG_PM2_APP:-jurnalku-staging}"
+STG_HEALTH_URL="${STG_HEALTH_URL:-http://127.0.0.1:3003/api/health}"
+DEPLOY_ID="$(date +%Y%m%d-%H%M%S)-$$"
+LOCAL_ARCHIVE="$(mktemp /tmp/jurnalku-staging.XXXXXX.tgz)"
+REMOTE_ARCHIVE="/tmp/jurnalku-staging-${DEPLOY_ID}.tgz"
 
-echo "▶ [1/5] Syntax check server..."
+cleanup() { rm -f "$LOCAL_ARCHIVE"; }
+trap cleanup EXIT
+[[ -f "$SSH_KNOWN_HOSTS" ]] || { echo "ERROR: known_hosts tidak ditemukan: $SSH_KNOWN_HOSTS" >&2; exit 1; }
+
+export SSHPASS="$VPS_PASS"
+unset VPS_PASS
+SSH_OPTS=(-o StrictHostKeyChecking=yes -o UserKnownHostsFile="$SSH_KNOWN_HOSTS")
+TARGET="${VPS_USER}@${VPS_IP}"
+remote() { sshpass -e ssh "${SSH_OPTS[@]}" "$TARGET" "$@"; }
+
+echo "[1/5] Syntax check server..."
 node -c server/index.cjs
 node -c server/tenant.cjs
 
-echo "▶ [2/5] Build frontend (tsc + vite)..."
-npx tsc -b
-npx vite build
+echo "[2/5] Build frontend..."
+npm run build
 
-echo "▶ [3/5] Kirim dist ke staging..."
-tar czf /tmp/stg_dist.tgz -C dist .
-base64 -w0 /tmp/stg_dist.tgz | $SSH "base64 -d > /tmp/stg_dist.tgz && rm -rf $STG/dist && mkdir -p $STG/dist && tar xzf /tmp/stg_dist.tgz -C $STG/dist && rm /tmp/stg_dist.tgz"
+echo "[3/5] Buat dan unggah artefak..."
+tar -czf "$LOCAL_ARCHIVE" dist server/index.cjs server/tenant.cjs
+sshpass -e scp "${SSH_OPTS[@]}" "$LOCAL_ARCHIVE" "$TARGET:$REMOTE_ARCHIVE"
 
-echo "▶ [4/5] Kirim server code ke staging..."
-base64 -w0 server/index.cjs | $SSH "base64 -d > $STG/server/index.cjs"
-base64 -w0 server/tenant.cjs | $SSH "base64 -d > $STG/server/tenant.cjs"
+echo "[4/5] Pasang artefak staging secara atomik..."
+remote bash -s -- "$STG" "$REMOTE_ARCHIVE" "$DEPLOY_ID" "$STG_PM2_APP" "$STG_HEALTH_URL" <<'REMOTE'
+set -euo pipefail
+STG="$1"; ARCHIVE="$2"; DEPLOY_ID="$3"; PM2_APP="$4"; HEALTH_URL="$5"
+WORK="$STG/.deploy-$DEPLOY_ID"
+cleanup() { rm -rf "$WORK"; rm -f "$ARCHIVE"; }
+trap cleanup EXIT
+mkdir -p "$WORK"
+tar -xzf "$ARCHIVE" -C "$WORK"
+test -s "$WORK/dist/index.html"
+node -c "$WORK/server/index.cjs"
+node -c "$WORK/server/tenant.cjs"
+rm -rf "$STG/dist.next"
+mv "$WORK/dist" "$STG/dist.next"
+rm -rf "$STG/dist.previous"
+[[ ! -d "$STG/dist" ]] || mv "$STG/dist" "$STG/dist.previous"
+mv "$STG/dist.next" "$STG/dist"
+install -m 0644 "$WORK/server/index.cjs" "$STG/server/index.cjs"
+install -m 0644 "$WORK/server/tenant.cjs" "$STG/server/tenant.cjs"
+pm2 restart "$PM2_APP" --update-env
+for attempt in {1..10}; do
+  curl --fail --silent --show-error --max-time 15 "$HEALTH_URL" >/dev/null && break
+  [[ "$attempt" -lt 10 ]] || exit 1
+  sleep 1
+done
+REMOTE
 
-echo "▶ [5/5] Restart staging + health check..."
-$SSH "cd $STG/server && node -c index.cjs && pm2 restart jurnalku-staging --update-env"
-sleep 2
-CODE=$($SSH "curl -s http://127.0.0.1:3002/api/settings -m8 -o /dev/null -w '%{http_code}'")
-
-echo ""
-if [ "$CODE" = "200" ]; then
-  echo "✅ STAGING OK → https://staging.jurnal.cc.cd (HTTP $CODE)"
-  echo "   Test manual dulu di browser. Kalau OK, jalankan: scripts/promote-live.sh"
-else
-  echo "❌ STAGING GAGAL (HTTP $CODE). Cek: pm2 logs jurnalku-staging"
-  exit 1
-fi
+echo "[5/5] STAGING sehat: $STG_HEALTH_URL"

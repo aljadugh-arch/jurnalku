@@ -92,7 +92,7 @@ export default function DomainSetupPage() {
             <div className="bg-gray-50 rounded-lg p-4 font-mono text-sm space-y-1 border">
               <div><span className="text-gray-400">Type:</span> <span className="font-semibold">A</span></div>
               <div><span className="text-gray-400">Name/Host:</span> <span className="font-semibold">jurnal</span></div>
-              <div><span className="text-gray-400">Value:</span> <span className="font-semibold text-primary">129.226.82.94</span></div>
+              <div><span className="text-gray-400">Value:</span> <span className="font-semibold text-primary">{info.dns_target_ip || 'Hubungi admin untuk alamat server'}</span></div>
               <div><span className="text-gray-400">TTL:</span> 300</div>
             </div>
             <p className="text-xs text-gray-400">Jika domain Anda langsung (bukan subdomain), gunakan <code>@</code> sebagai Name.</p>
