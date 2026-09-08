@@ -3139,14 +3139,11 @@ function tenantUsesLegacyStudentQrWindow(tenantId) {
   return ['MTs', 'MA', 'PT', 'NF'].includes(jenjang)
 }
 
-// Absensi harian masuk/pulang untuk RA/TK dan MI/SD hanya boleh dicatat guru
-// kelas/wali kelas atau guru yang mempunyai jadwal mapel pada rombel itu di
-// tanggal yang dipilih. Admin tetap dapat membaca rekap, tetapi tidak menulis.
+// Absensi harian masuk/pulang tersedia untuk seluruh guru. Akses tetap hanya
+// untuk kelas wali atau rombel yang mempunyai jadwal mapel guru pada tanggal itu.
+// Admin RA/TK dan MI/SD tetap dapat membaca rekap, tetapi tidak menulis.
 function requireTeacherDailyAttendanceAccess(req, siswaId, tanggal) {
   if (!isTeacherContext(req)) return { allowed: true }
-  if (!tenantUsesClassTeacherDailyAttendance(req.tenantId)) {
-    return { allowed: false, status: 403, error: 'Absensi harian oleh guru hanya berlaku untuk jenjang RA/TK dan MI/SD' }
-  }
   if (!/^\d{4}-\d{2}-\d{2}$/.test(String(tanggal || ''))) {
     return { allowed: false, status: 400, error: 'Tanggal absensi tidak valid' }
   }
@@ -3167,9 +3164,6 @@ function requireTeacherDailyAttendanceAccess(req, siswaId, tanggal) {
 
 function requireTeacherDailyRombelAccess(req, rombelId, tanggal) {
   if (!isTeacherContext(req)) return { allowed: true }
-  if (!tenantUsesClassTeacherDailyAttendance(req.tenantId)) {
-    return { allowed: false, status: 403, error: 'Absensi harian oleh guru hanya berlaku untuk jenjang RA/TK dan MI/SD' }
-  }
   if (!rombelId || !/^\d{4}-\d{2}-\d{2}$/.test(String(tanggal || ''))) {
     return { allowed: false, status: 400, error: 'Rombel dan tanggal wajib valid' }
   }
@@ -3358,9 +3352,15 @@ app.get('/api/guru/jadwal-context', authMiddleware, (req, res) => {
   const jadwal = db.prepare(`SELECT DISTINCT j.id AS jadwal_id,j.mapel_id,j.rombel_id,j.hari,j.jam_mulai,j.jam_selesai,j.ruangan,m.nama AS mapel_nama,m.kode AS mapel_kode,r.nama AS rombel_nama
     FROM jadwal j JOIN mapel m ON m.id=j.mapel_id AND m.tenant_id=j.tenant_id LEFT JOIN rombel r ON r.id=j.rombel_id AND r.tenant_id=j.tenant_id
     WHERE j.gtk_id=? AND j.tenant_id=? AND lower(j.hari)=? AND j.jenis_kegiatan='mapel' ORDER BY j.jam_mulai`).all(gtk.id, req.tenantId, day)
-  const ids = [...new Set(jadwal.map(j => j.rombel_id).filter(Boolean))]
+  const rombels = db.prepare(`SELECT DISTINCT r.id,r.nama
+    FROM rombel r
+    WHERE r.tenant_id=? AND (r.wali_kelas_id=? OR EXISTS (
+      SELECT 1 FROM jadwal j WHERE j.rombel_id=r.id AND j.gtk_id=?
+        AND j.tenant_id=r.tenant_id AND lower(j.hari)=? AND j.jenis_kegiatan='mapel'
+    )) ORDER BY r.nama`).all(req.tenantId, gtk.id, gtk.id, day)
+  const ids = rombels.map(r => r.id)
   const siswa = ids.length ? db.prepare(`SELECT s.id,s.nis,s.nisn,s.nama,s.jenis_kelamin,s.rombel_id,r.nama AS rombel_nama FROM siswa s LEFT JOIN rombel r ON r.id=s.rombel_id AND r.tenant_id=s.tenant_id WHERE s.tenant_id=? AND COALESCE(s.status,'aktif')='aktif' AND s.rombel_id IN (${ids.map(() => '?').join(',')}) ORDER BY r.nama,s.nama`).all(req.tenantId, ...ids) : []
-  res.json({ gtk: { ...gtk, nama_tampilan: honorificTeacherName(gtk.nama, gtk.jenis_kelamin) }, tanggal, jadwal, siswa })
+  res.json({ gtk: { ...gtk, nama_tampilan: honorificTeacherName(gtk.nama, gtk.jenis_kelamin) }, tanggal, jadwal, rombels, siswa })
 })
 
 // Absensi per mata pelajaran: terpisah dari absensi QR masuk/pulang harian.

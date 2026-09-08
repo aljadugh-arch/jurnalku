@@ -91,7 +91,8 @@ export const guruMenuItems: MenuItem[] = [
   { label: 'Catatan Kepribadian', icon: <ScrollText size={20} />, path: '/guru/catatan-kepribadian' },
   { label: 'Jadwal Saya', icon: <Calendar size={20} />, path: '/guru/jadwal' },
   { label: 'Penugasan', icon: <ClipboardCheck size={20} />, path: '/guru#tugas' },
-  { label: 'Absensi Siswa', icon: <QrCode size={20} />, path: '/guru/absensi-siswa' },
+  { label: 'Absensi Harian', icon: <QrCode size={20} />, path: '/guru/absensi-siswa' },
+  { label: 'Absensi Mapel', icon: <UserCheck size={20} />, path: '/guru/absensi-mapel' },
   { label: 'Absensi Saya', icon: <MapPin size={20} />, path: '/guru/absensi-guru' },
   { label: 'Generator AI Guru', icon: <Sparkles size={20} />, path: '/guru/modul-ajar' },
 ]

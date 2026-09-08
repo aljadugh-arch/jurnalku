@@ -244,7 +244,8 @@ export default function App() {
           <Route path="jurnal" element={<GuruJurnalPage />} />
           <Route path="jadwal" element={<GuruJadwalPage />} />
           <Route path="absensi-guru" element={<GuruAbsensiPage />} />
-          <Route path="absensi-siswa" element={<GuruAbsensiSiswaPage />} />
+          <Route path="absensi-siswa" element={<GuruAbsensiSiswaQRPage />} />
+          <Route path="absensi-mapel" element={<GuruAbsensiSiswaPage />} />
           <Route path="modul-ajar" element={<GuruModulAjarPage />} />
           <Route path="rombel" element={<GuruRombelPage />} />
           <Route path="penilaian-harian" element={<GuruPenilaianHarianPage />} />
@@ -254,7 +255,7 @@ export default function App() {
           <Route path="posting" element={<GuruPostingPage />} />
           <Route path="catatan-kepribadian" element={<GuruCatatanKepribadianPage />} />
           <Route path="absensi-ekskul" element={<GuruAbsensiEkskulPage />} />
-          <Route path="absensi-harian" element={<GuruAbsensiSiswaQRPage />} />
+          <Route path="absensi-harian" element={<Navigate to="/guru/absensi-siswa" replace />} />
         </Route>
 
         {/* Siswa Routes */}

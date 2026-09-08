@@ -55,20 +55,30 @@ test('halaman absensi menjelaskan bahwa KBM harus aktif sebelum manual atau QR',
   assert.match(attendancePage, /startQrCamera/)
 })
 
-test('absensi harian guru dibatasi backend ke guru kelas atau guru terjadwal pada jenjang RA/MI', () => {
-  const jenjangGuard = routeBody('function tenantUsesClassTeacherDailyAttendance', 'function requireTeacherDailyAttendanceAccess')
+test('absensi harian QR dan manual tersedia untuk semua guru tetapi tetap scoped kelas wali atau jadwal tanggal itu', () => {
   const guard = routeBody('function requireTeacherDailyAttendanceAccess', 'function teacherScheduleForDay')
+  const context = routeBody("app.get('/api/guru/jadwal-context'", '// Absensi per mata pelajaran')
   const single = routeBody("app.post('/api/absensi-siswa', STAFF", "app.post('/api/absensi-siswa/bulk'")
   const bulk = routeBody("app.post('/api/absensi-siswa/bulk', STAFF", "app.post('/api/absensi-siswa/bulk-range'")
   const qr = routeBody("app.post('/api/absensi-siswa/qr-scan', STAFF", "// ==================== ABSENSI GURU")
 
-  assert.match(jenjangGuard, /getTenantSettings\(db, tenantId, 'jenjang'\)/)
-  assert.match(jenjangGuard, /\['RA', 'MI'\]/)
+  assert.doesNotMatch(guard, /Absensi harian oleh guru hanya berlaku/)
   assert.match(guard, /wali_kelas_id/)
   assert.match(guard, /jenis_kegiatan='mapel'/)
+  assert.match(context, /rombels/)
+  assert.match(context, /wali_kelas_id/)
+  assert.match(context, /jenis_kegiatan='mapel'/)
   assert.match(single, /requireTeacherDailyAttendanceAccess\(req, siswa_id, tanggal\)/)
   assert.match(bulk, /requireTeacherDailyAttendanceAccess\(req, d\.siswa_id, tanggal\)/)
   assert.match(qr, /requireTeacherDailyAttendanceAccess\(req, siswa\.id, tanggal\)/)
+})
+
+test('navigasi guru memisahkan absensi harian QR/manual dari absensi per mata pelajaran', () => {
+  const menuItems = fs.readFileSync(path.join(__dirname, '..', 'src', 'lib', 'menuItems.tsx'), 'utf8')
+  assert.match(menuItems, /Absensi Harian.*\/guru\/absensi-siswa/s)
+  assert.match(menuItems, /Absensi Mapel.*\/guru\/absensi-mapel/s)
+  assert.match(appPage, /path="absensi-siswa" element=\{<GuruAbsensiSiswaQRPage \/>\}/)
+  assert.match(appPage, /path="absensi-mapel" element=\{<GuruAbsensiSiswaPage \/>\}/)
 })
 
 test('admin RA/MI monitor-only dan konfigurasi jendela QR terpisah dari jam pulang per rombel', () => {
@@ -87,6 +97,8 @@ test('admin RA/MI monitor-only dan konfigurasi jendela QR terpisah dari jam pula
 test('halaman guru mengirim siswa dan tanggal untuk filter akses server pada baca dan scan', () => {
   assert.match(teacherAttendancePage, /api\.get\('\/absensi-siswa'.*rombel_id/s)
   assert.match(teacherAttendancePage, /api\.post\('\/absensi-siswa\/qr-scan'.*tanggal/s)
+  assert.doesNotMatch(teacherAttendancePage, /api\.get\('\/siswa'/)
+  assert.match(teacherAttendancePage, /contextSiswa\.filter/)
 })
 
 test('dashboard siswa juga dapat diakses wali murid tertaut', () => {

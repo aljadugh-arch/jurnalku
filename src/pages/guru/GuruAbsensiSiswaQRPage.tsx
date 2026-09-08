@@ -14,18 +14,18 @@ const statusColors: Record<string, string> = {
 }
 
 /**
- * Halaman absensi harian siswa (masuk/pulang) untuk guru kelas / wali kelas.
+ * Halaman absensi harian siswa (masuk/pulang) untuk semua guru.
  * Menggunakan backend QR scan yang sudah ada (`POST /absensi-siswa/qr-scan`).
- * Hanya untuk jenjang MI/SD dan RA/TK.
+ * Rombel dibatasi backend ke kelas wali atau kelas terjadwal pada tanggal itu.
  */
 export default function GuruAbsensiSiswaQRPage() {
   const [tanggal, setTanggal] = useState(todayWib())
   const [sesi, setSesi] = useState<'masuk' | 'pulang'>('masuk')
   const [rombels, setRombels] = useState<any[]>([])
+  const [contextSiswa, setContextSiswa] = useState<any[]>([])
   const [selectedRombel, setSelectedRombel] = useState('')
   const [siswaList, setSiswaList] = useState<any[]>([])
   const [absensi, setAbsensi] = useState<Record<string, string>>({})
-  const [existing, setExisting] = useState<any[]>([])
   const [loading, setLoading] = useState(false)
   const [qrToken, setQrToken] = useState('')
   const [qrOpen, setQrOpen] = useState(false)
@@ -38,31 +38,16 @@ export default function GuruAbsensiSiswaQRPage() {
   const lastQrRef = useRef('')
   const cameraStartingRef = useRef(false)
 
-  // Load rombel yang diampu guru ini via jadwal-context
+  // Backend mengembalikan rombel kelas wali dan kelas terjadwal guru pada tanggal ini.
   useEffect(() => {
     api.get('/guru/jadwal-context', { params: { tanggal } })
       .then(res => {
-        const jadwalList = res.data.jadwal || []
-        // Ambil rombel unik dari jadwal hari ini
-        const rombelMap = new Map<string, any>()
-        for (const j of jadwalList) {
-          if (j.rombel_id && !rombelMap.has(j.rombel_id)) {
-            rombelMap.set(j.rombel_id, { id: j.rombel_id, nama: j.rombel_nama })
-          }
-        }
-        const uniqueRombels = Array.from(rombelMap.values())
+        const uniqueRombels = res.data.rombels || []
         setRombels(uniqueRombels)
-        if (uniqueRombels.length > 0 && !selectedRombel) {
-          setSelectedRombel(uniqueRombels[0].id)
-        }
+        setContextSiswa(res.data.siswa || [])
+        setSelectedRombel(current => uniqueRombels.some((r: any) => r.id === current) ? current : (uniqueRombels[0]?.id || ''))
       })
-      .catch(() => {
-        // Fallback: load semua rombel
-        api.get('/rombel').then(res => {
-          setRombels(res.data)
-          if (res.data.length > 0 && !selectedRombel) setSelectedRombel(res.data[0].id)
-        }).catch(() => toast.error('Gagal memuat rombel'))
-      })
+      .catch(() => { setRombels([]); setContextSiswa([]); setSelectedRombel(''); toast.error('Gagal memuat rombel yang Anda ampu') })
   }, [tanggal])
 
   // Check KBM status
@@ -77,12 +62,8 @@ export default function GuruAbsensiSiswaQRPage() {
   const loadData = useCallback(async () => {
     if (!selectedRombel) return
     try {
-      const [siswaRes, absensiRes] = await Promise.all([
-        api.get('/siswa', { params: { rombel_id: selectedRombel } }),
-        api.get('/absensi-siswa', { params: { tanggal, rombel_id: selectedRombel } }),
-      ])
-      setSiswaList(siswaRes.data)
-      setExisting(absensiRes.data)
+      const absensiRes = await api.get('/absensi-siswa', { params: { tanggal, rombel_id: selectedRombel } })
+      setSiswaList(contextSiswa.filter(s => s.rombel_id === selectedRombel))
       const map: Record<string, string> = {}
       for (const a of absensiRes.data) {
         const saved = sesi === 'pulang' ? a.status_pulang : a.status
@@ -92,7 +73,7 @@ export default function GuruAbsensiSiswaQRPage() {
     } catch {
       toast.error('Gagal memuat data absensi')
     }
-  }, [selectedRombel, tanggal, sesi])
+  }, [contextSiswa, selectedRombel, tanggal, sesi])
 
   useEffect(() => { void loadData() }, [loadData])
 
