@@ -67,8 +67,8 @@ app.use(cors({
       return cb(null, true)
     }
     // allow registered custom domains (from tenant DB)
-    const host = origin.replace(/^https?:\/\//, '').split(':')[0].toLowerCase()
-    const tenant = db.prepare('SELECT id FROM tenants WHERE domain_custom = ? AND aktif = 1').get(host)
+    const host = origin.replace(/^https?:\/\//, '').split(':')[0].toLowerCase().replace(/\.$/, '')
+    const tenant = db.prepare("SELECT id FROM tenants WHERE lower(trim(domain_custom, '.')) = ? AND aktif = 1").get(host)
     if (tenant) return cb(null, true)
     return cb(new Error('Not allowed by CORS'))
   },
