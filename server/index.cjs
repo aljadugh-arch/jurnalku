@@ -2300,7 +2300,7 @@ app.put('/api/settings', ADMIN, (req, res) => {
   if (!Array.isArray(dashboard_quick_menus)) return res.status(400).json({ error: 'dashboard_quick_menus wajib berupa array' })
   const allowedQuickMenus = new Set(['siswa','gtk','jadwal','rekap','absensi','ceklok','penilaian','keuangan','rombel'])
   const normalizedQuickMenus = [...new Set(dashboard_quick_menus.filter(item => typeof item === 'string' && allowedQuickMenus.has(item)))]
-  if (normalizedQuickMenus.length !== 8) return res.status(400).json({ error: 'Pilih tepat 8 pintasan dashboard yang valid dan unik. Anda memilih: ' + normalizedQuickMenus.length })
+  if (normalizedQuickMenus.length < 1 || normalizedQuickMenus.length > 9) return res.status(400).json({ error: 'Pilih 1-9 pintasan dashboard yang valid. Anda memilih: ' + normalizedQuickMenus.length })
   const quickMenus = JSON.stringify(normalizedQuickMenus)
   db.prepare(`INSERT INTO settings (id, tenant_id, nama_lembaga, alamat, telepon, email, theme, primary_color, accent_color, sidebar_color, geo_latitude, geo_longitude, geo_radius, jenjang, hari_libur, bg_size, bg_position, bg_repeat, bg_blur, pwa_enabled, pwa_name, pwa_theme_color, pwa_bg_color, dashboard_quick_menus, updated_at)
     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,datetime('now'))
@@ -4004,9 +4004,15 @@ app.get('/api/siswa/dashboard', authMiddleware, enforceTenantAccess, (req, res) 
   if (!linked.includes(String(selected))) return res.status(403).json({ error: 'Bukan siswa/anak tertaut' })
   const siswa = db.prepare('SELECT * FROM siswa WHERE id=? AND tenant_id=?').get(selected, req.tenantId)
   if (!siswa) return res.status(404).json({ error: 'Siswa tidak ditemukan' })
-  const days = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu']
-  const today = days[new Date().getDay()].toLowerCase()
-  const jadwal = db.prepare(`SELECT j.*, m.nama as mapel_nama, g.nama as guru_nama FROM jadwal j LEFT JOIN mapel m ON j.mapel_id = m.id AND m.tenant_id=j.tenant_id LEFT JOIN gtk g ON j.gtk_id = g.id AND g.tenant_id=j.tenant_id WHERE j.tenant_id=? AND j.rombel_id = ? AND lower(trim(j.hari)) = ? ORDER BY j.jam_mulai`).all(req.tenantId, siswa.rombel_id, today)
+  
+  // Get jadwal hari ini
+  let jadwal = []
+  if (siswa.rombel_id) {
+    const days = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu']
+    const today = days[new Date().getDay()].toLowerCase()
+    jadwal = db.prepare(`SELECT j.*, m.nama as mapel_nama, g.nama as guru_nama FROM jadwal j LEFT JOIN mapel m ON j.mapel_id = m.id AND m.tenant_id=j.tenant_id LEFT JOIN gtk g ON j.gtk_id = g.id AND g.tenant_id=j.tenant_id WHERE j.tenant_id=? AND j.rombel_id = ? AND lower(trim(coalesce(j.hari, ''))) = ? ORDER BY j.jam_mulai`).all(req.tenantId, siswa.rombel_id, today) || []
+  }
+  
   const bulan = todayJakarta().slice(0, 7) + '%'
   const count = status => db.prepare('SELECT COUNT(*) as c FROM absensi_siswa WHERE tenant_id=? AND siswa_id=? AND tanggal LIKE ? AND status=?').get(req.tenantId, siswa.id, bulan, status).c
   const [hadir, sakit, izin, alpha] = ['hadir','sakit','izin','alpha'].map(count)
