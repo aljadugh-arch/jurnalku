@@ -1902,6 +1902,13 @@ app.get('/api/auth/me', authMiddleware, (req, res) => {
   res.json(user ? { ...user, can_teach: !!user.can_teach } : null)
 })
 
+// Foto profil pegawai (GTK) untuk semua role staf (admin/kepala/bendahara/operator/tata usaha/guru)
+// dipakai sebagai fallback saat user belum mengunggah avatar pribadi.
+app.get('/api/auth/me/foto', authMiddleware, (req, res) => {
+  const gtk = resolveGtkForUser(req.user.id, req.tenantId)
+  res.json({ foto: gtk?.foto || null })
+})
+
 app.post('/api/auth/register', (req, res) => {
   const { nama_lembaga, nama, email, password, no_hp, domain_type, custom_domain, slug: slugInput } = req.body
   const vErr = vRegister(req.body); if (vErr) return res.status(400).json({ error: vErr })
@@ -2245,7 +2252,7 @@ app.put('/api/library/admin', ADMIN, (req, res) => {
   if (!name || name.length > 120) return res.status(400).json({ error: 'Nama perpustakaan wajib diisi (maksimal 120 karakter)' })
   if (description.length > 1000) return res.status(400).json({ error: 'Deskripsi maksimal 1000 karakter' })
   if (!isDriveFolderUrl(driveUrl)) return res.status(400).json({ error: 'URL folder Google Drive tidak valid' })
-  const allowedRoles = ['all','admin','super_admin','guru','siswa','wali_murid','kepala_madrasah','bendahara']
+  const allowedRoles = ['all','admin','super_admin','guru','siswa','wali_murid','kepala','bendahara','operator','tata_usaha','tu']
   const roles = [...new Set(Array.isArray(req.body.visibility_roles) ? req.body.visibility_roles : [])].filter(role => allowedRoles.includes(role))
   if (!roles.length) return res.status(400).json({ error: 'Pilih minimal satu role' })
   db.prepare(`INSERT INTO library_config (tenant_id,name,description,drive_folder_url,enabled,visibility_roles,updated_at)
@@ -4035,8 +4042,7 @@ app.get('/api/siswa/dashboard', authMiddleware, enforceTenantAccess, (req, res) 
   // Get jadwal hari ini
   let jadwal = []
   if (siswa.rombel_id) {
-    const days = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu']
-    const today = days[new Date().getDay()].toLowerCase()
+    const today = require('./attendance-rules.cjs').hariJakarta()
     jadwal = db.prepare(`SELECT j.*, m.nama as mapel_nama, g.nama as guru_nama FROM jadwal j LEFT JOIN mapel m ON j.mapel_id = m.id AND m.tenant_id=j.tenant_id LEFT JOIN gtk g ON j.gtk_id = g.id AND g.tenant_id=j.tenant_id WHERE j.tenant_id=? AND j.rombel_id = ? AND lower(trim(coalesce(j.hari, ''))) = ? ORDER BY j.jam_mulai`).all(req.tenantId, siswa.rombel_id, today) || []
   }
   

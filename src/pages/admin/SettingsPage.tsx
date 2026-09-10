@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { AlertTriangle, Save, Trash2, Smartphone } from 'lucide-react'
+import { AlertTriangle, Save, Trash2, Smartphone, BookOpen } from 'lucide-react'
 import toast from 'react-hot-toast'
 import api from '../../services/api'
 import { applyTheme } from '../../lib/applyTheme'
@@ -42,6 +42,17 @@ export default function SettingsPage() {
   const [savingJam, setSavingJam] = useState(false)
   const setSettings = useSettingsStore(s => s.setSettings)
 
+  const ALL_LIBRARY_ROLES = [
+    { value: 'siswa', label: 'Siswa' },
+    { value: 'wali_murid', label: 'Wali Murid' },
+    { value: 'guru', label: 'Guru' },
+    { value: 'kepala', label: 'Kepala' },
+    { value: 'bendahara', label: 'Bendahara' },
+    { value: 'admin', label: 'Admin' },
+  ]
+  const [library, setLibrary] = useState({ name: 'Perpustakaan Digital', description: '', drive_folder_url: '', enabled: false, visibility_roles: ['all'] as string[] })
+  const [savingLibrary, setSavingLibrary] = useState(false)
+
 
   useEffect(() => {
     api.get('/settings').then(res => {
@@ -75,6 +86,28 @@ export default function SettingsPage() {
     }).catch(() => toast.error('Gagal memuat pengaturan'))
     .finally(() => setLoading(false))
   }, [])
+
+  useEffect(() => {
+    api.get('/library/admin').then(res => {
+      if (!res.data) return
+      setLibrary({
+        name: res.data.name || 'Perpustakaan Digital',
+        description: res.data.description || '',
+        drive_folder_url: res.data.drive_folder_url || '',
+        enabled: !!res.data.enabled,
+        visibility_roles: res.data.visibility_roles?.length ? res.data.visibility_roles : ['all'],
+      })
+    }).catch(() => {})
+  }, [])
+
+  const handleSaveLibrary = async () => {
+    setSavingLibrary(true)
+    try {
+      await api.put('/library/admin', library)
+      toast.success('Pengaturan Perpustakaan Digital disimpan')
+    } catch (e: any) { toast.error(e.response?.data?.error || 'Gagal menyimpan perpustakaan') }
+    finally { setSavingLibrary(false) }
+  }
 
   const handleSave = async () => {
     if (form.dashboard_quick_menus.length < 1 || form.dashboard_quick_menus.length > 9) return toast.error('Pilih 1-9 pintasan dashboard')
@@ -533,6 +566,72 @@ export default function SettingsPage() {
             <input type="number" min="10" value={form.geo_radius} onChange={e => setForm({...form, geo_radius: e.target.value})} className="w-full px-4 py-2 border rounded-lg text-sm" />
             <p className="text-xs text-amber-600 mt-1 font-medium">⚠️ Wajib diisi agar ceklok guru hanya bisa dari dalam radius sekolah.</p>
           </div>
+        </div>
+      </div>
+
+      <div id="perpustakaan" className="bg-white rounded-xl p-4 sm:p-6 shadow-sm border border-gray-100 scroll-mt-24">
+        <div className="flex items-center gap-2 mb-4">
+          <BookOpen size={20} className="text-primary shrink-0" />
+          <h2 className="text-lg font-semibold text-gray-800">Perpustakaan Digital</h2>
+        </div>
+        <p className="text-xs text-gray-500 mb-4">Hubungkan folder Google Drive agar isinya bisa diakses langsung di dalam aplikasi tanpa membuka Google Drive.</p>
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-gray-700">Aktifkan Perpustakaan Digital</p>
+              <p className="text-xs text-gray-400 mt-0.5">Jika nonaktif, menu perpustakaan tidak akan menampilkan koleksi ke pengguna.</p>
+            </div>
+            <div
+              role="switch"
+              aria-checked={library.enabled}
+              tabIndex={0}
+              onClick={() => setLibrary({ ...library, enabled: !library.enabled })}
+              onKeyDown={e => (e.key === 'Enter' || e.key === ' ') && setLibrary({ ...library, enabled: !library.enabled })}
+              className={'relative inline-flex h-6 w-11 cursor-pointer items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 ' + (library.enabled ? 'bg-primary' : 'bg-gray-300')}
+            >
+              <span className={'inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ' + (library.enabled ? 'translate-x-6' : 'translate-x-1')} />
+            </div>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-600 mb-1">Nama Koleksi</label>
+            <input value={library.name} onChange={e => setLibrary({ ...library, name: e.target.value })} className="w-full px-4 py-2 border rounded-lg text-sm" />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-600 mb-1">Deskripsi</label>
+            <input value={library.description} onChange={e => setLibrary({ ...library, description: e.target.value })} className="w-full px-4 py-2 border rounded-lg text-sm" />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-600 mb-1">URL Folder Google Drive</label>
+            <input
+              value={library.drive_folder_url}
+              onChange={e => setLibrary({ ...library, drive_folder_url: e.target.value })}
+              placeholder="https://drive.google.com/drive/folders/xxxxxxxxx"
+              className="w-full px-4 py-2 border rounded-lg text-sm font-mono"
+            />
+            <p className="text-xs text-gray-400 mt-1">Folder Google Drive harus dibagikan minimal sebagai "Siapa saja yang memiliki link - Pelihat" agar bisa dimuat di aplikasi.</p>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-600 mb-2">Bisa Diakses Oleh</label>
+            <div className="flex flex-wrap gap-2">
+              <label className={'flex items-center gap-2 px-3 py-2 border rounded-lg text-sm cursor-pointer ' + (library.visibility_roles.includes('all') ? 'bg-primary/10 border-primary text-primary' : 'bg-white border-gray-300 text-gray-600')}>
+                <input type="checkbox" checked={library.visibility_roles.includes('all')} onChange={e => setLibrary({ ...library, visibility_roles: e.target.checked ? ['all'] : [] })} />
+                Semua Role
+              </label>
+              {!library.visibility_roles.includes('all') && ALL_LIBRARY_ROLES.map(r => (
+                <label key={r.value} className={'flex items-center gap-2 px-3 py-2 border rounded-lg text-sm cursor-pointer ' + (library.visibility_roles.includes(r.value) ? 'bg-primary/10 border-primary text-primary' : 'bg-white border-gray-300 text-gray-600')}>
+                  <input
+                    type="checkbox"
+                    checked={library.visibility_roles.includes(r.value)}
+                    onChange={e => setLibrary({ ...library, visibility_roles: e.target.checked ? [...library.visibility_roles, r.value] : library.visibility_roles.filter(x => x !== r.value) })}
+                  />
+                  {r.label}
+                </label>
+              ))}
+            </div>
+          </div>
+          <button onClick={handleSaveLibrary} disabled={savingLibrary} className="inline-flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-lg text-sm hover:bg-primary-dark disabled:opacity-50">
+            <Save size={16} /> {savingLibrary ? 'Menyimpan...' : 'Simpan Perpustakaan'}
+          </button>
         </div>
       </div>
 

@@ -159,6 +159,24 @@ export default function SiswaDashboard() {
         ))}
       </div>
 
+      <div className="hidden lg:grid grid-cols-4 xl:grid-cols-8 gap-3">
+        {[
+          ['Kehadiran', () => navigate('/siswa/absensi'), <Activity key="kehadiran" size={18} />],
+          ['Tabungan', () => goSection('tabungan'), <Wallet key="tabungan" size={18} />],
+          ['Tagihan', () => goSection('tagihan'), <Receipt key="tagihan" size={18} />],
+          ['Nilai', () => goSection('nilai'), <BookOpen key="nilai" size={18} />],
+          ['Jadwal', () => navigate('/siswa/jadwal'), <Calendar key="jadwal" size={18} />],
+          ['Tugas', () => goSection('tugas'), <ClipboardCheck key="tugas" size={18} />],
+          ['Catatan', () => goSection('catatan'), <NotebookPen key="catatan" size={18} />],
+          ['Perpus Digital', () => navigate('/siswa/perpustakaan'), <BookOpen key="perpus" size={18} />],
+        ].map(([label, onClick, icon]: any) => (
+          <button key={label} type="button" onClick={onClick} className="rounded-2xl bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800 p-3 text-center shadow-sm active:scale-95 transition">
+            <span className="mx-auto mb-2 flex h-10 w-10 items-center justify-center rounded-xl bg-primary text-white">{icon}</span>
+            <span className="text-xs font-semibold text-gray-700 dark:text-gray-200">{label}</span>
+          </button>
+        ))}
+      </div>
+
 
       {/* Persentase Kehadiran */}
       <Card title="Kehadiran Bulan Ini" icon={<CheckCircle size={18} className="text-primary" />}>

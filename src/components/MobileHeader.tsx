@@ -60,6 +60,12 @@ export default function MobileHeader({
   const [notifOpen, setNotifOpen] = useState(false)
   const [notifItems, setNotifItems] = useState<NotifItem[]>([])
   const [notifLoading, setNotifLoading] = useState(false)
+  const [gtkFoto, setGtkFoto] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (profilePhoto || user?.avatar) return
+    api.get('/auth/me/foto').then(res => setGtkFoto(res.data?.foto || null)).catch(() => setGtkFoto(null))
+  }, [profilePhoto, user?.avatar, user?.id])
 
   const teacherMode = user?.role === 'kepala' && !!user?.can_teach && location.pathname.startsWith('/guru')
 
@@ -101,7 +107,7 @@ export default function MobileHeader({
           aria-label="Menu akun"
         >
           <Avatar
-            src={profilePhoto || user?.avatar}
+            src={profilePhoto || user?.avatar || gtkFoto}
             name={user?.nama}
             size={42}
             className={light ? "!border-2 !border-white/40 shadow-sm" : "!border-2 !border-slate-200 dark:!border-gray-700 shadow-sm"}
