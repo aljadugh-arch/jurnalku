@@ -14,7 +14,7 @@ const jwt = require('jsonwebtoken')
 const { v4: uuidv4 } = require('uuid')
 const multer = require('multer')
 const { execFileSync } = require('child_process')
-const { setupTenantTables, tenantMiddleware, registerTenantRoutes } = require('./tenant.cjs')
+const { setupTenantTables, tenantMiddleware, registerTenantRoutes, BASE_DOMAIN } = require('./tenant.cjs')
 const { canonicalSettingsId, getTenantSettings, ensureTenantSettings, migrateTenantSettings } = require('./tenant-settings.cjs')
 const { normalizeHolidayDays } = require('./holiday-rules.cjs')
 const { parseGuruHariRules, guruBolehMengajar } = require('./jadwal-rules.cjs')
@@ -1355,6 +1355,25 @@ app.get('/api/health', (_req, res) => {
   } catch {
     res.status(503).json({ ok: false, service: 'jurnalku', database: 'error' })
   }
+})
+
+// Caddy on_demand_tls "ask" endpoint: hanya izinkan sertifikat otomatis untuk
+// subdomain lembaga (slug.BASE_DOMAIN) yang benar-benar terdaftar & aktif di
+// tabel tenants, atau domain_custom lembaga yang sudah diverifikasi. Ini
+// menghindari kebutuhan wildcard cert (DNS-01) sekaligus mencegah penyalahgunaan
+// on-demand TLS untuk domain sembarangan.
+app.get('/api/caddy/ask', (req, res) => {
+  const domain = String(req.query.domain || '').toLowerCase().trim()
+  if (!domain) return res.status(400).json({ ok: false, error: 'domain wajib' })
+  if (domain === BASE_DOMAIN || domain === `www.${BASE_DOMAIN}`) return res.json({ ok: true })
+  if (domain.endsWith('.' + BASE_DOMAIN)) {
+    const slug = domain.slice(0, -('.' + BASE_DOMAIN).length)
+    const tenant = db.prepare('SELECT id FROM tenants WHERE slug = ? AND aktif = 1').get(slug)
+    if (tenant) return res.json({ ok: true })
+  }
+  const custom = db.prepare("SELECT id FROM tenants WHERE lower(trim(domain_custom, '.')) = ? AND aktif = 1").get(domain)
+  if (custom) return res.json({ ok: true })
+  return res.status(404).json({ ok: false, error: 'domain tidak terdaftar' })
 })
 
 // ============================================================================
