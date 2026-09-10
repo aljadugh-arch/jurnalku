@@ -3981,7 +3981,7 @@ app.get('/api/siswa/portal', authMiddleware, (req, res) => {
 })
 
 // ==================== SISWA DASHBOARD ====================
-app.get('/api/siswa/dashboard', authMiddleware, (req, res) => {
+app.get('/api/siswa/dashboard', authMiddleware, enforceTenantAccess, (req, res) => {
   if (!['siswa', 'wali_murid'].includes(req.user.role)) return res.status(403).json({ error: 'Akses ditolak' })
   let linked = db.prepare('SELECT student_id FROM user_students WHERE tenant_id=? AND user_id=? ORDER BY student_id').all(req.tenantId, req.user.id).map(x => x.student_id)
   if (!linked.length && req.user.role === 'siswa' && req.user.nis) {

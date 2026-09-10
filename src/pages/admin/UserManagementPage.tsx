@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import toast from 'react-hot-toast'
-import { UserPlus, Trash2, Shield, Search, Download, Copy } from 'lucide-react'
+import { UserPlus, Trash2, Shield, Search, Download, Copy, Edit2 } from 'lucide-react'
 import api from '../../services/api'
 import { roleLabel } from '../../lib/roles'
 import type { User } from '../../types'
@@ -21,6 +21,8 @@ export default function UserManagementPage() {
   const [siswa, setSiswa] = useState<any[]>([])
   const [gtkSearch, setGtkSearch] = useState('')
   const [siswaSearch, setSiswaSearch] = useState('')
+  const [editingUser, setEditingUser] = useState<User | null>(null)
+  const [editingCanTeach, setEditingCanTeach] = useState(false)
 
   useEffect(() => {
     api.get('/gtk').then(r => setGtk(r.data)).catch(() => {})
@@ -67,6 +69,23 @@ export default function UserManagementPage() {
     if (!confirm(`Hapus akun ${u.nama}?`)) return
     try { await api.delete(`/users/${u.id}`); toast.success('Dihapus'); load() }
     catch (e: any) { toast.error(e.response?.data?.error || 'Gagal menghapus') }
+  }
+
+  const editTeachFlag = async (u: User) => {
+    setEditingUser(u)
+    setEditingCanTeach(u.can_teach || false)
+  }
+
+  const saveTeachFlag = async () => {
+    if (!editingUser) return
+    setSaving(true)
+    try {
+      await api.put(`/users/${editingUser.id}`, { can_teach: editingCanTeach })
+      toast.success('Perubahan disimpan')
+      setEditingUser(null)
+      load()
+    } catch (e: any) { toast.error(e.response?.data?.error || 'Gagal menyimpan') }
+    finally { setSaving(false) }
   }
 
   return (
@@ -121,15 +140,46 @@ export default function UserManagementPage() {
 
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
         <div className="lg:hidden divide-y">
-          {users.map(u => <div key={u.id} className="p-4 flex items-start gap-3"><div className="min-w-0 flex-1"><p className="font-medium text-gray-800 break-words">{u.nama}</p><p className="mt-1 text-sm text-gray-600 break-all">{u.email}</p><span className="mt-2 inline-flex max-w-full items-center gap-1 px-2 py-1 rounded-full text-xs bg-primary/10 text-primary"><Shield size={12} className="shrink-0"/><span className="break-words">{roleLabel(u.role)}</span></span></div><button aria-label={`Hapus ${u.nama}`} onClick={() => remove(u)} className="shrink-0 p-2 text-gray-400 hover:text-red-500"><Trash2 size={16}/></button></div>)}
+          {users.map(u => (
+            <div key={u.id} className="p-4 flex items-start gap-3">
+              <div className="min-w-0 flex-1">
+                <p className="font-medium text-gray-800 break-words">{u.nama}</p>
+                <p className="mt-1 text-sm text-gray-600 break-all">{u.email}</p>
+                {u.role === 'kepala' && <p className="mt-1 text-xs text-blue-600">{u.can_teach ? '✓ Mengajar' : '○ Tidak mengajar'}</p>}
+                <span className="mt-2 inline-flex max-w-full items-center gap-1 px-2 py-1 rounded-full text-xs bg-primary/10 text-primary">
+                  <Shield size={12} className="shrink-0"/><span className="break-words">{roleLabel(u.role)}</span>
+                </span>
+              </div>
+              {u.role === 'kepala' && <button aria-label={`Edit ${u.nama}`} onClick={() => editTeachFlag(u)} className="shrink-0 p-2 text-gray-400 hover:text-blue-500"><Edit2 size={16}/></button>}
+              <button aria-label={`Hapus ${u.nama}`} onClick={() => remove(u)} className="shrink-0 p-2 text-gray-400 hover:text-red-500"><Trash2 size={16}/></button>
+            </div>
+          ))}
         </div>
         <div className="hidden lg:block overflow-x-auto">
           <table className="w-full min-w-[640px] text-sm">
             <thead className="bg-gray-50 text-gray-500 text-left"><tr><th className="px-4 py-3">Nama</th><th className="px-4 py-3">Email</th><th className="px-4 py-3">Role</th><th className="px-4 py-3 w-16"></th></tr></thead>
-            <tbody className="divide-y">{users.map(u => <tr key={u.id}><td className="px-4 py-3 font-medium text-gray-800 break-words">{u.nama}</td><td className="px-4 py-3 text-gray-600 break-all">{u.email}</td><td className="px-4 py-3"><span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs bg-primary/10 text-primary"><Shield size={12}/>{roleLabel(u.role)}</span></td><td className="px-4 py-3"><button aria-label={`Hapus ${u.nama}`} onClick={() => remove(u)} className="text-gray-400 hover:text-red-500"><Trash2 size={16}/></button></td></tr>)}</tbody>
+            <tbody className="divide-y">{users.map(u => <tr key={u.id}><td className="px-4 py-3 font-medium text-gray-800 break-words">{u.nama}{u.role === 'kepala' && u.can_teach && ' (✓ Mengajar)'}</td><td className="px-4 py-3 text-gray-600 break-all">{u.email}</td><td className="px-4 py-3"><span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs bg-primary/10 text-primary"><Shield size={12}/>{roleLabel(u.role)}</span></td><td className="px-4 py-3 flex items-center gap-2">{u.role === 'kepala' && <button aria-label={`Edit ${u.nama}`} onClick={() => editTeachFlag(u)} className="text-gray-400 hover:text-blue-500"><Edit2 size={16}/></button>}<button aria-label={`Hapus ${u.nama}`} onClick={() => remove(u)} className="text-gray-400 hover:text-red-500"><Trash2 size={16}/></button></td></tr>)}</tbody>
           </table>
         </div>
       </div>
+
+      {editingUser && (
+        <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl shadow-xl max-w-sm w-full p-6">
+            <h3 className="text-lg font-semibold text-gray-800 mb-4">Edit {editingUser.nama}</h3>
+            <label className="flex items-center gap-3 rounded-lg border bg-blue-50 px-4 py-3 text-sm text-blue-900 mb-6">
+              <input type="checkbox" checked={editingCanTeach} onChange={e => setEditingCanTeach(e.target.checked)} className="h-4 w-4" />
+              Kepala ini juga mengajar
+            </label>
+            <div className="flex gap-3 justify-end">
+              <button onClick={() => setEditingUser(null)} className="px-4 py-2 rounded-lg bg-gray-100 text-gray-700 hover:bg-gray-200">Batal</button>
+              <button onClick={saveTeachFlag} disabled={saving} className="px-4 py-2 rounded-lg bg-primary text-white hover:bg-primary-dark disabled:opacity-50">
+                {saving ? 'Menyimpan...' : 'Simpan'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
