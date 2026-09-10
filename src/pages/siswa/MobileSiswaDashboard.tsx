@@ -11,6 +11,9 @@ import {
   ChevronRight,
   CheckCircle2,
   Sparkles,
+  Moon,
+  Sun,
+  LogOut,
 } from 'lucide-react'
 import api from '../../services/api'
 import MobileHeader from '../../components/MobileHeader'
@@ -18,6 +21,7 @@ import { useSettingsStore } from '../../stores/settingsStore'
 import { useThemeStore } from '../../stores/themeStore'
 import { heroColors } from '../../lib/applyTheme'
 import Avatar from '../../components/ui/Avatar'
+import { useAuthStore } from '../../stores/authStore'
 
 // ─── helpers ───────────────────────────────────────────────────────────────────
 
@@ -102,6 +106,9 @@ export default function MobileSiswaDashboard() {
   })
   const navigate = useNavigate()
   const settings = useSettingsStore(s => s.settings)
+  const { user, logout } = useAuthStore()
+  const { dark, toggle: toggleDark } = useThemeStore()
+  const [menuOpen, setMenuOpen] = useState(false)
 
   useEffect(() => {
     api
@@ -120,17 +127,52 @@ export default function MobileSiswaDashboard() {
   const { siswa, jadwal_hari_ini, rekap } = data
   const totalHari = (rekap.hadir || 0) + (rekap.sakit || 0) + (rekap.izin || 0) + (rekap.alpha || 0)
   const attendancePct = totalHari > 0 ? ((rekap.hadir || 0) / totalHari) * 100 : 100
-  const dark = useThemeStore(s => s.dark)
   const hero = heroColors(settings, dark)
 
   return (
     <div className="min-h-screen bg-[#F8FAFC] dark:bg-gray-950 pb-8 text-slate-800 dark:text-gray-100">
-      {/* ─── 1. HEADER DENGAN FOTO SISWA ─── */}
-      <div className="px-4 pt-4 pb-2 flex items-center justify-between">
-        <Avatar src={siswa?.foto || null} name={siswa?.nama} size={40} className="shrink-0" />
-        <button onClick={() => navigate('/siswa/posting')} className="text-slate-600 dark:text-gray-300 hover:text-slate-900">
+      {/* ─── 1. HEADER DENGAN FOTO SISWA + MENU LOGOUT/DARKMODE ─── */}
+      <div className="px-4 pt-4 pb-2 flex items-center justify-between relative">
+        <button
+          onClick={() => setMenuOpen(o => !o)}
+          className="flex items-center gap-2 active:scale-95 transition"
+        >
+          <Avatar src={siswa?.foto || null} name={siswa?.nama} size={40} className="shrink-0" />
+          <div className="text-left min-w-0">
+            <p className="text-xs font-semibold text-slate-900 dark:text-white truncate">{siswa?.nama || 'Siswa'}</p>
+            <p className="text-[10px] text-slate-500 dark:text-gray-400">Dashboard</p>
+          </div>
+        </button>
+        <button onClick={() => navigate('/siswa/posting')} className="text-slate-600 dark:text-gray-300 hover:text-slate-900 active:scale-95 transition">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
         </button>
+
+        {/* Dropdown Menu */}
+        {menuOpen && (
+          <>
+            <div className="fixed inset-0 z-40" onClick={() => setMenuOpen(false)} />
+            <div className="absolute left-0 top-14 w-48 z-50 rounded-xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 shadow-lg overflow-hidden">
+              <button
+                onClick={() => { toggleDark(); setMenuOpen(false); }}
+                className="w-full px-4 py-3 text-left text-sm font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 flex items-center gap-2 border-b border-gray-100 dark:border-gray-800"
+              >
+                {dark ? <Sun size={16} /> : <Moon size={16} />}
+                {dark ? 'Mode Terang' : 'Mode Gelap'}
+              </button>
+              <button
+                onClick={() => {
+                  setMenuOpen(false);
+                  logout();
+                  navigate('/login');
+                }}
+                className="w-full px-4 py-3 text-left text-sm font-medium text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 flex items-center gap-2"
+              >
+                <LogOut size={16} />
+                Logout
+              </button>
+            </div>
+          </>
+        )}
       </div>
 
       <div data-mobile-compact-dashboard="true" className="px-4 pt-4 space-y-3.5">

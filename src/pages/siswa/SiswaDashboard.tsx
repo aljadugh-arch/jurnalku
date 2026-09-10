@@ -1,9 +1,11 @@
 import { useState, useEffect } from 'react'
-import { Calendar, CheckCircle, BookOpen, Activity, ChevronRight, Clock, ClipboardCheck, Wallet, Receipt, NotebookPen } from 'lucide-react'
+import { Calendar, CheckCircle, BookOpen, Activity, ChevronRight, Clock, ClipboardCheck, Wallet, Receipt, NotebookPen, Moon, Sun, LogOut } from 'lucide-react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import api from '../../services/api'
 import { Card, StatCard, Badge, Avatar } from '../../components/ui'
 import MobileSiswaDashboard from './MobileSiswaDashboard'
+import { useAuthStore } from '../../stores/authStore'
+import { useThemeStore } from '../../stores/themeStore'
 
 function greetingByHour() {
   const h = new Date().getHours()
@@ -38,6 +40,9 @@ export default function SiswaDashboard() {
   const [data, setData] = useState<any>({ siswa: null, jadwal_hari_ini: [], rekap: { hadir: 0, sakit: 0, izin: 0, alpha: 0 }, rekap_kehadiran: {} })
   const navigate = useNavigate()
   const location = useLocation()
+  const { user, logout } = useAuthStore()
+  const { dark, toggle: toggleDark } = useThemeStore()
+  const [menuOpen, setMenuOpen] = useState(false)
 
   useEffect(() => {
     api.get('/siswa/dashboard').then(res => setData(res.data)).catch(() => {})
@@ -74,14 +79,37 @@ export default function SiswaDashboard() {
 
       {/* Desktop view */}
       <div className="hidden lg:block space-y-3">
-      {/* Greeting header */}
-      <div className="flex flex-col items-center text-center sm:flex-row sm:items-center sm:text-left gap-2.5 min-w-0">
-        <Avatar src={data.siswa?.foto || null} name={data.siswa?.nama} size={64} className="shrink-0" />
-        <div className="min-w-0">
-          <p className="text-gray-500 text-xs">{tanggal}</p>
-          <h1 className="text-xl sm:text-2xl font-bold text-gray-800 font-display leading-tight">
-            {greetingByHour()}, {data.siswa?.nama || 'Siswa'} 👋
-          </h1>
+      {/* Header + Logout + Darkmode */}
+      <div className="flex items-start justify-between">
+        <div className="flex flex-col items-start text-left gap-2.5 min-w-0 flex-1">
+          <Avatar src={data.siswa?.foto || null} name={data.siswa?.nama} size={64} className="shrink-0" />
+          <div className="min-w-0">
+            <p className="text-gray-500 text-xs">{tanggal}</p>
+            <h1 className="text-xl sm:text-2xl font-bold text-gray-800 dark:text-white font-display leading-tight">
+              {greetingByHour()}, {data.siswa?.nama || 'Siswa'} 👋
+            </h1>
+          </div>
+        </div>
+        
+        {/* Logout + Darkmode buttons */}
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => toggleDark()}
+            className="p-2.5 rounded-lg text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 active:scale-95 transition"
+            title={dark ? 'Mode Terang' : 'Mode Gelap'}
+          >
+            {dark ? <Sun size={20} /> : <Moon size={20} />}
+          </button>
+          <button
+            onClick={() => {
+              logout();
+              navigate('/login');
+            }}
+            className="p-2.5 rounded-lg text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 active:scale-95 transition"
+            title="Logout"
+          >
+            <LogOut size={20} />
+          </button>
         </div>
       </div>
 
