@@ -41,16 +41,12 @@ export default function MobileBendaharaDashboard({ data }: { data: BendaharaData
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-gray-950 pb-6">
-      <section className="relative overflow-hidden px-5 pb-9 pt-12 text-white" style={{ background: `linear-gradient(135deg, ${hero}, #0f172a)` }}>
+      <section className="relative overflow-hidden px-5 pb-6 pt-5 text-white" style={{ background: `linear-gradient(135deg, ${hero}, #0f172a)` }}>
         <div className="absolute -right-10 -top-12 h-44 w-44 rounded-full bg-white/10" />
-        <div className="relative z-10 flex items-start justify-between gap-3">
-          <div>
-            <p className="text-sm text-emerald-100">Dashboard Bendahara</p>
-            <h1 className="mt-1 text-xl font-bold">{user?.nama || 'Bendahara'}</h1>
-            <p className="mt-1 text-xs text-emerald-100">Ringkasan keuangan sekolah hari ini</p>
-          </div>
-          <MobileHeader basePath="/admin" onBell={() => navigate('/admin/posting')} />
+        <div className="relative z-10 flex items-center justify-between gap-3">
+          <MobileHeader basePath="/admin" onBell={() => navigate('/admin/posting')} light />
         </div>
+        <p className="relative z-10 mt-4 text-xs text-emerald-100">Ringkasan keuangan sekolah hari ini</p>
       </section>
 
       <div className="-mt-5 space-y-4 px-4">

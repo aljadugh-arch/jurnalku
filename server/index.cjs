@@ -1240,6 +1240,7 @@ const STAFF = requireRole('admin', 'super_admin', 'guru', 'wali_kelas', 'operato
 const TEACHER = requireCapability('teacher')
 const JOURNAL_REVIEWER = requireRole('admin', 'super_admin', 'kepala', 'operator')
 const BENDAHARA = requireRole('bendahara', 'admin', 'super_admin', 'operator')
+const CEKLOK_ACCESS = requireRole('admin', 'super_admin', 'guru', 'wali_kelas', 'operator', 'tata_usaha', 'tu', 'kepala', 'bendahara')
 const DASHBOARD_ROLES = requireRole('admin', 'super_admin', 'kepala', 'operator', 'bendahara', 'tata_usaha', 'tu')
 
 app.get('/api/subscription/status', authMiddleware, (req, res) => {
@@ -3475,7 +3476,7 @@ app.get('/api/siswa/tugas', authMiddleware, (req, res) => {
 })
 
 // ==================== GURU ABSENSI (CEKLOK) ====================
-app.get('/api/ceklok/admin', STAFF, (req, res) => {
+app.get('/api/ceklok/admin', CEKLOK_ACCESS, (req, res) => {
   const tanggal = String(req.query.tanggal || todayJakarta()).trim()
   const status = String(req.query.status || '').trim()
   const staffRoles = ['guru', 'wali_kelas', 'kepala', 'admin', 'bendahara', 'operator', 'tata_usaha', 'tu']
@@ -3525,7 +3526,7 @@ app.get('/api/siswa/qr-identifiers', STAFF, (req, res) => {
   res.json(data)
 })
 
-app.get('/api/guru/absensi-saya', STAFF, (req, res) => {
+app.get('/api/guru/absensi-saya', CEKLOK_ACCESS, (req, res) => {
   const gtk = resolveGtkForUser(req.user.id, req.tenantId)
   if (!gtk) {
     // Buat GTK dummy untuk admin/kepala supaya bisa ceklok
@@ -3551,7 +3552,7 @@ app.get('/api/guru/absensi-saya', STAFF, (req, res) => {
   res.json({ today: todayRecord || null, history, gtk })
 })
 
-app.post('/api/guru/ceklok', STAFF, (req, res) => {
+app.post('/api/guru/ceklok', CEKLOK_ACCESS, (req, res) => {
   let gtk = resolveGtkForUser(req.user.id, req.tenantId)
   if (!gtk) {
     const ADMIN_ROLES2 = ['admin','super_admin','kepala','bendahara','operator','tata_usaha','tu']

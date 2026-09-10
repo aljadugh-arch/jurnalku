@@ -22,11 +22,13 @@ export default function MobileHeader({
   onBell,
   showBell = true,
   profilePhoto,
+  light = false,
 }: {
   basePath: string
   onBell: () => void
   showBell?: boolean
   profilePhoto?: string | null
+  light?: boolean
 }) {
   const navigate = useNavigate()
   const location = useLocation()
@@ -63,15 +65,15 @@ export default function MobileHeader({
             src={profilePhoto || user?.avatar}
             name={user?.nama}
             size={42}
-            className="!border-2 !border-slate-200 dark:!border-gray-700 shadow-sm"
+            className={light ? "!border-2 !border-white/40 shadow-sm" : "!border-2 !border-slate-200 dark:!border-gray-700 shadow-sm"}
           />
-          <ChevronDown size={12} className="absolute -bottom-0.5 -right-0.5 text-slate-500 bg-white dark:bg-gray-800 rounded-full border border-slate-200 dark:border-gray-700 p-[1px] w-3.5 h-3.5" />
+          <ChevronDown size={12} className={light ? "absolute -bottom-0.5 -right-0.5 text-slate-700 bg-white rounded-full border border-white/40 p-[1px] w-3.5 h-3.5" : "absolute -bottom-0.5 -right-0.5 text-slate-500 bg-white dark:bg-gray-800 rounded-full border border-slate-200 dark:border-gray-700 p-[1px] w-3.5 h-3.5"} />
         </button>
         <div className="min-w-0 flex-1 cursor-pointer" onClick={() => setMenuOpen(o => !o)}>
-          <p className="text-[13px] font-bold text-slate-900 dark:text-white truncate leading-tight">
+          <p className={light ? "text-[13px] font-bold text-white truncate leading-tight" : "text-[13px] font-bold text-slate-900 dark:text-white truncate leading-tight"}>
             {user?.nama || 'User'}
           </p>
-          <p className="text-[11px] text-slate-500 dark:text-gray-400 leading-tight">
+          <p className={light ? "text-[11px] text-white/80 leading-tight" : "text-[11px] text-slate-500 dark:text-gray-400 leading-tight"}>
             {roleLabel(user?.role)}{teacherMode ? ' • Mode Guru' : ''}
           </p>
         </div>
@@ -81,7 +83,7 @@ export default function MobileHeader({
       {showBell && (
         <button
           onClick={onBell}
-          className="relative flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-slate-600 hover:bg-slate-100 dark:text-gray-300 dark:hover:bg-gray-800 active:scale-95 transition"
+          className={light ? "relative flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-white hover:bg-white/10 active:scale-95 transition" : "relative flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-slate-600 hover:bg-slate-100 dark:text-gray-300 dark:hover:bg-gray-800 active:scale-95 transition"}
           aria-label="Notifikasi"
         >
           <Bell size={19} />

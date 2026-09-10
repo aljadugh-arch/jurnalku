@@ -24,8 +24,8 @@ export default function BendaharaDashboard() {
       <p className="text-emerald-50 text-sm mt-1">Kelola tagihan, pembayaran, tabungan, dan laporan keuangan.</p>
     </div>
     <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
-      {cards.map(c => <button key={c.label} onClick={() => navigate(c.path)} className="bg-white rounded-2xl border border-gray-100 p-4 text-left shadow-sm hover:shadow-md transition">
-        <div className="flex items-center gap-3"><div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center">{c.icon}</div><div><p className="text-xs text-gray-500">{c.label}</p><p className="font-bold text-gray-800">{c.value}</p><p className="text-xs text-gray-400">{c.sub}</p></div></div>
+      {cards.map(c => <button key={c.label} onClick={() => navigate(c.path)} className="bg-white rounded-2xl border border-gray-100 p-4 text-left shadow-sm hover:shadow-md transition min-w-0">
+        <div className="flex items-center gap-3 min-w-0"><div className="w-10 h-10 shrink-0 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center">{c.icon}</div><div className="min-w-0"><p className="text-xs text-gray-500 truncate">{c.label}</p><p className="font-bold text-gray-800 truncate" title={c.value}>{c.value}</p><p className="text-xs text-gray-400 truncate">{c.sub}</p></div></div>
       </button>)}
     </div>
     <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">

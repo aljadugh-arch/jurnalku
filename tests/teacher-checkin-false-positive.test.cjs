@@ -14,7 +14,7 @@ function routeBody(start, end) {
 }
 
 test('ceklok masuk hanya dianggap selesai bila waktu_masuk benar-benar terisi', () => {
-  const route = routeBody("app.post('/api/guru/ceklok', STAFF", '// ==================== JAMAAH')
+  const route = routeBody("app.post('/api/guru/ceklok', CEKLOK_ACCESS", '// ==================== JAMAAH')
   assert.match(route, /if \(exists\?\.waktu_masuk\) return res\.status\(400\)\.json\(\{ error: 'Sudah ceklok masuk hari ini' \}\)/)
   assert.match(route, /if \(exists\)[\s\S]*UPDATE absensi_guru SET waktu_masuk=\?, status=\?, latitude=\?, longitude=\? WHERE id=\? AND tenant_id=\?/)
 })
