@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
 import { escapeHtml } from '../../utils/escapeHtml'
-import { Plus, Trash2, AlertTriangle, X, Download, FileSpreadsheet, Pencil, Settings2, Wand2, CalendarDays } from 'lucide-react'
+import { Plus, Trash2, AlertTriangle, X, Download, FileSpreadsheet, Pencil, Settings2, Wand2, CalendarDays, Clock } from 'lucide-react'
 import toast from 'react-hot-toast'
 import api from '../../services/api'
 import * as XLSX from 'xlsx'
@@ -553,7 +553,36 @@ export default function JadwalPage() {
             <button onClick={() => setShowToday(false)} className="p-1 text-blue-700 hover:bg-blue-100 rounded-lg"><X size={18} /></button>
           </div>
           {todayRows.length === 0 ? <p className="text-sm text-blue-800">Tidak ada jadwal untuk hari ini.</p> : (
-            <div className="overflow-x-auto"><table className="w-full text-sm"><thead><tr className="text-left text-blue-800 border-b border-blue-200"><th className="py-2 pr-3">Jam</th><th className="py-2 pr-3">Rombel</th><th className="py-2 pr-3">Kegiatan/Mapel</th><th className="py-2">Guru</th></tr></thead><tbody className="divide-y divide-blue-100">{todayRows.map(j => <tr key={j.id}><td className="py-2 pr-3 whitespace-nowrap">{j.jam_mulai}–{j.jam_selesai}</td><td className="py-2 pr-3 font-medium">{j.rombel_nama || '-'}</td><td className="py-2 pr-3">{j.jenis_kegiatan === 'mapel' ? (j.mapel_nama || '-') : (j.nama_kegiatan || '-')}</td><td className="py-2">{j.gtk_nama || '-'}</td></tr>)}</tbody></table></div>
+            <div className="space-y-3 max-h-[70vh] overflow-y-auto pr-1">
+              {Object.entries(
+                todayRows.reduce((acc: Record<string, typeof todayRows>, j) => {
+                  const slotKey = `${j.jam_mulai}–${j.jam_selesai}`
+                  ;(acc[slotKey] ||= []).push(j)
+                  return acc
+                }, {})
+              )
+                .sort(([a], [b]) => a.localeCompare(b))
+                .map(([slot, rows]) => (
+                  <div key={slot} className="bg-white rounded-xl border border-blue-100 overflow-hidden">
+                    <div className="flex items-center gap-2 bg-blue-100/70 px-3 py-2">
+                      <Clock size={14} className="text-blue-700 shrink-0" />
+                      <span className="text-xs font-bold text-blue-900">{slot}</span>
+                      <span className="text-[10px] text-blue-600 ml-auto">{rows.length} rombel</span>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 p-2">
+                      {rows.map(j => (
+                        <div key={j.id} className={`rounded-lg border p-2.5 ${j.jenis_kegiatan !== 'mapel' || j.guru_valid ? 'border-primary/20 bg-primary/5' : 'border-red-300 bg-red-50'}`}>
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="text-xs font-bold text-primary">{j.rombel_nama || '-'}</span>
+                          </div>
+                          <p className="text-sm font-medium text-gray-800 truncate">{j.jenis_kegiatan === 'mapel' ? (j.mapel_nama || '-') : (j.nama_kegiatan || '-')}</p>
+                          <p className={`text-xs truncate ${j.jenis_kegiatan === 'mapel' && !j.guru_valid ? 'font-bold text-red-700' : 'text-gray-500'}`}>{j.jenis_kegiatan === 'mapel' && !j.guru_valid ? 'Guru belum valid' : (j.gtk_nama || '-')}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+            </div>
           )}
         </div>
       )}
@@ -567,9 +596,10 @@ export default function JadwalPage() {
         </div>
       )}
 
-      <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100 flex gap-3 items-center">
-        <label className="text-sm font-medium text-gray-700">Rombel:</label>
-        <select value={selectedRombel} onChange={e => setSelectedRombel(e.target.value)} className="px-4 py-2 border border-gray-300 rounded-lg text-sm">
+      <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100 flex flex-col sm:flex-row gap-2 sm:gap-3 sm:items-center">
+        <label className="text-sm font-medium text-gray-700 shrink-0">Rombel:</label>
+        <select value={selectedRombel} onChange={e => setSelectedRombel(e.target.value)} className="w-full sm:w-auto px-4 py-2.5 border border-gray-300 rounded-lg text-sm bg-white">
+          <option value="" disabled>{rombels.length === 0 ? 'Memuat rombel...' : 'Pilih rombel'}</option>
           {rombels.map(r => <option key={r.id} value={r.id}>{r.nama}</option>)}
         </select>
       </div>

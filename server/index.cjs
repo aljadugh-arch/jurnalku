@@ -2306,9 +2306,9 @@ app.put('/api/settings', ADMIN, (req, res) => {
   const bg_repeat_v = bg_repeat || 'no-repeat'
   const bg_blur_v = bg_blur || 0
   if (!Array.isArray(dashboard_quick_menus)) return res.status(400).json({ error: 'dashboard_quick_menus wajib berupa array' })
-  const allowedQuickMenus = new Set(['siswa','gtk','jadwal','rekap','absensi','ceklok','penilaian','keuangan','rombel'])
+  const allowedQuickMenus = new Set(['siswa','gtk','jadwal','rekap','absensi','ceklok','penilaian','keuangan','rombel','buku-kas','tabungan','cashless','cashless-topup','cashless-bank-config','kantin-menu','kantin-orders','kantin-scanner','ekskul','absensi-ekskul','absensi-kokurikuler','absensi-kegiatan','absensi-jamaah','kalender-kbm','modul-ajar','posting','broadcast','catatan-kepribadian','supervisi','beasiswa','erkam','backup-restore','users','tenants','wa-gateway','notif-settings','developer-api','settings','pengajar','wali-kelas','mapel','tahun-ajaran','smartphone-pwa'])
   const normalizedQuickMenus = [...new Set(dashboard_quick_menus.filter(item => typeof item === 'string' && allowedQuickMenus.has(item)))]
-  if (normalizedQuickMenus.length < 1 || normalizedQuickMenus.length > 9) return res.status(400).json({ error: 'Pilih 1-9 pintasan dashboard yang valid. Anda memilih: ' + normalizedQuickMenus.length })
+  if (normalizedQuickMenus.length < 1 || normalizedQuickMenus.length > allowedQuickMenus.size) return res.status(400).json({ error: 'Pilih minimal 1 pintasan dashboard yang valid. Anda memilih: ' + normalizedQuickMenus.length })
   const quickMenus = JSON.stringify(normalizedQuickMenus)
   db.prepare(`INSERT INTO settings (id, tenant_id, nama_lembaga, alamat, telepon, email, theme, primary_color, accent_color, sidebar_color, geo_latitude, geo_longitude, geo_radius, jenjang, hari_libur, bg_size, bg_position, bg_repeat, bg_blur, pwa_enabled, pwa_name, pwa_theme_color, pwa_bg_color, dashboard_quick_menus, updated_at)
     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,datetime('now'))

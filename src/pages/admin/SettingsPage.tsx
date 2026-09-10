@@ -110,7 +110,7 @@ export default function SettingsPage() {
   }
 
   const handleSave = async () => {
-    if (form.dashboard_quick_menus.length < 1 || form.dashboard_quick_menus.length > 9) return toast.error('Pilih 1-9 pintasan dashboard')
+    if (form.dashboard_quick_menus.length < 1 || form.dashboard_quick_menus.length > adminDashboardShortcuts.length) return toast.error('Pilih minimal 1 pintasan dashboard')
     setSaving(true)
     try {
       const saved = await api.put('/settings', { ...form, bg_blur: form.bg_blur || 0, pwa_enabled: form.pwa_enabled })
@@ -371,13 +371,13 @@ export default function SettingsPage() {
 
       <div id="pintasan-dashboard" className="bg-white rounded-xl p-4 sm:p-6 shadow-sm border border-gray-100 scroll-mt-24">
         <h2 className="text-lg font-semibold text-gray-800 mb-1">Pintasan Dashboard</h2>
-        <p className="mb-4 text-xs text-gray-500">Pilih 1-9 menu dan atur urutannya untuk grid Home admin/kepala. Terpilih: {form.dashboard_quick_menus.length}/9.</p>
+        <p className="mb-4 text-xs text-gray-500">Pilih menu dan atur urutannya untuk grid Home admin/kepala. Terpilih: {form.dashboard_quick_menus.length}/{adminDashboardShortcuts.length}.</p>
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
           {adminDashboardShortcuts.map(item => {
             const selected = form.dashboard_quick_menus.includes(item.key)
             const order = form.dashboard_quick_menus.indexOf(item.key)
             return <div key={item.key} className={`rounded-xl border p-3 ${selected ? 'border-primary bg-primary/5' : 'border-gray-200'}`}>
-              <label className="flex cursor-pointer items-center gap-2 text-xs font-semibold text-gray-700"><input type="checkbox" checked={selected} disabled={!selected && form.dashboard_quick_menus.length >= 9} onChange={e => setForm({ ...form, dashboard_quick_menus: e.target.checked ? [...form.dashboard_quick_menus, item.key] : form.dashboard_quick_menus.filter(key => key !== item.key) })} /> {item.label}</label>
+              <label className="flex cursor-pointer items-center gap-2 text-xs font-semibold text-gray-700"><input type="checkbox" checked={selected} disabled={!selected && form.dashboard_quick_menus.length >= adminDashboardShortcuts.length} onChange={e => setForm({ ...form, dashboard_quick_menus: e.target.checked ? [...form.dashboard_quick_menus, item.key] : form.dashboard_quick_menus.filter(key => key !== item.key) })} /> {item.label}</label>
               {selected && <div className="mt-2 flex gap-1"><button type="button" disabled={order === 0} onClick={() => { const next = [...form.dashboard_quick_menus]; [next[order - 1], next[order]] = [next[order], next[order - 1]]; setForm({ ...form, dashboard_quick_menus: next }) }} className="rounded bg-gray-100 px-2 py-1 text-[10px] disabled:opacity-30">Naik</button><button type="button" disabled={order === form.dashboard_quick_menus.length - 1} onClick={() => { const next = [...form.dashboard_quick_menus]; [next[order + 1], next[order]] = [next[order], next[order + 1]]; setForm({ ...form, dashboard_quick_menus: next }) }} className="rounded bg-gray-100 px-2 py-1 text-[10px] disabled:opacity-30">Turun</button><span className="ml-auto text-[10px] text-gray-400">#{order + 1}</span></div>}
             </div>
           })}
