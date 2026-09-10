@@ -58,6 +58,7 @@ import GuruModulAjarPage from './pages/guru/GuruModulAjarPage'
 import GuruRombelPage from './pages/guru/GuruRombelPage'
 import GuruPenilaianHarianPage from './pages/guru/GuruPenilaianHarianPage'
 import GuruNilaiSumatifPage from './pages/guru/GuruNilaiSumatifPage'
+import GuruKoreksiJawabanPage from './pages/guru/GuruKoreksiJawabanPage'
 import GuruPostingPage from './pages/guru/GuruPostingPage'
 import GuruCatatanKepribadianPage from './pages/guru/GuruCatatanKepribadianPage'
 import GuruAbsensiEkskulPage from './pages/guru/GuruAbsensiEkskulPage'
@@ -259,6 +260,7 @@ export default function App() {
           <Route path="rombel" element={<GuruRombelPage />} />
           <Route path="penilaian-harian" element={<GuruPenilaianHarianPage />} />
           <Route path="nilai-sumatif" element={<GuruNilaiSumatifPage />} />
+          <Route path="koreksi-jawaban" element={<GuruKoreksiJawabanPage />} />
           <Route path="profile" element={<ProfilePage />} />
           <Route path="change-password" element={<ChangePasswordPage />} />
           {/* Halaman baru sesuai live */}

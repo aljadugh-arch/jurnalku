@@ -34,7 +34,8 @@ const { registerRoutes: registerBackupRestoreRoutes, LIMITS: BACKUP_LIMITS } = r
 const { registerFinanceExcelRoutes } = require('./finance-excel.cjs')
 const { FEATURE_KEYS, addMonthsIso, accessForTenant, featureForPath, normalizeFeatureSelection, generateUnlockCode, hashUnlockCode, setupSubscriptionTables } = require('./subscription.cjs')
 const { setupBackupTables, registerBackupRoutes } = require('./backup-drive.cjs')
-const { DOCUMENT_TYPES, buildPrompt, validateGenerateInput, createTemplateContent, createDocumentDocx, callAi } = require('./ai-documents.cjs')
+const { DOCUMENT_TYPES, buildPrompt, validateGenerateInput, createTemplateContent, createDocumentDocx, callAi, clean } = require('./ai-documents.cjs')
+const { encryptSecret, decryptSecret, maskKey, PROVIDER_ENDPOINTS, setupAiConfigTables, resolveAiConfig } = require('./ai-config.cjs')
 const { setupEkskulMembership } = require('./extracurricular-membership.cjs')
 
 const app = express()
@@ -137,6 +138,11 @@ const imageUpload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 5 * 1024 * 1024, files: 1 },
   fileFilter: (_req, file, cb) => cb(null, /^image\/(png|jpeg|webp)$/.test(file.mimetype))
+})
+const ocrUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024, files: 1 },
+  fileFilter: (_req, file, cb) => cb(null, /^image\/(png|jpeg|webp|gif|bmp)$/.test(file.mimetype))
 })
 const SIGNATURE_DIR = path.join(UPLOAD_DIR, 'signatures')
 fs.mkdirSync(SIGNATURE_DIR, { recursive: true })
@@ -808,6 +814,7 @@ setupTenantTables(db)
 ensureTenantSettings(db, 'default')
 setupEkskulMembership(db)
 setupSubscriptionTables(db)
+setupAiConfigTables(db)
 migrateTenantSettings(db)
 
 // Migrasi ekskul: tambahkan kolom jenis_kegiatan (wajib/pilihan) dan scope_rombel
@@ -4993,7 +5000,8 @@ app.post('/api/ai-documents/generate', STAFF, async (req, res) => {
   if (checked.error) return res.status(400).json({ error: checked.error })
   try {
     const input = checked.value
-    const content = input.mode === 'template' ? createTemplateContent(input) : await callAi(buildPrompt(input))
+    const aiOverride = resolveAiConfig(db, req.tenantId, req.user?.id) || {}
+    const content = input.mode === 'template' ? createTemplateContent(input) : await callAi(buildPrompt(input), aiOverride)
     const id = uuidv4()
     const title = `${DOCUMENT_TYPES[input.type].label} ${input.subject} ${input.grade}`.trim()
     db.prepare('INSERT INTO ai_documents(id,type,title,subject,grade,topic,metadata_json,content,created_by,tenant_id,generation_mode) VALUES(?,?,?,?,?,?,?,?,?,?,?)')
@@ -5022,6 +5030,176 @@ app.post('/api/ai-documents/export-docx', STAFF, async (req, res) => {
   } catch (error) {
     console.error('[AI Documents] export failed:', error.message)
     res.status(500).json({ error: 'Gagal membuat DOCX' })
+  }
+})
+
+// ===== AI provider config: admin default (per lembaga) + guru override (personal API key/OAuth) =====
+app.get('/api/ai-config/tenant', STAFF, (req, res) => {
+  const row = db.prepare('SELECT * FROM ai_config WHERE tenant_id = ?').get(req.tenantId)
+  if (!row) return res.json({ provider: 'gemini', model: '', hasApiKey: false, apiKeyMasked: '', customEndpoint: '' })
+  res.json({
+    provider: row.provider,
+    model: row.model,
+    hasApiKey: Boolean(row.api_key_encrypted),
+    apiKeyMasked: row.api_key_encrypted ? maskKey(decryptSecret(row.api_key_encrypted)) : '',
+    customEndpoint: row.custom_endpoint,
+  })
+})
+
+app.put('/api/ai-config/tenant', ADMIN, (req, res) => {
+  const { provider, apiKey, model, customEndpoint } = req.body || {}
+  const validProviders = ['gemini', 'openai', 'custom']
+  if (!validProviders.includes(String(provider))) return res.status(400).json({ error: 'Provider tidak valid' })
+  const existing = db.prepare('SELECT * FROM ai_config WHERE tenant_id = ?').get(req.tenantId)
+  const encrypted = apiKey && apiKey.trim() ? encryptSecret(apiKey) : (existing ? existing.api_key_encrypted : '')
+  db.prepare(`INSERT INTO ai_config (tenant_id, provider, api_key_encrypted, model, custom_endpoint, updated_by, updated_at)
+    VALUES (?,?,?,?,?,?, datetime('now'))
+    ON CONFLICT(tenant_id) DO UPDATE SET provider=excluded.provider, api_key_encrypted=excluded.api_key_encrypted,
+      model=excluded.model, custom_endpoint=excluded.custom_endpoint, updated_by=excluded.updated_by, updated_at=datetime('now')`)
+    .run(req.tenantId, provider, encrypted, model || '', customEndpoint || '', req.user?.id || null)
+  res.json({ ok: true })
+})
+
+app.get('/api/ai-config/me', authMiddleware, (req, res) => {
+  const row = db.prepare('SELECT * FROM user_ai_config WHERE user_id = ? AND tenant_id = ?').get(req.user.id, req.tenantId)
+  if (!row) return res.json({ provider: '', model: '', hasApiKey: false, apiKeyMasked: '', googleConnected: false, googleEmail: '' })
+  res.json({
+    provider: row.provider,
+    model: row.model,
+    hasApiKey: Boolean(row.api_key_encrypted),
+    apiKeyMasked: row.api_key_encrypted ? maskKey(decryptSecret(row.api_key_encrypted)) : '',
+    googleConnected: Boolean(row.google_access_token_encrypted),
+    googleEmail: row.google_email || '',
+  })
+})
+
+app.put('/api/ai-config/me', authMiddleware, (req, res) => {
+  const { provider, apiKey, model } = req.body || {}
+  const validProviders = ['', 'gemini', 'openai', 'custom']
+  if (!validProviders.includes(String(provider || ''))) return res.status(400).json({ error: 'Provider tidak valid' })
+  const existing = db.prepare('SELECT * FROM user_ai_config WHERE user_id = ? AND tenant_id = ?').get(req.user.id, req.tenantId)
+  const encrypted = apiKey && apiKey.trim() ? encryptSecret(apiKey) : (existing ? existing.api_key_encrypted : '')
+  db.prepare(`INSERT INTO user_ai_config (user_id, tenant_id, provider, api_key_encrypted, model, updated_at)
+    VALUES (?,?,?,?,?, datetime('now'))
+    ON CONFLICT(user_id) DO UPDATE SET provider=excluded.provider, api_key_encrypted=excluded.api_key_encrypted,
+      model=excluded.model, updated_at=datetime('now')`)
+    .run(req.user.id, req.tenantId, provider || '', encrypted, model || '')
+  res.json({ ok: true })
+})
+
+app.delete('/api/ai-config/me', authMiddleware, (req, res) => {
+  db.prepare('DELETE FROM user_ai_config WHERE user_id = ? AND tenant_id = ?').run(req.user.id, req.tenantId)
+  res.json({ ok: true })
+})
+
+// ===== Google OAuth (login akun Google berlangganan Gemini Pro, dipakai sbg kredensial AI personal guru) =====
+app.get('/api/ai-config/google/start', authMiddleware, (req, res) => {
+  const clientId = process.env.GOOGLE_OAUTH_CLIENT_ID
+  if (!clientId) return res.status(503).json({ error: 'Integrasi Google OAuth belum dikonfigurasi administrator sistem' })
+  const redirectUri = process.env.GOOGLE_OAUTH_REDIRECT_URI || `${req.protocol}://${req.get('host')}/api/ai-config/google/callback`
+  const state = jwt.sign({ userId: req.user.id, tenantId: req.tenantId }, JWT_SECRET, { expiresIn: '10m' })
+  const params = new URLSearchParams({
+    client_id: clientId,
+    redirect_uri: redirectUri,
+    response_type: 'code',
+    access_type: 'offline',
+    prompt: 'consent',
+    scope: 'openid email https://www.googleapis.com/auth/generative-language.retriever',
+    state,
+  })
+  res.json({ url: `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}` })
+})
+
+app.get('/api/ai-config/google/callback', async (req, res) => {
+  try {
+    const { code, state } = req.query
+    if (!code || !state) return res.status(400).send('Parameter tidak lengkap')
+    const payload = jwt.verify(String(state), JWT_SECRET)
+    const clientId = process.env.GOOGLE_OAUTH_CLIENT_ID
+    const clientSecret = process.env.GOOGLE_OAUTH_CLIENT_SECRET
+    const redirectUri = process.env.GOOGLE_OAUTH_REDIRECT_URI || `${req.protocol}://${req.get('host')}/api/ai-config/google/callback`
+    const tokenRes = await fetch('https://oauth2.googleapis.com/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({ code: String(code), client_id: clientId, client_secret: clientSecret, redirect_uri: redirectUri, grant_type: 'authorization_code' }),
+    })
+    const tokenBody = await tokenRes.json()
+    if (!tokenRes.ok) throw new Error(tokenBody.error_description || tokenBody.error || 'Gagal menukar kode OAuth')
+    let email = ''
+    try {
+      const infoRes = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', { headers: { Authorization: `Bearer ${tokenBody.access_token}` } })
+      const info = await infoRes.json()
+      email = info.email || ''
+    } catch {}
+    const expiry = new Date(Date.now() + (tokenBody.expires_in || 3600) * 1000).toISOString()
+    db.prepare(`INSERT INTO user_ai_config (user_id, tenant_id, google_access_token_encrypted, google_refresh_token_encrypted, google_token_expiry, google_email, updated_at)
+      VALUES (?,?,?,?,?,?, datetime('now'))
+      ON CONFLICT(user_id) DO UPDATE SET google_access_token_encrypted=excluded.google_access_token_encrypted,
+        google_refresh_token_encrypted=COALESCE(NULLIF(excluded.google_refresh_token_encrypted,''), user_ai_config.google_refresh_token_encrypted),
+        google_token_expiry=excluded.google_token_expiry, google_email=excluded.google_email, updated_at=datetime('now')`)
+      .run(payload.userId, payload.tenantId, encryptSecret(tokenBody.access_token), tokenBody.refresh_token ? encryptSecret(tokenBody.refresh_token) : '', expiry, email)
+    res.send('<script>window.close && window.close();</script>Akun Google berhasil terhubung. Anda bisa menutup tab ini.')
+  } catch (error) {
+    console.error('[Google OAuth] callback failed:', error.message)
+    res.status(500).send('Gagal menghubungkan akun Google: ' + error.message)
+  }
+})
+
+app.delete('/api/ai-config/google', authMiddleware, (req, res) => {
+  db.prepare('UPDATE user_ai_config SET google_access_token_encrypted=\'\', google_refresh_token_encrypted=\'\', google_token_expiry=NULL, google_email=NULL WHERE user_id=? AND tenant_id=?')
+    .run(req.user.id, req.tenantId)
+  res.json({ ok: true })
+})
+
+// ===== OCR: scan gambar soal/jawaban tulis tangan menjadi teks, untuk pembuatan SOAL & koreksi jawaban =====
+app.post('/api/ocr/scan', STAFF, ocrUpload.single('image'), async (req, res) => {
+  if (!req.file) return res.status(400).json({ error: 'File gambar wajib diunggah' })
+  try {
+    const { createWorker } = require('tesseract.js')
+    const worker = await createWorker(['ind', 'eng'])
+    const { data } = await worker.recognize(req.file.buffer)
+    await worker.terminate()
+    res.json({ text: (data.text || '').trim(), confidence: data.confidence || 0 })
+  } catch (error) {
+    console.error('[OCR] scan failed:', error.message)
+    res.status(500).json({ error: 'Gagal memproses OCR: ' + error.message })
+  }
+})
+
+// ===== Koreksi jawaban otomatis via AI: bandingkan jawaban siswa (hasil OCR/ketik) dengan kunci jawaban/rubrik =====
+app.post('/api/ai-koreksi/nilai', STAFF, async (req, res) => {
+  const { soal, kunciJawaban, jawabanSiswa, skalaMax } = req.body || {}
+  if (!clean(jawabanSiswa)) return res.status(400).json({ error: 'Jawaban siswa wajib diisi' })
+  if (!clean(soal) && !clean(kunciJawaban)) return res.status(400).json({ error: 'Soal atau kunci jawaban wajib diisi sebagai acuan koreksi' })
+  try {
+    const maxScore = Number(skalaMax) > 0 ? Number(skalaMax) : 100
+    const prompt = `Anda adalah guru yang mengoreksi jawaban siswa secara objektif dan adil.
+Soal: ${clean(soal) || '(tidak disediakan, gunakan kunci jawaban sebagai acuan utama)'}
+Kunci Jawaban / Rubrik Penilaian: ${clean(kunciJawaban) || '(tidak disediakan, nilai berdasarkan soal dan kebenaran konsep)'}
+Jawaban Siswa (hasil scan/ketik, mungkin ada typo dari OCR, maafkan typo ejaan tak substansial): ${clean(jawabanSiswa)}
+
+Tugas Anda:
+1. Berikan skor dari 0 sampai ${maxScore} berdasarkan kebenaran dan kelengkapan jawaban.
+2. Berikan alasan singkat penilaian.
+3. Berikan saran perbaikan untuk siswa jika jawaban belum sempurna.
+Keluarkan HANYA JSON valid tanpa markdown/pagar kode, format persis: {"skor": angka, "alasan": "...", "saran": "..."}`
+    const aiOverride = resolveAiConfig(db, req.tenantId, req.user?.id) || {}
+    const raw = await callAi(prompt, aiOverride)
+    let parsed
+    try {
+      const jsonMatch = raw.match(/\{[\s\S]*\}/)
+      parsed = JSON.parse(jsonMatch ? jsonMatch[0] : raw)
+    } catch {
+      return res.status(502).json({ error: 'AI mengembalikan format tidak valid, coba lagi' })
+    }
+    res.json({
+      skor: Math.max(0, Math.min(maxScore, Number(parsed.skor) || 0)),
+      alasan: clean(parsed.alasan),
+      saran: clean(parsed.saran),
+    })
+  } catch (error) {
+    console.error('[AI Koreksi] failed:', error.message)
+    res.status(error.message.includes('belum dikonfigurasi') ? 503 : 502).json({ error: error.message })
   }
 })
 

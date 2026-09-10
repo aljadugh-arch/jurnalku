@@ -51,6 +51,7 @@
     "exceljs": "^4.4.0",
     "express": "^5.2.1",
     "express-rate-limit": "^8.5.2",
+    "googleapis": "^178.1.1",
     "helmet": "^8.2.0",
     "html5-qrcode": "^2.3.8",
     "jsonwebtoken": "^9.0.3",
@@ -70,6 +71,7 @@
     "recharts": "^3.9.2",
     "sharp": "^0.35.3",
     "tailwindcss": "^4.3.2",
+    "tesseract.js": "^7.0.0",
     "uuid": "^14.0.1",
     "xlsx": "^0.18.5",
     "zustand": "^5.0.14"

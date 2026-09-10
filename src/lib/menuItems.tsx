@@ -2,7 +2,7 @@ import {
   LayoutDashboard, Users, GraduationCap, BookOpen, Calendar,
   ClipboardList, UserCheck, QrCode, MapPin,
   Layers, Activity, Globe, Sparkles, DollarSign, Settings, MessageSquare,
-  FileText, ClipboardCheck, ScrollText, School, Wallet, Receipt, DatabaseBackup, Code2
+  FileText, ClipboardCheck, ScrollText, School, Wallet, Receipt, DatabaseBackup, Code2, ScanText
 } from 'lucide-react'
 
 export interface MenuItem {
@@ -90,6 +90,7 @@ export const guruMenuItems: MenuItem[] = [
   { label: 'Jurnal Mengajar', icon: <ClipboardList size={20} />, path: '/guru/jurnal' },
   { label: 'Penilaian Harian', icon: <BookOpen size={20} />, path: '/guru/penilaian-harian' },
   { label: 'Nilai STS & SAS', icon: <ClipboardCheck size={20} />, path: '/guru/nilai-sumatif' },
+  { label: 'Koreksi Jawaban (AI+OCR)', icon: <ScanText size={20} />, path: '/guru/koreksi-jawaban' },
   { label: 'Catatan Kepribadian', icon: <ScrollText size={20} />, path: '/guru/catatan-kepribadian' },
   { label: 'Jadwal Saya', icon: <Calendar size={20} />, path: '/guru/jadwal' },
   { label: 'Penugasan', icon: <ClipboardCheck size={20} />, path: '/guru#tugas' },

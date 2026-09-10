@@ -9,6 +9,7 @@ import { isGuruKelasJenjang, JENJANG_OPTIONS } from '../../lib/jenjang'
 import MapPicker from '../../components/MapPicker'
 import JamPulangSiswa from '../../components/JamPulangSiswa'
 import FeatureSettings from '../../components/FeatureSettings'
+import AiSettingsCard from '../../components/AiSettingsCard'
 import { adminDashboardShortcuts, defaultAdminDashboardShortcutKeys, parseAdminDashboardShortcutKeys } from '../../lib/adminDashboardShortcuts'
 
 
@@ -636,6 +637,8 @@ export default function SettingsPage() {
       </div>
 
       <FeatureSettings />
+
+      <AiSettingsCard scope="tenant" title="Konfigurasi AI Lembaga (Default)" description="API key AI (Gemini, ChatGPT, atau provider lain) yang dipakai oleh seluruh guru di lembaga ini, kecuali guru mengaktifkan API key/akun Google personal miliknya sendiri." />
 
       {isGuruKelasJenjang(form.jenjang) && <JamPulangSiswa />}
 

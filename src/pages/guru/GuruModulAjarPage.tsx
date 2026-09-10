@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
-import { BookOpen, Download, FileText, Loader2, Sparkles } from 'lucide-react'
+import { BookOpen, Download, FileText, Loader2, Sparkles, Settings2, ScanText } from 'lucide-react'
 import toast from 'react-hot-toast'
 import api from '../../services/api'
+import AiSettingsCard from '../../components/AiSettingsCard'
+import { handleOcrFile } from '../../lib/ocr'
 
 type DocumentType = 'STS' | 'SAS' | 'LKPD' | 'PROTA' | 'PROMES' | 'ACP' | 'ATP' | 'MODUL_AJAR' | 'KISI_KISI'
 type GenerationMode = 'ai' | 'template'
@@ -40,6 +42,9 @@ export default function GuruModulAjarPage() {
   const [result, setResult] = useState('')
   const [documentId, setDocumentId] = useState('')
   const [history, setHistory] = useState<HistoryItem[]>([])
+  const [showAiSettings, setShowAiSettings] = useState(false)
+  const [scanningTopic, setScanningTopic] = useState(false)
+  const scanImageToText = (file: File | undefined | null, onText: (text: string) => void) => handleOcrFile(file, onText, setScanningTopic)
   const selected = useMemo(() => documentTypes.find(item => item.value === form.type)!, [form.type])
   const assessment = ['STS', 'SAS', 'KISI_KISI'].includes(form.type)
   const modulAjar = form.type === 'MODUL_AJAR'
@@ -89,10 +94,17 @@ export default function GuruModulAjarPage() {
   const labelClass = 'mb-1.5 block text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-slate-400'
 
   return <div className="space-y-6">
-    <div>
-      <h1 className="text-2xl font-bold text-gray-800 dark:text-slate-100">Generator Administrasi Guru Hybrid</h1>
-      <p className="mt-1 text-sm text-gray-500 dark:text-slate-400">Pilih bantuan AI atau bundle template lama yang cepat dan siap diedit.</p>
+    <div className="flex flex-wrap items-start justify-between gap-3">
+      <div>
+        <h1 className="text-2xl font-bold text-gray-800 dark:text-slate-100">Generator Administrasi Guru Hybrid</h1>
+        <p className="mt-1 text-sm text-gray-500 dark:text-slate-400">Pilih bantuan AI atau bundle template lama yang cepat dan siap diedit.</p>
+      </div>
+      <button onClick={() => setShowAiSettings(v => !v)} className="inline-flex items-center gap-2 rounded-lg border border-gray-300 px-3.5 py-2 text-sm font-semibold text-gray-600 dark:border-slate-700 dark:text-slate-300">
+        <Settings2 size={16} /> {showAiSettings ? 'Sembunyikan' : 'Atur'} API Key AI Saya
+      </button>
     </div>
+
+    {showAiSettings && <AiSettingsCard scope="me" title="API Key AI Personal Saya" description="Opsional. Jika diisi, dipakai menggantikan API key default lembaga khusus untuk akun Anda. Kosongkan untuk memakai default lembaga." />}
 
     <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
       {documentTypes.map(item => <button key={item.value} type="button" aria-pressed={form.type === item.value} onClick={() => { setForm(prev => ({ ...prev, type: item.value })); setResult(''); setDocumentId('') }} className={`flex min-h-[64px] w-full items-center gap-3 overflow-hidden rounded-xl border px-3 py-2.5 text-left transition ${form.type === item.value ? 'border-primary bg-primary/10 text-primary shadow-sm' : 'border-gray-200 bg-white text-gray-700 hover:border-primary/40 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200'}`}>
@@ -114,7 +126,15 @@ export default function GuruModulAjarPage() {
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <label><span className={labelClass}>Mata Pelajaran</span><input className={inputClass} value={form.subject} onChange={e => setForm({ ...form, subject: e.target.value })} placeholder="Contoh: Matematika" /></label>
             <label><span className={labelClass}>{modulAjar ? 'Pilih Fase / Kelas' : 'Kelas / Fase'}</span>{modulAjar ? <select className={inputClass} value={form.grade} onChange={e => setForm({ ...form, grade: e.target.value })}><option value="">Pilih Jenjang</option>{phaseOptions.map(option => <option key={option}>{option}</option>)}</select> : <input className={inputClass} value={form.grade} onChange={e => setForm({ ...form, grade: e.target.value })} placeholder="Contoh: Kelas VIII / Fase D" />}</label>
-            <label className="sm:col-span-2"><span className={labelClass}>Materi / Topik</span><textarea className={inputClass} rows={3} value={form.topic} onChange={e => setForm({ ...form, topic: e.target.value })} placeholder="Tuliskan ruang lingkup materi dengan jelas" /></label>
+            <label className="sm:col-span-2"><span className={labelClass}>Materi / Topik</span><textarea className={inputClass} rows={3} value={form.topic} onChange={e => setForm({ ...form, topic: e.target.value })} placeholder="Tuliskan ruang lingkup materi dengan jelas" />
+              <div className="mt-2 flex items-center gap-2">
+                <label className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-gray-300 px-3 py-1.5 text-xs font-semibold text-gray-600 dark:border-slate-700 dark:text-slate-300">
+                  {scanningTopic ? <Loader2 size={14} className="animate-spin" /> : <ScanText size={14} />} {scanningTopic ? 'Memindai...' : 'Scan Foto Materi (OCR)'}
+                  <input type="file" accept="image/*" className="hidden" disabled={scanningTopic} onChange={e => scanImageToText(e.target.files?.[0], text => setForm(prev => ({ ...prev, topic: prev.topic ? `${prev.topic}\n${text}` : text })))} />
+                </label>
+                <span className="text-[11px] text-gray-400">Foto soal/buku/tulisan tangan otomatis diubah jadi teks</span>
+              </div>
+            </label>
             <label><span className={labelClass}>Kurikulum</span><select className={inputClass} value={form.curriculum} onChange={e => setForm({ ...form, curriculum: e.target.value })}><option>Kurikulum Merdeka</option><option>Kurikulum 2013</option><option>Kurikulum Berbasis Cinta</option></select></label>
             <label><span className={labelClass}>Semester</span><select className={inputClass} value={form.semester} onChange={e => setForm({ ...form, semester: e.target.value })}><option>Ganjil</option><option>Genap</option></select></label>
             <label><span className={labelClass}>Tahun Pelajaran</span><input className={inputClass} value={form.academicYear} onChange={e => setForm({ ...form, academicYear: e.target.value })} /></label>

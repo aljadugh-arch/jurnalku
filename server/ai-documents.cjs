@@ -220,4 +220,4 @@ async function callAi(prompt, options = {}) {
   return clean(content)
 }
 
-module.exports = { DOCUMENT_TYPES, buildPrompt, validateGenerateInput, createTemplateContent, createDocumentDocx, callAi, parseMarkdown, parseAiResponse }
+module.exports = { DOCUMENT_TYPES, buildPrompt, validateGenerateInput, createTemplateContent, createDocumentDocx, callAi, parseMarkdown, parseAiResponse, clean }
