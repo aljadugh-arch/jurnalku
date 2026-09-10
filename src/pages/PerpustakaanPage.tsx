@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { BookOpen, ExternalLink, Loader2 } from 'lucide-react'
-import api from '../../services/api'
+import api from '../services/api'
 
 type LibraryConfig = {
   name: string
@@ -14,7 +14,7 @@ function extractFolderId(url: string): string | null {
   return m ? m[1] : null
 }
 
-export default function SiswaPerpustakaanPage() {
+export default function PerpustakaanPage() {
   const [config, setConfig] = useState<LibraryConfig | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)

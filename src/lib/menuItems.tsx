@@ -49,6 +49,7 @@ export const adminMenuItems: MenuItem[] = [
   { label: 'Rapor Siswa', icon: <FileText size={20} />, path: '/admin/rapor' },
   { label: 'Catatan Kepribadian', icon: <ScrollText size={20} />, path: '/admin/catatan-kepribadian' },
   { label: 'Generator AI Guru', icon: <Sparkles size={20} />, path: '/admin/modul-ajar' },
+  { label: 'Perpustakaan Digital', icon: <BookOpen size={20} />, path: '/admin/perpustakaan' },
   { label: 'Tahun Ajaran', icon: <School size={20} />, path: '/admin/tahun-ajaran' },
   {
     label: 'Keuangan', icon: <DollarSign size={20} />,
@@ -88,6 +89,7 @@ export const guruMenuItems: MenuItem[] = [
   { label: 'Posting', icon: <FileText size={20} />, path: '/guru/posting' },
   { label: 'Jurnal Mengajar', icon: <ClipboardList size={20} />, path: '/guru/jurnal' },
   { label: 'Penilaian Harian', icon: <BookOpen size={20} />, path: '/guru/penilaian-harian' },
+  { label: 'Nilai STS & SAS', icon: <ClipboardCheck size={20} />, path: '/guru/nilai-sumatif' },
   { label: 'Catatan Kepribadian', icon: <ScrollText size={20} />, path: '/guru/catatan-kepribadian' },
   { label: 'Jadwal Saya', icon: <Calendar size={20} />, path: '/guru/jadwal' },
   { label: 'Penugasan', icon: <ClipboardCheck size={20} />, path: '/guru#tugas' },
@@ -95,6 +97,7 @@ export const guruMenuItems: MenuItem[] = [
   { label: 'Absensi Mapel', icon: <UserCheck size={20} />, path: '/guru/absensi-mapel' },
   { label: 'Absensi Saya', icon: <MapPin size={20} />, path: '/guru/absensi-guru' },
   { label: 'Generator AI Guru', icon: <Sparkles size={20} />, path: '/guru/modul-ajar' },
+  { label: 'Perpustakaan Digital', icon: <BookOpen size={20} />, path: '/guru/perpustakaan' },
 ]
 
 export const siswaMenuItems: MenuItem[] = [
@@ -117,6 +120,7 @@ export const kepalaMenuItems: MenuItem[] = [
   { label: 'Rombongan Belajar', icon: <Layers size={20} />, path: '/admin/rombel' },
   { label: 'Jurnal Mengajar', icon: <ClipboardList size={20} />, path: '/admin/jurnal' },
   { label: 'Supervisi Guru', icon: <ClipboardCheck size={20} />, path: '/admin/supervisi' },
+  { label: 'Perpustakaan Digital', icon: <BookOpen size={20} />, path: '/admin/perpustakaan' },
   {
     label: 'Absensi', icon: <UserCheck size={20} />,
     children: [

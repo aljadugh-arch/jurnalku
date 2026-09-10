@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom'
+import { School, BookOpen, Users, Calendar, Shield, BarChart3, ArrowRight, CheckCircle, Zap, Clock, Moon, Sun } from 'lucide-react'
 import { useSettingsStore } from '../stores/settingsStore'
-import { School, BookOpen, Users, Calendar, Shield, BarChart3, ArrowRight, CheckCircle, Zap, Clock } from 'lucide-react'
+import { useThemeStore } from '../stores/themeStore'
 
 const features = [
   { icon: Users, title: 'Data Siswa & GTK Terpusat', desc: 'Kelola ribuan data dalam satu klik. Tidak ada lagi Excel berantakan!' },
@@ -22,82 +23,98 @@ const benefits = [
 
 export default function LandingPage() {
   const { settings } = useSettingsStore()
+  const { dark, toggle: toggleDark } = useThemeStore()
   const logo = settings.logo || '/logo-jurnalku-256.png'
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-indigo-50">
+    <div className="min-h-screen bg-slate-50 dark:bg-gray-950 text-slate-900 dark:text-gray-100 transition-colors">
       {/* Navbar */}
-      <nav className="bg-white/90 backdrop-blur-md border-b border-gray-200 sticky top-0 z-50 shadow-sm">
+      <nav className="bg-white/90 dark:bg-gray-900/90 backdrop-blur-md border-b border-slate-200 dark:border-gray-800 sticky top-0 z-50 shadow-sm">
         <div className="max-w-6xl mx-auto px-4 py-4 flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <div className="w-10 h-10 bg-white rounded-lg flex items-center justify-center border border-primary/10 overflow-hidden">
+            <div className="w-10 h-10 bg-white dark:bg-gray-900 rounded-lg flex items-center justify-center border border-primary/10 dark:border-gray-800 overflow-hidden">
               <img src={logo} alt="Logo Jurnalku" className="w-full h-full object-contain" />
             </div>
             <div>
-              <span className="text-xl font-bold text-gray-900 font-display">JURNALKU</span>
-              <p className="text-xs text-gray-500">SIMS/M Terpadu</p>
+              <span className="text-xl font-bold text-slate-900 dark:text-white font-display">JURNALKU</span>
+              <p className="text-xs text-slate-500 dark:text-gray-400">SIMS/M Terpadu</p>
             </div>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 sm:gap-3">
+            <button
+              onClick={toggleDark}
+              className="p-2.5 rounded-full text-slate-500 hover:bg-slate-100 dark:text-gray-400 dark:hover:bg-gray-800 transition"
+              aria-label={dark ? 'Aktifkan mode terang' : 'Aktifkan mode gelap'}
+              title={dark ? 'Mode Terang' : 'Mode Gelap'}
+            >
+              {dark ? <Sun size={18} className="text-amber-500" /> : <Moon size={18} />}
+            </button>
             <Link to="/login" className="px-5 py-2.5 bg-primary text-white rounded-xl text-sm font-semibold hover:bg-primary-dark shadow-lg shadow-primary/30 transition-all">Masuk</Link>
-            <Link to="/register" className="px-4 py-2 text-sm font-medium text-gray-700 hover:text-primary transition-colors">Mulai Coba Gratis</Link>
+            <Link to="/register" className="hidden sm:inline px-4 py-2 text-sm font-medium text-slate-700 dark:text-gray-300 hover:text-primary dark:hover:text-primary transition-colors">Mulai Coba Gratis</Link>
           </div>
         </div>
       </nav>
 
       {/* Hero */}
-      <section className="max-w-6xl mx-auto px-4 py-12 sm:py-16">
-        <div className="text-center">
-          <div className="inline-flex items-center gap-2 px-4 py-2 bg-green-50 border border-green-200 text-green-700 rounded-full text-sm font-medium mb-4">
-            <Zap size={16} /> Dipercaya 100+ Lembaga Pendidikan
-          </div>
-          <h1 className="text-4xl sm:text-5xl font-extrabold text-gray-900 font-display leading-tight mb-4">
-            Kelola Lembaga Jadi<br />
-            <span className="bg-gradient-to-r from-primary to-indigo-600 bg-clip-text text-transparent">10x Lebih Cepat!</span>
-          </h1>
-          <p className="text-lg text-gray-600 max-w-3xl mx-auto mb-3 leading-relaxed">
-            <strong>Bosan dengan administrasi manual yang makan waktu?</strong><br />
-            JURNALKU adalah solusi SIMS/M terlengkap yang menghemat waktu Anda hingga <span className="text-primary font-bold">70%</span>.
-          </p>
-          <p className="text-base text-gray-500 max-w-2xl mx-auto mb-6">
-            Data siswa, guru, jadwal, absensi, keuangan, jurnal, sampai rapor — semua terintegrasi dalam satu platform.
-          </p>
-          <div className="flex flex-col sm:flex-row items-center justify-center gap-3 mb-6">
-            <Link to="/register" className="inline-flex items-center gap-2 px-8 py-4 bg-primary text-white rounded-xl font-bold text-lg hover:bg-primary-dark shadow-2xl shadow-primary/40 transition-all hover:scale-105">
-              Mulai Gratis Sekarang <ArrowRight size={20} />
-            </Link>
-            <Link to="/login#demo" className="inline-flex items-center gap-2 px-8 py-4 border-2 border-gray-300 text-gray-700 rounded-xl font-semibold hover:bg-gray-50 transition-all">
-              Lihat Demo
-            </Link>
-          </div>
-          <div className="flex items-center justify-center gap-6 text-sm text-gray-500">
-            <div className="flex items-center gap-1">
-              <CheckCircle size={16} className="text-green-500" />
-              <span>Gratis 30 hari</span>
+      <section className="relative overflow-hidden">
+        <div className="absolute inset-0 pointer-events-none">
+          <div className="absolute -top-10 -left-10 w-72 h-72 bg-primary/10 dark:bg-primary/20 rounded-full blur-3xl" />
+          <div className="absolute top-40 right-0 w-96 h-96 bg-indigo-500/10 dark:bg-indigo-500/20 rounded-full blur-3xl" />
+        </div>
+        <div className="relative max-w-6xl mx-auto px-4 py-12 sm:py-16">
+          <div className="text-center">
+            <div className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-900 text-emerald-700 dark:text-emerald-400 rounded-full text-sm font-medium mb-4">
+              <Zap size={16} /> Dipercaya 100+ Lembaga Pendidikan
             </div>
-            <div className="flex items-center gap-1">
-              <CheckCircle size={16} className="text-green-500" />
-              <span>Tanpa kartu kredit</span>
+            <h1 className="text-4xl sm:text-5xl font-extrabold text-slate-900 dark:text-white font-display leading-tight mb-4">
+              Kelola Lembaga Jadi<br />
+              <span className="bg-gradient-to-r from-primary to-indigo-500 bg-clip-text text-transparent">10x Lebih Cepat!</span>
+            </h1>
+            <p className="text-lg text-slate-600 dark:text-gray-300 max-w-3xl mx-auto mb-3 leading-relaxed">
+              <strong>Bosan dengan administrasi manual yang makan waktu?</strong><br />
+              JURNALKU adalah solusi SIMS/M terlengkap yang menghemat waktu Anda hingga <span className="text-primary font-bold">70%</span>.
+            </p>
+            <p className="text-base text-slate-500 dark:text-gray-400 max-w-2xl mx-auto mb-6">
+              Data siswa, guru, jadwal, absensi, keuangan, jurnal, sampai rapor — semua terintegrasi dalam satu platform.
+            </p>
+            <div className="flex flex-col sm:flex-row items-center justify-center gap-3 mb-6">
+              <Link to="/register" className="inline-flex items-center gap-2 px-8 py-4 bg-primary text-white rounded-xl font-bold text-lg hover:bg-primary-dark shadow-2xl shadow-primary/40 transition-all hover:scale-105">
+                Mulai Gratis Sekarang <ArrowRight size={20} />
+              </Link>
+              <Link to="/login#demo" className="inline-flex items-center gap-2 px-8 py-4 border-2 border-slate-300 dark:border-gray-700 text-slate-700 dark:text-gray-200 rounded-xl font-semibold hover:bg-slate-50 dark:hover:bg-gray-800 transition-all">
+                Lihat Demo
+              </Link>
             </div>
-            <div className="flex items-center gap-1">
-              <CheckCircle size={16} className="text-green-500" />
-              <span>Setup 15 menit</span>
+            <div className="flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-sm text-slate-500 dark:text-gray-400">
+              <div className="flex items-center gap-1">
+                <CheckCircle size={16} className="text-emerald-500" />
+                <span>Gratis 30 hari</span>
+              </div>
+              <div className="flex items-center gap-1">
+                <CheckCircle size={16} className="text-emerald-500" />
+                <span>Tanpa kartu kredit</span>
+              </div>
+              <div className="flex items-center gap-1">
+                <CheckCircle size={16} className="text-emerald-500" />
+                <span>Setup 15 menit</span>
+              </div>
             </div>
           </div>
         </div>
       </section>
 
       {/* Benefits */}
-      <section className="bg-white py-10 border-y border-gray-100">
+      <section className="bg-white dark:bg-gray-900 py-10 border-y border-slate-100 dark:border-gray-800">
         <div className="max-w-6xl mx-auto px-4">
           <div className="text-center mb-8">
-            <h2 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-2 font-display">Mengapa 100+ Lembaga Memilih JURNALKU?</h2>
-            <p className="text-base text-gray-600">Karena kami paham betapa sibuknya Anda</p>
+            <h2 className="text-2xl sm:text-3xl font-bold text-slate-900 dark:text-white mb-2 font-display">Mengapa 100+ Lembaga Memilih JURNALKU?</h2>
+            <p className="text-base text-slate-600 dark:text-gray-400">Karena kami paham betapa sibuknya Anda</p>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
             {benefits.map((b, i) => (
-              <div key={i} className="flex items-start gap-3 p-3 bg-green-50 rounded-lg border border-green-100">
-                <CheckCircle size={20} className="text-green-600 flex-shrink-0 mt-0.5" />
-                <span className="text-gray-700 font-medium">{b}</span>
+              <div key={i} className="flex items-start gap-3 p-3 bg-emerald-50 dark:bg-emerald-950/30 rounded-lg border border-emerald-100 dark:border-emerald-900">
+                <CheckCircle size={20} className="text-emerald-600 dark:text-emerald-400 flex-shrink-0 mt-0.5" />
+                <span className="text-slate-700 dark:text-gray-200 font-medium">{b}</span>
               </div>
             ))}
           </div>
@@ -107,33 +124,33 @@ export default function LandingPage() {
       {/* Features */}
       <section className="max-w-6xl mx-auto px-4 py-12">
         <div className="text-center mb-8">
-          <h2 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-2 font-display">Fitur Lengkap, Semua dalam Satu Platform</h2>
-          <p className="text-base text-gray-600">Tidak perlu langganan 10 aplikasi berbeda. JURNALKU = All-in-One.</p>
+          <h2 className="text-2xl sm:text-3xl font-bold text-slate-900 dark:text-white mb-2 font-display">Fitur Lengkap, Semua dalam Satu Platform</h2>
+          <p className="text-base text-slate-600 dark:text-gray-400">Tidak perlu langganan 10 aplikasi berbeda. JURNALKU = All-in-One.</p>
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {features.map((f, i) => (
-            <div key={i} className="bg-white rounded-2xl p-6 shadow-md border border-gray-100 hover:shadow-xl hover:border-primary/30 transition-all group">
+            <div key={i} className="bg-white dark:bg-gray-900 rounded-2xl p-6 shadow-md dark:shadow-none border border-slate-100 dark:border-gray-800 hover:shadow-xl hover:border-primary/30 dark:hover:border-primary/50 transition-all group">
               <div className="w-12 h-12 bg-gradient-to-br from-primary to-indigo-600 rounded-xl flex items-center justify-center mb-3 group-hover:scale-110 transition-transform">
                 <f.icon size={24} className="text-white" />
               </div>
-              <h3 className="font-bold text-gray-900 mb-1.5 text-lg">{f.title}</h3>
-              <p className="text-gray-600 text-sm leading-relaxed">{f.desc}</p>
+              <h3 className="font-bold text-slate-900 dark:text-white mb-1.5 text-lg">{f.title}</h3>
+              <p className="text-slate-600 dark:text-gray-400 text-sm leading-relaxed">{f.desc}</p>
             </div>
           ))}
         </div>
       </section>
 
       {/* Social Proof */}
-      <section className="bg-gray-50 py-10 border-y border-gray-200">
+      <section className="bg-slate-50 dark:bg-gray-900/60 py-10 border-y border-slate-200 dark:border-gray-800">
         <div className="max-w-4xl mx-auto px-4 text-center">
-          <h2 className="text-xl sm:text-2xl font-bold text-gray-900 mb-6 font-display">Bergabung dengan Lembaga-Lembaga Terbaik</h2>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-6 items-center opacity-60">
-            <div className="text-3xl font-bold text-gray-600">SD</div>
-            <div className="text-3xl font-bold text-gray-600">SMP</div>
-            <div className="text-3xl font-bold text-gray-600">SMA</div>
-            <div className="text-3xl font-bold text-gray-600">MA</div>
+          <h2 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white mb-6 font-display">Bergabung dengan Lembaga-Lembaga Terbaik</h2>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-6 items-center opacity-60 dark:opacity-50">
+            <div className="text-3xl font-bold text-slate-600 dark:text-gray-400">SD</div>
+            <div className="text-3xl font-bold text-slate-600 dark:text-gray-400">SMP</div>
+            <div className="text-3xl font-bold text-slate-600 dark:text-gray-400">SMA</div>
+            <div className="text-3xl font-bold text-slate-600 dark:text-gray-400">MA</div>
           </div>
-          <p className="text-gray-500 mt-6 text-sm">Dipercaya oleh 100+ lembaga pendidikan di seluruh Indonesia</p>
+          <p className="text-slate-500 dark:text-gray-500 mt-6 text-sm">Dipercaya oleh 100+ lembaga pendidikan di seluruh Indonesia</p>
         </div>
       </section>
 
@@ -158,9 +175,9 @@ export default function LandingPage() {
       </section>
 
       {/* Footer */}
-      <footer className="bg-sidebar text-white py-6 border-t border-gray-800">
+      <footer className="bg-slate-900 dark:bg-black text-white py-6 border-t border-slate-800 dark:border-gray-900">
         <div className="max-w-6xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-center gap-2 text-center">
-          <p className="text-sm text-gray-400">
+          <p className="text-sm text-slate-400 dark:text-gray-500">
             Design by <span className="font-semibold text-white">aljadugh</span> — All rights reserved.
           </p>
         </div>

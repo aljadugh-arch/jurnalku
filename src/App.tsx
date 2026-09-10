@@ -28,6 +28,7 @@ import TahunAjaranPage from './pages/admin/TahunAjaranPage'
 import TagihanPage from './pages/admin/TagihanPage'
 import TabunganPage from './pages/admin/TabunganPage'
 import SettingsPage from './pages/admin/SettingsPage'
+import PerpustakaanPage from './pages/PerpustakaanPage'
 import WAGatewayPage from './pages/admin/WAGatewayPage'
 import BroadcastPage from './pages/admin/BroadcastPage'
 import KalenderKBMPage from './pages/admin/KalenderKBMPage'
@@ -56,6 +57,7 @@ import GuruJadwalPage from './pages/guru/GuruJadwalPage'
 import GuruModulAjarPage from './pages/guru/GuruModulAjarPage'
 import GuruRombelPage from './pages/guru/GuruRombelPage'
 import GuruPenilaianHarianPage from './pages/guru/GuruPenilaianHarianPage'
+import GuruNilaiSumatifPage from './pages/guru/GuruNilaiSumatifPage'
 import GuruPostingPage from './pages/guru/GuruPostingPage'
 import GuruCatatanKepribadianPage from './pages/guru/GuruCatatanKepribadianPage'
 import GuruAbsensiEkskulPage from './pages/guru/GuruAbsensiEkskulPage'
@@ -69,7 +71,6 @@ import SiswaNilaiPage from './pages/siswa/SiswaNilaiPage'
 import SiswaKantinPage from './pages/siswa/SiswaKantinPage'
 import SiswaQrisTopupPage from './pages/siswa/SiswaQrisTopupPage'
 import SiswaSectionPage from './pages/siswa/SiswaSectionPage'
-import SiswaPerpustakaanPage from './pages/siswa/SiswaPerpustakaanPage'
 import SiswaMenuPage from './pages/siswa/SiswaMenuPage'
 import ChangePasswordPage from './pages/ChangePasswordPage'
 import ProfilePage from './pages/ProfilePage'
@@ -187,6 +188,7 @@ export default function App() {
           <Route path="tahun-ajaran" element={<TahunAjaranPage />} />
           <Route path="tagihan" element={<TagihanPage />} />
           <Route path="tabungan" element={<TabunganPage />} />
+          <Route path="perpustakaan" element={<PerpustakaanPage />} />
           <Route path="settings" element={
             <ProtectedRoute allowedRoles={['admin', 'super_admin']}><SettingsPage /></ProtectedRoute>
           } />
@@ -256,12 +258,14 @@ export default function App() {
           <Route path="modul-ajar" element={<GuruModulAjarPage />} />
           <Route path="rombel" element={<GuruRombelPage />} />
           <Route path="penilaian-harian" element={<GuruPenilaianHarianPage />} />
+          <Route path="nilai-sumatif" element={<GuruNilaiSumatifPage />} />
           <Route path="profile" element={<ProfilePage />} />
           <Route path="change-password" element={<ChangePasswordPage />} />
           {/* Halaman baru sesuai live */}
           <Route path="posting" element={<GuruPostingPage />} />
           <Route path="catatan-kepribadian" element={<GuruCatatanKepribadianPage />} />
           <Route path="absensi-ekskul" element={<GuruAbsensiEkskulPage />} />
+          <Route path="perpustakaan" element={<PerpustakaanPage />} />
           <Route path="absensi-harian" element={<Navigate to="/guru/absensi-siswa" replace />} />
         </Route>
 
@@ -287,7 +291,7 @@ export default function App() {
           <Route path="tugas" element={<SiswaSectionPage section="tugas" />} />
           <Route path="tagihan" element={<SiswaSectionPage section="tagihan" />} />
           <Route path="tabungan" element={<SiswaSectionPage section="tabungan" />} />
-          <Route path="perpustakaan" element={<SiswaPerpustakaanPage />} />
+          <Route path="perpustakaan" element={<PerpustakaanPage />} />
           <Route path="menu" element={<SiswaMenuPage />} />
         </Route>
 
