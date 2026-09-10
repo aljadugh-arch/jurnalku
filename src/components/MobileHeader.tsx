@@ -1,9 +1,31 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
-import { Bell, Moon, Sun, User, Lock, LogOut, ChevronDown, Repeat2 } from 'lucide-react'
+import { Bell, Moon, Sun, User, Lock, LogOut, ChevronDown, Repeat2, UserCheck, QrCode, DoorOpen, ClipboardList } from 'lucide-react'
 import { useAuthStore } from '../stores/authStore'
 import { useThemeStore } from '../stores/themeStore'
 import Avatar from './ui/Avatar'
+import api from '../services/api'
+
+type NotifItem = { id: string; event_type: string; label: string; metadata: any; created_at: string }
+
+const NOTIF_ICONS: Record<string, any> = {
+  teacher_checkin: UserCheck,
+  teacher_checkout: UserCheck,
+  student_qr_attendance: QrCode,
+  class_session_started: DoorOpen,
+  class_session_finished: DoorOpen,
+  assignment_created: ClipboardList,
+}
+
+function timeAgo(iso: string) {
+  const diffMs = Date.now() - new Date(iso + 'Z').getTime()
+  const min = Math.floor(diffMs / 60000)
+  if (min < 1) return 'Baru saja'
+  if (min < 60) return `${min} menit lalu`
+  const hour = Math.floor(min / 60)
+  if (hour < 24) return `${hour} jam lalu`
+  return `${Math.floor(hour / 24)} hari lalu`
+}
 
 function roleLabel(role?: string) {
   switch (role) {
@@ -25,7 +47,7 @@ export default function MobileHeader({
   light = false,
 }: {
   basePath: string
-  onBell: () => void
+  onBell?: () => void
   showBell?: boolean
   profilePhoto?: string | null
   light?: boolean
@@ -35,6 +57,9 @@ export default function MobileHeader({
   const { user, logout } = useAuthStore()
   const { dark, toggle: toggleDark } = useThemeStore()
   const [menuOpen, setMenuOpen] = useState(false)
+  const [notifOpen, setNotifOpen] = useState(false)
+  const [notifItems, setNotifItems] = useState<NotifItem[]>([])
+  const [notifLoading, setNotifLoading] = useState(false)
 
   const teacherMode = user?.role === 'kepala' && !!user?.can_teach && location.pathname.startsWith('/guru')
 
@@ -51,6 +76,20 @@ export default function MobileHeader({
     logout()
     navigate('/login')
   }
+
+  const handleBellClick = () => {
+    if (onBell) return onBell()
+    setNotifOpen(o => !o)
+  }
+
+  useEffect(() => {
+    if (!notifOpen || onBell) return
+    setNotifLoading(true)
+    api.get('/notifications/feed', { params: { limit: 20 } })
+      .then(res => setNotifItems(res.data || []))
+      .catch(() => setNotifItems([]))
+      .finally(() => setNotifLoading(false))
+  }, [notifOpen, onBell])
 
   return (
     <div className="relative flex items-center justify-between w-full gap-3">
@@ -82,12 +121,48 @@ export default function MobileHeader({
       {/* Kanan: Bell notifikasi */}
       {showBell && (
         <button
-          onClick={onBell}
+          onClick={handleBellClick}
           className={light ? "relative flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-white hover:bg-white/10 active:scale-95 transition" : "relative flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-slate-600 hover:bg-slate-100 dark:text-gray-300 dark:hover:bg-gray-800 active:scale-95 transition"}
           aria-label="Notifikasi"
         >
           <Bell size={19} />
         </button>
+      )}
+
+      {/* Dropdown notifikasi aktivitas terkini (ceklok, absensi QR, sesi kelas, dll) */}
+      {notifOpen && !onBell && (
+        <>
+          <div
+            className="fixed inset-0 z-[90] bg-black/20 backdrop-blur-[1px]"
+            onClick={() => setNotifOpen(false)}
+          />
+          <div className="absolute right-0 top-12 w-80 max-w-[88vw] z-[100] rounded-2xl border border-slate-200 bg-white shadow-2xl dark:bg-gray-900 dark:border-gray-700 overflow-hidden animate-in fade-in slide-in-from-top-2 duration-150">
+            <div className="border-b border-gray-100 dark:border-gray-800 px-4 py-3 bg-slate-50/50 dark:bg-gray-800/40">
+              <p className="text-sm font-bold text-gray-900 dark:text-gray-100">Notifikasi Terkini</p>
+              <p className="text-xs text-slate-500 dark:text-gray-400">Ceklok, absensi QR, sesi kelas &amp; penugasan</p>
+            </div>
+            <div className="max-h-80 overflow-y-auto">
+              {notifLoading && <p className="px-4 py-6 text-center text-xs text-slate-400">Memuat...</p>}
+              {!notifLoading && notifItems.length === 0 && (
+                <p className="px-4 py-6 text-center text-xs text-slate-400">Belum ada aktivitas terbaru.</p>
+              )}
+              {!notifLoading && notifItems.map(item => {
+                const Icon = NOTIF_ICONS[item.event_type] || Bell
+                return (
+                  <div key={item.id} className="flex items-start gap-3 border-b border-gray-50 dark:border-gray-800 px-4 py-3 last:border-0">
+                    <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+                      <Icon size={15} />
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-xs font-medium text-gray-800 dark:text-gray-100">{item.label}</p>
+                      <p className="mt-0.5 text-[11px] text-slate-400">{timeAgo(item.created_at)}</p>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        </>
       )}
 
       {/* Dropdown menu langsung dari klik avatar */}

@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { BarChart3, BookOpen, CreditCard, DollarSign, MapPin, PiggyBank, Users } from 'lucide-react'
 import api from '../../services/api'
-import FinanceExcelPanel from '../../components/FinanceExcelPanel'
 import MobileBendaharaDashboard from './MobileBendaharaDashboard'
 
 export default function BendaharaDashboard() {
@@ -32,9 +31,9 @@ export default function BendaharaDashboard() {
       <button onClick={() => navigate('/admin/buku-kas')} className="inline-flex items-center justify-center gap-2 rounded-2xl bg-emerald-600 p-4 text-sm font-semibold text-white"><BookOpen size={18}/> Buku Kas</button>
       <button onClick={() => navigate('/admin/ceklok')} className="inline-flex items-center justify-center gap-2 rounded-2xl bg-white border border-gray-100 p-4 text-sm font-semibold text-gray-700"><MapPin size={18}/> Ceklok Saya</button>
       <button onClick={() => navigate('/admin/tagihan')} className="inline-flex items-center justify-center gap-2 rounded-2xl bg-white border border-gray-100 p-4 text-sm font-semibold text-gray-700"><DollarSign size={18}/> Tagihan & Pembayaran</button>
-      <button onClick={() => navigate('/admin/tabungan')} className="inline-flex items-center justify-center gap-2 rounded-2xl bg-white border border-gray-100 p-4 text-sm font-semibold text-gray-700"><BarChart3 size={18}/> Laporan</button>
+      <button onClick={() => navigate('/admin/tabungan')} className="inline-flex items-center justify-center gap-2 rounded-2xl bg-white border border-gray-100 p-4 text-sm font-semibold text-gray-700"><BarChart3 size={18}/> Tabungan</button>
+      <button onClick={() => navigate('/admin/bendahara/laporan')} className="inline-flex items-center justify-center gap-2 rounded-2xl bg-white border border-gray-100 p-4 text-sm font-semibold text-gray-700"><BarChart3 size={18}/> Laporan</button>
     </div>
-    <div id="laporan"><FinanceExcelPanel /></div>
     </div>
   </>
 }

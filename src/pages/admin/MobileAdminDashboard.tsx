@@ -58,7 +58,7 @@ export default function MobileAdminDashboard({ stats }: Props) {
 
   return (
     <div className="lg:hidden min-h-screen -mx-4 -mt-3 bg-slate-50 pb-8 dark:bg-gray-950">
-      <div className="px-4 pb-2 pt-4"><MobileHeader basePath="/admin" onBell={() => navigate('/admin/posting')} /></div>
+      <div className="px-4 pb-2 pt-4"><MobileHeader basePath="/admin" /></div>
       <main className="space-y-4 px-4 pt-3">
         <div>
           <p className="text-xs text-slate-500 dark:text-gray-400">Selamat datang,</p>

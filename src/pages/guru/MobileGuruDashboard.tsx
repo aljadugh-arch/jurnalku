@@ -179,7 +179,7 @@ export default function MobileGuruDashboard() {
     <div className="min-h-[100dvh] bg-slate-50 dark:bg-gray-950 pb-6">
       {/* ── HEADER MINIMALIS: avatar + nama di kiri, bell notif di kanan ── */}
       <div className="px-4 pt-4 pb-2">
-        <MobileHeader basePath="/guru" onBell={() => navigate('/guru/posting')} profilePhoto={data.gtk?.foto || null} />
+        <MobileHeader basePath="/guru" profilePhoto={data.gtk?.foto || null} />
       </div>
 
       <div data-mobile-compact-dashboard="true" className="px-4 space-y-4">

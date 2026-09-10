@@ -25,7 +25,7 @@ const quickMenus = [
   { label: 'Tabungan', path: '/admin/tabungan', icon: PiggyBank, tile: 'bg-blue-500', bg: 'bg-blue-50' },
   { label: 'Buku Kas', path: '/admin/buku-kas', icon: BookOpen, tile: 'bg-violet-500', bg: 'bg-violet-50' },
   { label: 'Ceklok Saya', path: '/admin/ceklok', icon: UserCheck, tile: 'bg-amber-500', bg: 'bg-amber-50' },
-  { label: 'Laporan', path: '/admin/bendahara#laporan', icon: FileBarChart, tile: 'bg-cyan-500', bg: 'bg-cyan-50' },
+  { label: 'Laporan', path: '/admin/bendahara/laporan', icon: FileBarChart, tile: 'bg-cyan-500', bg: 'bg-cyan-50' },
   { label: 'Data Siswa', path: '/admin/siswa', icon: Landmark, tile: 'bg-rose-500', bg: 'bg-rose-50' },
 ]
 
@@ -44,7 +44,7 @@ export default function MobileBendaharaDashboard({ data }: { data: BendaharaData
     <div className="min-h-[100dvh] bg-slate-50 dark:bg-gray-950 pb-6">
       {/* ── HEADER MINIMALIS: sama seperti guru/admin ── */}
       <div className="px-4 pt-4 pb-2">
-        <MobileHeader basePath="/admin" onBell={() => navigate('/admin/posting')} />
+        <MobileHeader basePath="/admin" />
       </div>
 
       <div className="px-4 space-y-4">

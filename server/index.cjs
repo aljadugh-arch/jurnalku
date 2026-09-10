@@ -3337,6 +3337,32 @@ app.get('/api/admin/monitoring', DASHBOARD_ROLES, (req, res) => {
   res.json(notificationMonitor.getMonitoring(db, req.tenantId, tanggal))
 })
 
+// Feed notifikasi real-time (bell icon) — aktivitas terkini: ceklok guru, absensi QR siswa, sesi kelas, penugasan
+const NOTIF_FEED_LABELS = {
+  teacher_checkin: (m) => `Guru melakukan ceklok masuk`,
+  teacher_checkout: (m) => `Guru melakukan ceklok pulang`,
+  student_qr_attendance: (m) => `Absensi QR siswa sedang berlangsung (${m.sesi === 'pulang' ? 'pulang' : 'masuk'})`,
+  class_session_started: () => `Guru masuk kelas`,
+  class_session_finished: () => `Guru menyelesaikan kelas`,
+  assignment_created: () => `Tugas baru diterbitkan`,
+}
+app.get('/api/notifications/feed', authMiddleware, (req, res) => {
+  const limit = Math.min(Number(req.query.limit) || 20, 50)
+  const rows = db.prepare('SELECT * FROM notification_activity WHERE tenant_id=? ORDER BY created_at DESC LIMIT ?').all(req.tenantId, limit)
+  res.json(rows.map(row => {
+    let metadata = {}
+    try { metadata = JSON.parse(row.metadata_json || '{}') } catch {}
+    const labelFn = NOTIF_FEED_LABELS[row.event_type]
+    return {
+      id: row.id,
+      event_type: row.event_type,
+      label: labelFn ? labelFn(metadata) : row.event_type,
+      metadata,
+      created_at: row.created_at,
+    }
+  }))
+})
+
 app.get('/api/admin/rekap-kehadiran', DASHBOARD_ROLES, (req, res) => {
   const tanggal = /^\d{4}-\d{2}-\d{2}$/.test(String(req.query.tanggal || '')) ? String(req.query.tanggal) : todayJakarta()
   res.json(getAttendanceOverview(db, req.tenantId, tanggal))

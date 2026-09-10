@@ -46,6 +46,7 @@ import BackupRestorePage from './pages/admin/BackupRestorePage'
 import CekLokAdminPage from './pages/admin/CekLokAdminPage'
 import GuruAbsensiPage from './pages/guru/GuruAbsensiPage'
 import BendaharaDashboard from './pages/admin/BendaharaDashboard'
+import LaporanKeuanganPage from './pages/admin/LaporanKeuanganPage'
 import BukuKasPage from './pages/admin/BukuKasPage'
 import EkskulPage from './pages/admin/EkskulPage'
 import GuruDashboard from './pages/guru/GuruDashboard'
@@ -222,6 +223,7 @@ export default function App() {
           <Route path="ceklok" element={<CekLokAdminPage />} />
           <Route path="absensi-saya" element={<GuruAbsensiPage />} />
           <Route path="bendahara" element={<BendaharaDashboard />} />
+          <Route path="bendahara/laporan" element={<LaporanKeuanganPage />} />
           <Route path="buku-kas" element={<BukuKasPage />} />
           <Route path="ekskul" element={<EkskulPage />} />
           {/* E-Kantin & Cashless Routes */}
