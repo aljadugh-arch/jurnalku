@@ -4405,7 +4405,7 @@ function ensurePengajarFromJadwal({ gtk_id, mapel_id, rombel_id, tenant_id }) {
 }
 
 // ==================== JADWAL ====================
-app.get('/api/jadwal/hari-ini', ADMIN, (req, res) => {
+app.get('/api/jadwal/hari-ini', DASHBOARD_ROLES, (req, res) => {
   const hari = require('./attendance-rules.cjs').hariJakarta()
   const rows = db.prepare(`SELECT j.*, m.nama AS mapel_nama, m.kode AS mapel_kode,
     r.nama AS rombel_nama, g.nama AS gtk_nama, g.nama AS guru_nama,
