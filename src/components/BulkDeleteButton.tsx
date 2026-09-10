@@ -7,9 +7,10 @@ interface BulkDeleteButtonProps {
   kategori: string       // 'siswa' | 'gtk' | 'mapel' | 'rombel' | 'jadwal' | ...
   label: string          // 'Siswa', 'GTK', dst — untuk teks tombol & dialog
   onDone?: () => void     // callback refresh data setelah hapus
+  className?: string     // override styling tombol trigger (mis. agar seragam dalam grid)
 }
 
-export default function BulkDeleteButton({ kategori, label, onDone }: BulkDeleteButtonProps) {
+export default function BulkDeleteButton({ kategori, label, onDone, className }: BulkDeleteButtonProps) {
   const [open, setOpen] = useState(false)
   const [confirm, setConfirm] = useState('')
   const [busy, setBusy] = useState(false)
@@ -46,7 +47,7 @@ export default function BulkDeleteButton({ kategori, label, onDone }: BulkDelete
       <button
         type="button"
         onClick={openDialog}
-        className="inline-flex items-center gap-2 rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-sm font-medium text-red-700 hover:bg-red-100"
+        className={className || 'inline-flex items-center gap-2 rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-sm font-medium text-red-700 hover:bg-red-100'}
       >
         <Trash2 size={16} /> Hapus Semua
       </button>

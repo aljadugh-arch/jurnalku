@@ -512,32 +512,37 @@ export default function JadwalPage() {
           <h1 className="text-2xl font-bold text-gray-800 font-display">Jadwal Pelajaran</h1>
           <p className="text-gray-500 text-sm mt-1">Kelola jadwal dengan sistem anti tabrakan</p>
         </div>
-        <div className="flex flex-wrap gap-2">
-          <button onClick={exportExcel} className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg text-sm hover:bg-green-700">
-            <FileSpreadsheet size={16} /> Excel
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 w-full sm:w-auto">
+          <button onClick={exportExcel} className="flex items-center justify-center gap-2 px-3 py-2.5 bg-green-600 text-white rounded-lg text-xs sm:text-sm hover:bg-green-700 text-center">
+            <FileSpreadsheet size={16} className="shrink-0" /> <span className="truncate">Excel</span>
           </button>
-          <button onClick={exportMasterExcel} className="flex items-center gap-2 px-4 py-2 bg-emerald-700 text-white rounded-lg text-sm hover:bg-emerald-800">
-            <FileSpreadsheet size={16} /> Master Excel (Semua Rombel)
+          <button onClick={exportMasterExcel} className="flex items-center justify-center gap-2 px-3 py-2.5 bg-emerald-700 text-white rounded-lg text-xs sm:text-sm hover:bg-emerald-800 text-center">
+            <FileSpreadsheet size={16} className="shrink-0" /> <span className="truncate">Master Excel</span>
           </button>
-          <button onClick={exportPDF} className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg text-sm hover:bg-red-700">
-            <Download size={16} /> PDF
+          <button onClick={exportPDF} className="flex items-center justify-center gap-2 px-3 py-2.5 bg-red-600 text-white rounded-lg text-xs sm:text-sm hover:bg-red-700 text-center">
+            <Download size={16} className="shrink-0" /> <span className="truncate">PDF</span>
           </button>
-          <button onClick={loadToday} className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700">
-            <CalendarDays size={16} /> Jadwal Hari Ini Semua Rombel
+          <button onClick={loadToday} className="flex items-center justify-center gap-2 px-3 py-2.5 bg-blue-600 text-white rounded-lg text-xs sm:text-sm hover:bg-blue-700 text-center">
+            <CalendarDays size={16} className="shrink-0" /> <span className="truncate">Jadwal Hari Ini</span>
           </button>
-          <button onClick={() => checkConflicts(false)} className="flex items-center gap-2 px-4 py-2 bg-orange-500 text-white rounded-lg text-sm hover:bg-orange-600">
-            <AlertTriangle size={16} /> Cek Tabrakan
+          <button onClick={() => checkConflicts(false)} className="flex items-center justify-center gap-2 px-3 py-2.5 bg-orange-500 text-white rounded-lg text-xs sm:text-sm hover:bg-orange-600 text-center">
+            <AlertTriangle size={16} className="shrink-0" /> <span className="truncate">Cek Tabrakan</span>
           </button>
-          <button onClick={() => setShowTemplateModal(true)} className="flex items-center gap-2 px-4 py-2 bg-gray-600 text-white rounded-lg text-sm hover:bg-gray-700">
-            <Settings2 size={16} /> Template Jadwal
+          <button onClick={() => setShowTemplateModal(true)} className="flex items-center justify-center gap-2 px-3 py-2.5 bg-gray-600 text-white rounded-lg text-xs sm:text-sm hover:bg-gray-700 text-center">
+            <Settings2 size={16} className="shrink-0" /> <span className="truncate">Template Jadwal</span>
           </button>
-          <button onClick={() => setShowGenerate(true)} disabled={generating} className="flex items-center gap-2 px-4 py-2 bg-violet-600 text-white rounded-lg text-sm hover:bg-violet-700 disabled:opacity-60">
-            <Wand2 size={16} /> {generating ? 'Menyusun...' : 'Generate Otomatis'}
+          <button onClick={() => setShowGenerate(true)} disabled={generating} className="flex items-center justify-center gap-2 px-3 py-2.5 bg-violet-600 text-white rounded-lg text-xs sm:text-sm hover:bg-violet-700 disabled:opacity-60 text-center">
+            <Wand2 size={16} className="shrink-0" /> <span className="truncate">{generating ? 'Menyusun...' : 'Generate Otomatis'}</span>
           </button>
-          <button onClick={openAdd} className="flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-lg text-sm hover:bg-primary-dark">
-            <Plus size={16} /> Tambah Jadwal
+          <button onClick={openAdd} className="flex items-center justify-center gap-2 px-3 py-2.5 bg-primary text-white rounded-lg text-xs sm:text-sm hover:bg-primary-dark text-center">
+            <Plus size={16} className="shrink-0" /> <span className="truncate">Tambah Jadwal</span>
           </button>
-          <BulkDeleteButton kategori="jadwal" label="Jadwal" onDone={loadJadwal} />
+          <BulkDeleteButton
+            kategori="jadwal"
+            label="Jadwal"
+            onDone={loadJadwal}
+            className="flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg border border-red-300 bg-red-50 text-xs sm:text-sm font-medium text-red-700 hover:bg-red-100 text-center"
+          />
         </div>
       </div>
 
