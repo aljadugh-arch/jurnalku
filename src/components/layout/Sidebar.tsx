@@ -89,6 +89,7 @@ const bendaharaMenuItems: MenuItem[] = [
   { label: 'Ceklok Saya', icon: <MapPin size={20} />, path: '/admin/ceklok' },
   { label: 'Tagihan & Pembayaran', icon: <DollarSign size={20} />, path: '/admin/tagihan' },
   { label: 'Tabungan Siswa', icon: <PiggyBank size={20} />, path: '/admin/tabungan' },
+  { label: 'Buku Kas', icon: <FileText size={20} />, path: '/admin/buku-kas' },
   { label: 'Laporan Keuangan', icon: <FileText size={20} />, path: '/admin/bendahara#laporan' },
 ]
 

@@ -77,16 +77,18 @@ export default function SettingsPage() {
   }, [])
 
   const handleSave = async () => {
+    if (form.dashboard_quick_menus.length !== 8) return toast.error('Pilih tepat 8 pintasan dashboard')
     setSaving(true)
     try {
-      await api.put('/settings', { ...form, bg_blur: form.bg_blur || 0, pwa_enabled: form.pwa_enabled })
-      // Tema lembaga yang baru disimpan menjadi acuan: hapus override lokal
-      // agar admin melihat hasilnya, termasuk setelah refresh.
+      const saved = await api.put('/settings', { ...form, bg_blur: form.bg_blur || 0, pwa_enabled: form.pwa_enabled })
+      const persisted = parseAdminDashboardShortcutKeys(saved.data.dashboard_quick_menus)
+      const nextForm = { ...form, dashboard_quick_menus: persisted }
       clearLocalTheme()
-      applyTheme(form, true)
-      setSettings(form)
+      applyTheme(nextForm, true)
+      setForm(nextForm)
+      setSettings(nextForm)
       toast.success('Pengaturan berhasil disimpan')
-    } catch { toast.error('Gagal menyimpan') }
+    } catch (error: any) { toast.error(error.response?.data?.error || 'Gagal menyimpan') }
     finally { setSaving(false) }
   }
 
@@ -336,7 +338,7 @@ export default function SettingsPage() {
 
       <div id="pintasan-dashboard" className="bg-white rounded-xl p-4 sm:p-6 shadow-sm border border-gray-100 scroll-mt-24">
         <h2 className="text-lg font-semibold text-gray-800 mb-1">Pintasan Dashboard</h2>
-        <p className="mb-4 text-xs text-gray-500">Pilih tepat 8 menu dan atur urutannya untuk grid Home admin/kepala.</p>
+        <p className="mb-4 text-xs text-gray-500">Pilih tepat 8 menu dan atur urutannya untuk grid Home admin/kepala. Terpilih: {form.dashboard_quick_menus.length}/8.</p>
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
           {adminDashboardShortcuts.map(item => {
             const selected = form.dashboard_quick_menus.includes(item.key)

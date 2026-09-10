@@ -2297,15 +2297,16 @@ app.put('/api/settings', ADMIN, (req, res) => {
   const bg_position_v = bg_position || 'center'
   const bg_repeat_v = bg_repeat || 'no-repeat'
   const bg_blur_v = bg_blur || 0
-  const previousQuickMenus = getTenantSettings(db, req.tenantId, 'dashboard_quick_menus')?.dashboard_quick_menus || '[]'
-  const quickMenus = Array.isArray(dashboard_quick_menus)
-    ? JSON.stringify(dashboard_quick_menus.slice(0, 8))
-    : previousQuickMenus
+  if (!Array.isArray(dashboard_quick_menus)) return res.status(400).json({ error: 'dashboard_quick_menus wajib berupa array' })
+  const allowedQuickMenus = new Set(['siswa','gtk','jadwal','rekap','absensi','ceklok','penilaian','keuangan','rombel'])
+  const normalizedQuickMenus = [...new Set(dashboard_quick_menus.filter(item => typeof item === 'string' && allowedQuickMenus.has(item)))]
+  if (normalizedQuickMenus.length !== 8 || normalizedQuickMenus.length !== dashboard_quick_menus.length) return res.status(400).json({ error: 'Pilih tepat 8 pintasan dashboard yang valid dan unik' })
+  const quickMenus = JSON.stringify(normalizedQuickMenus)
   db.prepare(`INSERT INTO settings (id, tenant_id, nama_lembaga, alamat, telepon, email, theme, primary_color, accent_color, sidebar_color, geo_latitude, geo_longitude, geo_radius, jenjang, hari_libur, bg_size, bg_position, bg_repeat, bg_blur, pwa_enabled, pwa_name, pwa_theme_color, pwa_bg_color, dashboard_quick_menus, updated_at)
     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,datetime('now'))
     ON CONFLICT(id) DO UPDATE SET tenant_id=excluded.tenant_id, nama_lembaga=excluded.nama_lembaga, alamat=excluded.alamat, telepon=excluded.telepon, email=excluded.email, theme=excluded.theme, primary_color=excluded.primary_color, accent_color=excluded.accent_color, sidebar_color=excluded.sidebar_color, geo_latitude=excluded.geo_latitude, geo_longitude=excluded.geo_longitude, geo_radius=excluded.geo_radius, jenjang=excluded.jenjang, hari_libur=excluded.hari_libur, bg_size=excluded.bg_size, bg_position=excluded.bg_position, bg_repeat=excluded.bg_repeat, bg_blur=excluded.bg_blur, pwa_enabled=excluded.pwa_enabled, pwa_name=excluded.pwa_name, pwa_theme_color=excluded.pwa_theme_color, pwa_bg_color=excluded.pwa_bg_color, dashboard_quick_menus=excluded.dashboard_quick_menus, updated_at=datetime('now')`)
     .run(id, req.tenantId, nama_lembaga, alamat, telepon, email, theme, primary_color, accent_color, sidebar_color, geo_latitude || null, geo_longitude || null, geo_radius || 200, jenjang || '', JSON.stringify(hari_libur || []), bg_size_v, bg_position_v, bg_repeat_v, bg_blur_v, pwa_enabled ? 1 : 0, pwa_name || '', pwa_theme_color || '#1e40af', pwa_bg_color || '#ffffff', quickMenus)
-  res.json({ success: true })
+  res.json({ success: true, dashboard_quick_menus: JSON.parse(quickMenus) })
 })
 
 app.post('/api/settings/logo', ADMIN, imageUpload.single('logo'), compressUploadedImages(['logo']), (req, res) => {
@@ -3131,12 +3132,12 @@ function teacherCanAccessStudentOnDate(req, siswaId, tanggal) {
 
 function tenantUsesClassTeacherDailyAttendance(tenantId) {
   const jenjang = String(getTenantSettings(db, tenantId, 'jenjang')?.jenjang || '').trim()
-  return ['RA', 'MI'].includes(jenjang)
+  return ['RA', 'TK', 'MI', 'SD'].includes(jenjang)
 }
 
 function tenantUsesLegacyStudentQrWindow(tenantId) {
   const jenjang = String(getTenantSettings(db, tenantId, 'jenjang')?.jenjang || '').trim()
-  return ['MTs', 'MA', 'PT', 'NF'].includes(jenjang)
+  return ['MTs', 'SMP', 'MA', 'SMA', 'SMK', 'MAK', 'PT', 'NF'].includes(jenjang)
 }
 
 // Absensi harian masuk/pulang tersedia untuk seluruh guru. Akses tetap hanya
@@ -3207,7 +3208,7 @@ function teacherScheduleForDay(gtkId, tenantId, day, date) {
 app.get('/api/guru/dashboard', authMiddleware, (req, res) => {
   const gtk = resolveGtkForUser(req.user.id, req.tenantId)
   const gtkId = gtk?.id
-  if (!gtkId) return res.json({ jadwal_hari_ini: [], rekap_jurnal: { total: 0 }, absensi_hari_ini: 0, catatan_count: 0, siswa_rombel_count: 0, rombel_count: 0, wali_rombel: [] })
+  if (!gtkId) return res.json({ jadwal_hari_ini: [], rekap_jurnal: { total: 0 }, absensi_hari_ini: 0, catatan_count: 0, siswa_rombel_count: 0, rombel_count: 0, wali_rombel: [], gtk: null })
 
   const today = require('./attendance-rules.cjs').hariJakarta()
   const todayDate = todayJakarta()
@@ -3236,7 +3237,7 @@ app.get('/api/guru/dashboard', authMiddleware, (req, res) => {
       .run(sesiKelasAktif.jam_selesai, sesiKelasAktif.id, req.tenantId)
   }
   const sesiAktifSekarang = sesiKelasAktif && timeJakarta() <= sesiKelasAktif.jam_selesai ? sesiKelasAktif : null
-  res.json({ jadwal_hari_ini: jadwal, hari_libur: holidayToday, sesi_kelas_aktif: sesiAktifSekarang, mapel_diampu: mapelDiampu, ekskul_diampu: ekskulDiampu, tugas, rekap_jurnal: { total: totalJurnal }, absensi_hari_ini: absensiHariIni, catatan_count: catatanCount, siswa_rombel_count: siswaRombelCount, nilai_siswa_count: siswaRombelCount, rombel_count: rombelCount, wali_rombel: waliRombel, gtk: { ...gtk, nama_tampilan: honorificTeacherName(gtk.nama, gtk.jenis_kelamin) } })
+  res.json({ jadwal_hari_ini: jadwal, hari_libur: holidayToday, sesi_kelas_aktif: sesiAktifSekarang, mapel_diampu: mapelDiampu, ekskul_diampu: ekskulDiampu, tugas, rekap_jurnal: { total: totalJurnal }, absensi_hari_ini: absensiHariIni, catatan_count: catatanCount, siswa_rombel_count: siswaRombelCount, nilai_siswa_count: siswaRombelCount, rombel_count: rombelCount, wali_rombel: waliRombel, gtk: { ...gtk, foto: gtk.foto || null, nama_tampilan: honorificTeacherName(gtk.nama, gtk.jenis_kelamin) } })
 })
 
 function clockToMinutes(value) {
@@ -3841,6 +3842,79 @@ app.get('/api/keuangan/laporan', BENDAHARA, (req, res) => {
   res.json({ saldo_awal, debet, kredit, saldo: saldo_awal + debet - kredit, per_kategori, per_akun })
 })
 
+
+// ==================== BUKU KAS BENDAHARA ====================
+function ensureBukuKasMasters(tenantId, tipe) {
+  let akun = db.prepare("SELECT id,saldo_awal FROM keuangan_akun WHERE tenant_id=? AND nama='Buku Kas' ORDER BY id LIMIT 1").get(tenantId)
+  if (!akun) {
+    akun = { id: uuidv4(), saldo_awal: 0 }
+    db.prepare("INSERT INTO keuangan_akun(id,nama,saldo_awal,tenant_id) VALUES(?,'Buku Kas',0,?)").run(akun.id, tenantId)
+  }
+  const namaKategori = tipe === 'masuk' ? 'Buku Kas Debet' : 'Buku Kas Kredit'
+  let kategori = db.prepare('SELECT id FROM keuangan_kategori WHERE tenant_id=? AND nama=? AND tipe=? ORDER BY id LIMIT 1').get(tenantId, namaKategori, tipe)
+  if (!kategori) {
+    kategori = { id: uuidv4() }
+    db.prepare('INSERT INTO keuangan_kategori(id,nama,tipe,tenant_id) VALUES(?,?,?,?)').run(kategori.id, namaKategori, tipe, tenantId)
+  }
+  return { akun, kategori }
+}
+
+function validBukuKasPayload(body) {
+  const tanggal = String(body?.tanggal || '').trim()
+  const uraian = String(body?.uraian || '').trim()
+  const debet = Number(body?.debet || 0)
+  const kredit = Number(body?.kredit || 0)
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(tanggal)) return { error: 'Tanggal tidak valid' }
+  if (!uraian || uraian.length > 500) return { error: 'Uraian wajib diisi (maksimal 500 karakter)' }
+  if (!Number.isFinite(debet) || !Number.isFinite(kredit) || debet < 0 || kredit < 0 || (debet > 0) === (kredit > 0)) return { error: 'Isi tepat salah satu Debet atau Kredit dengan nominal lebih dari 0' }
+  return { tanggal, uraian, debet, kredit, tipe: debet > 0 ? 'masuk' : 'keluar', nominal: debet > 0 ? debet : kredit }
+}
+
+app.get('/api/buku-kas', BENDAHARA, (req, res) => {
+  const akun = db.prepare("SELECT id,saldo_awal FROM keuangan_akun WHERE tenant_id=? AND nama='Buku Kas' ORDER BY id LIMIT 1").get(req.tenantId)
+  if (!akun) return res.json([])
+  const transactions = db.prepare(`SELECT t.id,t.tanggal,t.keterangan AS uraian,t.tipe,t.nominal,t.created_at
+    FROM keuangan_transaksi t WHERE t.tenant_id=? AND t.akun_id=?
+    ORDER BY t.tanggal ASC,t.created_at ASC,t.id ASC`).all(req.tenantId, akun.id)
+  let saldo = Number(akun.saldo_awal || 0)
+  const formatter = new Intl.DateTimeFormat('id-ID', { weekday: 'long', timeZone: 'Asia/Jakarta' })
+  const rows = transactions.map(row => {
+    const debet = row.tipe === 'masuk' ? Number(row.nominal) : 0
+    const kredit = row.tipe === 'keluar' ? Number(row.nominal) : 0
+    saldo += debet - kredit
+    return { ...row, hari: formatter.format(new Date(`${row.tanggal}T12:00:00+07:00`)), debet, kredit, saldo }
+  })
+  res.json(rows)
+})
+
+app.post('/api/buku-kas', BENDAHARA, (req, res) => {
+  const payload = validBukuKasPayload(req.body)
+  if (payload.error) return res.status(400).json({ error: payload.error })
+  const id = uuidv4()
+  const { akun, kategori } = ensureBukuKasMasters(req.tenantId, payload.tipe)
+  db.prepare('INSERT INTO keuangan_transaksi(id,tanggal,akun_id,kategori_id,tipe,nominal,keterangan,tenant_id) VALUES(?,?,?,?,?,?,?,?)')
+    .run(id, payload.tanggal, akun.id, kategori.id, payload.tipe, payload.nominal, payload.uraian, req.tenantId)
+  res.status(201).json({ id, success: true })
+})
+
+app.put('/api/buku-kas/:id', BENDAHARA, (req, res) => {
+  const payload = validBukuKasPayload(req.body)
+  if (payload.error) return res.status(400).json({ error: payload.error })
+  const current = db.prepare(`SELECT t.id FROM keuangan_transaksi t JOIN keuangan_akun a ON a.id=t.akun_id AND a.tenant_id=t.tenant_id
+    WHERE t.id=? AND t.tenant_id=? AND a.nama='Buku Kas'`).get(req.params.id, req.tenantId)
+  if (!current) return res.status(404).json({ error: 'Transaksi Buku Kas tidak ditemukan' })
+  const { akun, kategori } = ensureBukuKasMasters(req.tenantId, payload.tipe)
+  db.prepare('UPDATE keuangan_transaksi SET tanggal=?,akun_id=?,kategori_id=?,tipe=?,nominal=?,keterangan=? WHERE id=? AND tenant_id=?')
+    .run(payload.tanggal, akun.id, kategori.id, payload.tipe, payload.nominal, payload.uraian, req.params.id, req.tenantId)
+  res.json({ success: true })
+})
+
+app.delete('/api/buku-kas/:id', BENDAHARA, (req, res) => {
+  const info = db.prepare(`DELETE FROM keuangan_transaksi WHERE id=? AND tenant_id=? AND akun_id IN
+    (SELECT id FROM keuangan_akun WHERE tenant_id=? AND nama='Buku Kas')`).run(req.params.id, req.tenantId, req.tenantId)
+  if (!info.changes) return res.status(404).json({ error: 'Transaksi Buku Kas tidak ditemukan' })
+  res.json({ success: true })
+})
 
 // ==================== LAPORAN MINGGUAN/BULANAN ====================
 app.get('/api/bendahara/laporan', BENDAHARA, (req, res) => {

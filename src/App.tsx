@@ -46,6 +46,7 @@ import BackupRestorePage from './pages/admin/BackupRestorePage'
 import CekLokAdminPage from './pages/admin/CekLokAdminPage'
 import GuruAbsensiPage from './pages/guru/GuruAbsensiPage'
 import BendaharaDashboard from './pages/admin/BendaharaDashboard'
+import BukuKasPage from './pages/admin/BukuKasPage'
 import EkskulPage from './pages/admin/EkskulPage'
 import GuruDashboard from './pages/guru/GuruDashboard'
 import GuruJurnalPage from './pages/guru/GuruJurnalPage'
@@ -66,6 +67,9 @@ import SiswaPostingPage from './pages/siswa/SiswaPostingPage'
 import SiswaNilaiPage from './pages/siswa/SiswaNilaiPage'
 import SiswaKantinPage from './pages/siswa/SiswaKantinPage'
 import SiswaQrisTopupPage from './pages/siswa/SiswaQrisTopupPage'
+import SiswaSectionPage from './pages/siswa/SiswaSectionPage'
+import SiswaPerpustakaanPage from './pages/siswa/SiswaPerpustakaanPage'
+import SiswaMenuPage from './pages/siswa/SiswaMenuPage'
 import ChangePasswordPage from './pages/ChangePasswordPage'
 import ProfilePage from './pages/ProfilePage'
 import PanduanPage from './pages/PanduanPage'
@@ -218,6 +222,7 @@ export default function App() {
           <Route path="ceklok" element={<CekLokAdminPage />} />
           <Route path="absensi-saya" element={<GuruAbsensiPage />} />
           <Route path="bendahara" element={<BendaharaDashboard />} />
+          <Route path="buku-kas" element={<BukuKasPage />} />
           <Route path="ekskul" element={<EkskulPage />} />
           {/* E-Kantin & Cashless Routes */}
           <Route path="kantin-menu" element={<KantinMenuPage />} />
@@ -277,9 +282,14 @@ export default function App() {
           <Route path="nilai" element={<SiswaNilaiPage />} />
           <Route path="kantin" element={<SiswaKantinPage />} />
           <Route path="qris-topup" element={<SiswaQrisTopupPage />} />
+          <Route path="tugas" element={<SiswaSectionPage section="tugas" />} />
+          <Route path="tagihan" element={<SiswaSectionPage section="tagihan" />} />
+          <Route path="tabungan" element={<SiswaSectionPage section="tabungan" />} />
+          <Route path="perpustakaan" element={<SiswaPerpustakaanPage />} />
+          <Route path="menu" element={<SiswaMenuPage />} />
         </Route>
 
-        <Route path="*" element={<Navigate to="/login" replace />} />
+        <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>
   )

@@ -2,10 +2,18 @@
 // tingkat = ROMAN numeral (I,II,III...XII) atau huruf (A,B untuk RA/TK)
 // paralel = alfabet (A,B,C,D...) atau numerik (1,2,3,4...)
 export const JENJANG_OPTIONS = [
-  { value: 'RA', label: 'RA / TK (PAUD)' },
-  { value: 'MI', label: 'MI / SD' },
-  { value: 'MTs', label: 'MTs / SMP' },
-  { value: 'MA', label: 'MA / SMA / SMK' },
+  { value: 'RA', label: 'RA' },
+  { value: 'TK', label: 'TK / PAUD' },
+  { value: 'MI', label: 'MI' },
+  { value: 'SD', label: 'SD' },
+  { value: 'MTs', label: 'MTs' },
+  { value: 'SMP', label: 'SMP' },
+  { value: 'MA', label: 'MA' },
+  { value: 'SMA', label: 'SMA' },
+  { value: 'SMK', label: 'SMK' },
+  { value: 'MAK', label: 'MAK' },
+  { value: 'PT', label: 'Perguruan Tinggi' },
+  { value: 'NF', label: 'Lembaga Nonformal' },
 ]
 
 // Roman numeral conversion (small range, no lib needed)
@@ -48,7 +56,7 @@ export const JTM_MENIT: Record<string, number> = { RA: 30, MI: 35, MTs: 40, MA: 
 
 /** RA/TK dan MI/SD: absensi siswa via guru kelas/wali kelas (bukan admin). */
 export function isGuruKelasJenjang(jenjang?: string): boolean {
-  return jenjang === 'RA' || jenjang === 'MI'
+  return ['RA', 'TK', 'MI', 'SD'].includes(jenjang || '')
 }
 
 export function jtmMenit(jenjang: string): number {

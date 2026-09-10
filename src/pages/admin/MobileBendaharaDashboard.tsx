@@ -1,7 +1,7 @@
 import { useAuthStore } from '../../stores/authStore'
 import { useNavigate } from 'react-router-dom'
 import {
-  ArrowDownLeft, ArrowUpRight, CreditCard, FileBarChart,
+  ArrowDownLeft, ArrowUpRight, BookOpen, FileBarChart,
   Landmark, PiggyBank, ReceiptText, UserCheck, WalletCards,
 } from 'lucide-react'
 import MobileHeader from '../../components/MobileHeader'
@@ -22,7 +22,7 @@ const rupiah = (value: number) => new Intl.NumberFormat('id-ID', {
 const quickMenus = [
   { label: 'Tagihan', path: '/admin/tagihan', icon: ReceiptText, color: 'bg-emerald-500' },
   { label: 'Tabungan', path: '/admin/tabungan', icon: PiggyBank, color: 'bg-blue-500' },
-  { label: 'Pembayaran', path: '/admin/pembayaran', icon: CreditCard, color: 'bg-violet-500' },
+  { label: 'Buku Kas', path: '/admin/buku-kas', icon: BookOpen, color: 'bg-violet-500' },
   { label: 'Ceklok Saya', path: '/admin/ceklok', icon: UserCheck, color: 'bg-amber-500' },
   { label: 'Laporan', path: '/admin/bendahara#laporan', icon: FileBarChart, color: 'bg-cyan-500' },
   { label: 'Data Siswa', path: '/admin/siswa', icon: Landmark, color: 'bg-rose-500' },

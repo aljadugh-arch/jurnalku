@@ -21,10 +21,12 @@ export default function MobileHeader({
   basePath,
   onBell,
   showBell = true,
+  profilePhoto,
 }: {
   basePath: string
   onBell: () => void
   showBell?: boolean
+  profilePhoto?: string | null
 }) {
   const navigate = useNavigate()
   const location = useLocation()
@@ -58,7 +60,7 @@ export default function MobileHeader({
           aria-label="Menu akun"
         >
           <Avatar
-            src={user?.avatar}
+            src={profilePhoto || user?.avatar}
             name={user?.nama}
             size={42}
             className="!border-2 !border-slate-200 dark:!border-gray-700 shadow-sm"

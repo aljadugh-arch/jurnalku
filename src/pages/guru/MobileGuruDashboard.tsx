@@ -7,6 +7,7 @@ import {
   ChevronRight,
   Fingerprint,
   LogIn,
+  DoorOpen,
   Star,
   Target,
   Users,
@@ -125,6 +126,20 @@ export default function MobileGuruDashboard() {
     }
   }
 
+  const finishClass = async () => {
+    if (!data.sesi_kelas_aktif?.id) return
+    setBusy(true)
+    try {
+      await api.post('/guru/sesi-kelas/selesai', { sesi_id: data.sesi_kelas_aktif?.id })
+      toast.success('Sesi kelas diselesaikan')
+      await load()
+    } catch (err: any) {
+      toast.error(err.response?.data?.error || 'Gagal menyelesaikan kelas')
+    } finally {
+      setBusy(false)
+    }
+  }
+
   const quickActions = [
     {
       label: 'Jadwal Mengajar',
@@ -164,7 +179,7 @@ export default function MobileGuruDashboard() {
     <div className="min-h-[100dvh] bg-slate-50 dark:bg-gray-950 pb-6">
       {/* ── HEADER MINIMALIS: avatar + nama di kiri, bell notif di kanan ── */}
       <div className="px-4 pt-4 pb-2">
-        <MobileHeader basePath="/guru" onBell={() => navigate('/guru/posting')} />
+        <MobileHeader basePath="/guru" onBell={() => navigate('/guru/posting')} profilePhoto={data.gtk?.foto || null} />
       </div>
 
       <div data-mobile-compact-dashboard="true" className="px-4 space-y-4">
@@ -196,7 +211,15 @@ export default function MobileGuruDashboard() {
 
           {/* nested white next-class card */}
           <div data-guru-next-class="true" className="relative z-10 mt-4 rounded-2xl bg-white p-3 shadow-sm dark:bg-gray-900">
-            {nextClass ? (
+            {data.sesi_kelas_aktif ? (
+              <div className="flex items-center gap-3">
+                <div className="min-w-0 flex-1">
+                  <p className="text-[11px] font-semibold uppercase text-emerald-600">Sedang di kelas sejak {data.sesi_kelas_aktif.waktu_masuk}</p>
+                  <p className="truncate text-sm font-bold text-slate-900 dark:text-white">{data.sesi_kelas_aktif.rombel_nama} · {data.sesi_kelas_aktif.mapel_nama}</p>
+                </div>
+                <button onClick={finishClass} disabled={busy} className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-red-600 px-3 py-2 text-xs font-semibold text-white active:scale-95 transition disabled:opacity-60"><DoorOpen size={14}/>Selesai Kelas</button>
+              </div>
+            ) : nextClass ? (
               <div className="flex items-center gap-3">
                 <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-600 dark:bg-blue-500/15">
                   <BookOpen size={20} />
@@ -305,7 +328,9 @@ export default function MobileGuruDashboard() {
                     </div>
 
                     <div data-guru-schedule-action="true" className="shrink-0">
-                      {isDone ? (
+                      {data.sesi_kelas_aktif?.jadwal_id === j.id ? (
+                        <button onClick={() => finishClass()} disabled={busy} className="inline-flex items-center gap-1 rounded-full bg-red-600 px-2.5 py-1.5 text-[11px] font-semibold text-white disabled:opacity-60"><DoorOpen size={12}/>Selesai</button>
+                      ) : isDone ? (
                         <span className="rounded-full bg-slate-100 px-2.5 py-1.5 text-[11px] font-semibold text-slate-400 dark:bg-gray-800">
                           Selesai
                         </span>

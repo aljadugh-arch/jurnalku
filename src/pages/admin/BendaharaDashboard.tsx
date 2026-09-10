@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { BarChart3, CreditCard, DollarSign, MapPin, PiggyBank, Users } from 'lucide-react'
+import { BarChart3, BookOpen, CreditCard, DollarSign, MapPin, PiggyBank, Users } from 'lucide-react'
 import api from '../../services/api'
 import FinanceExcelPanel from '../../components/FinanceExcelPanel'
 import MobileBendaharaDashboard from './MobileBendaharaDashboard'
@@ -28,7 +28,8 @@ export default function BendaharaDashboard() {
         <div className="flex items-center gap-3"><div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center">{c.icon}</div><div><p className="text-xs text-gray-500">{c.label}</p><p className="font-bold text-gray-800">{c.value}</p><p className="text-xs text-gray-400">{c.sub}</p></div></div>
       </button>)}
     </div>
-    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+    <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+      <button onClick={() => navigate('/admin/buku-kas')} className="inline-flex items-center justify-center gap-2 rounded-2xl bg-emerald-600 p-4 text-sm font-semibold text-white"><BookOpen size={18}/> Buku Kas</button>
       <button onClick={() => navigate('/admin/ceklok')} className="inline-flex items-center justify-center gap-2 rounded-2xl bg-white border border-gray-100 p-4 text-sm font-semibold text-gray-700"><MapPin size={18}/> Ceklok Saya</button>
       <button onClick={() => navigate('/admin/tagihan')} className="inline-flex items-center justify-center gap-2 rounded-2xl bg-white border border-gray-100 p-4 text-sm font-semibold text-gray-700"><DollarSign size={18}/> Tagihan & Pembayaran</button>
       <button onClick={() => navigate('/admin/tabungan')} className="inline-flex items-center justify-center gap-2 rounded-2xl bg-white border border-gray-100 p-4 text-sm font-semibold text-gray-700"><BarChart3 size={18}/> Laporan</button>

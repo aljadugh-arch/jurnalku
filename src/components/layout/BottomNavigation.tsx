@@ -80,6 +80,7 @@ function roleItems(role?: string, hideStaffCeklok?: boolean): NavItem[] {
       { label: 'Ceklok', path: '/admin/ceklok', icon: <MapPin size={iconSize} /> },
       { label: 'Tagihan', path: '/admin/tagihan', icon: <DollarSign size={iconSize} /> },
       { label: 'Tabungan', path: '/admin/tabungan', icon: <CreditCard size={iconSize} /> },
+      { label: 'Buku Kas', path: '/admin/buku-kas', icon: <BookOpen size={iconSize} /> },
       { label: 'Laporan', path: '/admin/bendahara', icon: <BarChart3 size={iconSize} /> },
     ]
   }
@@ -165,12 +166,13 @@ export default function BottomNavigation() {
   const primary = items.slice(0, 4)
   const more = items.slice(4)
   const activeMore = more.some(item => isActive(location.pathname, item.path))
-  const adminRole = ['admin', 'super_admin', 'kepala', 'operator', 'tata_usaha', 'tu'].includes(navigationRole || '')
+  const managementRole = ['admin', 'super_admin', 'kepala', 'operator', 'tata_usaha', 'tu'].includes(navigationRole || '')
+  const canSwitchTeacher = role === 'kepala' && !!user?.can_teach
 
   return (
     <>
-      {adminRole && <MobileMenuSheet open={open} onClose={() => setOpen(false)} variant="all" />}
-      {open && !adminRole && (
+      {managementRole && <MobileMenuSheet open={open} onClose={() => setOpen(false)} variant="all" />}
+      {open && !managementRole && (
         <div className="fixed inset-0 z-50 bg-black/40 lg:hidden" onClick={() => setOpen(false)}>
           <div
             className="absolute inset-x-3 bottom-24 max-h-[70vh] overflow-y-auto rounded-3xl bg-white p-3 shadow-2xl dark:bg-gray-900"
@@ -226,6 +228,7 @@ export default function BottomNavigation() {
       )}
 
       <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-gray-200 bg-white/95 px-2 pb-[max(env(safe-area-inset-bottom),0.5rem)] pt-2 shadow-[0_-10px_30px_rgba(15,23,42,0.12)] backdrop-blur-xl dark:border-gray-800 dark:bg-gray-950/95 lg:hidden">
+        {canSwitchTeacher && <div className="mx-auto mb-2 grid max-w-xl grid-cols-2 gap-1 rounded-xl bg-slate-100 p-1 text-[11px] font-semibold dark:bg-gray-800"><Link to="/admin" className={clsx('rounded-lg px-2 py-1.5 text-center', !location.pathname.startsWith('/guru') ? 'bg-white text-primary shadow-sm dark:bg-gray-700' : 'text-gray-500')}>Mode Manajemen</Link><Link to="/guru" className={clsx('rounded-lg px-2 py-1.5 text-center', location.pathname.startsWith('/guru') ? 'bg-white text-primary shadow-sm dark:bg-gray-700' : 'text-gray-500')}>Mode Guru</Link></div>}
         <div className="mx-auto grid max-w-xl grid-cols-5 gap-1">
           {primary.map(item => (
             <Link

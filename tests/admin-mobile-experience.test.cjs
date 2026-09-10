@@ -39,7 +39,8 @@ test('settings persists tenant-specific dashboard shortcut choices', () => {
   assert.match(SETTINGS, /Pintasan Dashboard/)
   assert.match(SETTINGS, /dashboard_quick_menus/)
   assert.match(SERVER, /dashboard_quick_menus/)
-  assert.match(SERVER, /previousQuickMenus/)
+  assert.match(SERVER, /Array\.isArray\(dashboard_quick_menus\)/)
+  assert.match(SERVER, /dashboard_quick_menus: JSON\.parse\(quickMenus\)/)
 })
 
 test('calendar selection loads configured teaching schedule', () => {
