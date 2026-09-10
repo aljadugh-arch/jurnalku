@@ -107,12 +107,12 @@ export default function RegisterPage() {
           {/* Domain mode selector */}
           <div className="mb-5">
             <label className="block text-xs font-medium text-gray-600 mb-2">Pilih Jenis Domain</label>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               {/* Subdomain */}
               <button
                 type="button"
                 onClick={() => setDomainMode('subdomain')}
-                className={`flex flex-col items-start gap-1 p-3 rounded-xl border-2 text-left transition-colors ${
+                className={`min-w-0 flex flex-col items-start gap-1 p-3 rounded-xl border-2 text-left transition-colors ${
                   domainMode === 'subdomain'
                     ? 'border-primary bg-primary/5'
                     : 'border-gray-200 hover:border-gray-300'
@@ -132,7 +132,7 @@ export default function RegisterPage() {
               <button
                 type="button"
                 onClick={() => setDomainMode('custom')}
-                className={`flex flex-col items-start gap-1 p-3 rounded-xl border-2 text-left transition-colors ${
+                className={`min-w-0 flex flex-col items-start gap-1 p-3 rounded-xl border-2 text-left transition-colors ${
                   domainMode === 'custom'
                     ? 'border-primary bg-primary/5'
                     : 'border-gray-200 hover:border-gray-300'
@@ -144,7 +144,7 @@ export default function RegisterPage() {
                     Domain Sendiri
                   </span>
                 </div>
-                <span className="text-xs text-gray-400 leading-tight">jurnal.sekolahku.sch.id</span>
+                <span className="text-xs text-gray-400 leading-tight break-all">jurnal.sekolahku.sch.id</span>
                 <span className="text-xs text-gray-400 leading-tight">Domain milik lembaga</span>
               </button>
             </div>
@@ -156,12 +156,12 @@ export default function RegisterPage() {
                   <label className="block text-xs font-medium text-gray-600 mb-1">
                     Subdomain <span className="text-red-500">*</span>
                   </label>
-                  <div className="flex items-center border rounded-lg overflow-hidden focus-within:ring-2 focus-within:ring-primary/20">
+                  <div className="min-w-0 flex items-center border rounded-lg overflow-hidden focus-within:ring-2 focus-within:ring-primary/20">
                     <input
                       value={form.slug}
                       onChange={e => setForm({ ...form, slug: slugify(e.target.value) })}
                       placeholder="nama-sekolah"
-                      className="flex-1 px-3 py-2 text-sm outline-none"
+                      className="min-w-0 flex-1 px-3 py-2 text-sm outline-none"
                     />
                     <span className="px-3 py-2 bg-gray-50 text-gray-400 text-sm border-l whitespace-nowrap">{`.${SUBDOMAIN_BASE}`}</span>
                   </div>

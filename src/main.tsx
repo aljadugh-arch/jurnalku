@@ -9,14 +9,12 @@ applyTheme()
 
 // Enable PWA discovery and its service worker only for tenants that opted in.
 async function configurePwa() {
-  const linkEl = document.querySelector('link[rel="manifest"]') as HTMLLinkElement | null
-  if (!linkEl) return
+  let linkEl = document.querySelector('link[rel="manifest"]') as HTMLLinkElement | null
 
-  linkEl.href = '/api/pwa/manifest'
   try {
     const response = await fetch('/api/pwa/manifest')
-    if (!response.ok) {
-      linkEl.removeAttribute('href')
+    if (response.status === 204 || !response.ok) {
+      linkEl?.remove()
       // PWA may be disabled, but favicon remains tenant-scoped and server-backed.
       const favicons = document.querySelectorAll('link[rel="icon"], link[rel="shortcut icon"]')
       favicons.forEach(el => { el.setAttribute('href', `/favicon.ico?v=${Date.now()}`) })
@@ -30,6 +28,12 @@ async function configurePwa() {
     }
 
     const data = await response.json()
+    if (!linkEl) {
+      linkEl = document.createElement('link')
+      linkEl.rel = 'manifest'
+      document.head.appendChild(linkEl)
+    }
+    linkEl.href = '/api/pwa/manifest'
     const tc = document.querySelector('meta[name="theme-color"]') as HTMLMetaElement | null
     if (tc && data.theme_color) tc.content = data.theme_color
     if (data.name) document.title = data.name

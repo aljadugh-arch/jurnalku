@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import { Eye, EyeOff, ArrowLeft, ArrowRight, Moon, Sun } from 'lucide-react'
 import { useAuthStore } from '../../stores/authStore'
@@ -14,8 +14,18 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
+  const demoRef = useRef<HTMLDivElement>(null)
   const navigate = useNavigate()
   const { loginWithCredentials, loginDemo } = useAuthStore()
+
+  useEffect(() => {
+    if (window.location.hash !== '#demo' || !demoRef.current) return
+    const frame = window.requestAnimationFrame(() => {
+      demoRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      demoRef.current?.focus({ preventScroll: true })
+    })
+    return () => window.cancelAnimationFrame(frame)
+  }, [])
 
   const getRedirectPath = (role: string) => {
     if (['admin', 'super_admin', 'kepala', 'bendahara', 'operator', 'tata_usaha', 'tu'].includes(role)) return '/admin'
@@ -103,6 +113,7 @@ export default function LoginPage() {
           <button
             onClick={toggleDark}
             className="p-2.5 rounded-full text-slate-500 hover:bg-slate-200 dark:text-gray-400 dark:hover:bg-gray-800 transition"
+            aria-label={dark ? 'Aktifkan mode terang' : 'Aktifkan mode gelap'}
             title={dark ? 'Mode Terang' : 'Mode Gelap'}
           >
             {dark ? <Sun size={18} className="text-amber-500" /> : <Moon size={18} />}
@@ -140,10 +151,11 @@ export default function LoginPage() {
 
             <form onSubmit={handleLogin} className="space-y-4">
               <div>
-                <label className="block text-xs font-bold text-slate-700 dark:text-gray-300 mb-1.5">
+                <label htmlFor="login-identifier" className="block text-xs font-bold text-slate-700 dark:text-gray-300 mb-1.5">
                   Email / Kode Guru / NISN / NIS
                 </label>
                 <input
+                  id="login-identifier"
                   type="text"
                   autoCapitalize="none"
                   autoCorrect="off"
@@ -156,13 +168,14 @@ export default function LoginPage() {
 
               <div>
                 <div className="flex items-center justify-between mb-1.5">
-                  <label className="text-xs font-bold text-slate-700 dark:text-gray-300">Password</label>
+                  <label htmlFor="login-password" className="text-xs font-bold text-slate-700 dark:text-gray-300">Password</label>
                   <Link to="/forgot-password" className="text-xs text-blue-600 hover:underline font-semibold">
                     Lupa?
                   </Link>
                 </div>
                 <div className="relative">
                   <input
+                    id="login-password"
                     type={showPassword ? 'text' : 'password'}
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
@@ -172,6 +185,7 @@ export default function LoginPage() {
                   <button
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
+                    aria-label={showPassword ? 'Sembunyikan password' : 'Tampilkan password'}
                     className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-gray-300"
                   >
                     {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
@@ -191,7 +205,12 @@ export default function LoginPage() {
             </form>
 
             {['jurnal.cc.cd','jurnalmadrasah.web.id'].includes(window.location.hostname) && (
-            <div className="mt-5 rounded-2xl border border-blue-100 dark:border-blue-900/40 bg-blue-50/70 dark:bg-blue-950/30 p-3">
+            <div
+              id="demo"
+              ref={demoRef}
+              tabIndex={-1}
+              className="mt-5 scroll-mt-4 rounded-2xl border border-blue-100 dark:border-blue-900/40 bg-blue-50/70 dark:bg-blue-950/30 p-3 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+            >
               <p className="text-xs font-bold text-slate-800 dark:text-gray-200 mb-2">Akun Demo Cepat</p>
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
                 {['admin','kepala','guru','bendahara','siswa'].map(role => (

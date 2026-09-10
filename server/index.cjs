@@ -3646,7 +3646,7 @@ function selectLinkedStudent(req) {
 
 app.get('/api/pwa/manifest', (req, res) => {
   const s = getTenantSettings(db, req.tenantId, 'pwa_enabled,pwa_name,pwa_icon,nama_lembaga,logo,primary_color,pwa_bg_color,pwa_theme_color,updated_at') || {}
-  if (s.pwa_enabled === 0) return res.status(404).json({ error: 'PWA dinonaktifkan' })
+  if (s.pwa_enabled === 0) return res.status(204).end()
   const t = req.tenant || db.prepare('SELECT nama FROM tenants WHERE id=?').get(req.tenantId) || {}
   const name = s.pwa_name || (t.nama ? t.nama + ' Apps' : 'Jurnalku')
   const version = String(s.updated_at || Date.now()).replace(/[^0-9]/g, '')

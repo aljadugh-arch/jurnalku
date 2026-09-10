@@ -20,7 +20,10 @@ test('PWA install prompt tidak menggantung setelah prompt ditutup atau gagal', (
 })
 
 test('registrasi PWA menunggu manifest, memperbarui worker, dan memakai scope tenant', () => {
-  assert.match(html, /rel="manifest" href="\/api\/pwa\/manifest"/)
+  assert.doesNotMatch(html, /rel="manifest"/)
+  assert.match(main, /document\.createElement\('link'\)/)
+  assert.match(main, /linkEl\.rel = 'manifest'/)
+  assert.match(main, /linkEl\.href = '\/api\/pwa\/manifest'/)
   assert.match(main, /navigator\.serviceWorker\.register\('\/sw\.js', \{ updateViaCache: 'none' \}\)/)
   assert.match(main, /registration\.update\(\)/)
   assert.match(server, /start_url: req\.isRegisteredTenantHost \? '\/login' : '\/'/)
