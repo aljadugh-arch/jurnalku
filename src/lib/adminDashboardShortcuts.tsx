@@ -26,8 +26,8 @@ export function parseAdminDashboardShortcutKeys(value: unknown) {
   try {
     const parsed = Array.isArray(value) ? value : JSON.parse(String(value || '[]'))
     if (Array.isArray(parsed)) {
-      const valid = parsed.filter(key => adminDashboardShortcuts.some(item => item.key === key)).slice(0, 8)
-      if (valid.length === 8) return valid as string[]
+      const valid = [...new Set(parsed.filter(key => adminDashboardShortcuts.some(item => item.key === key)))].slice(0, 9) as string[]
+      if (valid.length >= 1) return valid
     }
   } catch { /* gunakan default */ }
   return defaultAdminDashboardShortcutKeys

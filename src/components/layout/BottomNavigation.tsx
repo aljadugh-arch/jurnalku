@@ -245,19 +245,34 @@ export default function BottomNavigation() {
               <span className="leading-none">{item.label}</span>
             </Link>
           ))}
-          <button
-            type="button"
-            onClick={() => setOpen(v => !v)}
-            className={clsx(
-              'flex min-h-14 flex-col items-center justify-center gap-0.5 rounded-2xl text-[11px] font-semibold transition',
-              open || activeMore
-                ? 'bg-primary text-white shadow-lg shadow-primary/25'
-                : 'text-gray-500 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-800'
-            )}
-          >
-            <MoreHorizontal size={iconSize} />
-            <span className="leading-none">Lainnya</span>
-          </button>
+          {managementRole ? (
+            <Link
+              to="/admin/settings"
+              className={clsx(
+                'flex min-h-14 flex-col items-center justify-center gap-0.5 rounded-2xl text-[11px] font-semibold transition',
+                isActive(location.pathname, '/admin/settings')
+                  ? 'bg-primary text-white shadow-lg shadow-primary/25'
+                  : 'text-gray-500 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-800'
+              )}
+            >
+              <Settings size={iconSize} />
+              <span className="leading-none">Pengaturan</span>
+            </Link>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setOpen(v => !v)}
+              className={clsx(
+                'flex min-h-14 flex-col items-center justify-center gap-0.5 rounded-2xl text-[11px] font-semibold transition',
+                open || activeMore
+                  ? 'bg-primary text-white shadow-lg shadow-primary/25'
+                  : 'text-gray-500 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-800'
+              )}
+            >
+              <MoreHorizontal size={iconSize} />
+              <span className="leading-none">Lainnya</span>
+            </button>
+          )}
         </div>
       </nav>
     </>
