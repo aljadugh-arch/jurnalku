@@ -1,15 +1,38 @@
 import { useEffect, useState } from 'react'
-import { BookOpen, ExternalLink } from 'lucide-react'
-import api from '../../services/api'
+import { BookOpen } from 'lucide-react'
 
 export default function SiswaPerpustakaanPage() {
-  const [library, setLibrary] = useState<any>(undefined)
-  useEffect(() => { api.get('/library').then(response => setLibrary(response.data)).catch(() => setLibrary(null)) }, [])
-  if (library === undefined) return <div className="py-10 text-center text-sm text-gray-400">Memuat...</div>
-  return <div className="mx-auto max-w-2xl rounded-2xl border bg-white p-6 shadow-sm">
-    <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-emerald-100 text-emerald-700"><BookOpen/></span>
-    <h1 className="mt-4 text-2xl font-bold text-gray-800">{library?.name || 'Perpustakaan Digital'}</h1>
-    <p className="mt-2 text-sm text-gray-600">{library?.description || 'Perpustakaan digital belum diaktifkan oleh lembaga.'}</p>
-    {library?.drive_folder_url && <a href={library.drive_folder_url} target="_blank" rel="noopener noreferrer" className="mt-5 inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-white"><ExternalLink size={17}/>Buka Perpustakaan</a>}
-  </div>
+  const [content] = useState({
+    name: 'Perpustakaan Digital',
+    description: 'Perpustakaan digital sekolah belum diaktifkan oleh lembaga.',
+    drive_folder_url: null
+  })
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h1 className="text-2xl font-bold text-gray-800 font-display">Perpustakaan Digital</h1>
+        <p className="text-gray-500 text-sm mt-1">Akses koleksi buku dan referensi digital</p>
+      </div>
+
+      <div className="mx-auto max-w-2xl rounded-2xl border border-gray-100 bg-white p-8 shadow-sm text-center">
+        <div className="flex h-16 w-16 items-center justify-center rounded-xl bg-emerald-100 text-emerald-700 mx-auto mb-4">
+          <BookOpen size={32} />
+        </div>
+        <h2 className="text-lg font-semibold text-gray-800">{content.name}</h2>
+        <p className="mt-2 text-sm text-gray-600">{content.description}</p>
+        {content.drive_folder_url && (
+          <a
+            href={content.drive_folder_url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="mt-4 inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white hover:bg-primary/90"
+          >
+            <BookOpen size={16} />
+            Buka Perpustakaan
+          </a>
+        )}
+      </div>
+    </div>
+  )
 }

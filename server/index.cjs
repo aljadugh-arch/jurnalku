@@ -4074,6 +4074,36 @@ app.get('/api/siswa/absensi', authMiddleware, (req, res) => {
   res.json(db.prepare('SELECT * FROM absensi_siswa WHERE siswa_id=? AND tenant_id=? ORDER BY tanggal DESC LIMIT 90').all(siswaId, req.tenantId))
 })
 
+// ==================== BENDAHARA DASHBOARD ====================
+app.get('/bendahara/dashboard', authMiddleware, (req, res) => {
+  if (req.user.role !== 'bendahara') return res.status(403).json({ error: 'Akses ditolak' })
+  
+  const tagihan_belum = db.prepare(`
+    SELECT COUNT(*) as jumlah, COALESCE(SUM(nominal), 0) as nominal 
+    FROM tagihan WHERE status != 'lunas' AND tenant_id = ?
+  `).get(req.tenantId)
+  
+  const lunas_bulan_ini = db.prepare(`
+    SELECT COUNT(*) as jumlah, COALESCE(SUM(nominal), 0) as nominal 
+    FROM tagihan WHERE status = 'lunas' AND strftime('%Y-%m', tanggal_bayar) = strftime('%Y-%m', 'now') AND tenant_id = ?
+  `).get(req.tenantId)
+  
+  const saldo_tabungan = db.prepare(`
+    SELECT COALESCE(SUM(saldo_akhir), 0) as total FROM tabungan_siswa WHERE tenant_id = ?
+  `).get(req.tenantId)?.total || 0
+  
+  const siswa_aktif = db.prepare(`
+    SELECT COUNT(*) as jumlah FROM siswa WHERE status = 'aktif' AND tenant_id = ?
+  `).get(req.tenantId)?.jumlah || 0
+  
+  res.json({
+    tagihan_belum: tagihan_belum || {},
+    lunas_bulan_ini: lunas_bulan_ini || {},
+    saldo_tabungan,
+    siswa_aktif
+  })
+})
+
 // ==================== SISWA EKSKUL ====================
 app.get('/api/siswa/penilaian', authMiddleware, (req, res) => {
   if (!['siswa', 'wali_murid'].includes(req.user.role)) return res.status(403).json({ error: 'Akses ditolak' })
