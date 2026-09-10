@@ -8,12 +8,12 @@ import MobileBendaharaDashboard from './MobileBendaharaDashboard'
 export default function BendaharaDashboard() {
   const navigate = useNavigate()
   const [data, setData] = useState<any>(null)
-  useEffect(() => { api.get('/bendahara/dashboard').then(r => setData(r.data)).catch(() => setData(null)) }, [])
+  useEffect(() => { api.get('/api/bendahara/dashboard').then(r => setData(r.data)).catch(() => setData(null)) }, [])
   const money = (n: number) => new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(Number(n || 0))
   const cards = [
-    { label: 'Tagihan Belum Bayar', value: money(data?.tagihan_belum?.nominal), sub: `${data?.tagihan_belum?.jumlah || 0} tagihan`, icon: <DollarSign size={20} />, path: '/admin/tagihan' },
-    { label: 'Lunas Bulan Ini', value: money(data?.lunas_bulan_ini?.nominal), sub: `${data?.lunas_bulan_ini?.jumlah || 0} pembayaran`, icon: <CreditCard size={20} />, path: '/admin/tagihan' },
-    { label: 'Saldo Tabungan', value: money(data?.saldo_tabungan), sub: 'total saldo siswa', icon: <PiggyBank size={20} />, path: '/admin/tabungan' },
+    { label: 'Tagihan Belum Bayar', value: money(data?.tagihan_belum?.nominal || 0), sub: `${data?.tagihan_belum?.jumlah || 0} tagihan`, icon: <DollarSign size={20} />, path: '/admin/tagihan' },
+    { label: 'Lunas Bulan Ini', value: money(data?.lunas_bulan_ini?.nominal || 0), sub: `${data?.lunas_bulan_ini?.jumlah || 0} pembayaran`, icon: <CreditCard size={20} />, path: '/admin/tagihan' },
+    { label: 'Saldo Tabungan', value: money(data?.saldo_tabungan || 0), sub: 'total saldo siswa', icon: <PiggyBank size={20} />, path: '/admin/tabungan' },
     { label: 'Siswa Aktif', value: data?.siswa_aktif || 0, sub: 'data siswa', icon: <Users size={20} />, path: '/admin/siswa' },
   ]
   return <>
