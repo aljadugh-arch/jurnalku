@@ -69,9 +69,12 @@ export default function JadwalPage() {
   }, [hari])
 
   useEffect(() => {
-    Promise.all([api.get('/rombel'), api.get('/mapel'), api.get('/gtk'), api.get('/template-jadwal'), api.get('/pengajar'), api.get('/rombel-jam-pulang')]).then(async ([r, m, g, t, p, jp]) => {
+    Promise.all([
+      api.get('/rombel'), api.get('/mapel'), api.get('/gtk'), api.get('/template-jadwal'), api.get('/pengajar'),
+      api.get('/rombel-jam-pulang').catch(() => ({ data: [] })),
+    ]).then(async ([r, m, g, t, p, jp]) => {
       setRombels(r.data); setGtks(g.data); setTemplates(t.data); setPengajar(p.data)
-      setJamPulang(Object.fromEntries(jp.data.map((x:any)=>[`${x.rombel_id}:${x.hari}`,x.jam_pulang])))
+      setJamPulang(Object.fromEntries((jp.data || []).map((x:any)=>[`${x.rombel_id}:${x.hari}`,x.jam_pulang])))
       // Seed mapel kegiatan khusus kalau belum ada (sekali saja, idempotent by kode)
       const existingKodes = new Set(m.data.map((x: any) => x.kode))
       const missing = KEGIATAN_KHUSUS_DEFAULT.filter(k => !existingKodes.has(k.kode))
@@ -83,7 +86,7 @@ export default function JadwalPage() {
         setMapels(m.data)
       }
       if (r.data.length > 0) setSelectedRombel(r.data[0].id)
-    })
+    }).catch(() => toast.error('Gagal memuat data jadwal. Coba refresh halaman.'))
   }, [])
 
   useEffect(() => { if (selectedRombel) loadJadwal() }, [selectedRombel])
