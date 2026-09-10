@@ -507,12 +507,12 @@ export default function JadwalPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-800 font-display">Jadwal Pelajaran</h1>
+      <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4">
+        <div className="shrink-0">
+          <h1 className="text-2xl font-bold text-gray-800 font-display whitespace-nowrap">Jadwal Pelajaran</h1>
           <p className="text-gray-500 text-sm mt-1">Kelola jadwal dengan sistem anti tabrakan</p>
         </div>
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 w-full sm:w-auto">
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 w-full lg:w-auto lg:max-w-xl">
           <button onClick={exportExcel} className="flex items-center justify-center gap-2 px-3 py-2.5 bg-green-600 text-white rounded-lg text-xs sm:text-sm hover:bg-green-700 text-center">
             <FileSpreadsheet size={16} className="shrink-0" /> <span className="truncate">Excel</span>
           </button>
