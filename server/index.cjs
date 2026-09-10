@@ -5104,7 +5104,7 @@ app.get('/api/ai-config/google/start', authMiddleware, (req, res) => {
     response_type: 'code',
     access_type: 'offline',
     prompt: 'consent',
-    scope: 'openid email https://www.googleapis.com/auth/generative-language.retriever',
+    scope: 'openid email profile',
     state,
   })
   res.json({ url: `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}` })
