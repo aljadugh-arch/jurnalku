@@ -104,8 +104,8 @@ export default function AiSettingsCard({ scope, title, description }: { scope: S
 
       {scope === 'me' && (
         <div className="rounded-xl border border-gray-200 bg-gray-50 p-4 dark:border-slate-700 dark:bg-slate-800/60">
-          <h3 className="text-sm font-semibold text-gray-700 dark:text-slate-200">Login dengan Akun Google (Gemini Pro)</h3>
-          <p className="mt-1 text-xs text-gray-500 dark:text-slate-400">Hubungkan akun Google yang berlangganan Gemini Pro untuk memakai kuota Gemini Pro Anda sendiri, tanpa API key manual.</p>
+          <h3 className="text-sm font-semibold text-gray-700 dark:text-slate-200">Hubungkan Akun Google (opsional)</h3>
+          <p className="mt-1 text-xs text-gray-500 dark:text-slate-400">Menampilkan identitas akun Google Anda di sistem. Catatan: berlangganan Gemini Pro pribadi tidak memberi akses API — untuk memakai AI, tetap wajib isi API Key Gemini di bawah (didapat gratis dari Google AI Studio, terpisah dari langganan Gemini Pro).</p>
           {cfg?.googleConnected ? (
             <div className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-lg bg-emerald-50 px-3.5 py-2.5 dark:bg-emerald-950/30">
               <span className="text-sm text-emerald-700 dark:text-emerald-300">Terhubung sebagai <strong>{cfg.googleEmail}</strong></span>

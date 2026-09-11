@@ -50,7 +50,10 @@ function buildPrompt(input) {
   const checked = validateGenerateInput(input)
   if (checked.error) throw new Error(checked.error)
   const data = checked.value
-  const common = `Gunakan bahasa Indonesia formal, faktual, sesuai ${clean(data.curriculum) || 'Kurikulum Merdeka'}, dan siap dicetak.\nMata Pelajaran: ${clean(data.subject)}\nKelas/Fase: ${clean(data.grade)}\nMateri/Topik: ${clean(data.topic)}\nLembaga: ${clean(data.schoolName) || 'Lembaga pengguna'}\nPengajar: ${clean(data.teacherName) || 'Guru mata pelajaran'}\nTahun Pelajaran: ${clean(data.academicYear) || 'tahun berjalan'}\nSemester: ${clean(data.semester) || 'Ganjil'}\nJangan mengarang sumber atau data identitas. Keluarkan Markdown saja tanpa pagar kode.`
+  const referenceBlock = clean(data.referenceText)
+    ? `\n\nMateri/Referensi Terlampir (dari file/foto yang diunggah pengguna, jadikan acuan utama isi & fakta, jangan bertentangan dengannya):\n${clean(data.referenceText).slice(0, 12000)}`
+    : ''
+  const common = `Gunakan bahasa Indonesia formal, faktual, sesuai ${clean(data.curriculum) || 'Kurikulum Merdeka'}, dan siap dicetak.\nMata Pelajaran: ${clean(data.subject)}\nKelas/Fase: ${clean(data.grade)}\nMateri/Topik: ${clean(data.topic)}\nLembaga: ${clean(data.schoolName) || 'Lembaga pengguna'}\nPengajar: ${clean(data.teacherName) || 'Guru mata pelajaran'}\nTahun Pelajaran: ${clean(data.academicYear) || 'tahun berjalan'}\nSemester: ${clean(data.semester) || 'Ganjil'}\nJangan mengarang sumber atau data identitas. Keluarkan Markdown saja tanpa pagar kode.${referenceBlock}`
   const prompts = {
     STS: `Buat naskah SUMATIF TENGAH SEMESTER. Buat ${data.multipleChoiceCount} pilihan ganda dengan opsi a-d dan ${data.essayCount} uraian. Susun bagian: A. PILIHAN GANDA, B. URAIAN, lalu Kunci Jawaban di bagian paling akhir. Variasikan level kognitif dan pastikan setiap kunci benar.`,
     SAS: `Buat naskah SUMATIF AKHIR SEMESTER. Buat ${data.multipleChoiceCount} pilihan ganda dengan opsi a-d dan ${data.essayCount} uraian. Susun bagian: A. PILIHAN GANDA, B. URAIAN, lalu Kunci Jawaban di bagian paling akhir. Cakupan harus representatif untuk akhir semester.`,

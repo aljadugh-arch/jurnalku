@@ -83,21 +83,16 @@ function setupAiConfigTables(db) {
 }
 
 // Resolves the effective AI credentials for a request: user override wins, else tenant default.
+// Catatan: token OAuth Google (dari tombol "Hubungkan Akun Google") TIDAK dipakai sebagai API key
+// Gemini di sini — scope OAuth sengaja dibatasi ke identitas dasar (email/profile) saja supaya
+// aplikasi bisa dipublikasikan tanpa proses verifikasi Google, sehingga token itu tidak diberi izin
+// memanggil Generative Language API dan akan selalu ditolak (401) jika dipaksakan. OAuth Google di
+// sini murni untuk menghubungkan/menampilkan identitas akun guru, bukan sumber kredensial AI.
 function resolveAiConfig(db, tenantId, userId) {
   const userCfg = userId
     ? db.prepare('SELECT * FROM user_ai_config WHERE user_id = ? AND tenant_id = ?').get(userId, tenantId)
     : null
-  if (userCfg && (userCfg.api_key_encrypted || userCfg.google_access_token_encrypted)) {
-    if (userCfg.google_access_token_encrypted) {
-      return {
-        source: 'user_google_oauth',
-        provider: 'gemini',
-        apiKey: decryptSecret(userCfg.google_access_token_encrypted),
-        model: userCfg.model || 'gemini-2.0-flash',
-        endpoint: PROVIDER_ENDPOINTS.gemini,
-        googleEmail: userCfg.google_email || '',
-      }
-    }
+  if (userCfg && userCfg.api_key_encrypted) {
     return {
       source: 'user',
       provider: userCfg.provider || 'gemini',

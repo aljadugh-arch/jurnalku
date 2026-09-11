@@ -144,6 +144,12 @@ const ocrUpload = multer({
   limits: { fileSize: 10 * 1024 * 1024, files: 1 },
   fileFilter: (_req, file, cb) => cb(null, /^image\/(png|jpeg|webp|gif|bmp)$/.test(file.mimetype))
 })
+// Upload multi-file untuk materi/foto/dokumen referensi generator AI (soal, RPP, silabus, dll)
+const referenceUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 15 * 1024 * 1024, files: 10 },
+  fileFilter: (_req, file, cb) => cb(null, /^(image\/(png|jpeg|webp|gif|bmp)|application\/pdf|application\/vnd\.openxmlformats-officedocument\.wordprocessingml\.document|text\/plain)$/.test(file.mimetype))
+})
 const SIGNATURE_DIR = path.join(UPLOAD_DIR, 'signatures')
 fs.mkdirSync(SIGNATURE_DIR, { recursive: true })
 const ktsUpload = multer({
@@ -5163,6 +5169,54 @@ app.post('/api/ocr/scan', STAFF, ocrUpload.single('image'), async (req, res) => 
   } catch (error) {
     console.error('[OCR] scan failed:', error.message)
     res.status(500).json({ error: 'Gagal memproses OCR: ' + error.message })
+  }
+})
+
+// Ekstrak teks dari satu file referensi: foto/scan (OCR tesseract), PDF (pdf-parse), DOCX (mammoth), TXT (langsung)
+async function extractReferenceText(file) {
+  const mime = file.mimetype
+  if (/^image\//.test(mime)) {
+    const { createWorker } = require('tesseract.js')
+    const worker = await createWorker(['ind', 'eng'])
+    const { data } = await worker.recognize(file.buffer)
+    await worker.terminate()
+    return (data.text || '').trim()
+  }
+  if (mime === 'application/pdf') {
+    const { PDFParse } = require('pdf-parse')
+    const parser = new PDFParse({ data: file.buffer })
+    try {
+      const result = await parser.getText()
+      return (result.text || '').trim()
+    } finally { await parser.destroy() }
+  }
+  if (mime === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
+    const mammoth = require('mammoth')
+    const result = await mammoth.extractRawText({ buffer: file.buffer })
+    return (result.value || '').trim()
+  }
+  if (mime === 'text/plain') return file.buffer.toString('utf8').trim()
+  return ''
+}
+
+// ===== File/foto referensi generator AI: unggah banyak file sekaligus (materi, contoh soal, dokumen kurikulum, dll), diekstrak jadi teks lalu dipakai sebagai konteks tambahan prompt AI =====
+app.post('/api/ai-documents/reference-extract', STAFF, referenceUpload.array('files', 10), async (req, res) => {
+  const files = req.files || []
+  if (!files.length) return res.status(400).json({ error: 'Minimal satu file wajib diunggah' })
+  try {
+    const results = []
+    for (const file of files) {
+      try {
+        const text = await extractReferenceText(file)
+        results.push({ filename: file.originalname, mimetype: file.mimetype, size: file.size, text, ok: true })
+      } catch (error) {
+        results.push({ filename: file.originalname, mimetype: file.mimetype, size: file.size, text: '', ok: false, error: error.message })
+      }
+    }
+    res.json({ files: results })
+  } catch (error) {
+    console.error('[AI Documents] reference-extract failed:', error.message)
+    res.status(500).json({ error: 'Gagal memproses file referensi: ' + error.message })
   }
 })
 

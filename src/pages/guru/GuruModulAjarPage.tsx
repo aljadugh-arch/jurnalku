@@ -44,6 +44,8 @@ export default function GuruModulAjarPage() {
   const [history, setHistory] = useState<HistoryItem[]>([])
   const [showAiSettings, setShowAiSettings] = useState(false)
   const [scanningTopic, setScanningTopic] = useState(false)
+  const [referenceFiles, setReferenceFiles] = useState<{ name: string; size: number; text: string; ok: boolean; error?: string }[]>([])
+  const [extractingRef, setExtractingRef] = useState(false)
   const scanImageToText = (file: File | undefined | null, onText: (text: string) => void) => handleOcrFile(file, onText, setScanningTopic)
   const selected = useMemo(() => documentTypes.find(item => item.value === form.type)!, [form.type])
   const assessment = ['STS', 'SAS', 'KISI_KISI'].includes(form.type)
@@ -52,11 +54,33 @@ export default function GuruModulAjarPage() {
   const loadHistory = () => { api.get('/ai-documents').then(({ data }) => setHistory(data)).catch(() => {}) }
   useEffect(() => { loadHistory() }, [])
 
+  const handleReferenceFiles = async (fileList: FileList | null) => {
+    if (!fileList || !fileList.length) return
+    const remainingSlots = 10 - referenceFiles.length
+    if (remainingSlots <= 0) return toast.error('Maksimal 10 file referensi')
+    const files = Array.from(fileList).slice(0, remainingSlots)
+    setExtractingRef(true)
+    try {
+      const fd = new FormData()
+      files.forEach(f => fd.append('files', f))
+      const { data } = await api.post('/ai-documents/reference-extract', fd, { headers: { 'Content-Type': undefined } })
+      const extracted = (data.files || []).map((f: any) => ({ name: f.filename, size: f.size, text: f.text || '', ok: f.ok, error: f.error }))
+      setReferenceFiles(prev => [...prev, ...extracted])
+      const failedCount = extracted.filter((f: any) => !f.ok || !f.text).length
+      if (failedCount) toast(`${failedCount} file tidak berhasil dibaca teksnya`, { icon: '⚠️' })
+      else toast.success(`${extracted.length} file referensi berhasil diproses`)
+    } catch (error: any) {
+      toast.error(error.response?.data?.error || 'Gagal memproses file referensi')
+    } finally { setExtractingRef(false) }
+  }
+  const removeReferenceFile = (idx: number) => setReferenceFiles(prev => prev.filter((_, i) => i !== idx))
+  const referenceText = useMemo(() => referenceFiles.filter(f => f.ok && f.text).map(f => `[${f.name}]\n${f.text}`).join('\n\n'), [referenceFiles])
+
   const generate = async () => {
     if (!form.subject || !form.grade || !form.topic) return toast.error('Mata pelajaran, kelas, dan materi wajib diisi')
     setLoading(true)
     try {
-      const { data } = await api.post('/ai-documents/generate', form)
+      const { data } = await api.post('/ai-documents/generate', { ...form, referenceText })
       setResult(data.content)
       setDocumentId(data.id)
       loadHistory()
@@ -134,6 +158,26 @@ export default function GuruModulAjarPage() {
                 </label>
                 <span className="text-[11px] text-gray-400">Foto soal/buku/tulisan tangan otomatis diubah jadi teks</span>
               </div>
+            </label>
+            <label className="sm:col-span-2">
+              <span className={labelClass}>File / Foto Referensi Tambahan (opsional, bisa pilih lebih dari satu)</span>
+              <div className="mt-1 flex flex-wrap items-center gap-2">
+                <label className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-dashed border-gray-300 px-3 py-2 text-xs font-semibold text-gray-600 hover:border-primary hover:text-primary dark:border-slate-700 dark:text-slate-300">
+                  {extractingRef ? <Loader2 size={14} className="animate-spin" /> : <FileText size={14} />} {extractingRef ? 'Memproses...' : 'Pilih File / Foto (bisa banyak sekaligus)'}
+                  <input type="file" accept="image/*,.pdf,.docx,.txt" multiple className="hidden" disabled={extractingRef || referenceFiles.length >= 10} onChange={e => { handleReferenceFiles(e.target.files); e.target.value = '' }} />
+                </label>
+                <span className="text-[11px] text-gray-400">Gambar/foto (OCR), PDF, DOCX, TXT — maks 10 file, 15MB/file. Isinya jadi acuan tambahan AI.</span>
+              </div>
+              {referenceFiles.length > 0 && (
+                <ul className="mt-2 space-y-1">
+                  {referenceFiles.map((f, idx) => (
+                    <li key={idx} className={`flex items-center justify-between gap-2 rounded-lg border px-3 py-1.5 text-xs ${f.ok && f.text ? 'border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-900 dark:bg-emerald-950/30 dark:text-emerald-300' : 'border-red-200 bg-red-50 text-red-700 dark:border-red-900 dark:bg-red-950/30 dark:text-red-300'}`}>
+                      <span className="truncate">{f.name} {f.ok && f.text ? `(${f.text.length} karakter terbaca)` : '(gagal dibaca)'}</span>
+                      <button type="button" onClick={() => removeReferenceFile(idx)} className="shrink-0 text-gray-400 hover:text-red-600">Hapus</button>
+                    </li>
+                  ))}
+                </ul>
+              )}
             </label>
             <label><span className={labelClass}>Kurikulum</span><select className={inputClass} value={form.curriculum} onChange={e => setForm({ ...form, curriculum: e.target.value })}><option>Kurikulum Merdeka</option><option>Kurikulum 2013</option><option>Kurikulum Berbasis Cinta</option></select></label>
             <label><span className={labelClass}>Semester</span><select className={inputClass} value={form.semester} onChange={e => setForm({ ...form, semester: e.target.value })}><option>Ganjil</option><option>Genap</option></select></label>
