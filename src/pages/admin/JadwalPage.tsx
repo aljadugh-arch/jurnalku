@@ -620,24 +620,24 @@ export default function JadwalPage() {
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
         {/* Desktop: matrix table */}
         <div className="hidden md:block overflow-x-auto -mx-2 px-2">
-          <table className="w-full text-sm">
+          <table className="w-full text-sm" style={{ minWidth: `${140 + hari.length * 160}px` }}>
             <thead className="bg-gray-50 border-b">
               <tr>
-                <th className="text-left px-4 py-3 font-medium text-gray-600">Jam</th>
-                {hari.map(h => <th key={h} className="text-left px-4 py-3 font-medium text-gray-600 capitalize">{h}</th>)}
+                <th className="sticky left-0 z-10 bg-gray-50 text-left px-4 py-3 font-medium text-gray-600" style={{ minWidth: 140 }}>Jam</th>
+                {hari.map(h => <th key={h} className="text-left px-4 py-3 font-medium text-gray-600 capitalize" style={{ minWidth: 160 }}>{h}</th>)}
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
               {allTimeSlots.map(jam => (
                 <tr key={`${jam.mulai}-${jam.selesai}`} className="hover:bg-gray-50">
-                  <td className="px-4 py-3 text-gray-600 whitespace-nowrap">
-                    <div className="text-xs font-medium">{jam.isCustom ? '⏰' : `Jam ${jam.ke}`}</div>
+                  <td className="sticky left-0 z-10 bg-white px-4 py-3 text-gray-600 whitespace-nowrap" style={{ minWidth: 140 }}>
+                    <div className="flex items-center gap-1 text-xs font-medium">{jam.isCustom ? <Clock size={12} className="text-gray-400" /> : `Jam ${jam.ke}`}</div>
                     <div className="text-[10px] text-gray-400">{jam.mulai}-{jam.selesai}</div>
                   </td>
                   {hari.map(h => {
                     const slot = getSlot(h, jam)
                     return (
-                      <td key={h} className="px-4 py-3">
+                      <td key={h} className="px-4 py-3" style={{ minWidth: 160 }}>
                         {slot ? (
                           <div className={`rounded-lg p-2 group relative border ${slot.jenis_kegiatan !== 'mapel' || slot.guru_valid ? 'bg-primary/5 border-primary/20' : 'bg-red-50 border-red-300'}`}>
                             <p className="text-xs font-medium text-primary">{slot.jenis_kegiatan === 'mapel' ? (slot.mapel_nama || mapels.find(m => m.id === slot.mapel_id)?.nama) : slot.nama_kegiatan}</p>
