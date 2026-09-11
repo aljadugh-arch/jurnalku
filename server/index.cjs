@@ -1894,7 +1894,7 @@ app.post('/api/auth/demo', (req, res) => {
   let user = db.prepare('SELECT * FROM users WHERE tenant_id=? AND role=? ORDER BY created_at LIMIT 1').get(tenantId, role)
   if (!user && role === 'wali_kelas') user = db.prepare("SELECT * FROM users WHERE tenant_id=? AND role='guru' ORDER BY created_at LIMIT 1").get(tenantId)
   if (!user) user = makeDemo(role)
-  const token = jwt.sign({ id: user.id, email: user.email, nama: user.nama, role: user.role, tenant_id: user.tenant_id, gtk_id: user.gtk_id, siswa_id: user.siswa_id, nis: user.nis }, JWT_SECRET, { expiresIn: '8h' })
+  const token = jwt.sign({ id: user.id, email: user.email, nama: user.nama, role: user.role, tenant_id: user.tenant_id, gtk_id: user.gtk_id, siswa_id: user.siswa_id, nis: user.nis }, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN })
   res.json({ token, user: { id: user.id, email: user.email, nama: user.nama, role: user.role, tenant_id: user.tenant_id, avatar: user.avatar || null } })
 })
 
@@ -1987,7 +1987,7 @@ app.post('/api/auth/register', (req, res) => {
   db.prepare('INSERT INTO notif_settings (id, tenant_id) VALUES (?,?)').run('main_' + tenantId, tenantId)
 
   // Auto-login: return token + user so FE can go straight to dashboard.
-  const token = jwt.sign({ id, role: 'admin', nama, email, tenant_id: tenantId }, JWT_SECRET, { expiresIn: '24h' })
+  const token = jwt.sign({ id, role: 'admin', nama, email, tenant_id: tenantId }, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN })
   const reqHost = (req.headers['host'] || req.headers['x-forwarded-host'] || '').split(':')[0]
   const subdomainBase = reqHost === 'jurnalmadrasah.web.id' || reqHost.endsWith('.jurnalmadrasah.web.id')
     ? 'jurnalmadrasah.web.id' : 'jurnal.cc.cd'

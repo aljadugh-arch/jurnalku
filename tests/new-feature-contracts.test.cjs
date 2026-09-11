@@ -30,8 +30,15 @@ test('library menu is present on desktop and mobile/tablet paths', () => {
   assert.match(combined, /perpustakaan/)
 })
 
-test('normal login token duration is configurable', () => {
+test('all user login token durations are configurable', () => {
   const src = read('server/index.cjs')
   assert.match(src, /JWT_EXPIRES_IN/)
-  assert.match(src, /expiresIn: JWT_EXPIRES_IN/)
+  assert.equal((src.match(/expiresIn: JWT_EXPIRES_IN/g) || []).length, 3)
+  assert.doesNotMatch(src, /expiresIn: ['\"](?:8h|24h)['\"]/)
+})
+
+test('student dashboard has one mobile header', () => {
+  const src = read('src/pages/siswa/MobileSiswaDashboard.tsx')
+  assert.equal((src.match(/<MobileHeader\b/g) || []).length, 1)
+  assert.doesNotMatch(src, /HEADER DENGAN FOTO SISWA/)
 })
