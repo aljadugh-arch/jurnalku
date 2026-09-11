@@ -33,7 +33,7 @@ const { getLateDashboard } = require('./dashboard-late.cjs')
 const { registerRoutes: registerBackupRestoreRoutes, LIMITS: BACKUP_LIMITS } = require('./backup-restore.cjs')
 const { registerFinanceExcelRoutes } = require('./finance-excel.cjs')
 const { FEATURE_KEYS, addMonthsIso, accessForTenant, featureForPath, normalizeFeatureSelection, generateUnlockCode, hashUnlockCode, setupSubscriptionTables } = require('./subscription.cjs')
-const { setupBackupTables, registerBackupRoutes } = require('./backup-drive.cjs')
+const { setupBackupTables, registerBackupRoutes, startBackupScheduler } = require('./backup-drive.cjs')
 const { DOCUMENT_TYPES, buildPrompt, validateGenerateInput, createTemplateContent, createDocumentDocx, callAi, clean } = require('./ai-documents.cjs')
 const { encryptSecret, decryptSecret, maskKey, PROVIDER_ENDPOINTS, setupAiConfigTables, resolveAiConfig } = require('./ai-config.cjs')
 const { setupEkskulMembership } = require('./extracurricular-membership.cjs')
@@ -42,6 +42,9 @@ const app = express()
 const PORT = process.env.PORT || 3001
 const IS_PROD = process.env.NODE_ENV === 'production'
 const JWT_SECRET = process.env.JWT_SECRET || (!IS_PROD ? crypto.randomBytes(32).toString('hex') : '')
+// Sesi login normal bertahan lintas penutupan aplikasi. JWT_SECRET production
+// tetap wajib stabil di environment; menggantinya memang akan mencabut sesi lama.
+const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '30d'
 const todayJakarta = () => new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Jakarta' })
 const timeJakarta = () => new Date().toLocaleTimeString('en-GB', { timeZone: 'Asia/Jakarta', hour: '2-digit', minute: '2-digit', hour12: false })
 
@@ -1308,7 +1311,7 @@ registerBackupRestoreRoutes(app, db, { ADMIN, upload: backupUpload, dbPath, medi
 registerFinanceExcelRoutes(app, db, { authorize: requireRole('bendahara', 'admin', 'super_admin', 'operator'), upload: multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024, files: 1 } }) })
 registerPortalRoutes(app, db, { auth: authMiddleware, requireRole, uuid: uuidv4, bcrypt })
 registerKantinRoutes(app, db, { requireRole, uuid: uuidv4, bcrypt })
-registerBackupRoutes(app, db, { requireRole, uuid: uuidv4, mediaRoot: UPLOAD_DIR })
+const backupScheduler = registerBackupRoutes(app, db, { requireRole, uuid: uuidv4, mediaRoot: UPLOAD_DIR })
 const BEASISWA_ROLES = requireRole('admin', 'super_admin', 'bendahara')
 const BEASISWA_SELECT = `SELECT b.*, s.nama siswa_nama, s.nis siswa_nis
   FROM beasiswa b JOIN siswa s ON s.id=b.siswa_id AND s.tenant_id=b.tenant_id`
@@ -1925,7 +1928,7 @@ app.post('/api/auth/login', authLimiter, (req, res) => {
   if (!user || !bcrypt.compareSync(password, user.password)) {
     return res.status(401).json({ error: 'Email/kode guru/NIS/NISN atau password salah' })
   }
-  const token = jwt.sign({ id: user.id, role: user.role, nama: user.nama, email: user.email, tenant_id: user.tenant_id, gtk_id: user.gtk_id || null, siswa_id: user.siswa_id || null, nis: user.nis || null, can_teach: !!user.can_teach }, JWT_SECRET, { expiresIn: '24h' })
+  const token = jwt.sign({ id: user.id, role: user.role, nama: user.nama, email: user.email, tenant_id: user.tenant_id, gtk_id: user.gtk_id || null, siswa_id: user.siswa_id || null, nis: user.nis || null, can_teach: !!user.can_teach }, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN })
   res.json({ token, user: { id: user.id, nama: user.nama, email: user.email, role: user.role, nip: user.nip, nis: user.nis, siswa_id: user.siswa_id, gtk_id: user.gtk_id, avatar: user.avatar, can_teach: !!user.can_teach } })
 })
 
@@ -4297,12 +4300,7 @@ function assertKbmActive(req, tanggal) {
   const row = db.prepare("SELECT id FROM kalender_kbm WHERE tenant_id=? AND tanggal=? AND jenis='kbm_aktif' LIMIT 1").get(req.tenantId, tanggal)
   if (!row) throw new Error('KBM belum diaktifkan di Kalender KBM untuk tanggal ini')
 }
-function dateRange(start, end) {
-  const out=[], a=new Date(String(start)+'T00:00:00+07:00'), b=new Date(String(end)+'T00:00:00+07:00')
-  if (isNaN(a) || isNaN(b) || a>b) return out
-  for (let d=new Date(a); d<=b; d.setDate(d.getDate()+1)) out.push(d.toISOString().slice(0,10))
-  return out
-}
+const { dateRange, writeDailyAttendanceSession } = require('./attendance-rules.cjs')
 
 // ==================== KALENDER KBM ====================
 app.get('/api/kalender-kbm', authMiddleware, (req, res) => {
@@ -5308,38 +5306,20 @@ app.get('/api/absensi-siswa', authMiddleware, (req, res) => {
 })
 
 app.post('/api/absensi-siswa', STAFF, (req, res) => {
-  // jenis: 'masuk' (default) | 'pulang'. Kalau 'pulang', field yang diupdate adalah waktu_pulang & status_pulang.
   const { siswa_id, rombel_id, tanggal, status, waktu_absen, metode, keterangan, jenis } = req.body
-  const isPulang = jenis === 'pulang'
+  const normalizedJenis = jenis === 'pulang' ? 'pulang' : 'masuk'
   const adminWrite = requireAdminDailyAttendanceWriteAccess(req)
   if (!adminWrite.allowed) return res.status(adminWrite.status).json({ error: adminWrite.error })
   const teacherAccess = requireTeacherDailyAttendanceAccess(req, siswa_id, tanggal)
   if (!teacherAccess.allowed) return res.status(teacherAccess.status).json({ error: teacherAccess.error })
   try { assertKbmActive(req, tanggal) } catch (e) { return res.status(400).json({ error: e.message }) }
-  const jam = waktu_absen || null
-  const id = uuidv4()
-  const exists = db.prepare('SELECT id FROM absensi_siswa WHERE siswa_id = ? AND tanggal = ? AND tenant_id = ?').get(siswa_id, tanggal, req.tenantId)
-  if (exists) {
-    if (isPulang) {
-      db.prepare('UPDATE absensi_siswa SET status_pulang=?, waktu_pulang=?, keterangan_pulang=?, metode=COALESCE(?, metode) WHERE id=?')
-        .run(status, jam, keterangan || '', metode || null, exists.id)
-    } else {
-      db.prepare('UPDATE absensi_siswa SET status=?, waktu_absen=?, waktu_masuk=?, metode=?, keterangan=? WHERE id=?')
-        .run(status, jam, jam, metode || 'manual', keterangan || '', exists.id)
-    }
-    sendAbsensiNotifToWali(siswa_id, isPulang ? (status + ' (pulang)') : status, tanggal).catch(() => {})
-    return res.json({ id: exists.id, updated: true, jenis: isPulang ? 'pulang' : 'masuk' })
-  }
-  if (isPulang) {
-    // Belum ada record masuk -> tetap buat row baru, tandai kolom pulang saja
-    db.prepare('INSERT INTO absensi_siswa (id, siswa_id, rombel_id, tanggal, status, status_pulang, waktu_pulang, metode, keterangan_pulang, tenant_id) VALUES (?,?,?,?,?,?,?,?,?,?)')
-      .run(id, siswa_id, rombel_id || null, tanggal, 'hadir', status, jam, metode || 'manual', keterangan || '', req.tenantId)
-  } else {
-    db.prepare('INSERT INTO absensi_siswa (id, siswa_id, rombel_id, tanggal, status, waktu_absen, waktu_masuk, metode, keterangan, tenant_id) VALUES (?,?,?,?,?,?,?,?,?,?)')
-      .run(id, siswa_id, rombel_id || null, tanggal, status, jam, jam, metode || 'manual', keterangan || '', req.tenantId)
-  }
-  sendAbsensiNotifToWali(siswa_id, isPulang ? (status + ' (pulang)') : status, tanggal).catch(() => {})
-  res.json({ id, jenis: isPulang ? 'pulang' : 'masuk' })
+  const result = writeDailyAttendanceSession(db, {
+    id: uuidv4(), tenantId: req.tenantId, siswaId: siswa_id, rombelId: rombel_id || null,
+    tanggal, status, waktu: waktu_absen || null, metode: metode || 'manual',
+    keterangan: keterangan || '', jenis: normalizedJenis,
+  })
+  if (!result.already) sendAbsensiNotifToWali(siswa_id, normalizedJenis === 'pulang' ? `${status} (pulang)` : status, tanggal).catch(() => {})
+  res.json(result)
 })
 
 app.post('/api/absensi-siswa/bulk', STAFF, (req, res) => {
@@ -5359,34 +5339,23 @@ app.post('/api/absensi-siswa/bulk', STAFF, (req, res) => {
   }
   try { assertKbmActive(req, tanggal) } catch (e) { return res.status(400).json({ error: e.message }) }
   let count = 0
+  let already = 0
   for (const d of data) {
-    const exists = db.prepare('SELECT id FROM absensi_siswa WHERE siswa_id = ? AND tanggal = ? AND tenant_id = ?').get(d.siswa_id, tanggal, req.tenantId)
-    const jam = d.waktu_absen || null
-    if (exists) {
-      if (isPulang) {
-        db.prepare('UPDATE absensi_siswa SET status_pulang=?, waktu_pulang=?, keterangan_pulang=?, metode=COALESCE(?, metode) WHERE id=?')
-          .run(d.status, jam, d.keterangan || '', d.metode || null, exists.id)
-      } else {
-        db.prepare('UPDATE absensi_siswa SET status=?, waktu_absen=?, waktu_masuk=?, metode=?, keterangan=? WHERE id=?')
-          .run(d.status, jam, jam, d.metode || 'manual', d.keterangan || '', exists.id)
-      }
-    } else {
-      if (isPulang) {
-        db.prepare('INSERT INTO absensi_siswa (id, siswa_id, rombel_id, tanggal, status, status_pulang, waktu_pulang, metode, keterangan_pulang, tenant_id) VALUES (?,?,?,?,?,?,?,?,?,?)')
-          .run(uuidv4(), d.siswa_id, rombel_id || null, tanggal, 'hadir', d.status, jam, d.metode || 'manual', d.keterangan || '', req.tenantId)
-      } else {
-        db.prepare('INSERT INTO absensi_siswa (id, siswa_id, rombel_id, tanggal, status, waktu_absen, waktu_masuk, metode, keterangan, tenant_id) VALUES (?,?,?,?,?,?,?,?,?,?)')
-          .run(uuidv4(), d.siswa_id, rombel_id || null, tanggal, d.status, jam, jam, d.metode || 'manual', d.keterangan || '', req.tenantId)
-      }
-    }
+    const result = writeDailyAttendanceSession(db, {
+      id: uuidv4(), tenantId: req.tenantId, siswaId: d.siswa_id, rombelId: rombel_id || null,
+      tanggal, status: d.status, waktu: d.waktu_absen || null, metode: d.metode || 'manual',
+      keterangan: d.keterangan || '', jenis: isPulang ? 'pulang' : 'masuk',
+    })
+    if (result.already) { already++; continue }
     count++
     try { waQueue.queueWaliAttendance(db, { tenantId: req.tenantId, studentId: d.siswa_id, date: tanggal, session: isPulang ? 'pulang' : 'masuk', status: d.status }) } catch {}
   }
-  res.json({ count, jenis: isPulang ? 'pulang' : 'masuk' })
+  res.json({ count, already, jenis: isPulang ? 'pulang' : 'masuk' })
 })
 
 app.post('/api/absensi-siswa/bulk-range', STAFF, (req, res) => {
   const { mulai, selesai, rombel_id, status, jenis } = req.body
+  const normalizedJenis = jenis === 'pulang' ? 'pulang' : 'masuk'
   const adminWrite = requireAdminDailyAttendanceWriteAccess(req)
   if (!adminWrite.allowed) return res.status(adminWrite.status).json({ error: adminWrite.error })
   if (isTeacherContext(req)) return res.status(403).json({ error: 'Simpan rentang hanya tersedia untuk admin pada jenjang non RA/MI' })
@@ -5394,16 +5363,21 @@ app.post('/api/absensi-siswa/bulk-range', STAFF, (req, res) => {
   if (!rombel_id || !dates.length) return res.status(400).json({ error: 'Rombel dan rentang tanggal wajib valid' })
   const siswa = db.prepare("SELECT id FROM siswa WHERE rombel_id=? AND status='aktif' AND tenant_id=? ORDER BY nama").all(rombel_id, req.tenantId)
   let count = 0
+  let already = 0
+  let activeDates = 0
   for (const tanggal of dates) {
     try { assertKbmActive(req, tanggal) } catch { continue }
+    activeDates++
     for (const x of siswa) {
-      const exists = db.prepare('SELECT id FROM absensi_siswa WHERE siswa_id=? AND tanggal=? AND tenant_id=?').get(x.id, tanggal, req.tenantId)
-      if (exists) db.prepare('UPDATE absensi_siswa SET status=?, metode=? WHERE id=? AND tenant_id=?').run(status || 'hadir', 'batch-range', exists.id, req.tenantId)
-      else db.prepare('INSERT INTO absensi_siswa (id,siswa_id,rombel_id,tanggal,status,metode,tenant_id) VALUES (?,?,?,?,?,?,?)').run(uuidv4(), x.id, rombel_id, tanggal, status || 'hadir', 'batch-range', req.tenantId)
-      count++
+      const result = writeDailyAttendanceSession(db, {
+        id: uuidv4(), tenantId: req.tenantId, siswaId: x.id, rombelId: rombel_id,
+        tanggal, status: status || 'hadir', metode: 'batch-range', jenis: normalizedJenis,
+      })
+      if (result.already) already++
+      else count++
     }
   }
-  res.json({ count, dates: dates.length, jenis: jenis || 'masuk' })
+  res.json({ count, already, dates: activeDates, jenis: normalizedJenis })
 })
 
 // QR permanen per siswa = siswa.id (UUID, tidak pernah berubah). Scan -> tandai hadir hari ini.
@@ -5474,43 +5448,21 @@ app.post('/api/absensi-siswa/qr-scan', STAFF, (req, res) => {
   let sesi
   try { sesi = require('./attendance-rules.cjs').sesiAbsensiSiswa({ waktu, jamPulang: batas?.jam_pulang, fallbackPulang: cfg.sesi_pulang_mulai, explicit: req.body.sesi, aktif: batas && batas.aktif }) }
   catch (e) { return res.status(400).json({ error: e.message }) }
-  const sesiPulang = sesi === 'pulang'
-  let exists = db.prepare('SELECT id, status, status_pulang FROM absensi_siswa WHERE siswa_id = ? AND tanggal = ? AND tenant_id = ?').get(siswa.id, tanggal, req.tenantId)
-  // The unique index is the final concurrency guard. If two scanner callbacks
-  // race, the loser re-reads the row and takes the idempotent update path.
-  const insertOrReload = (sql, params) => {
-    try { db.prepare(sql).run(...params); return null }
-    catch (error) {
-      if (error?.code !== 'SQLITE_CONSTRAINT_UNIQUE') throw error
-      return db.prepare('SELECT id, status, status_pulang FROM absensi_siswa WHERE siswa_id = ? AND tanggal = ? AND tenant_id = ?').get(siswa.id, tanggal, req.tenantId)
-    }
-  }
-  if (sesiPulang) {
-    // Sesi pulang: catat waktu_pulang & status_pulang
-    if (!exists) {
-      exists = insertOrReload('INSERT INTO absensi_siswa (id, siswa_id, rombel_id, tanggal, status, status_pulang, waktu_pulang, metode, tenant_id) VALUES (?,?,?,?,?,?,?,?,?)', [uuidv4(), siswa.id, siswa.rombel_id, tanggal, 'hadir', 'hadir', waktu, 'qr', req.tenantId])
-      if (exists?.status_pulang === 'hadir') return res.json({ siswa: qrSiswaPayload(db, siswa, req.tenantId), already: true, sesi: 'pulang' })
-      if (exists) db.prepare('UPDATE absensi_siswa SET status_pulang=?, waktu_pulang=?, metode=? WHERE id=? AND tenant_id=?').run('hadir', waktu, 'qr', exists.id, req.tenantId)
-    } else {
-      if (exists.status_pulang === 'hadir') return res.json({ siswa: qrSiswaPayload(db, siswa, req.tenantId), already: true, sesi: 'pulang' })
-      db.prepare('UPDATE absensi_siswa SET status_pulang=?, waktu_pulang=? WHERE id=?').run('hadir', waktu, exists.id)
-    }
-    try { notificationMonitor.logActivity(db, { tenantId: req.tenantId, eventType: 'student_qr_attendance', actorId: null, entityId: siswa.id, metadata: { sesi: 'pulang', metode: 'qr' } }) } catch {}
+  const normalizedJenis = sesi === 'pulang' ? 'pulang' : 'masuk'
+  const result = writeDailyAttendanceSession(db, {
+  id: uuidv4(), tenantId: req.tenantId, siswaId: siswa.id, rombelId: siswa.rombel_id,
+  tanggal, status: 'hadir', waktu, metode: 'qr', jenis: normalizedJenis,
+  })
+  // Both sessions are routed through the same first-writer-wins helper; a pulang-only row keeps masuk empty.
+  const payload = { siswa: qrSiswaPayload(db, siswa, req.tenantId), waktu, sesi: normalizedJenis }
+  if (result.already) return res.json({ ...payload, already: true, status: result.status })
+  try { notificationMonitor.logActivity(db, { tenantId: req.tenantId, eventType: 'student_qr_attendance', actorId: null, entityId: siswa.id, metadata: { sesi: normalizedJenis, metode: 'qr' } }) } catch {}
+  if (normalizedJenis === 'pulang') {
     try { waQueue.queueWaliAttendance(db, { tenantId: req.tenantId, studentId: siswa.id, date: tanggal, session: 'pulang', status: 'hadir' }) } catch {}
-    return res.json({ siswa: qrSiswaPayload(db, siswa, req.tenantId), waktu, sesi: 'pulang' })
-  }
-  // Sesi masuk (default)
-  if (exists) {
-    if (exists.status === 'hadir') return res.json({ siswa: qrSiswaPayload(db, siswa, req.tenantId), already: true, sesi: 'masuk' })
-    db.prepare('UPDATE absensi_siswa SET status=?, waktu_masuk=?, waktu_absen=?, metode=? WHERE id=?').run('hadir', waktu, waktu, 'qr', exists.id)
   } else {
-    exists = insertOrReload('INSERT INTO absensi_siswa (id, siswa_id, rombel_id, tanggal, status, waktu_masuk, waktu_absen, metode, tenant_id) VALUES (?,?,?,?,?,?,?,?,?)', [uuidv4(), siswa.id, siswa.rombel_id, tanggal, 'hadir', waktu, waktu, 'qr', req.tenantId])
-    if (exists?.status === 'hadir') return res.json({ siswa: qrSiswaPayload(db, siswa, req.tenantId), already: true, sesi: 'masuk' })
-    if (exists) db.prepare('UPDATE absensi_siswa SET status=?, waktu_masuk=?, waktu_absen=?, metode=? WHERE id=? AND tenant_id=?').run('hadir', waktu, waktu, 'qr', exists.id, req.tenantId)
+    sendAbsensiNotifToWali(siswa.id, 'hadir', tanggal).catch(() => {})
   }
-  try { notificationMonitor.logActivity(db, { tenantId: req.tenantId, eventType: 'student_qr_attendance', actorId: null, entityId: siswa.id, metadata: { sesi: 'masuk', metode: 'qr' } }) } catch {}
-  sendAbsensiNotifToWali(siswa.id, 'hadir', tanggal).catch(() => {})
-  res.json({ siswa: qrSiswaPayload(db, siswa, req.tenantId), waktu, sesi: 'masuk' })
+  res.json(payload)
 })
 
 // ==================== ABSENSI GURU ====================
@@ -6471,6 +6423,7 @@ app.use((err, req, res, next) => {
 
 // Start server
 app.listen(PORT, () => {
+  startBackupScheduler(backupScheduler)
 
 // ==================== WA AUTO SCHEDULER ====================
 // Jalankan notif otomatis setiap 1 menit untuk semua tenant aktif

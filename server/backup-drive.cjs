@@ -44,6 +44,11 @@ function setupBackupTables(db) {
       folder_id TEXT,
       auto_enabled INTEGER DEFAULT 0,
       retention_days INTEGER DEFAULT 14,
+      schedule_time TEXT DEFAULT '23:00',
+      timezone TEXT DEFAULT 'Asia/Jakarta',
+      last_run_key TEXT,
+      last_run_at TEXT,
+      run_claimed_at TEXT,
       updated_at TEXT DEFAULT (datetime('now'))
     );
     CREATE TABLE IF NOT EXISTS google_drive_oauth_state (
@@ -52,6 +57,19 @@ function setupBackupTables(db) {
       expires_at INTEGER NOT NULL
     );
   `)
+  // Existing installations need additive columns; never replace the database.
+  for (const sql of [
+    "ALTER TABLE backup_config ADD COLUMN schedule_time TEXT DEFAULT '23:00'",
+    "ALTER TABLE backup_config ADD COLUMN timezone TEXT DEFAULT 'Asia/Jakarta'",
+    "ALTER TABLE backup_config ADD COLUMN last_run_key TEXT",
+    "ALTER TABLE backup_config ADD COLUMN last_run_at TEXT",
+    "ALTER TABLE backup_config ADD COLUMN run_claimed_at TEXT",
+  ]) {
+    try { db.exec(sql) }
+    catch (error) {
+      if (!/duplicate column name/i.test(String(error?.message || error))) throw error
+    }
+  }
 }
 
 // --- Auth mode detection & loading ---
@@ -281,12 +299,72 @@ function tsStamp() {
   return `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}`
 }
 
-function registerBackupRoutes(app, db, { requireRole, uuid, mediaRoot }) {
+function registerBackupRoutes(app, db, { requireRole, uuid, mediaRoot, now = () => new Date(), resolveAuth = resolveWorkingAuth }) {
   const kadmin = requireRole('admin', 'super_admin')
 
   const getConfig = (tenantId) =>
-    db.prepare('SELECT tenant_id, folder_id, auto_enabled, retention_days FROM backup_config WHERE tenant_id = ?').get(tenantId)
-    || { tenant_id: tenantId, folder_id: null, auto_enabled: 0, retention_days: 14 }
+    db.prepare('SELECT tenant_id, folder_id, auto_enabled, retention_days, schedule_time, timezone, last_run_key, last_run_at, run_claimed_at FROM backup_config WHERE tenant_id = ?').get(tenantId)
+    || { tenant_id: tenantId, folder_id: null, auto_enabled: 0, retention_days: 14, schedule_time: '23:00', timezone: 'Asia/Jakarta', last_run_key: null, last_run_at: null, run_claimed_at: null }
+
+  const localParts = (date, timezone) => {
+    const parts = new Intl.DateTimeFormat('en-CA', { timeZone: timezone || 'Asia/Jakarta', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false }).formatToParts(date)
+    return Object.fromEntries(parts.filter(p => p.type !== 'literal').map(p => [p.type, p.value]))
+  }
+  const isoSqlTime = (date) => date.toISOString().slice(0, 19).replace('T', ' ')
+  const runBackupForTenant = async (tenantId, cfg, filenamePrefix = '') => {
+    const { token } = await resolveAuth(tenantId)
+    const tenantRow = db.prepare('SELECT slug FROM tenants WHERE id=?').get(tenantId)
+    const filename = `${filenamePrefix}jurnal-${(tenantRow?.slug || tenantId).replace(/[^a-z0-9_-]/gi, '_')}-${tsStamp()}.json.gz`
+    const artifact = createService(db, { mediaRoot: mediaRoot || process.env.MEDIA_ROOT || path.join(APP_ROOT, 'uploads') }).exportData(tenantId)
+    const gz = zlib.gzipSync(Buffer.from(JSON.stringify(artifact), 'utf8'))
+    const driveFileId = await driveUpload(token, { name: filename, folderId: cfg.folder_id || process.env.GOOGLE_DRIVE_BACKUP_FOLDER_ID || null, buffer: gz, mimeType: 'application/gzip' })
+    db.prepare('INSERT INTO backup_log (id, tenant_id, filename, drive_file_id, size, status) VALUES (?,?,?,?,?,?)').run(uuid(), tenantId, filename, driveFileId, gz.length, 'ok')
+    return { filename, driveFileId, size: gz.length, token }
+  }
+  const applyRetention = async (tenantId, cfg, token, currentDate) => {
+    const retentionDays = Math.max(1, Math.min(365, Number(cfg.retention_days) || 14))
+    const cutoff = new Date(currentDate.getTime() - retentionDays * 86400000)
+    const expired = db.prepare("SELECT id, drive_file_id FROM backup_log WHERE tenant_id=? AND status='ok' AND drive_file_id IS NOT NULL AND created_at < ?").all(tenantId, isoSqlTime(cutoff))
+    for (const row of expired) {
+      const response = await fetch(`https://www.googleapis.com/drive/v3/files/${encodeURIComponent(row.drive_file_id)}?supportsAllDrives=true`, {
+        method: 'DELETE', headers: { Authorization: `Bearer ${token}` },
+      })
+      if (!response.ok && response.status !== 404) throw new Error(`retensi Drive gagal: ${response.status}`)
+      db.prepare('DELETE FROM backup_log WHERE id=? AND tenant_id=?').run(row.id, tenantId)
+    }
+  }
+  const automaticBackupTick = async () => {
+    const currentDate = now()
+    const tenants = db.prepare("SELECT id FROM tenants WHERE COALESCE(aktif,1)=1").all()
+    for (const tenant of tenants) {
+      const cfg = getConfig(tenant.id)
+      if (!cfg.auto_enabled || !/^([01]\d|2[0-3]):[0-5]\d$/.test(cfg.schedule_time || '')) continue
+      let p
+      try { p = localParts(currentDate, cfg.timezone) }
+      catch (error) {
+        db.prepare('INSERT INTO backup_log (id,tenant_id,filename,drive_file_id,size,status,error) VALUES (?,?,?,?,?,?,?)')
+          .run(uuid(), tenant.id, 'auto-config', null, 0, 'error', String(error.message || error))
+        continue
+      }
+      const localTime = `${p.hour}:${p.minute}`
+      const key = `${p.year}-${p.month}-${p.day}`
+      if (localTime < cfg.schedule_time || cfg.last_run_key === key) continue
+      const staleBefore = isoSqlTime(new Date(currentDate.getTime() - 30 * 60000))
+      const claimedAt = isoSqlTime(currentDate)
+      const claimed = db.prepare("UPDATE backup_config SET run_claimed_at=?,updated_at=? WHERE tenant_id=? AND auto_enabled=1 AND COALESCE(last_run_key,'')<>? AND (run_claimed_at IS NULL OR run_claimed_at < ?)")
+        .run(claimedAt, claimedAt, tenant.id, key, staleBefore)
+      if (!claimed.changes) continue
+      try {
+        const backup = await runBackupForTenant(tenant.id, getConfig(tenant.id), 'auto-')
+        await applyRetention(tenant.id, getConfig(tenant.id), backup.token, currentDate)
+        db.prepare('UPDATE backup_config SET last_run_key=?,last_run_at=?,run_claimed_at=NULL WHERE tenant_id=?').run(key, claimedAt, tenant.id)
+      } catch (error) {
+        db.prepare('UPDATE backup_config SET run_claimed_at=NULL WHERE tenant_id=?').run(tenant.id)
+        db.prepare('INSERT INTO backup_log (id,tenant_id,filename,drive_file_id,size,status,error) VALUES (?,?,?,?,?,?,?)')
+          .run(uuid(), tenant.id, `auto-${key}`, null, 0, 'error', String(error.message || error))
+      }
+    }
+  }
 
   app.get('/api/google-drive/oauth/start', kadmin, (req, res) => {
     try {
@@ -323,7 +401,7 @@ function registerBackupRoutes(app, db, { requireRole, uuid, mediaRoot }) {
   // Status koneksi Google Drive
   app.get('/api/google-drive/status', kadmin, async (req, res) => {
     try {
-      const { auth, token } = await resolveWorkingAuth(req.tenantId)
+      const { auth, token } = await resolveAuth(req.tenantId)
       const cfg = getConfig(req.tenantId)
       const folderId = cfg.folder_id || process.env.GOOGLE_DRIVE_BACKUP_FOLDER_ID || null
       let folder_ok = false
@@ -371,20 +449,14 @@ function registerBackupRoutes(app, db, { requireRole, uuid, mediaRoot }) {
     const slug = (tenant?.slug || req.tenantId || 'tenant').replace(/[^a-z0-9_-]/gi, '_')
     const filename = `jurnal-${slug}-${tsStamp()}.json.gz`
     try {
-      const { token } = await resolveWorkingAuth(req.tenantId)
+      const { token } = await resolveAuth(req.tenantId)
       const cfg = getConfig(req.tenantId)
       const folderId = cfg.folder_id || process.env.GOOGLE_DRIVE_BACKUP_FOLDER_ID || null
-
       const artifact = createService(db, { mediaRoot: mediaRoot || process.env.MEDIA_ROOT || path.join(APP_ROOT, 'uploads') }).exportData(req.tenantId)
-      const json = JSON.stringify(artifact)
-      const gz = zlib.gzipSync(Buffer.from(json, 'utf8'))
-
+      const gz = zlib.gzipSync(Buffer.from(JSON.stringify(artifact), 'utf8'))
       const driveFileId = await driveUpload(token, { name: filename, folderId, buffer: gz, mimeType: 'application/gzip' })
-
       db.prepare('INSERT INTO backup_log (id, tenant_id, filename, drive_file_id, size, status) VALUES (?,?,?,?,?,?)')
         .run(id, req.tenantId, filename, driveFileId, gz.length, 'ok')
-      // Media yang tidak tertampung budget dilaporkan agar admin tahu file mana
-      // yang perlu diperkecil/diunggah manual, tanpa menggagalkan backup data.
       const omitted = artifact.manifest?.media?.omitted || []
       res.json({
         id, drive_file_id: driveFileId, size: gz.length, filename,
@@ -414,23 +486,36 @@ function registerBackupRoutes(app, db, { requireRole, uuid, mediaRoot }) {
   })
 
   app.put('/api/backup/config', kadmin, (req, res) => {
-    const { folder_id, auto_enabled, retention_days } = req.body || {}
+    const { folder_id, auto_enabled, retention_days, schedule_time } = req.body || {}
     const rd = Number(retention_days)
     if (retention_days !== undefined && (!Number.isInteger(rd) || rd < 1 || rd > 365)) {
       return res.status(400).json({ error: 'retention_days harus 1–365' })
     }
+    if (schedule_time !== undefined && !/^([01]\d|2[0-3]):[0-5]\d$/.test(String(schedule_time))) {
+      return res.status(400).json({ error: 'Waktu backup harus berformat HH:mm' })
+    }
     const cur = getConfig(req.tenantId)
-    db.prepare(`INSERT INTO backup_config (tenant_id, folder_id, auto_enabled, retention_days, updated_at)
-                VALUES (?,?,?,?,datetime('now'))
-                ON CONFLICT(tenant_id) DO UPDATE SET folder_id=excluded.folder_id, auto_enabled=excluded.auto_enabled, retention_days=excluded.retention_days, updated_at=datetime('now')`)
+    db.prepare(`INSERT INTO backup_config (tenant_id, folder_id, auto_enabled, retention_days, schedule_time, timezone, updated_at)
+                VALUES (?,?,?,?,?,'Asia/Jakarta',datetime('now'))
+                ON CONFLICT(tenant_id) DO UPDATE SET folder_id=excluded.folder_id, auto_enabled=excluded.auto_enabled, retention_days=excluded.retention_days, schedule_time=excluded.schedule_time, timezone='Asia/Jakarta', updated_at=datetime('now')`)
       .run(
         req.tenantId,
         folder_id !== undefined ? (folder_id || null) : (cur.folder_id || null),
         auto_enabled !== undefined ? (auto_enabled ? 1 : 0) : (cur.auto_enabled || 0),
         retention_days !== undefined ? rd : (cur.retention_days || 14),
+        schedule_time !== undefined ? String(schedule_time) : (cur.schedule_time || '23:00'),
       )
     res.json(getConfig(req.tenantId))
   })
+
+  return { automaticBackupTick }
 }
 
-module.exports = { setupBackupTables, registerBackupRoutes, loadAuth, resolveWorkingAuth, exportTenantData }
+function startBackupScheduler(scheduler, { intervalMs = 60 * 1000 } = {}) {
+  scheduler.automaticBackupTick().catch(() => {})
+  const timer = setInterval(() => scheduler.automaticBackupTick().catch(() => {}), intervalMs)
+  timer.unref?.()
+  return timer
+}
+
+module.exports = { setupBackupTables, registerBackupRoutes, startBackupScheduler, loadAuth, resolveWorkingAuth, exportTenantData }

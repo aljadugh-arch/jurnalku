@@ -178,8 +178,10 @@ export default function GuruAbsensiSiswaQRPage() {
     if (!data.length) return toast.error('Pilih status kehadiran minimal satu siswa')
     setLoading(true)
     try {
-      await api.post('/absensi-siswa/bulk', { tanggal, rombel_id: selectedRombel, jenis: sesi, data })
-      toast.success(`Absensi ${sesi} tersimpan`)
+      const r = await api.post('/absensi-siswa/bulk', { tanggal, rombel_id: selectedRombel, jenis: sesi, data })
+      const skipped = Number(r.data.already || 0)
+      const message = `${r.data.count} baru disimpan, ${skipped} sudah tercatat`
+      skipped && !r.data.count ? toast(message) : toast.success(message)
       loadData()
     } catch (err: any) { toast.error(err.response?.data?.error || 'Gagal simpan') }
     finally { setLoading(false) }

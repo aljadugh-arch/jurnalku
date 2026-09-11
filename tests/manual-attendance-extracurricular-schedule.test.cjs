@@ -24,8 +24,10 @@ test('API bulk manual memvalidasi status dan siswa tenant sebelum upsert masuk a
   const bulk = routeBody("app.post('/api/absensi-siswa/bulk', STAFF", "app.post('/api/absensi-siswa/bulk-range'")
   assert.match(bulk, /validAttendanceStatuses/)
   assert.match(bulk, /studentExists/)
-  assert.match(bulk, /status_pulang=\?/)
-  assert.match(bulk, /status=\?/)
+  assert.match(bulk, /writeDailyAttendanceSession\(db/)
+  assert.match(bulk, /jenis: isPulang \? 'pulang' : 'masuk'/)
+  assert.match(bulk, /status: d\.status/)
+  assert.match(bulk, /already/)
 })
 
 test('dashboard dan halaman jadwal guru menggabungkan jadwal mapel dan ekstrakurikuler', () => {

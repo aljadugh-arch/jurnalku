@@ -52,6 +52,7 @@ function roleItems(role?: string, hideStaffCeklok?: boolean): NavItem[] {
       { label: 'Absen Mapel', path: '/guru/absensi-mapel', icon: <ListChecks size={iconSize} /> },
       { label: 'Jurnal', path: '/guru/jurnal', icon: <ClipboardList size={iconSize} /> },
       { label: 'Posting', path: '/guru/posting', icon: <FileText size={iconSize} /> },
+      { label: 'Perpus', path: '/guru/perpustakaan', icon: <BookOpen size={iconSize} /> },
       { label: 'Catatan', path: '/guru/catatan-kepribadian', icon: <FileText size={iconSize} /> },
       { label: 'Modul', path: '/guru/modul-ajar', icon: <FileText size={iconSize} /> },
     ]
@@ -80,6 +81,7 @@ function roleItems(role?: string, hideStaffCeklok?: boolean): NavItem[] {
       { label: 'Ceklok', path: '/admin/ceklok', icon: <MapPin size={iconSize} /> },
       { label: 'Tagihan', path: '/admin/tagihan', icon: <DollarSign size={iconSize} /> },
       { label: 'Tabungan', path: '/admin/tabungan', icon: <CreditCard size={iconSize} /> },
+      { label: 'Perpus', path: '/admin/perpustakaan', icon: <BookOpen size={iconSize} /> },
       { label: 'Buku Kas', path: '/admin/buku-kas', icon: <BookOpen size={iconSize} /> },
       { label: 'Laporan', path: '/admin/bendahara', icon: <BarChart3 size={iconSize} /> },
     ]
@@ -92,6 +94,7 @@ function roleItems(role?: string, hideStaffCeklok?: boolean): NavItem[] {
       { label: 'Presensi', path: '/admin/absensi-siswa', icon: <UserCheck size={iconSize} /> },
       ...(hideStaffCeklok ? [] : [ceklokStaff]),
       { label: 'Posting', path: '/admin/posting', icon: <FileText size={iconSize} /> },
+      { label: 'Perpus', path: '/admin/perpustakaan', icon: <BookOpen size={iconSize} /> },
       ...(hideStaffCeklok ? [] : [absensiSaya]),
       { label: 'Rekap', path: '/admin/rekap-absensi', icon: <ClipboardList size={iconSize} /> },
       { label: 'Keuangan', path: '/admin/tagihan', icon: <DollarSign size={iconSize} /> },

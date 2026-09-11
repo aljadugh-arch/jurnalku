@@ -18,6 +18,7 @@ interface PreviewResult {
 interface DriveStatus { connected: boolean; email?: string; folder_id?: string | null; folder_ok?: boolean; error?: string; auth_type?: 'oauth2' | 'service_account' }
 interface DriveDiagnostics { credential_dir: string; auth_mode: string; files: { service_account: boolean; oauth_client: boolean; oauth_token_shared: boolean; oauth_token_tenant: boolean } }
 interface BackupLog { id: string; filename: string; drive_file_id: string | null; size: number; status: string; error: string | null; created_at: string }
+interface BackupConfig { folder_id: string; auto_enabled: boolean; retention_days: number; schedule_time: string; timezone: string; last_run_at?: string | null }
 
 const fmtSize = (b: number) => b < 1024 ? `${b} B` : b < 1048576 ? `${(b / 1024).toFixed(1)} KB` : `${(b / 1048576).toFixed(2)} MB`
 
@@ -35,7 +36,7 @@ export default function BackupRestorePage() {
   const [driveLoading, setDriveLoading] = useState(false)
   const [running, setRunning] = useState(false)
   const [logs, setLogs] = useState<BackupLog[]>([])
-  const [cfg, setCfg] = useState({ folder_id: '', auto_enabled: false, retention_days: 14 })
+  const [cfg, setCfg] = useState<BackupConfig>({ folder_id: '', auto_enabled: false, retention_days: 14, schedule_time: '23:00', timezone: 'Asia/Jakarta' })
 
   const loadDrive = () => {
     setDriveLoading(true)
@@ -47,7 +48,7 @@ export default function BackupRestorePage() {
   const loadLogs = () => { api.get('/backup/log').then(({ data }) => setLogs(data)).catch(() => {}) }
   const loadCfg = () => {
     api.get('/backup/config').then(({ data }) => setCfg({
-      folder_id: data.folder_id || '', auto_enabled: !!data.auto_enabled, retention_days: data.retention_days || 14,
+      folder_id: data.folder_id || '', auto_enabled: !!data.auto_enabled, retention_days: data.retention_days || 14, schedule_time: data.schedule_time || '23:00', timezone: data.timezone || 'Asia/Jakarta', last_run_at: data.last_run_at || null,
     })).catch(() => {})
   }
 
@@ -215,6 +216,11 @@ export default function BackupRestorePage() {
           <div>
             <label className="mb-1 block text-xs font-medium text-gray-600">Simpan berapa hari</label>
             <input type="number" min={1} max={365} value={cfg.retention_days} onChange={e => setCfg({ ...cfg, retention_days: parseInt(e.target.value) || 14 })} className="w-full rounded-lg border px-3 py-2 text-sm" />
+          </div>
+          <div>
+            <label className="mb-1 block text-xs font-medium text-gray-600">Waktu otomatis (WIB)</label>
+            <input type="time" value={cfg.schedule_time} onChange={e => setCfg({ ...cfg, schedule_time: e.target.value })} className="w-full rounded-lg border px-3 py-2 text-sm" />
+            <p className="mt-1 text-xs text-gray-500">Zona waktu: Asia/Jakarta</p>
           </div>
         </div>
         <label className="mt-3 flex cursor-pointer items-center gap-2 text-sm text-gray-700">

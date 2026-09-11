@@ -131,6 +131,7 @@ export default function MobileSiswaDashboard() {
 
   return (
     <div className="min-h-screen bg-[#F8FAFC] dark:bg-gray-950 pb-8 text-slate-800 dark:text-gray-100">
+      <div className="px-4 pt-4 pb-2"><MobileHeader basePath="/siswa" profilePhoto={siswa?.foto || null} /></div>
       {/* ─── 1. HEADER DENGAN FOTO SISWA + MENU LOGOUT/DARKMODE ─── */}
       <div className="px-4 pt-4 pb-2 flex items-center justify-between relative">
         <button

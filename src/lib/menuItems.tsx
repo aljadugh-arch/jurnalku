@@ -106,6 +106,7 @@ export const siswaMenuItems: MenuItem[] = [
   { label: 'Absensi Saya', icon: <QrCode size={20} />, path: '/siswa/absensi' },
   { label: 'Jadwal', icon: <Calendar size={20} />, path: '/siswa/jadwal' },
   { label: 'Ekskul', icon: <Activity size={20} />, path: '/siswa/ekskul' },
+  { label: 'Perpustakaan Digital', icon: <BookOpen size={20} />, path: '/siswa/perpustakaan' },
 ]
 
 // Kepala Madrasah/Sekolah = pimpinan, tetap punya ceklok sendiri karena masuk kategori GTK.
@@ -160,6 +161,7 @@ function filterRoleItems(items: MenuItem[], role?: string): MenuItem[] {
 
 export function menuForRole(role?: string): MenuItem[] {
   const items = role === 'kepala' ? kepalaMenuItems
+    : role === 'bendahara' ? adminMenuItems.filter(item => ['/admin', '/admin/pembayaran', '/admin/perpustakaan', '/admin/pengaturan'].includes(item.path || ''))
     : ['admin', 'super_admin', 'operator', 'tata_usaha', 'tu'].includes(role || '') ? adminMenuItems
     : role === 'guru' || role === 'wali_kelas' ? guruMenuItems
     : siswaMenuItems

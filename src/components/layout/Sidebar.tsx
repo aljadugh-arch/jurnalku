@@ -37,6 +37,7 @@ const guruMenuItems: MenuItem[] = [
   { label: 'Absensi Ekskul/Peminatan', icon: <UserCheck size={20} />, path: '/guru/absensi-ekskul' },
   { label: 'Absensi Saya', icon: <MapPin size={20} />, path: '/guru/absensi-guru' },
   { label: 'Modul Ajar', icon: <Sparkles size={20} />, path: '/guru/modul-ajar' },
+  { label: 'Perpustakaan Digital', icon: <BookOpen size={20} />, path: '/guru/perpustakaan' },
 ]
 
 const siswaMenuItems: MenuItem[] = [
@@ -48,6 +49,7 @@ const siswaMenuItems: MenuItem[] = [
   { label: 'Nilai', icon: <BookOpen size={20} />, path: '/siswa#nilai' },
   { label: 'Jadwal Hari Ini', icon: <Calendar size={20} />, path: '/siswa#jadwal' },
   { label: 'Tugas', icon: <ClipboardCheck size={20} />, path: '/siswa#tugas' },
+  { label: 'Perpustakaan Digital', icon: <BookOpen size={20} />, path: '/siswa/perpustakaan' },
 ]
 
 // Kepala Madrasah/Sekolah = pimpinan. Sesuai live bundle (Sc).
@@ -63,6 +65,7 @@ const kepalaMenuItems: MenuItem[] = [
   { label: 'Rombongan Belajar', icon: <Layers size={20} />, path: '/admin/rombel' },
   { label: 'Jurnal Mengajar', icon: <ClipboardList size={20} />, path: '/admin/jurnal' },
   { label: 'Supervisi Guru', icon: <ClipboardCheck size={20} />, path: '/admin/supervisi' },
+  { label: 'Perpustakaan Digital', icon: <BookOpen size={20} />, path: '/admin/perpustakaan' },
   {
     label: 'Absensi', icon: <UserCheck size={20} />,
     children: [
@@ -91,6 +94,7 @@ const bendaharaMenuItems: MenuItem[] = [
   { label: 'Tabungan Siswa', icon: <PiggyBank size={20} />, path: '/admin/tabungan' },
   { label: 'Buku Kas', icon: <FileText size={20} />, path: '/admin/buku-kas' },
   { label: 'Laporan Keuangan', icon: <FileText size={20} />, path: '/admin/bendahara#laporan' },
+  { label: 'Perpustakaan Digital', icon: <BookOpen size={20} />, path: '/admin/perpustakaan' },
 ]
 
 export default function Sidebar() {

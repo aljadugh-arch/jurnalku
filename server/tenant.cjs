@@ -45,6 +45,9 @@ function setupTenantTables(db) {
       aktif INTEGER DEFAULT 1,
       created_at TEXT DEFAULT (datetime('now')),
       expired_at TEXT,
+      trial_ends_at TEXT,
+      subscription_ends_at TEXT,
+      features_json TEXT DEFAULT '{}',
       foundation_id TEXT
     );
 
@@ -56,10 +59,18 @@ function setupTenantTables(db) {
   // is a no-op when the table predates these columns), THEN index foundation_id.
   try {
     const cols = db.prepare("PRAGMA table_info(tenants)").all()
-    const names = new Set(cols.map(c => c.name))
-    if (!names.has('domain_status')) db.exec("ALTER TABLE tenants ADD COLUMN domain_status TEXT DEFAULT 'active'")
-    if (!names.has('foundation_id')) db.exec("ALTER TABLE tenants ADD COLUMN foundation_id TEXT")
-  } catch {}
+    let names = new Set(cols.map(c => c.name))
+    const additions = [
+      ['domain_status', "ALTER TABLE tenants ADD COLUMN domain_status TEXT DEFAULT 'active'"],
+      ['foundation_id', "ALTER TABLE tenants ADD COLUMN foundation_id TEXT"],
+      ['trial_ends_at', "ALTER TABLE tenants ADD COLUMN trial_ends_at TEXT"],
+      ['subscription_ends_at', "ALTER TABLE tenants ADD COLUMN subscription_ends_at TEXT"],
+      ['features_json', "ALTER TABLE tenants ADD COLUMN features_json TEXT DEFAULT '{}'"],
+    ]
+    for (const [name, sql] of additions) {
+      if (!names.has(name)) { db.exec(sql); names.add(name) }
+    }
+  } catch (error) { console.error('[migration] tenants columns failed', error.message) }
   db.exec("CREATE INDEX IF NOT EXISTS idx_tenants_foundation ON tenants(foundation_id)")
 
   // Add tenant_id to all data tables if not exists

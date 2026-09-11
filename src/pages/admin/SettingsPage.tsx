@@ -47,10 +47,15 @@ export default function SettingsPage() {
     { value: 'siswa', label: 'Siswa' },
     { value: 'wali_murid', label: 'Wali Murid' },
     { value: 'guru', label: 'Guru' },
-    { value: 'kepala', label: 'Kepala' },
+    { value: 'wali_kelas', label: 'Wali Kelas' },
+    { value: 'kepala', label: 'Kepala Madrasah' },
     { value: 'bendahara', label: 'Bendahara' },
+    { value: 'operator', label: 'Operator' },
+    { value: 'tata_usaha', label: 'Tata Usaha' },
+    { value: 'tu', label: 'TU' },
     { value: 'admin', label: 'Admin' },
-  ]
+    { value: 'super_admin', label: 'Super Admin' },
+    ]
   const [library, setLibrary] = useState({ name: 'Perpustakaan Digital', description: '', drive_folder_url: '', enabled: false, visibility_roles: ['all'] as string[] })
   const [savingLibrary, setSavingLibrary] = useState(false)
 

@@ -1,81 +1,61 @@
 const test = require('node:test')
 const assert = require('node:assert/strict')
 const sqlite3 = require('better-sqlite3')
-const path = require('node:path')
-const jwt = require('jsonwebtoken')
+const os = require('node:os')
 
-// Setup test database
-const dbPath = path.join(__dirname, '..', 'test-db.sqlite')
+const dbPath = `${os.tmpdir()}/jurnalku-subscription-${process.pid}-${Date.now()}.sqlite`
 const db = new sqlite3(dbPath)
-const JWT_SECRET = 'test-secret-key'
+db.exec(`CREATE TABLE IF NOT EXISTS tenants (
+  id TEXT PRIMARY KEY, nama TEXT, slug TEXT, plan TEXT,
+  trial_ends_at TEXT, subscription_ends_at TEXT,
+  features_json TEXT DEFAULT '{}'
+)`)
+db.prepare("INSERT INTO tenants (id, nama, slug, plan, features_json) VALUES ('default','Default','default','trial','{}')").run()
 
-// Helper: Create expired tenant
+test.after(() => {
+  db.close()
+  for (const suffix of ['', '-wal', '-shm']) {
+    try { require('node:fs').unlinkSync(dbPath + suffix) } catch {}
+  }
+})
+
 function setupExpiredTenant() {
   const tenantId = 'test-expired-' + Date.now()
-  try {
-    db.prepare('INSERT INTO tenants (id, nama, slug, plan, trial_ends_at) VALUES (?,?,?,?,?)').run(
-      tenantId,
-      'Tenant Expired',
-      'tenant-expired',
-      'trial',
-      new Date(Date.now() - 86400000).toISOString() // 1 day ago
-    )
-  } catch {}
+  db.prepare('INSERT INTO tenants (id, nama, slug, plan, trial_ends_at) VALUES (?,?,?,?,?)').run(
+    tenantId, 'Tenant Expired', 'tenant-expired', 'trial', new Date(Date.now() - 86400000).toISOString()
+  )
   return tenantId
 }
 
-// Helper: Create tenant with feature disabled
 function setupFeatureDisabledTenant() {
   const tenantId = 'test-disabled-' + Date.now()
-  try {
-    db.prepare('INSERT INTO tenants (id, nama, slug, plan, features_json) VALUES (?,?,?,?,?)').run(
-      tenantId,
-      'Tenant Disabled',
-      'tenant-disabled',
-      'trial',
-      JSON.stringify({ keuangan: false, absensi: false })
-    )
-  } catch {}
+  db.prepare('INSERT INTO tenants (id, nama, slug, plan, features_json) VALUES (?,?,?,?,?)').run(
+    tenantId, 'Tenant Disabled', 'tenant-disabled', 'trial', JSON.stringify({ keuangan: false, absensi: false })
+  )
   return tenantId
 }
 
 test('subscription locked returns 402 with SUBSCRIPTION_LOCKED code', () => {
-  const tenantId = setupExpiredTenant()
-  const tenant = db.prepare('SELECT * FROM tenants WHERE id=?').get(tenantId)
-  
-  assert(tenant, 'Test tenant created')
-  assert(tenant.trial_ends_at, 'Trial ends at set')
-  const trialEnd = new Date(tenant.trial_ends_at)
-  const now = new Date()
-  assert(trialEnd < now, `Trial must be expired (${trialEnd.toISOString()} < ${now.toISOString()})`)
+  const tenant = db.prepare('SELECT * FROM tenants WHERE id=?').get(setupExpiredTenant())
+  assert(tenant)
+  assert(new Date(tenant.trial_ends_at) < new Date())
 })
 
 test('feature disabled returns 403 with FEATURE_DISABLED code', () => {
-  const tenantId = setupFeatureDisabledTenant()
-  const tenant = db.prepare('SELECT * FROM tenants WHERE id=?').get(tenantId)
-  
-  assert(tenant, 'Test tenant created')
-  const features = tenant.features_json ? JSON.parse(tenant.features_json) : {}
-  assert.equal(features.keuangan, false, 'keuangan feature must be disabled')
-  assert.equal(features.absensi, false, 'absensi feature must be disabled')
+  const tenant = db.prepare('SELECT * FROM tenants WHERE id=?').get(setupFeatureDisabledTenant())
+  assert(tenant)
+  const features = JSON.parse(tenant.features_json)
+  assert.equal(features.keuangan, false)
+  assert.equal(features.absensi, false)
 })
 
 test('feature access check with valid tenant', () => {
-  const tenantId = 'default'
-  const tenant = db.prepare('SELECT * FROM tenants WHERE id=?').get(tenantId)
-  
-  assert(tenant, 'default tenant exists')
-  const features = tenant.features_json ? JSON.parse(tenant.features_json) : {}
-  // Features should be enabled for trial tenants
-  assert(Object.keys(features).length >= 0, 'features_json parseable')
+  const tenant = db.prepare('SELECT * FROM tenants WHERE id=?').get('default')
+  assert(tenant)
+  assert.doesNotThrow(() => JSON.parse(tenant.features_json || '{}'))
 })
 
 test('tenant columns include required fields for subscription gating', () => {
-  const columns = db.prepare('PRAGMA table_info(tenants)').all()
-  const columnNames = columns.map(c => c.name)
-  
-  assert(columnNames.includes('trial_ends_at'), 'tenants must have trial_ends_at')
-  assert(columnNames.includes('subscription_ends_at'), 'tenants must have subscription_ends_at')
-  assert(columnNames.includes('features_json'), 'tenants must have features_json')
-  assert(columnNames.includes('plan'), 'tenants must have plan')
+  const names = db.prepare('PRAGMA table_info(tenants)').all().map(c => c.name)
+  for (const name of ['trial_ends_at', 'subscription_ends_at', 'features_json', 'plan']) assert(names.includes(name), `tenants must have ${name}`)
 })

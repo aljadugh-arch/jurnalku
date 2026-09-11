@@ -156,7 +156,12 @@ export default function AbsensiSiswaPage({ qrMode = false }: { qrMode?: boolean 
     if (!kbmStatus.aktif && range.mulai === range.selesai && range.mulai === tanggal) return toast.error(kbmStatus.libur ? 'Hari libur: absensi nonaktif' : 'Aktifkan KBM tanggal ini di Kalender KBM terlebih dahulu')
     if (!selectedRombel) return toast.error('Pilih rombel')
     setLoading(true)
-    try { const r = await api.post('/absensi-siswa/bulk-range', { ...range, rombel_id: selectedRombel, jenis: sesi }); toast.success(`${r.data.count} absensi rentang tersimpan`) }
+    try {
+      const r = await api.post('/absensi-siswa/bulk-range', { ...range, rombel_id: selectedRombel, jenis: sesi })
+      const skipped = Number(r.data.already || 0)
+      const message = `${r.data.count} baru disimpan, ${skipped} sudah tercatat (${r.data.dates} hari KBM)`
+      skipped && !r.data.count ? toast(message) : toast.success(message)
+    }
     catch (err: any) { toast.error(err.response?.data?.error || 'Gagal simpan rentang') }
     finally { setLoading(false) }
   }
@@ -198,7 +203,7 @@ export default function AbsensiSiswaPage({ qrMode = false }: { qrMode?: boolean 
           scanBusyRef.current = true
           lastQrRef.current = normalized
           setScanBusy(true); setLastQr(normalized); setQrToken(normalized)
-          try { const r = await api.post('/absensi-siswa/qr-scan', { token: normalized, sesi }); announceScanResult(r.data); toast.success(r.data.already ? `${r.data.siswa?.nama || 'Siswa'} sudah tercatat` : `${r.data.siswa?.nama || 'Siswa'} hadir (${r.data.sesi})`); loadData() }
+          try { const r = await api.post('/absensi-siswa/qr-scan', { token: normalized, sesi, tanggal }); announceScanResult(r.data); toast.success(r.data.already ? `${r.data.siswa?.nama || 'Siswa'} sudah tercatat` : `${r.data.siswa?.nama || 'Siswa'} hadir (${r.data.sesi})`); loadData() }
           catch (err: any) { playFeedbackSound('error'); toast.error(err.response?.data?.error || 'QR gagal') }
           finally { window.setTimeout(() => { scanBusyRef.current = false; lastQrRef.current = ''; setScanBusy(false); setLastQr('') }, 1200) }
         }, () => {})
@@ -216,7 +221,7 @@ export default function AbsensiSiswaPage({ qrMode = false }: { qrMode?: boolean 
     setLastQr(token)
     setQrToken(token)
     try {
-      const r = await api.post('/absensi-siswa/qr-scan', { token, sesi })
+      const r = await api.post('/absensi-siswa/qr-scan', { token, sesi, tanggal })
       announceScanResult(r.data)
       toast.success(r.data.already ? `${r.data.siswa?.nama || 'Siswa'} sudah tercatat` : `${r.data.siswa?.nama || 'Siswa'} hadir (${r.data.sesi})`)
       await loadData()
@@ -255,8 +260,10 @@ export default function AbsensiSiswaPage({ qrMode = false }: { qrMode?: boolean 
     if (!data.length) return toast.error('Pilih status kehadiran minimal satu siswa')
     setLoading(true)
     try {
-      await api.post('/absensi-siswa/bulk', { tanggal, rombel_id: selectedRombel, jenis: sesi, data })
-      toast.success(`Absensi ${sesi} tersimpan`)
+      const r = await api.post('/absensi-siswa/bulk', { tanggal, rombel_id: selectedRombel, jenis: sesi, data })
+      const skipped = Number(r.data.already || 0)
+      const message = `${r.data.count} baru disimpan, ${skipped} sudah tercatat`
+      skipped && !r.data.count ? toast(message) : toast.success(message)
       loadData()
     } catch (err: any) { toast.error(err.response?.data?.error || 'Gagal simpan') }
     finally { setLoading(false) }

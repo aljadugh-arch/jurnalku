@@ -36,9 +36,12 @@ test('semua jalur simpan absensi scoped tenant dan memberikan respons sukses', (
   assert.match(single, /res\.json\(/)
   assert.match(bulk, /res\.json\(/)
   assert.match(qr, /res\.json\(/)
-  assert.match(single, /WHERE siswa_id = \? AND tanggal = \? AND tenant_id = \?/)
-  assert.match(bulk, /WHERE siswa_id = \? AND tanggal = \? AND tenant_id = \?/)
-  assert.match(qr, /WHERE siswa_id = \? AND tanggal = \? AND tenant_id = \?/)
+  assert.match(single, /writeDailyAttendanceSession\(db/)
+  assert.match(single, /tenantId: req\.tenantId/)
+  assert.match(bulk, /writeDailyAttendanceSession\(db/)
+  assert.match(bulk, /tenantId: req\.tenantId/)
+  assert.match(qr, /writeDailyAttendanceSession\(db/)
+  assert.match(qr, /tenantId: req\.tenantId/)
 })
 
 test('kepala yang merangkap guru tetap dapat dihubungkan ke GTK yang sama', () => {

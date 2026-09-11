@@ -36,8 +36,9 @@ test('dialog edit dari popup detail memakai modal portal terbaru', () => {
 
 test('QR masuk dan pulang menulis kolom sesi masing-masing secara langsung', () => {
   const qr = server.slice(server.indexOf("app.post('/api/absensi-siswa/qr-scan'"), server.indexOf('// ==================== ABSENSI GURU'))
-  assert.match(qr, /status_pulang=\?, waktu_pulang=\?/) 
-  assert.match(qr, /status=\?, waktu_masuk=\?, waktu_absen=\?/) 
-  assert.match(qr, /sesi: 'pulang'/)
-  assert.match(qr, /sesi: 'masuk'/)
+  assert.match(qr, /writeDailyAttendanceSession\(db/)
+  assert.match(qr, /jenis: normalizedJenis/)
+  assert.match(qr, /already: true/)
+  assert.match(qr, /normalizedJenis === 'pulang'/)
+  assert.match(qr, /sesi: normalizedJenis/)
 })
