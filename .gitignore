@@ -16,3 +16,6 @@ server.pre-*/
 server/index.cjs.rollback*
 server/index.cjs.pre-*
 server/index.cjs.failed-*
+eng.traineddata
+ind.traineddata
+*.traineddata
