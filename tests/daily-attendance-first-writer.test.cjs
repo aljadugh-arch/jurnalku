@@ -73,3 +73,20 @@ test('first writer wins independently for pulang', () => {
   assert.equal(row.status_pulang, 'sakit')
   assert.equal(row.waktu_pulang, '11:00')
 })
+
+test('admin manual absen lebih dulu membuat scan QR guru melaporkan sudah tercatat, dan sebaliknya', () => {
+  const db = makeDb()
+  // Skenario 1: admin absen manual duluan, guru scan QR belakangan.
+  const adminFirst = writeDailyAttendanceSession(db, { ...base, jenis: 'masuk', id: 'admin-1', status: 'hadir', metode: 'manual' })
+  const guruQrAfter = writeDailyAttendanceSession(db, { ...base, jenis: 'masuk', id: 'guru-qr-1', status: 'hadir', metode: 'qr' })
+  assert.equal(adminFirst.already, false)
+  assert.equal(guruQrAfter.already, true)
+  assert.equal(db.prepare('SELECT count(*) n FROM absensi_siswa').get().n, 1)
+
+  // Skenario 2: guru scan QR duluan (siswa lain), admin absen manual belakangan.
+  const guruQrFirst = writeDailyAttendanceSession(db, { ...base, siswaId: 's2', jenis: 'masuk', id: 'guru-qr-2', status: 'hadir', metode: 'qr' })
+  const adminAfter = writeDailyAttendanceSession(db, { ...base, siswaId: 's2', jenis: 'masuk', id: 'admin-2', status: 'sakit', metode: 'manual' })
+  assert.equal(guruQrFirst.already, false)
+  assert.equal(adminAfter.already, true)
+  assert.equal(adminAfter.status, 'hadir')
+})

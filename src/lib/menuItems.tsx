@@ -109,6 +109,20 @@ export const siswaMenuItems: MenuItem[] = [
   { label: 'Perpustakaan Digital', icon: <BookOpen size={20} />, path: '/siswa/perpustakaan' },
 ]
 
+// Bendahara: hanya modul keuangan, dashboard, dan perpustakaan — tidak boleh
+// mengakses data akademik/administrasi lain milik admin.
+export const bendaharaMenuItems: MenuItem[] = [
+  { label: 'Dashboard', icon: <LayoutDashboard size={20} />, path: '/admin' },
+  {
+    label: 'Keuangan', icon: <DollarSign size={20} />,
+    children: [
+      { label: 'Tagihan & Pembayaran', path: '/admin/tagihan' },
+      { label: 'Tabungan Siswa', path: '/admin/tabungan' },
+    ]
+  },
+  { label: 'Perpustakaan Digital', icon: <BookOpen size={20} />, path: '/admin/perpustakaan' },
+]
+
 // Kepala Madrasah/Sekolah = pimpinan, tetap punya ceklok sendiri karena masuk kategori GTK.
 export const kepalaMenuItems: MenuItem[] = [
   { label: 'Dashboard', icon: <LayoutDashboard size={20} />, path: '/admin' },
@@ -161,7 +175,7 @@ function filterRoleItems(items: MenuItem[], role?: string): MenuItem[] {
 
 export function menuForRole(role?: string): MenuItem[] {
   const items = role === 'kepala' ? kepalaMenuItems
-    : role === 'bendahara' ? adminMenuItems.filter(item => ['/admin', '/admin/pembayaran', '/admin/perpustakaan', '/admin/pengaturan'].includes(item.path || ''))
+    : role === 'bendahara' ? bendaharaMenuItems
     : ['admin', 'super_admin', 'operator', 'tata_usaha', 'tu'].includes(role || '') ? adminMenuItems
     : role === 'guru' || role === 'wali_kelas' ? guruMenuItems
     : siswaMenuItems

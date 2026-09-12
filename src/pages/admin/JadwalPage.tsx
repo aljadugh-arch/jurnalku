@@ -614,7 +614,10 @@ export default function JadwalPage() {
           <button onClick={() => setSelectedSchedules(repairRows.filter(j => !j.guru_valid).map(j => j.id))} className="px-3 py-1.5 border rounded-lg text-xs">Pilih hasil filter invalid</button>
         </div>
         {repairRows.map(j => <label key={j.id} className={`flex gap-3 items-center p-2 rounded-lg border text-sm ${j.guru_valid ? 'border-gray-100' : 'border-amber-300 bg-amber-50 text-amber-900'}`}><input type="checkbox" checked={selectedSchedules.includes(j.id)} onChange={e => setSelectedSchedules(s => e.target.checked ? [...s, j.id] : s.filter(id => id !== j.id))} /><span className="flex-1">{j.mapel_nama || '-'} · {j.rombel_nama || rombels.find(r => r.id === j.rombel_id)?.nama} · {j.hari} {j.jam_mulai}</span><b>{j.guru_valid ? j.gtk_nama : 'Guru belum valid'}</b></label>)}
-        <div className="flex flex-wrap gap-2"><select value={bulkGtkId} onChange={e => setBulkGtkId(e.target.value)} className="px-3 py-2 border rounded-lg text-sm"><option value="">Pilih GTK valid</option>{gtks.map(g => <option key={g.id} value={g.id}>{g.nama}</option>)}</select><button disabled={!bulkGtkId || !selectedSchedules.length} onClick={bulkAssign} className="px-4 py-2 bg-primary text-white rounded-lg text-sm disabled:opacity-40">Tetapkan guru ({selectedSchedules.length})</button></div>
+        <div className="flex flex-col sm:flex-row sm:flex-wrap gap-2">
+          <select value={bulkGtkId} onChange={e => setBulkGtkId(e.target.value)} className="w-full sm:w-auto min-w-0 px-3 py-2 border rounded-lg text-sm"><option value="">Pilih GTK valid</option>{gtks.map(g => <option key={g.id} value={g.id}>{g.nama}</option>)}</select>
+          <button disabled={!bulkGtkId || !selectedSchedules.length} onClick={bulkAssign} className="w-full sm:w-auto px-4 py-2 bg-primary text-white rounded-lg text-sm disabled:opacity-40">Tetapkan guru ({selectedSchedules.length})</button>
+        </div>
       </div>
 
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">

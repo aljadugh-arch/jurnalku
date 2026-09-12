@@ -69,11 +69,11 @@ test('QR attendance uses the old complete scanner and student QR features', () =
   assert.match(ABSENSI, /Unduh Semua/)
 })
 
-test('RA and MI admin QR routes stay monitor-only like the server policy', () => {
-  assert.match(ABSENSI, /const readOnly = isGuruKelasJenjang/)
-  assert.doesNotMatch(ABSENSI, /const inputReadOnly = !qrMode && readOnly/)
-  assert.match(ABSENSI, /disabled=\{readOnly\}/)
+test('admin QR/manual attendance is writable for all jenjang, including RA and MI', () => {
+  assert.match(ABSENSI, /const readOnly = false/)
+  assert.doesNotMatch(ABSENSI, /isGuruKelasJenjang/)
   assert.match(SERVER, /requireAdminDailyAttendanceWriteAccess/)
+  assert.match(SERVER, /function requireAdminDailyAttendanceWriteAccess\(req\) \{\s*return \{ allowed: true \}/)
 })
 
 test('operator and TU menus and direct routes omit destinations restricted to admin roles', () => {

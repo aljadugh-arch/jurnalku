@@ -86,16 +86,14 @@ test('navigasi guru memisahkan absensi harian QR/manual dari absensi per mata pe
   assert.match(featureAccess, /'\/guru\/absensi-mapel'/)
 })
 
-test('admin RA/MI monitor-only dan konfigurasi jendela QR terpisah dari jam pulang per rombel', () => {
+test('admin dapat menginput absensi manual & QR di semua jenjang termasuk RA dan MI', () => {
   const range = routeBody("app.post('/api/absensi-siswa/bulk-range', STAFF", 'function normalizeQrToken')
   const rombelClock = routeBody("app.get('/api/rombel-jam-pulang', ADMIN", "// ==================== JENIS TAGIHAN")
   assert.match(range, /requireAdminDailyAttendanceWriteAccess\(req\)/)
   assert.match(rombelClock, /requireRombelDepartureConfigJenjang\(req\)/)
   assert.match(server, /tenantUsesLegacyStudentQrWindow\(req\.tenantId\).*teacherClockCols\.concat\(legacyStudentQrCols\)/s)
-  assert.match(attendancePage, /readOnly = isGuruKelasJenjang/)
-  assert.match(attendancePage, /disabled=\{readOnly\}/)
-  assert.match(settingsPage, /!isGuruKelasJenjang\(form\.jenjang\)/)
-  assert.match(settingsPage, /isGuruKelasJenjang\(form\.jenjang\).*<JamPulangSiswa/s)
+  assert.match(server, /function requireAdminDailyAttendanceWriteAccess\(req\) \{\s*return \{ allowed: true \}/)
+  assert.match(attendancePage, /const readOnly = false/)
   assert.doesNotMatch(settingsPage, /isGuruKelasJenjang\(settings\.jenjang/)
 })
 

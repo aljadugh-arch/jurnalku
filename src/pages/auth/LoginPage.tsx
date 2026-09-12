@@ -1,9 +1,15 @@
 import { useEffect, useRef, useState } from 'react'
-import { useNavigate, Link } from 'react-router-dom'
+import { useNavigate, Navigate, Link } from 'react-router-dom'
 import { Eye, EyeOff, ArrowLeft, ArrowRight, Moon, Sun } from 'lucide-react'
 import { useAuthStore } from '../../stores/authStore'
 import { useSettingsStore } from '../../stores/settingsStore'
 import { useThemeStore } from '../../stores/themeStore'
+
+const getRedirectPath = (role: string) => {
+  if (['admin', 'super_admin', 'kepala', 'bendahara', 'operator', 'tata_usaha', 'tu'].includes(role)) return '/admin'
+  if (role === 'guru' || role === 'wali_kelas') return '/guru'
+  return '/siswa'
+}
 
 export default function LoginPage() {
   const { settings } = useSettingsStore()
@@ -16,8 +22,13 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false)
   const demoRef = useRef<HTMLDivElement>(null)
   const navigate = useNavigate()
-  const { loginWithCredentials, loginDemo } = useAuthStore()
+  const { loginWithCredentials, loginDemo, isAuthenticated, user, authReady } = useAuthStore()
 
+  // PWA start_url untuk host tenant terdaftar adalah '/login', jadi setiap kali
+  // aplikasi yang sudah terinstall dibuka ulang, browser membuka rute ini
+  // langsung -- bukan '/'. Token 30 hari di localStorage tetap valid dan
+  // checkAuth() tetap sukses, tapi tanpa redirect ini user selalu terjebak
+  // melihat form login lagi, seolah-olah sesinya hilang ("logout otomatis").
   useEffect(() => {
     if (window.location.hash !== '#demo' || !demoRef.current) return
     const frame = window.requestAnimationFrame(() => {
@@ -27,12 +38,10 @@ export default function LoginPage() {
     return () => window.cancelAnimationFrame(frame)
   }, [])
 
-  const getRedirectPath = (role: string) => {
-    if (['admin', 'super_admin', 'kepala', 'bendahara', 'operator', 'tata_usaha', 'tu'].includes(role)) return '/admin'
-    if (role === 'guru' || role === 'wali_kelas') return '/guru'
-    return '/siswa'
+  // Jangan tampilkan form login jika sesi masih valid; redirect ke dashboard.
+  if (authReady && isAuthenticated && user) {
+    return <Navigate to={getRedirectPath(user.role)} replace />
   }
-
 
   const handleDemo = async (role: string) => {
     setError('')

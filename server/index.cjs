@@ -3224,9 +3224,12 @@ function requireTeacherDailyRombelAccess(req, rombelId, tanggal) {
     : { allowed: false, status: 403, error: 'Rombel bukan kelas wali atau kelas terjadwal Anda pada tanggal ini' }
 }
 
+// Admin diizinkan menginput absensi harian siswa (manual & QR) di semua jenjang,
+// termasuk RA/TK dan MI/SD. Sebelumnya dibatasi hanya guru/wali kelas untuk
+// jenjang tsb; pembatasan itu dihapus atas permintaan eksplisit pengguna agar
+// admin punya kemampuan sama seperti tenant jenjang lain (mis. MTs/SMP).
 function requireAdminDailyAttendanceWriteAccess(req) {
-  if (isTeacherContext(req) || !tenantUsesClassTeacherDailyAttendance(req.tenantId)) return { allowed: true }
-  return { allowed: false, status: 403, error: 'Untuk jenjang RA/TK dan MI/SD, admin hanya memantau dan merekap absensi harian siswa' }
+  return { allowed: true }
 }
 
 function requireRombelDepartureConfigJenjang(req) {

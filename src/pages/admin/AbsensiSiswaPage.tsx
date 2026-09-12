@@ -11,7 +11,6 @@ import QRCode from 'qrcode'
 import FoundationTenantPicker from '../../components/FoundationTenantPicker'
 import { announceStudentScanSuccess, playFeedbackSound, primeFeedbackSound } from '../../lib/feedbackSound'
 import { useSettingsStore } from '../../stores/settingsStore'
-import { isGuruKelasJenjang } from '../../lib/jenjang'
 import MobileAttendanceSummary from './MobileAttendanceSummary'
 
 const statusColors: Record<string, string> = {
@@ -86,7 +85,10 @@ export default function AbsensiSiswaPage({ qrMode = false }: { qrMode?: boolean 
   const [range, setRange] = useState({ mulai: todayWib(), selesai: todayWib(), status: 'hadir' })
   const [qrToken, setQrToken] = useState('')
   const { settings } = useSettingsStore()
-  const readOnly = isGuruKelasJenjang(settings.jenjang as string)
+  // Admin dapat menginput absensi manual & QR di semua jenjang, termasuk
+  // RA/TK dan MI/SD — batasan read-only untuk admin dihapus, backend juga
+  // tidak lagi memblokir (lihat requireAdminDailyAttendanceWriteAccess).
+  const readOnly = false
   const [qrOpen, setQrOpen] = useState(false)
   const [lastQr, setLastQr] = useState('')
   const [scanBusy, setScanBusy] = useState(false)
