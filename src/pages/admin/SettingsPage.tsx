@@ -5,6 +5,7 @@ import api from '../../services/api'
 import { applyTheme } from '../../lib/applyTheme'
 import { clearLocalTheme } from '../../stores/themeStore'
 import { useSettingsStore } from '../../stores/settingsStore'
+import { useAuthStore } from '../../stores/authStore'
 import { isGuruKelasJenjang, JENJANG_OPTIONS } from '../../lib/jenjang'
 import MapPicker from '../../components/MapPicker'
 import JamPulangSiswa from '../../components/JamPulangSiswa'
@@ -19,6 +20,8 @@ const HARI_OPTIONS = [
 ]
 
 export default function SettingsPage() {
+  const { user } = useAuthStore()
+  const isSuperadmin = user?.role === 'super_admin'
   const [form, setForm] = useState({
     nama_lembaga: '', alamat: '', telepon: '', email: '',
     theme: 'light', primary_color: '#1e40af', accent_color: '#059669', sidebar_color: '#1e293b',
@@ -221,17 +224,18 @@ export default function SettingsPage() {
   if (loading) return <div className="p-8 text-center text-gray-400">Memuat pengaturan...</div>
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-gray-800 font-display break-words">Pengaturan Lembaga</h1>
-          <p className="text-gray-500 text-sm mt-1">Identitas dan tampilan aplikasi</p>
+          <h1 className="text-2xl font-bold text-gray-800 font-display break-words">{isSuperadmin ? 'Pengaturan Dashboard Superadmin' : 'Pengaturan Lembaga'}</h1>
+          <p className="text-gray-500 text-sm mt-1">{isSuperadmin ? 'Preferensi tampilan & pintasan dashboard superadmin' : 'Identitas dan tampilan aplikasi'}</p>
         </div>
         <button onClick={handleSave} disabled={saving} className="flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-lg text-sm hover:bg-primary-dark disabled:opacity-50">
           <Save size={16} /> {saving ? 'Menyimpan...' : 'Simpan Perubahan'}
         </button>
       </div>
 
+      {!isSuperadmin && (
       <div id="identitas" className="bg-white rounded-xl p-4 sm:p-6 shadow-sm border border-gray-100 scroll-mt-24">
         <h2 className="text-lg font-semibold text-gray-800 mb-4">Identitas Lembaga</h2>
         <div className="space-y-4">
@@ -357,7 +361,9 @@ export default function SettingsPage() {
           </div>
         </div>
       </div>
+      )}
 
+      {!isSuperadmin && (
       <div className="bg-white rounded-xl p-4 sm:p-6 shadow-sm border border-gray-100">
         <h2 className="text-lg font-semibold text-gray-800">Template KTS</h2>
         <p className="text-xs text-gray-500 mt-1 mb-4">Rasio kartu CR80 85.6:54 mm. Rekomendasi 1011x639 px. PNG, JPG, atau WebP, maks 5MB.</p>
@@ -374,8 +380,9 @@ export default function SettingsPage() {
           ))}
         </div>
       </div>
+      )}
 
-      <div id="pintasan-dashboard" className="bg-white rounded-xl p-4 sm:p-6 shadow-sm border border-gray-100 scroll-mt-24">
+      <div id="pintasan-dashboard" className="bg-white rounded-xl p-3 sm:p-4 shadow-sm border border-gray-100 scroll-mt-24">
         <h2 className="text-lg font-semibold text-gray-800 mb-1">Pintasan Dashboard</h2>
         <p className="mb-4 text-xs text-gray-500">Pilih menu dan atur urutannya untuk grid Home admin/kepala. Terpilih: {form.dashboard_quick_menus.length}/{adminDashboardShortcuts.length}.</p>
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
@@ -390,7 +397,7 @@ export default function SettingsPage() {
         </div>
       </div>
 
-      <div id="tampilan" className="bg-white rounded-xl p-4 sm:p-6 shadow-sm border border-gray-100 scroll-mt-24">
+      <div id="tampilan" className="bg-white rounded-xl p-3 sm:p-4 shadow-sm border border-gray-100 scroll-mt-24">
         <h2 className="text-lg font-semibold text-gray-800 mb-4">Tampilan & Theme</h2>
         <div className="space-y-4">
           <div>
@@ -437,6 +444,7 @@ export default function SettingsPage() {
         </div>
       </div>
 
+      {!isSuperadmin && (
       <div id="pwa" className="bg-white rounded-xl p-4 sm:p-6 shadow-sm border border-gray-100 scroll-mt-24">
         <div className="flex items-center gap-2 mb-4">
           <Smartphone size={20} className="text-primary shrink-0" />
@@ -532,7 +540,9 @@ export default function SettingsPage() {
           </div>
         </div>
       </div>
+      )}
 
+      {!isSuperadmin && (
       <div id="ceklok" className="bg-white rounded-xl p-4 sm:p-6 shadow-sm border border-gray-100 scroll-mt-24">
         <div className="mb-4">
           <h2 className="text-lg font-semibold text-gray-800">Geolokasi Ceklok Guru</h2>
@@ -574,7 +584,9 @@ export default function SettingsPage() {
           </div>
         </div>
       </div>
+      )}
 
+      {!isSuperadmin && (
       <div id="perpustakaan" className="bg-white rounded-xl p-4 sm:p-6 shadow-sm border border-gray-100 scroll-mt-24">
         <div className="flex items-center gap-2 mb-4">
           <BookOpen size={20} className="text-primary shrink-0" />
@@ -640,13 +652,15 @@ export default function SettingsPage() {
           </button>
         </div>
       </div>
+      )}
 
-      <FeatureSettings />
+      {!isSuperadmin && <FeatureSettings />}
 
-      <AiSettingsCard scope="tenant" title="Konfigurasi AI Lembaga (Default)" description="API key AI (Gemini, ChatGPT, atau provider lain) yang dipakai oleh seluruh guru di lembaga ini, kecuali guru mengaktifkan API key/akun Google personal miliknya sendiri." />
+      {!isSuperadmin && <AiSettingsCard scope="tenant" title="Konfigurasi AI Lembaga (Default)" description="API key AI (Gemini, ChatGPT, atau provider lain) yang dipakai oleh seluruh guru di lembaga ini, kecuali guru mengaktifkan API key/akun Google personal miliknya sendiri." />}
 
-      {isGuruKelasJenjang(form.jenjang) && <JamPulangSiswa />}
+      {!isSuperadmin && isGuruKelasJenjang(form.jenjang) && <JamPulangSiswa />}
 
+      {!isSuperadmin && (
       <div className="bg-white rounded-xl p-4 sm:p-6 shadow-sm border border-gray-100">
         <div className="mb-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
           <div>
@@ -677,7 +691,9 @@ export default function SettingsPage() {
           <div><label className="block text-xs text-gray-500 mb-1">Pulang selesai</label><input type="time" value={jam.ceklok_pulang_selesai} onChange={e => setJam({...jam, ceklok_pulang_selesai: e.target.value})} className="w-full px-3 py-2 border rounded-lg text-sm" /></div>
         </div>
       </div>
+      )}
 
+      {!isSuperadmin && (
       <div className="rounded-xl border border-red-200 bg-red-50 p-4 sm:p-6 shadow-sm">
         <div className="flex items-start gap-3">
           <AlertTriangle className="mt-0.5 shrink-0 text-red-600" size={22} />
@@ -693,6 +709,7 @@ export default function SettingsPage() {
           </div>
         </div>
       </div>
+      )}
     </div>
   )
 }

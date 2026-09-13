@@ -75,13 +75,13 @@ export default function DeveloperApiPage() {
   const example = `curl -H "X-API-Key: YOUR_API_KEY" \\\n  "${window.location.origin}/api/external/v1/siswa?page=1&limit=20"`
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <div>
         <h1 className="flex items-center gap-2 text-2xl font-bold text-gray-800 dark:text-white"><Code2 className="text-primary" /> REST API Developer</h1>
         <p className="mt-1 text-sm text-gray-500">Integrasikan aplikasi eksternal dengan data tenant ini secara terisolasi.</p>
       </div>
 
-      <section className="rounded-xl border border-gray-100 bg-white p-4 shadow-sm sm:p-6 dark:border-gray-800 dark:bg-gray-900">
+      <section className="rounded-xl border border-gray-100 bg-white p-3 shadow-sm sm:p-4 dark:border-gray-800 dark:bg-gray-900">
         <h2 className="flex items-center gap-2 font-semibold text-gray-800 dark:text-white"><Plus size={18} /> Buat API Key</h2>
         <div className="mt-4 grid gap-3 sm:grid-cols-[minmax(0,1fr)_160px_auto]">
           <input aria-label="Nama API key" value={name} onChange={e => setName(e.target.value)} className="rounded-lg border px-3 py-2 text-sm" placeholder="Nama integrasi" />
@@ -100,7 +100,7 @@ export default function DeveloperApiPage() {
         )}
       </section>
 
-      <section className="rounded-xl border border-gray-100 bg-white p-4 shadow-sm sm:p-6 dark:border-gray-800 dark:bg-gray-900">
+      <section className="rounded-xl border border-gray-100 bg-white p-3 shadow-sm sm:p-4 dark:border-gray-800 dark:bg-gray-900">
         <h2 className="flex items-center gap-2 font-semibold text-gray-800 dark:text-white"><KeyRound size={18} /> API Key Aktif</h2>
         <div className="mt-4 overflow-x-auto">
           <table className="w-full min-w-[680px] text-left text-sm">
@@ -113,13 +113,13 @@ export default function DeveloperApiPage() {
         </div>
       </section>
 
-      <section className="rounded-xl border border-gray-100 bg-white p-4 shadow-sm sm:p-6 dark:border-gray-800 dark:bg-gray-900">
+      <section className="rounded-xl border border-gray-100 bg-white p-3 shadow-sm sm:p-4 dark:border-gray-800 dark:bg-gray-900">
         <h2 className="font-semibold text-gray-800 dark:text-white">Autentikasi dan Base URL</h2>
         <p className="mt-2 text-sm text-gray-600 dark:text-gray-300">Kirim key lewat header <code className="rounded bg-gray-100 px-1.5 py-0.5">X-API-Key</code>. Base URL mengikuti domain lembaga: <code className="break-all">{window.location.origin}/api/external</code>.</p>
         <pre className="mt-3 overflow-x-auto rounded-xl bg-gray-950 p-4 text-xs leading-6 text-emerald-300"><code>{example}</code></pre>
       </section>
 
-      <section className="rounded-xl border border-gray-100 bg-white p-4 shadow-sm sm:p-6 dark:border-gray-800 dark:bg-gray-900">
+      <section className="rounded-xl border border-gray-100 bg-white p-3 shadow-sm sm:p-4 dark:border-gray-800 dark:bg-gray-900">
         <h2 className="font-semibold text-gray-800 dark:text-white">Endpoint tersedia</h2>
         <div className="mt-4 space-y-2">
           {endpoints.map(([method, endpoint, description]) => <div key={`${method}-${endpoint}`} className="grid gap-1 rounded-lg border p-3 sm:grid-cols-[60px_minmax(260px,1fr)_1fr] sm:items-center"><span className={`w-fit rounded px-2 py-1 text-[11px] font-bold ${method === 'GET' ? 'bg-blue-100 text-blue-700' : 'bg-emerald-100 text-emerald-700'}`}>{method}</span><code className="overflow-x-auto text-xs text-gray-800 dark:text-gray-200">{endpoint}</code><span className="text-xs text-gray-500">{description}</span></div>)}

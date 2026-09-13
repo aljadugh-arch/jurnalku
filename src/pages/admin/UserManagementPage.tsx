@@ -89,7 +89,7 @@ export default function UserManagementPage() {
   }
 
   return (
-    <div className="min-w-0 space-y-6">
+    <div className="min-w-0 space-y-4">
       <div className="min-w-0">
         <h1 className="text-2xl font-bold text-gray-800 font-display">Manajemen Pengguna</h1>
         <div className="flex flex-wrap gap-2 mt-2">
@@ -99,7 +99,7 @@ export default function UserManagementPage() {
         <p className="text-gray-500 text-sm mt-1">Kelola akun & role: Kepala Madrasah (pimpinan, read-only) dan Admin/Operator (akses penuh)</p>
       </div>
 
-      <div className="min-w-0 bg-white rounded-xl p-4 sm:p-6 shadow-sm border border-gray-100">
+      <div className="min-w-0 bg-white rounded-xl p-3 sm:p-4 shadow-sm border border-gray-100">
         <h2 className="font-semibold text-gray-700 mb-4 flex items-center gap-2"><UserPlus size={18} /> Tambah Pengguna</h2>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4 p-3 bg-gray-50 rounded-xl">
           <div className="min-w-0 min-h-[104px]">
@@ -119,7 +119,7 @@ export default function UserManagementPage() {
             {siswaSearch && filteredSiswa.map(sw => <button key={sw.id} type="button" onClick={() => pickSiswa(sw)} className="block w-full text-left px-3 py-1.5 text-xs bg-white border-b hover:bg-blue-50 rounded">{sw.nama} ({sw.nis})</button>)}
           </div>
         </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <input placeholder="Nama lengkap" value={form.nama} onChange={e => setForm({ ...form, nama: e.target.value })} className="w-full min-w-0 h-11 px-4 py-2 border rounded-lg text-sm" />
           <input placeholder="Email" value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} className="w-full min-w-0 h-11 px-4 py-2 border rounded-lg text-sm" />
           <input placeholder="Password (min 6)" type="password" value={form.password} onChange={e => setForm({ ...form, password: e.target.value })} className="w-full min-w-0 h-11 px-4 py-2 border rounded-lg text-sm" />

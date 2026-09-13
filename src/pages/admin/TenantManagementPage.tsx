@@ -127,9 +127,9 @@ export default function TenantManagementPage() {
   const totalSiswa = tenants.reduce((sum, t) => sum + (Number(t.siswa_count) || 0), 0)
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       {/* Dashboard Stats */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
         <div className="bg-white border border-gray-200 rounded-xl p-4">
           <div className="text-sm text-gray-500">Total Lembaga</div>
           <div className="text-2xl font-bold text-gray-900 mt-1">{totalTenants}</div>
@@ -173,7 +173,7 @@ export default function TenantManagementPage() {
       )}
 
       {showForm && (
-        <form onSubmit={handleCreate} className="bg-white rounded-xl shadow-sm border p-6 space-y-4">
+        <form onSubmit={handleCreate} className="bg-white rounded-xl shadow-sm border p-4 space-y-3">
           <h3 className="font-semibold text-lg">Tambah Lembaga Baru</h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
@@ -224,44 +224,44 @@ export default function TenantManagementPage() {
         <table className="w-full">
           <thead className="bg-gray-50 border-b border-gray-100">
             <tr>
-              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Nama Lembaga</th>
-              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Subdomain</th>
-              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Custom Domain</th>
-              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Plan</th>
-              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Status</th>
-              <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wide">Aksi</th>
+              <th className="px-3 py-2 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Nama Lembaga</th>
+              <th className="px-3 py-2 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Subdomain</th>
+              <th className="px-3 py-2 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Custom Domain</th>
+              <th className="px-3 py-2 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Plan</th>
+              <th className="px-3 py-2 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Status</th>
+              <th className="px-3 py-2 text-right text-xs font-semibold text-gray-500 uppercase tracking-wide">Aksi</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
             {tenants.map(t => (
               <tr key={t.id} className="hover:bg-gray-50/70 transition-colors">
-                <td className="px-4 py-3.5 align-top">
+                <td className="px-3 py-2.5 align-top">
                   <div className="font-medium text-gray-900">{t.nama}</div>
                   <div className="text-xs text-gray-400 mt-0.5">{t.email}</div>
                 </td>
-                <td className="px-4 py-3.5 align-top">
+                <td className="px-3 py-2.5 align-top">
                   <a href={`https://${t.slug}.${t.base_domain || 'jurnal.cc.cd'}`} target="_blank" rel="noreferrer"
                     className="inline-flex items-center gap-1 text-sm text-primary hover:underline">
                     {t.slug}.{t.base_domain || 'jurnal.cc.cd'}
                     <ExternalLink size={12} className="shrink-0 opacity-60" />
                   </a>
                 </td>
-                <td className="px-4 py-3.5 align-top text-sm text-gray-600">
+                <td className="px-3 py-2.5 align-top text-sm text-gray-600">
                   {t.domain_custom || <span className="text-gray-300">—</span>}
                 </td>
-                <td className="px-4 py-3.5 align-top">
+                <td className="px-3 py-2.5 align-top">
                   <span className={`inline-block px-2.5 py-1 rounded-full text-xs font-medium ${t.plan === 'trial' ? 'bg-amber-50 text-amber-700' : t.plan === 'pro' ? 'bg-blue-50 text-blue-700' : 'bg-purple-50 text-purple-700'}`}>
                     {t.plan}
                   </span>
                   {(t.subscription_ends_at || t.trial_ends_at) && <div className="mt-1 whitespace-nowrap text-[11px] text-gray-400">s/d {new Date((t.subscription_ends_at || t.trial_ends_at) as string).toLocaleDateString('id-ID')}</div>}
                 </td>
-                <td className="px-4 py-3.5 align-top">
+                <td className="px-3 py-2.5 align-top">
                   <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${t.aktif ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'}`}>
                     <span className={`w-1.5 h-1.5 rounded-full ${t.aktif ? 'bg-green-500' : 'bg-red-500'}`} />
                     {t.aktif ? 'Aktif' : 'Nonaktif'}
                   </span>
                 </td>
-                <td className="px-4 py-3.5 align-top text-right relative">
+                <td className="px-3 py-2.5 align-top text-right relative">
                   <button
                     onClick={() => setOpenMenuId(openMenuId === t.id ? null : t.id)}
                     className="inline-flex items-center justify-center w-8 h-8 rounded-lg text-gray-500 hover:bg-gray-100 hover:text-gray-700 transition-colors"
