@@ -1,6 +1,7 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import api from '../../services/api'
 import toast from 'react-hot-toast'
+import { MoreVertical, ExternalLink, Ban, CheckCircle2, Globe2, Link2, ArrowLeftRight, KeyRound } from 'lucide-react'
 
 interface Tenant {
   id: string
@@ -28,6 +29,16 @@ export default function TenantManagementPage() {
   const [unlock, setUnlock] = useState<{ tenantId: string; tenantName: string; plan: 'lite' | 'pro'; months: number } | null>(null)
   const [generatedKey, setGeneratedKey] = useState('')
   const [generating, setGenerating] = useState(false)
+  const [openMenuId, setOpenMenuId] = useState<string | null>(null)
+  const menuRef = useRef<HTMLDivElement | null>(null)
+
+  useEffect(() => {
+    const onClickOutside = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) setOpenMenuId(null)
+    }
+    document.addEventListener('mousedown', onClickOutside)
+    return () => document.removeEventListener('mousedown', onClickOutside)
+  }, [])
 
   useEffect(() => { loadTenants() }, [])
 
@@ -211,52 +222,93 @@ export default function TenantManagementPage() {
       <div className="bg-white rounded-xl shadow-sm border overflow-hidden">
         <div className="overflow-x-auto -mx-2 px-2">
         <table className="w-full">
-          <thead className="bg-gray-50">
+          <thead className="bg-gray-50 border-b border-gray-100">
             <tr>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Lembaga</th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Subdomain</th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Custom Domain</th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Plan</th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Aksi</th>
+              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Nama Lembaga</th>
+              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Subdomain</th>
+              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Custom Domain</th>
+              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Plan</th>
+              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Status</th>
+              <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wide">Aksi</th>
             </tr>
           </thead>
-          <tbody className="divide-y">
+          <tbody className="divide-y divide-gray-100">
             {tenants.map(t => (
-              <tr key={t.id} className="hover:bg-gray-50">
-                <td className="px-4 py-3">
+              <tr key={t.id} className="hover:bg-gray-50/70 transition-colors">
+                <td className="px-4 py-3.5 align-top">
                   <div className="font-medium text-gray-900">{t.nama}</div>
-                  <div className="text-xs text-gray-500">{t.email}</div>
+                  <div className="text-xs text-gray-400 mt-0.5">{t.email}</div>
                 </td>
-                <td className="px-4 py-3">
-                  <a href={`https://${t.slug}.${t.base_domain || 'jurnal.cc.cd'}`} target="_blank" rel="noreferrer" className="text-primary text-sm hover:underline">
+                <td className="px-4 py-3.5 align-top">
+                  <a href={`https://${t.slug}.${t.base_domain || 'jurnal.cc.cd'}`} target="_blank" rel="noreferrer"
+                    className="inline-flex items-center gap-1 text-sm text-primary hover:underline">
                     {t.slug}.{t.base_domain || 'jurnal.cc.cd'}
+                    <ExternalLink size={12} className="shrink-0 opacity-60" />
                   </a>
                 </td>
-                <td className="px-4 py-3 text-sm text-gray-600">
-                  {t.domain_custom || <span className="text-gray-400">-</span>}
+                <td className="px-4 py-3.5 align-top text-sm text-gray-600">
+                  {t.domain_custom || <span className="text-gray-300">—</span>}
                 </td>
-                <td className="px-4 py-3">
-                  <span className={`px-2 py-1 rounded-full text-xs font-medium ${t.plan === 'trial' ? 'bg-amber-100 text-amber-700' : t.plan === 'pro' ? 'bg-blue-100 text-blue-700' : 'bg-purple-100 text-purple-700'}`}>
+                <td className="px-4 py-3.5 align-top">
+                  <span className={`inline-block px-2.5 py-1 rounded-full text-xs font-medium ${t.plan === 'trial' ? 'bg-amber-50 text-amber-700' : t.plan === 'pro' ? 'bg-blue-50 text-blue-700' : 'bg-purple-50 text-purple-700'}`}>
                     {t.plan}
                   </span>
-                  {(t.subscription_ends_at || t.trial_ends_at) && <div className="mt-1 whitespace-nowrap text-[11px] text-gray-500">s/d {new Date((t.subscription_ends_at || t.trial_ends_at) as string).toLocaleDateString('id-ID')}</div>}
+                  {(t.subscription_ends_at || t.trial_ends_at) && <div className="mt-1 whitespace-nowrap text-[11px] text-gray-400">s/d {new Date((t.subscription_ends_at || t.trial_ends_at) as string).toLocaleDateString('id-ID')}</div>}
                 </td>
-                <td className="px-4 py-3">
-                  <span className={`px-2 py-1 rounded-full text-xs font-medium ${t.aktif ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                <td className="px-4 py-3.5 align-top">
+                  <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${t.aktif ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'}`}>
+                    <span className={`w-1.5 h-1.5 rounded-full ${t.aktif ? 'bg-green-500' : 'bg-red-500'}`} />
                     {t.aktif ? 'Aktif' : 'Nonaktif'}
                   </span>
                 </td>
-                <td className="px-4 py-3">
-                  <div className="flex flex-wrap gap-2">
-                    <button onClick={() => toggleTenant(t.id, t.aktif)} className={`text-xs px-2 py-1 rounded ${t.aktif ? 'bg-red-50 text-red-600 hover:bg-red-100' : 'bg-green-50 text-green-600 hover:bg-green-100'}`}>
-                      {t.aktif ? 'Nonaktifkan' : 'Aktifkan'}
-                    </button>
-                    <button onClick={() => setCustomDomain(t.id)} className="text-xs px-2 py-1 rounded bg-blue-50 text-blue-600 hover:bg-blue-100">Set Domain</button>
-                    <button onClick={() => changeSlug(t)} className="text-xs px-2 py-1 rounded bg-amber-50 text-amber-700 hover:bg-amber-100">Ganti Subdomain</button>
-                    <button onClick={() => changeBaseDomain(t)} className="text-xs px-2 py-1 rounded bg-teal-50 text-teal-700 hover:bg-teal-100">Pindah Domain Utama</button>
-                    <button onClick={() => { setUnlock({ tenantId: t.id, tenantName: t.nama, plan: 'lite', months: 1 }); setGeneratedKey('') }} className="text-xs px-2 py-1 rounded bg-purple-50 text-purple-700 hover:bg-purple-100">Buat Kunci</button>
-                  </div>
+                <td className="px-4 py-3.5 align-top text-right relative">
+                  <button
+                    onClick={() => setOpenMenuId(openMenuId === t.id ? null : t.id)}
+                    className="inline-flex items-center justify-center w-8 h-8 rounded-lg text-gray-500 hover:bg-gray-100 hover:text-gray-700 transition-colors"
+                    aria-label="Aksi lembaga"
+                  >
+                    <MoreVertical size={18} />
+                  </button>
+                  {openMenuId === t.id && (
+                    <div ref={menuRef} className="absolute right-4 top-11 z-20 w-56 bg-white rounded-xl shadow-lg border border-gray-100 py-1.5 text-left">
+                      <button
+                        onClick={() => { toggleTenant(t.id, t.aktif); setOpenMenuId(null) }}
+                        className={`w-full flex items-center gap-2.5 px-3.5 py-2 text-sm hover:bg-gray-50 ${t.aktif ? 'text-red-600' : 'text-green-600'}`}
+                      >
+                        {t.aktif ? <Ban size={15} /> : <CheckCircle2 size={15} />}
+                        {t.aktif ? 'Nonaktifkan' : 'Aktifkan'}
+                      </button>
+                      <button
+                        onClick={() => { setCustomDomain(t.id); setOpenMenuId(null) }}
+                        className="w-full flex items-center gap-2.5 px-3.5 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                      >
+                        <Globe2 size={15} className="text-blue-600" />
+                        Set Custom Domain
+                      </button>
+                      <button
+                        onClick={() => { changeSlug(t); setOpenMenuId(null) }}
+                        className="w-full flex items-center gap-2.5 px-3.5 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                      >
+                        <Link2 size={15} className="text-amber-600" />
+                        Ganti Subdomain
+                      </button>
+                      <button
+                        onClick={() => { changeBaseDomain(t); setOpenMenuId(null) }}
+                        className="w-full flex items-center gap-2.5 px-3.5 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                      >
+                        <ArrowLeftRight size={15} className="text-teal-600" />
+                        Pindah Domain Utama
+                      </button>
+                      <div className="my-1 border-t border-gray-100" />
+                      <button
+                        onClick={() => { setUnlock({ tenantId: t.id, tenantName: t.nama, plan: 'lite', months: 1 }); setGeneratedKey(''); setOpenMenuId(null) }}
+                        className="w-full flex items-center gap-2.5 px-3.5 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                      >
+                        <KeyRound size={15} className="text-purple-600" />
+                        Buat Kunci Langganan
+                      </button>
+                    </div>
+                  )}
                 </td>
               </tr>
             ))}

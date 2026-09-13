@@ -173,10 +173,22 @@ function filterRoleItems(items: MenuItem[], role?: string): MenuItem[] {
   })
 }
 
+// Super admin platform hanya mengelola lembaga/tenant, bukan operasional akademik
+// satu sekolah — sidebar-nya sengaja dipangkas ke 5 menu inti saja.
+export const superAdminMenuItems: MenuItem[] = [
+  { label: 'Dashboard', icon: <LayoutDashboard size={20} />, path: '/admin' },
+  { label: 'Manajemen Lembaga', icon: <Globe size={20} />, path: '/admin/tenants' },
+  { label: 'Manajemen Pengguna', icon: <UserCheck size={20} />, path: '/admin/users' },
+  { label: 'Backup & Restore', icon: <DatabaseBackup size={20} />, path: '/admin/backup-restore' },
+  { label: 'REST API Developer', icon: <Code2 size={20} />, path: '/admin/developer-api' },
+  { label: 'Pengaturan', icon: <Settings size={20} />, path: '/admin/settings' },
+]
+
 export function menuForRole(role?: string): MenuItem[] {
+  if (role === 'super_admin') return superAdminMenuItems
   const items = role === 'kepala' ? kepalaMenuItems
     : role === 'bendahara' ? bendaharaMenuItems
-    : ['admin', 'super_admin', 'operator', 'tata_usaha', 'tu'].includes(role || '') ? adminMenuItems
+    : ['admin', 'operator', 'tata_usaha', 'tu'].includes(role || '') ? adminMenuItems
     : role === 'guru' || role === 'wali_kelas' ? guruMenuItems
     : siswaMenuItems
   const visible = filterRoleItems(items, role)
