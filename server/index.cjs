@@ -60,14 +60,14 @@ app.use(helmet({
 }))
 
 // CORS: restrict to known origins in production, allow all in dev
-const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS || 'https://jurnal.cc.cd')
+const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS || 'https://jurnal.cc.cd,https://jurnalmadrasah.web.id')
   .split(',').map(s => s.trim())
 app.use(cors({
   origin: (origin, cb) => {
     if (!origin) return cb(null, true) // curl / same-origin / mobile
     if (!IS_PROD) return cb(null, true)
-    // allow main domain + any *.jurnal.cc.cd subdomain (multi-tenant)
-    if (ALLOWED_ORIGINS.includes(origin) || /^https:\/\/[a-z0-9-]+\.jurnal\.cc\.cd$/i.test(origin)) {
+    // allow main domains + any *.jurnal.cc.cd or *.jurnalmadrasah.web.id subdomain (multi-tenant, multi-canonical-domain)
+    if (ALLOWED_ORIGINS.includes(origin) || /^https:\/\/[a-z0-9-]+\.(jurnal\.cc\.cd|jurnalmadrasah\.web\.id)$/i.test(origin)) {
       return cb(null, true)
     }
     // allow registered custom domains (from tenant DB)

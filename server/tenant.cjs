@@ -12,6 +12,12 @@
  */
 
 const BASE_DOMAIN = process.env.BASE_DOMAIN || 'jurnal.cc.cd'
+// Platform kini menerima registrasi/subdomain di lebih dari satu domain kanonik
+// (jurnal.cc.cd dan jurnalmadrasah.web.id) yang berbagi satu database tenant.
+// BASE_DOMAIN tetap dipertahankan untuk backward-compat (mis. link admin@slug.jurnal.cc.cd),
+// BASE_DOMAINS adalah daftar semua domain kanonik yang sah sebagai basis subdomain-per-tenant.
+const BASE_DOMAINS = (process.env.BASE_DOMAINS || `${BASE_DOMAIN},jurnalmadrasah.web.id`)
+  .split(',').map(d => d.trim().toLowerCase()).filter(Boolean)
 
 /**
  * Setup tenant tables in database
@@ -135,9 +141,10 @@ function tenantMiddleware(db) {
     let tenant = null
     req.isRegisteredTenantHost = false
 
-    // 1. Check if it's a subdomain of BASE_DOMAIN
-    if (host.endsWith('.' + BASE_DOMAIN)) {
-      const slug = host.replace('.' + BASE_DOMAIN, '')
+    // 1. Check if it's a subdomain of any registered canonical BASE_DOMAINS
+    const matchedBase = BASE_DOMAINS.find(bd => host.endsWith('.' + bd))
+    if (matchedBase) {
+      const slug = host.slice(0, -(matchedBase.length + 1))
       if (slug && slug !== 'www') {
         // Custom domain is an alias, not a replacement: tenant remains reachable by slug too.
         tenant = db.prepare('SELECT * FROM tenants WHERE slug = ? AND aktif = 1').get(slug)
@@ -146,7 +153,7 @@ function tenantMiddleware(db) {
 
     // 2. Check custom domain mapping. Canonical platform hosts are reserved
     // even if bad legacy data accidentally maps one as a custom domain.
-    const canonicalHost = host === BASE_DOMAIN || host === `www.${BASE_DOMAIN}`
+    const canonicalHost = BASE_DOMAINS.some(bd => host === bd || host === `www.${bd}`)
     if (!tenant && !canonicalHost && host !== 'localhost') {
       tenant = db.prepare("SELECT * FROM tenants WHERE lower(trim(domain_custom, '.')) = ? AND aktif = 1").get(host.replace(/\.$/, ''))
     }
@@ -212,7 +219,9 @@ function registerTenantRoutes(app, db, authMiddleware, uuidv4, SUPER) {
     // pada login pertama. Middleware akan mencekal API lain sampai diganti.
     const bcrypt = require('bcryptjs')
     const adminId = uuidv4()
-    const adminEmail = email || `admin@${slug}.jurnal.cc.cd`
+    const reqHostForEmail = (req.headers['host'] || req.headers['x-forwarded-host'] || '').split(':')[0].toLowerCase()
+    const emailBase = BASE_DOMAINS.find(bd => reqHostForEmail === bd || reqHostForEmail.endsWith('.' + bd)) || BASE_DOMAIN
+    const adminEmail = email || `admin@${slug}.${emailBase}`
     // Generate password acak (16 char base64) supaya admin pertama tidak
     // mendapat password default yang lemah dan publik.
     const adminInitialPassword = require('crypto').randomBytes(12).toString('base64').replace(/[+/=]/g, 'X')
@@ -464,4 +473,4 @@ function registerTenantRoutes(app, db, authMiddleware, uuidv4, SUPER) {
   })
 }
 
-module.exports = { setupTenantTables, tenantMiddleware, tenantQuery, registerTenantRoutes, BASE_DOMAIN }
+module.exports = { setupTenantTables, tenantMiddleware, tenantQuery, registerTenantRoutes, BASE_DOMAIN, BASE_DOMAINS }
