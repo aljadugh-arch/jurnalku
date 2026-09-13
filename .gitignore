@@ -7,6 +7,8 @@ dist/
 .env.*
 server/jurnalku*.db
 server/*.db
+server/*.db.*
+server/uploads/
 .DS_Store
 *.log
 # Local historical snapshots and deployment backups (not application source)
