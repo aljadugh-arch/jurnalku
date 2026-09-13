@@ -258,14 +258,26 @@ function registerTenantRoutes(app, db, authMiddleware, uuidv4, SUPER) {
   // Update tenant
   app.put('/api/tenants/:id', authMiddleware, (req, res) => {
     if (req.user.role !== 'super_admin') return res.status(403).json({ error: 'Forbidden' })
-    const { nama, domain_custom, plan, max_siswa, max_gtk, aktif, expired_at, base_domain } = req.body
+    const { nama, domain_custom, plan, max_siswa, max_gtk, aktif, expired_at, base_domain, slug } = req.body
     const baseDomainVal = base_domain && BASE_DOMAINS.includes(String(base_domain).toLowerCase())
       ? String(base_domain).toLowerCase()
       : null
-    db.prepare(`UPDATE tenants SET nama=COALESCE(?,nama), domain_custom=?, plan=COALESCE(?,plan), 
-      max_siswa=COALESCE(?,max_siswa), max_gtk=COALESCE(?,max_gtk), aktif=COALESCE(?,aktif), 
-      expired_at=?, base_domain=COALESCE(?,base_domain) WHERE id=?`)
-      .run(nama, domain_custom || null, plan, max_siswa, max_gtk, aktif, expired_at || null, baseDomainVal, req.params.id)
+
+    let slugVal = null
+    if (slug !== undefined && slug !== null && String(slug).trim() !== '') {
+      const normalized = String(slug).toLowerCase().trim()
+      if (!/^[a-z0-9-]+$/.test(normalized)) {
+        return res.status(400).json({ error: 'Slug hanya boleh huruf kecil, angka, dan dash' })
+      }
+      const dup = db.prepare('SELECT id FROM tenants WHERE slug = ? AND id != ?').get(normalized, req.params.id)
+      if (dup) return res.status(409).json({ error: 'Slug sudah digunakan tenant lain' })
+      slugVal = normalized
+    }
+
+    db.prepare(`UPDATE tenants SET nama=COALESCE(?,nama), domain_custom=?, plan=COALESCE(?,plan),
+      max_siswa=COALESCE(?,max_siswa), max_gtk=COALESCE(?,max_gtk), aktif=COALESCE(?,aktif),
+      expired_at=?, base_domain=COALESCE(?,base_domain), slug=COALESCE(?,slug) WHERE id=?`)
+      .run(nama, domain_custom || null, plan, max_siswa, max_gtk, aktif, expired_at || null, baseDomainVal, slugVal, req.params.id)
     res.json({ success: true })
   })
 

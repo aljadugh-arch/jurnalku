@@ -69,6 +69,29 @@ export default function TenantManagementPage() {
     } catch (e: any) { alert(e.response?.data?.error || 'Gagal set domain') }
   }
 
+  const changeSlug = async (t: Tenant) => {
+    const currentBase = t.base_domain || 'jurnal.cc.cd'
+    const newSlug = window.prompt(
+      `Ganti subdomain untuk "${t.nama}"\nSubdomain saat ini: ${t.slug}.${currentBase}\n\nMasukkan slug baru (huruf kecil, angka, dash saja):`,
+      t.slug
+    )
+    if (!newSlug || newSlug.trim() === '' || newSlug === t.slug) return
+    try {
+      await api.put(`/tenants/${t.id}`, { slug: newSlug })
+      alert(`Subdomain diganti menjadi: ${newSlug}.${currentBase}\n\nBeri tahu pengguna lembaga untuk memakai URL baru ini.`)
+      loadTenants()
+    } catch (e: any) { alert(e.response?.data?.error || 'Gagal ganti subdomain') }
+  }
+
+  const changeBaseDomain = async (t: Tenant) => {
+    const next = t.base_domain === 'jurnal.cc.cd' ? 'jurnalmadrasah.web.id' : 'jurnal.cc.cd'
+    if (!window.confirm(`Pindahkan domain utama "${t.nama}" ke ${next}?\n\nURL baru: https://${t.slug}.${next}`)) return
+    try {
+      await api.put(`/tenants/${t.id}`, { base_domain: next })
+      loadTenants()
+    } catch (e: any) { alert(e.response?.data?.error || 'Gagal ganti domain utama') }
+  }
+
   const generateUnlockKey = async () => {
     if (!unlock) return
     setGenerating(true)
@@ -230,6 +253,8 @@ export default function TenantManagementPage() {
                       {t.aktif ? 'Nonaktifkan' : 'Aktifkan'}
                     </button>
                     <button onClick={() => setCustomDomain(t.id)} className="text-xs px-2 py-1 rounded bg-blue-50 text-blue-600 hover:bg-blue-100">Set Domain</button>
+                    <button onClick={() => changeSlug(t)} className="text-xs px-2 py-1 rounded bg-amber-50 text-amber-700 hover:bg-amber-100">Ganti Subdomain</button>
+                    <button onClick={() => changeBaseDomain(t)} className="text-xs px-2 py-1 rounded bg-teal-50 text-teal-700 hover:bg-teal-100">Pindah Domain Utama</button>
                     <button onClick={() => { setUnlock({ tenantId: t.id, tenantName: t.nama, plan: 'lite', months: 1 }); setGeneratedKey('') }} className="text-xs px-2 py-1 rounded bg-purple-50 text-purple-700 hover:bg-purple-100">Buat Kunci</button>
                   </div>
                 </td>
