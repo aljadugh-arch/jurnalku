@@ -184,7 +184,7 @@ export default function AbsensiSiswaPage({ qrMode = false }: { qrMode?: boolean 
   // Sesi bunyi diambil dari respons server (r.data.sesi), bukan dropdown UI:
   // server yang memutuskan masuk/pulang berdasarkan jam & batas jam pulang rombel.
   const announceScanResult = (data: any) => {
-    announceStudentScanSuccess(data?.siswa?.nama_panggilan_unik || data?.siswa?.nama, data?.sesi === 'pulang' ? 'pulang' : 'masuk', data?.already)
+    announceStudentScanSuccess(data?.siswa?.nama_panggilan || data?.siswa?.nama_panggilan_unik || data?.siswa?.nama, data?.sesi === 'pulang' ? 'pulang' : 'masuk', data?.already)
   }
 
   const startQrCamera = async () => {

@@ -109,30 +109,42 @@ function pickBestVoice(synth: SpeechSynthesis): SpeechSynthesisVoice | null {
   const voices = synth.getVoices?.() || []
   const name = (v: SpeechSynthesisVoice) => v.name.toLowerCase()
   const isId = (v: SpeechSynthesisVoice) => /^id[-_]/i.test(v.lang) || /indonesia/i.test(v.name)
+  // Voice "Natural"/"Online"/"Neural" (mis. Microsoft Edge neural voices) memakai
+  // model neural TTS modern — jauh lebih manusiawi dibanding voice legacy berbasis
+  // formant synthesis (espeak/SAPI4/robotic). Diprioritaskan bila tersedia.
+  const isNatural = (v: SpeechSynthesisVoice) => /natural|online|neural/i.test(name(v))
+  // Nama voice pria yang benar-benar terverifikasi male di browser umum. HATI-HATI:
+  // "Google US English" BUKAN voice pria (itu voice wanita default Chrome) — jangan
+  // dijadikan fallback male seperti sebelumnya, itu salah dan bikin suara wanita
+  // terdengar dipakaikan label "male-first".
+  const isVerifiedMale = (v: SpeechSynthesisVoice) =>
+    /\bmale\b|\bpria\b|laki[- ]?laki|\bman\b|\bpria\b/i.test(name(v)) ||
+    /google uk english male|microsoft david|microsoft andika|microsoft ardi|microsoft rizwan|microsoft farrell|microsoft ryan|microsoft guy|microsoft brian|microsoft christopher|microsoft eric/i.test(name(v))
 
   const idVoices = voices.filter(isId)
 
-  // Prioritas MALE-first (sesuai permintaan: suara laki-laki):
-  // 1) male Indonesia (Google + "male"/nama pria)
-  // 2) Google US English (suara pria natural, sering tersedia & jelas)
-  // 3) male lain di browser
-  // 4) female Indonesia (fallback bila tak ada male)
+  // Prioritas MALE-first + neural-first (suara lebih manusiawi/enak didengar):
+  // 1) male Indonesia natural/neural
+  // 2) male Indonesia (non-neural)
+  // 3) male natural/neural bahasa lain (Inggris dsb, tetap jelas & manusiawi)
+  // 4) male verified lain
+  // 5) female Indonesia (fallback terakhir bila memang tak ada voice pria sama sekali)
 
-  // (a) voice Indonesia yang terindikasi pria/maskulin / male
-  const maleId = idVoices.find(v =>
-    /male|\bpria\b|pria|laki|man|daniel|david|osman|rizwan|ardi|andika|budi|gilang|wira/i.test(name(v))
-  )
+  const maleIdNatural = idVoices.find(v => isVerifiedMale(v) && isNatural(v))
+  if (maleIdNatural) return maleIdNatural
+
+  const maleId = idVoices.find(isVerifiedMale)
   if (maleId) return maleId
 
-  // (b) Google US English — umumnya pria, keras & jelas
-  const googleUs = voices.find(v => /google\s*us\s*english/i.test(name(v)))
-  if (googleUs) return googleUs
+  const maleNaturalAny = voices.find(v => isVerifiedMale(v) && isNatural(v))
+  if (maleNaturalAny) return maleNaturalAny
 
-  // (c) male di semua bahasa
-  const maleAny = voices.find(v => /male|\bman\b|daniel|david/i.test(name(v)))
+  const maleAny = voices.find(isVerifiedMale)
   if (maleAny) return maleAny
 
-  // (d) voice Indonesia apa pun (fallback, bisa female)
+  // (d) voice Indonesia apa pun (natural/neural diprioritaskan bila ada beberapa), fallback bisa female
+  const idNatural = idVoices.find(isNatural)
+  if (idNatural) return idNatural
   if (idVoices[0]) return idVoices[0]
 
   // (e) Google Bahasa Indonesia kalau ada (voice id paling natural)

@@ -845,6 +845,15 @@ try {
   if (!raporCols.some(col => col.name === 'nilai_sas')) db.exec('ALTER TABLE rapor ADD COLUMN nilai_sas INTEGER DEFAULT 0')
 } catch (e) { console.error('[migrate] rapor nilai_sts/nilai_sas failed', e.message) }
 
+// Migrasi siswa: kolom nama_panggilan (opsional) sebagai basis TTS absensi.
+// Berbeda dari uniqueStudentNickname() (dihitung otomatis dari nama untuk memastikan
+// keunikan token saat diumumkan), nama_panggilan adalah nama akrab pilihan admin —
+// dipakai TTS bila diisi, sebelum jatuh ke nama depan otomatis.
+try {
+  const siswaCols = db.prepare('PRAGMA table_info(siswa)').all()
+  if (!siswaCols.some(col => col.name === 'nama_panggilan')) db.exec('ALTER TABLE siswa ADD COLUMN nama_panggilan TEXT')
+} catch (e) { console.error('[migrate] siswa nama_panggilan failed', e.message) }
+
 // Migrasi: kolom UNIQUE global (nip/nis/kode) peninggalan pra-multi-tenant bikin
 // import/edit gagal begitu ada NIP/NIS kosong kedua atau kode sama antar-sekolah.
 // Ganti jadi UNIQUE composite per-tenant via recreate table (aman: tidak ada FK ke kolom ini).
@@ -2498,15 +2507,15 @@ app.get('/api/siswa', authMiddleware, (req, res) => {
 
 app.post('/api/siswa', ADMIN, (req, res) => {
   const id = uuidv4()
-  const { nik, nis, nisn, nama, jenis_kelamin, tempat_lahir, tanggal_lahir, alamat, no_hp, nama_ortu, rombel_id } = req.body
+  const { nik, nis, nisn, nama, jenis_kelamin, tempat_lahir, tanggal_lahir, alamat, no_hp, nama_ortu, nama_panggilan, rombel_id } = req.body
   if (nik && !/^\d{16}$/.test(String(nik))) return res.status(400).json({ error: 'NIK harus berupa 16 digit angka.' })
   if (rombel_id) {
     const rombel = db.prepare('SELECT id FROM rombel WHERE id=? AND tenant_id=?').get(rombel_id, req.tenantId)
     if (!rombel) return res.status(400).json({ error: 'Rombel tidak ditemukan pada lembaga ini.' })
   }
   try {
-    db.prepare('INSERT INTO siswa (id, nik, nis, nisn, nama, jenis_kelamin, tempat_lahir, tanggal_lahir, alamat, no_hp, nama_ortu, rombel_id, tenant_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)')
-      .run(id, nik || null, nis, nisn, nama, jenis_kelamin, tempat_lahir, tanggal_lahir, alamat, no_hp, nama_ortu, rombel_id || null, req.tenantId)
+    db.prepare('INSERT INTO siswa (id, nik, nis, nisn, nama, jenis_kelamin, tempat_lahir, tanggal_lahir, alamat, no_hp, nama_ortu, nama_panggilan, rombel_id, tenant_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
+      .run(id, nik || null, nis, nisn, nama, jenis_kelamin, tempat_lahir, tanggal_lahir, alamat, no_hp, nama_ortu, (nama_panggilan || '').trim() || null, rombel_id || null, req.tenantId)
     const siswa = db.prepare('SELECT * FROM siswa WHERE id = ? AND tenant_id = ?').get(id, req.tenantId)
     ensureStudentUser(siswa, req.tenantId)
     res.json({ id, akun_siswa: true })
@@ -2520,11 +2529,12 @@ app.put('/api/siswa/:id', ADMIN, (req, res) => {
   const current = db.prepare('SELECT * FROM siswa WHERE id=? AND tenant_id=?').get(req.params.id, req.tenantId)
   if (!current) return res.status(404).json({ error: 'Siswa tidak ditemukan' })
   const body = req.body || {}
-  const fields = ['nik', 'nis', 'nisn', 'nama', 'jenis_kelamin', 'tempat_lahir', 'tanggal_lahir', 'alamat', 'no_hp', 'nama_ortu', 'rombel_id', 'status']
+  const fields = ['nik', 'nis', 'nisn', 'nama', 'jenis_kelamin', 'tempat_lahir', 'tanggal_lahir', 'alamat', 'no_hp', 'nama_ortu', 'nama_panggilan', 'rombel_id', 'status']
   const updates = fields.filter(field => Object.prototype.hasOwnProperty.call(body, field))
   if (updates.length === 0) return res.status(400).json({ error: 'Tidak ada data yang diubah' })
   const values = { ...current }
   for (const field of updates) values[field] = body[field]
+  if (updates.includes('nama_panggilan')) values.nama_panggilan = (values.nama_panggilan || '').trim() || null
   if (values.nik && !/^\d{16}$/.test(String(values.nik))) return res.status(400).json({ error: 'NIK harus berupa 16 digit angka.' })
   if (updates.includes('rombel_id')) {
     values.rombel_id = values.rombel_id || null
@@ -5428,7 +5438,14 @@ function uniqueStudentNickname(db, siswa, tenantId) {
 }
 
 function qrSiswaPayload(db, siswa, tenantId) {
-  return { nama: siswa.nama, nis: siswa.nis, nama_panggilan_unik: uniqueStudentNickname(db, siswa, tenantId) }
+  return {
+    nama: siswa.nama,
+    nis: siswa.nis,
+    // nama_panggilan: diisi manual oleh admin (opsional), basis TTS bila ada.
+    // nama_panggilan_unik: fallback otomatis dari nama lengkap agar tetap unik saat diumumkan.
+    nama_panggilan: siswa.nama_panggilan || null,
+    nama_panggilan_unik: uniqueStudentNickname(db, siswa, tenantId),
+  }
 }
 app.post('/api/absensi-siswa/qr-scan', STAFF, (req, res) => {
   const token = normalizeQrToken(req.body.token)

@@ -18,6 +18,7 @@ export interface Siswa {
   nis: string
   nisn: string
   nama: string
+  nama_panggilan?: string
   jenis_kelamin: 'L' | 'P'
   tempat_lahir: string
   tanggal_lahir: string

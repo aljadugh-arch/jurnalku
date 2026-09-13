@@ -12,6 +12,7 @@ interface Siswa {
   nis: string
   nisn: string
   nama: string
+  nama_panggilan?: string
   jenis_kelamin: string
   tempat_lahir: string
   tanggal_lahir: string
@@ -25,7 +26,7 @@ interface Siswa {
 }
 
 const emptyForm: Omit<Siswa, 'id'> = {
-  nik: '', nis: '', nisn: '', nama: '', jenis_kelamin: 'L', tempat_lahir: '',
+  nik: '', nis: '', nisn: '', nama: '', nama_panggilan: '', jenis_kelamin: 'L', tempat_lahir: '',
   tanggal_lahir: '', alamat: '', no_hp: '', nama_ortu: '', rombel_id: '',
   rombel_nama: '', status: 'aktif'
 }
@@ -115,7 +116,7 @@ export default function DataSiswaPage() {
   const handleEdit = (siswa: Siswa) => {
     setForm({
       nik: siswa.nik || '',
-      nis: siswa.nis, nisn: siswa.nisn, nama: siswa.nama,
+      nis: siswa.nis, nisn: siswa.nisn, nama: siswa.nama, nama_panggilan: siswa.nama_panggilan || '',
       jenis_kelamin: siswa.jenis_kelamin, tempat_lahir: siswa.tempat_lahir,
       tanggal_lahir: siswa.tanggal_lahir, alamat: siswa.alamat,
       no_hp: siswa.no_hp, nama_ortu: siswa.nama_ortu,
@@ -164,9 +165,9 @@ export default function DataSiswaPage() {
   }
 
   const handleExport = () => {
-    const header = 'NIK,NIS,NISN,Nama,JK,Tempat Lahir,Tgl Lahir,Alamat,No HP,Nama Ortu,Status'
+    const header = 'NIK,NIS,NISN,Nama,Nama Panggilan,JK,Tempat Lahir,Tgl Lahir,Alamat,No HP,Nama Ortu,Status'
     const rows = data.map((s) =>
-      [s.nik || '', s.nis, s.nisn, s.nama, s.jenis_kelamin, s.tempat_lahir, s.tanggal_lahir, s.alamat, s.no_hp, s.nama_ortu, s.status].join(',')
+      [s.nik || '', s.nis, s.nisn, s.nama, s.nama_panggilan || '', s.jenis_kelamin, s.tempat_lahir, s.tanggal_lahir, s.alamat, s.no_hp, s.nama_ortu, s.status].join(',')
     )
     const csv = [header, ...rows].join('\n')
     const blob = new Blob([csv], { type: 'text/csv' })
@@ -325,6 +326,7 @@ export default function DataSiswaPage() {
             <DetailRow label="NIK" value={selectedSiswa.nik || '-'} mono />
             <DetailRow label="NIS" value={selectedSiswa.nis || '-'} mono />
             <DetailRow label="NISN" value={selectedSiswa.nisn || '-'} mono />
+            <DetailRow label="Nama Panggilan" value={selectedSiswa.nama_panggilan || '-'} />
             <DetailRow label="Jenis Kelamin" value={selectedSiswa.jenis_kelamin === 'L' ? 'Laki-laki' : 'Perempuan'} />
             <DetailRow
               label="Tempat / Tgl Lahir"
@@ -377,6 +379,10 @@ export default function DataSiswaPage() {
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1">Nama Lengkap *</label>
                 <input value={form.nama} onChange={(e) => setForm({...form, nama: e.target.value})} className="w-full px-3 py-2 border rounded-lg text-sm" />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Nama Panggilan <span className="text-gray-400 font-normal">(opsional, untuk suara TTS absensi)</span></label>
+                <input value={form.nama_panggilan || ''} onChange={(e) => setForm({...form, nama_panggilan: e.target.value})} placeholder="mis. Azkayra" className="w-full px-3 py-2 border rounded-lg text-sm" />
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
@@ -438,13 +444,14 @@ export default function DataSiswaPage() {
           title="Import Data Siswa"
           templateName="master-siswa-v2.xls"
           headerRow={0}
-          columnMap={{ 'Nama': 'nama', 'NAMA': 'nama', 'NIK': 'nik', 'NIS': 'nis', 'NISN': 'nisn', 'JK': 'jenis_kelamin', 'Jenis Kelamin': 'jenis_kelamin', 'Tempat Lahir': 'tempat_lahir', 'Tanggal Lahir': 'tanggal_lahir', 'Alamat': 'alamat', 'No HP': 'no_hp', 'Nama Ortu': 'nama_ortu' }}
+          columnMap={{ 'Nama': 'nama', 'NAMA': 'nama', 'Nama Panggilan': 'nama_panggilan', 'NIK': 'nik', 'NIS': 'nis', 'NISN': 'nisn', 'JK': 'jenis_kelamin', 'Jenis Kelamin': 'jenis_kelamin', 'Tempat Lahir': 'tempat_lahir', 'Tanggal Lahir': 'tanggal_lahir', 'Alamat': 'alamat', 'No HP': 'no_hp', 'Nama Ortu': 'nama_ortu' }}
           onImport={async (rows) => {
             for (const row of rows) {
               if (!row.nama) continue
               const jk = (row.jenis_kelamin || 'L').toString().charAt(0).toUpperCase()
               await api.post('/siswa', {
                 nis: String(row.nis || ''), nisn: String(row.nisn || ''), nama: row.nama,
+                nama_panggilan: row.nama_panggilan || '',
                 jenis_kelamin: jk, tempat_lahir: row.tempat_lahir || '',
                 nik: String(row.nik || ''), tanggal_lahir: row.tanggal_lahir || '', alamat: row.alamat || '',
                 no_hp: String(row.no_hp || ''), nama_ortu: row.nama_ortu || '',
