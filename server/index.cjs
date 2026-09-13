@@ -14,7 +14,7 @@ const jwt = require('jsonwebtoken')
 const { v4: uuidv4 } = require('uuid')
 const multer = require('multer')
 const { execFileSync } = require('child_process')
-const { setupTenantTables, tenantMiddleware, registerTenantRoutes, BASE_DOMAIN } = require('./tenant.cjs')
+const { setupTenantTables, tenantMiddleware, registerTenantRoutes, BASE_DOMAIN, BASE_DOMAINS } = require('./tenant.cjs')
 const { canonicalSettingsId, getTenantSettings, ensureTenantSettings, migrateTenantSettings } = require('./tenant-settings.cjs')
 const { normalizeHolidayDays } = require('./holiday-rules.cjs')
 const { parseGuruHariRules, guruBolehMengajar } = require('./jadwal-rules.cjs')
@@ -1390,9 +1390,10 @@ app.get('/api/health', (_req, res) => {
 app.get('/api/caddy/ask', (req, res) => {
   const domain = String(req.query.domain || '').toLowerCase().trim()
   if (!domain) return res.status(400).json({ ok: false, error: 'domain wajib' })
-  if (domain === BASE_DOMAIN || domain === `www.${BASE_DOMAIN}`) return res.json({ ok: true })
-  if (domain.endsWith('.' + BASE_DOMAIN)) {
-    const slug = domain.slice(0, -('.' + BASE_DOMAIN).length)
+  if (BASE_DOMAINS.some(bd => domain === bd || domain === `www.${bd}`)) return res.json({ ok: true })
+  const matchedBase = BASE_DOMAINS.find(bd => domain.endsWith('.' + bd))
+  if (matchedBase) {
+    const slug = domain.slice(0, -(matchedBase.length + 1))
     const tenant = db.prepare('SELECT id FROM tenants WHERE slug = ? AND aktif = 1').get(slug)
     if (tenant) return res.json({ ok: true })
   }
@@ -1983,8 +1984,13 @@ app.post('/api/auth/register', (req, res) => {
     domainStatus = 'pending' // menunggu DNS resolve + provisioning
   }
 
-  db.prepare("INSERT INTO tenants (id, slug, nama, email, domain_custom, domain_status, plan, trial_ends_at) VALUES (?,?,?,?,?,?,'trial',datetime('now','+1 month'))")
-    .run(tenantId, slug, nama_lembaga || nama, email, domainVal, domainStatus)
+  // base_domain: domain kanonik untuk branding link tenant baru. Diambil dari host
+  // request (domain publik tempat user mendaftar), fallback ke BASE_DOMAIN utama.
+  const regHost = (req.headers['host'] || req.headers['x-forwarded-host'] || '').split(':')[0].toLowerCase()
+  const regBaseDomain = BASE_DOMAINS.find(bd => regHost === bd || regHost.endsWith('.' + bd)) || BASE_DOMAIN
+
+  db.prepare("INSERT INTO tenants (id, slug, nama, email, domain_custom, domain_status, plan, trial_ends_at, base_domain) VALUES (?,?,?,?,?,?,'trial',datetime('now','+1 month'),?)")
+    .run(tenantId, slug, nama_lembaga || nama, email, domainVal, domainStatus, regBaseDomain)
 
   // Create admin user for the tenant
   const id = uuidv4()

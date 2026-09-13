@@ -13,14 +13,17 @@ interface Tenant {
   trial_ends_at?: string | null
   subscription_ends_at?: string | null
   aktif: 0 | 1 | boolean
+  base_domain?: string | null
   [key: string]: unknown
 }
+
+const BASE_DOMAIN_OPTIONS = ['jurnal.cc.cd', 'jurnalmadrasah.web.id']
 
 export default function TenantManagementPage() {
   const [tenants, setTenants] = useState<Tenant[]>([])
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
-  const [form, setForm] = useState({ slug: '', nama: '', email: '', telepon: '', max_siswa: 100, max_gtk: 20 })
+  const [form, setForm] = useState({ slug: '', nama: '', email: '', telepon: '', max_siswa: 100, max_gtk: 20, base_domain: 'jurnal.cc.cd' })
   const [created, setCreated] = useState<any>(null)
   const [unlock, setUnlock] = useState<{ tenantId: string; tenantName: string; plan: 'lite' | 'pro'; months: number } | null>(null)
   const [generatedKey, setGeneratedKey] = useState('')
@@ -43,7 +46,7 @@ export default function TenantManagementPage() {
       const { data } = await api.post('/tenants', form)
       setCreated(data)
       setShowForm(false)
-      setForm({ slug: '', nama: '', email: '', telepon: '', max_siswa: 100, max_gtk: 20 })
+      setForm({ slug: '', nama: '', email: '', telepon: '', max_siswa: 100, max_gtk: 20, base_domain: 'jurnal.cc.cd' })
       loadTenants()
     } catch (err: any) {
       alert(err.response?.data?.error || 'Gagal membuat tenant')
@@ -126,7 +129,7 @@ export default function TenantManagementPage() {
           <h3 className="font-semibold text-green-800">Lembaga Berhasil Dibuat</h3>
           <div className="mt-2 text-sm text-green-700 space-y-1">
             <p>Nama: <strong>{created.nama}</strong></p>
-            <p>URL: <strong>https://{created.slug}.jurnalmadrasah.web.id</strong></p>
+            <p>URL: <strong>https://{created.slug}.{created.base_domain || 'jurnal.cc.cd'}</strong></p>
             <p>Email Admin: <strong>{created.admin_email}</strong></p>
             <p>Password awal: <strong>{created.admin_initial_password || created.admin_password}</strong></p>
             <p>Trial: <strong>Gratis satu bulan</strong></p>
@@ -145,11 +148,18 @@ export default function TenantManagementPage() {
                 className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary/20 focus:border-primary" placeholder="SDIT Al-Fatih" />
             </div>
             <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Domain Utama</label>
+              <select value={form.base_domain} onChange={e => setForm({...form, base_domain: e.target.value})}
+                className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary/20 focus:border-primary">
+                {BASE_DOMAIN_OPTIONS.map(d => <option key={d} value={d}>{d}</option>)}
+              </select>
+            </div>
+            <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Slug (subdomain)</label>
               <div className="flex items-center">
                 <input type="text" required value={form.slug} onChange={e => setForm({...form, slug: e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '')})}
                   className="w-full px-3 py-2 border rounded-l-lg focus:ring-2 focus:ring-primary/20 focus:border-primary" placeholder="sdit-alfatih" />
-                <span className="px-3 py-2 bg-gray-100 border border-l-0 rounded-r-lg text-sm text-gray-500">.jurnalmadrasah.web.id</span>
+                <span className="px-3 py-2 bg-gray-100 border border-l-0 rounded-r-lg text-sm text-gray-500">.{form.base_domain}</span>
               </div>
             </div>
             <div>
@@ -196,8 +206,8 @@ export default function TenantManagementPage() {
                   <div className="text-xs text-gray-500">{t.email}</div>
                 </td>
                 <td className="px-4 py-3">
-                  <a href={`https://${t.slug}.jurnalmadrasah.web.id`} target="_blank" rel="noreferrer" className="text-primary text-sm hover:underline">
-                    {t.slug}.jurnalmadrasah.web.id
+                  <a href={`https://${t.slug}.${t.base_domain || 'jurnal.cc.cd'}`} target="_blank" rel="noreferrer" className="text-primary text-sm hover:underline">
+                    {t.slug}.{t.base_domain || 'jurnal.cc.cd'}
                   </a>
                 </td>
                 <td className="px-4 py-3 text-sm text-gray-600">

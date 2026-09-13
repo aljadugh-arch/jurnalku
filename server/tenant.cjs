@@ -72,6 +72,11 @@ function setupTenantTables(db) {
       ['trial_ends_at', "ALTER TABLE tenants ADD COLUMN trial_ends_at TEXT"],
       ['subscription_ends_at', "ALTER TABLE tenants ADD COLUMN subscription_ends_at TEXT"],
       ['features_json', "ALTER TABLE tenants ADD COLUMN features_json TEXT DEFAULT '{}'"],
+      // base_domain: domain kanonik pilihan admin untuk branding link (jurnal.cc.cd atau
+      // jurnalmadrasah.web.id). Tenant tetap bisa diakses via subdomain di KEDUA base domain
+      // (resolusi tenant berbasis slug global-unique, lihat tenantMiddleware), kolom ini
+      // murni untuk menentukan URL mana yang ditampilkan sebagai alamat resmi lembaga.
+      ['base_domain', `ALTER TABLE tenants ADD COLUMN base_domain TEXT DEFAULT '${BASE_DOMAIN}'`],
     ]
     for (const [name, sql] of additions) {
       if (!names.has(name)) { db.exec(sql); names.add(name) }
@@ -209,19 +214,25 @@ function registerTenantRoutes(app, db, authMiddleware, uuidv4, SUPER) {
     const exists = db.prepare('SELECT id FROM tenants WHERE slug = ?').get(slug)
     if (exists) return res.status(409).json({ error: 'Slug sudah digunakan' })
 
+    // base_domain: domain kanonik pilihan admin untuk branding link. Boleh dikirim
+    // eksplisit dari form (base_domain), kalau tidak fallback ke domain request saat ini.
+    const reqHostForEmail = (req.headers['host'] || req.headers['x-forwarded-host'] || '').split(':')[0].toLowerCase()
+    const requestBase = BASE_DOMAINS.find(bd => reqHostForEmail === bd || reqHostForEmail.endsWith('.' + bd)) || BASE_DOMAIN
+    const baseDomain = BASE_DOMAINS.includes(String(req.body.base_domain || '').toLowerCase())
+      ? String(req.body.base_domain).toLowerCase()
+      : requestBase
+
     const id = uuidv4()
-    db.prepare(`INSERT INTO tenants (id, slug, nama, domain_custom, email, telepon, alamat, plan, max_siswa, max_gtk, trial_ends_at)
-      VALUES (?,?,?,?,?,?,?,?,?,?,datetime('now','+1 month'))`)
-      .run(id, slug, nama, domain_custom || null, email || null, telepon || null, alamat || null, 'trial', max_siswa || 100, max_gtk || 20)
+    db.prepare(`INSERT INTO tenants (id, slug, nama, domain_custom, email, telepon, alamat, plan, max_siswa, max_gtk, trial_ends_at, base_domain)
+      VALUES (?,?,?,?,?,?,?,?,?,?,datetime('now','+1 month'),?)`)
+      .run(id, slug, nama, domain_custom || null, email || null, telepon || null, alamat || null, 'trial', max_siswa || 100, max_gtk || 20, baseDomain)
 
     // Create default admin user for tenant.
     // Catatan: must_change_password=1 agar user dipaksa ganti password
     // pada login pertama. Middleware akan mencekal API lain sampai diganti.
     const bcrypt = require('bcryptjs')
     const adminId = uuidv4()
-    const reqHostForEmail = (req.headers['host'] || req.headers['x-forwarded-host'] || '').split(':')[0].toLowerCase()
-    const emailBase = BASE_DOMAINS.find(bd => reqHostForEmail === bd || reqHostForEmail.endsWith('.' + bd)) || BASE_DOMAIN
-    const adminEmail = email || `admin@${slug}.${emailBase}`
+    const adminEmail = email || `admin@${slug}.${baseDomain}`
     // Generate password acak (16 char base64) supaya admin pertama tidak
     // mendapat password default yang lemah dan publik.
     const adminInitialPassword = require('crypto').randomBytes(12).toString('base64').replace(/[+/=]/g, 'X')
@@ -241,17 +252,20 @@ function registerTenantRoutes(app, db, authMiddleware, uuidv4, SUPER) {
     // karena password tidak pernah dikirim ulang dan tidak dapat di-decrypt.
     // User harus ganti setelah login pertama (must_change_password=1).
     console.log(`[tenant] Created tenant "${nama}" admin_email=${adminEmail} initial_password=${adminInitialPassword} (wajib ganti setelah login)`)
-    res.json({ id, slug, nama, admin_email: adminEmail, admin_initial_password: adminInitialPassword, must_change_password: true })
+    res.json({ id, slug, nama, base_domain: baseDomain, admin_email: adminEmail, admin_initial_password: adminInitialPassword, must_change_password: true })
   })
 
   // Update tenant
   app.put('/api/tenants/:id', authMiddleware, (req, res) => {
     if (req.user.role !== 'super_admin') return res.status(403).json({ error: 'Forbidden' })
-    const { nama, domain_custom, plan, max_siswa, max_gtk, aktif, expired_at } = req.body
+    const { nama, domain_custom, plan, max_siswa, max_gtk, aktif, expired_at, base_domain } = req.body
+    const baseDomainVal = base_domain && BASE_DOMAINS.includes(String(base_domain).toLowerCase())
+      ? String(base_domain).toLowerCase()
+      : null
     db.prepare(`UPDATE tenants SET nama=COALESCE(?,nama), domain_custom=?, plan=COALESCE(?,plan), 
       max_siswa=COALESCE(?,max_siswa), max_gtk=COALESCE(?,max_gtk), aktif=COALESCE(?,aktif), 
-      expired_at=? WHERE id=?`)
-      .run(nama, domain_custom || null, plan, max_siswa, max_gtk, aktif, expired_at || null, req.params.id)
+      expired_at=?, base_domain=COALESCE(?,base_domain) WHERE id=?`)
+      .run(nama, domain_custom || null, plan, max_siswa, max_gtk, aktif, expired_at || null, baseDomainVal, req.params.id)
     res.json({ success: true })
   })
 

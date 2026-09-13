@@ -17,6 +17,7 @@ export default function RegisterPage() {
   const navigate = useNavigate()
   const login = useAuthStore(s => s.login)
   const [domainMode, setDomainMode] = useState<DomainMode>('subdomain')
+  const [slugTouched, setSlugTouched] = useState(false)
   const [form, setForm] = useState({
     nama_lembaga: '',
     slug: '',
@@ -37,7 +38,10 @@ export default function RegisterPage() {
     setForm(f => ({
       ...f,
       nama_lembaga: val,
-      slug: domainMode === 'subdomain' ? slugify(val) : f.slug,
+      // Slug hanya di-auto-generate dari nama lembaga selagi user BELUM pernah
+      // mengedit kolom slug secara manual. Begitu user mengetik langsung di
+      // kolom subdomain, auto-generate berhenti agar pilihan mereka tidak tertimpa.
+      slug: (domainMode === 'subdomain' && !slugTouched) ? slugify(val) : f.slug,
     }))
   }
 
@@ -70,6 +74,7 @@ export default function RegisterPage() {
       }
       if (domainMode === 'subdomain') {
         payload.slug = form.slug
+        payload.base_domain = SUBDOMAIN_BASE
       } else {
         payload.domain_custom = form.domain_custom
       }
@@ -159,7 +164,7 @@ export default function RegisterPage() {
                   <div className="min-w-0 flex items-center border rounded-lg overflow-hidden focus-within:ring-2 focus-within:ring-primary/20">
                     <input
                       value={form.slug}
-                      onChange={e => setForm({ ...form, slug: slugify(e.target.value) })}
+                      onChange={e => { setSlugTouched(true); setForm({ ...form, slug: slugify(e.target.value) }) }}
                       placeholder="nama-sekolah"
                       className="min-w-0 flex-1 px-3 py-2 text-sm outline-none"
                     />
