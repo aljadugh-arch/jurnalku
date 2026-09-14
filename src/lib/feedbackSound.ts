@@ -198,14 +198,18 @@ function speakClear(text: string) {
 // supaya nama yang sama berulang (scan pagi lalu pulang) tidak perlu
 // request ulang ke server dalam sesi browser yang sama.
 const geminiAudioCache = new Map<string, HTMLAudioElement>()
-// Kalau server pernah menjawab "belum dikonfigurasi" (404), jangan coba lagi
-// di sesi ini — langsung ke Web Speech API supaya tidak ada delay percuma.
+// Kalau server pernah menjawab tenant belum konfigurasi API key Gemini sama
+// sekali (bukan sekadar cache-miss), jangan coba lagi di sesi ini.
 let geminiTtsUnavailable = false
 
 /**
  * Coba TTS server-side (Gemini, voice pria natural, id-ID) lebih dulu.
- * Kalau gagal/tidak dikonfigurasi/offline, fallback otomatis ke Web Speech
- * API browser (speakClear) — absensi tidak boleh pernah terhambat oleh TTS.
+ * Endpoint server HANYA mengecek cache (instan, tidak pernah menunggu
+ * Gemini generate — diukur nyata Gemini butuh 3-14 detik, jauh terlalu
+ * lambat untuk jalur scan langsung). Kalau cache belum ada, server balas
+ * 404 SEKARANG JUGA dan mulai generate di background untuk scan berikutnya
+ * dengan nama yang sama — jadi fallback ke Web Speech API di sini SELALU
+ * instan, tidak ada delay tunggu network Gemini.
  */
 async function speakViaGeminiOrFallback(text: string) {
   if (geminiTtsUnavailable) return speakClear(text)
@@ -220,16 +224,24 @@ async function speakViaGeminiOrFallback(text: string) {
     }
   }
   try {
-    const res = await api.post('/tts/announce', { text }, { timeout: 6000 })
+    // Timeout pendek: server hanya cek cache di disk (operasi instan), tidak
+    // pernah menunggu Gemini generate — timeout ini murni jaga-jaga network.
+    const res = await api.post('/tts/announce', { text }, { timeout: 2500 })
     const audioUrl = res.data?.audioUrl
     if (!audioUrl) throw new Error('no audio url')
     const audio = new Audio(audioUrl)
     geminiAudioCache.set(text, audio)
     await audio.play()
   } catch (err: any) {
-    // 404 = tenant belum konfigurasi API key Gemini → tandai unavailable
-    // supaya panggilan TTS berikutnya di sesi ini tidak menunggu network lagi.
-    if (err?.response?.status === 404) geminiTtsUnavailable = true
+    // Bedakan dua kasus 404 yang beda arti:
+    // - generating:true  → cache-miss biasa, server sedang generate di
+    //   background untuk scan berikutnya. JANGAN tandai unavailable —
+    //   coba lagi di scan berikutnya (kemungkinan sudah ter-cache).
+    // - 404 tanpa generating → tenant memang belum konfigurasi API key
+    //   Gemini sama sekali. Tandai unavailable agar tidak retry percuma.
+    if (err?.response?.status === 404 && !err.response?.data?.generating) {
+      geminiTtsUnavailable = true
+    }
     speakClear(text)
   }
 }
@@ -237,6 +249,7 @@ async function speakViaGeminiOrFallback(text: string) {
 export function announceAttendanceSuccess(name: string | undefined | null, session: AttendanceSession) {
   const nickname = firstName(name) || 'Berhasil'
   void speakViaGeminiOrFallback(`${nickname} ${session}`)
+
 }
 
 export function announceStudentScanSuccess(name: string | undefined | null, session: AttendanceSession, already?: boolean) {

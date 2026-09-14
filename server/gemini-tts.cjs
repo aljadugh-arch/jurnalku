@@ -54,6 +54,13 @@ function pcmToWav(pcmBuffer, sampleRate = 24000, channels = 1, bitsPerSample = 1
 // Cache dikunci per tenant+voice+text supaya frasa berulang (mis. nama
 // siswa yang sama setiap hari) tidak memanggil API lagi — hemat kuota &
 // jauh lebih cepat (langsung dari disk, tanpa network round-trip).
+//
+// PENTING: Gemini TTS API BUKAN cepat — diukur nyata di production
+// (2026-09-14) butuh 3-14 DETIK per generate (jauh dari instan). Fungsi ini
+// TIDAK BOLEH dipanggil secara sinkron/menunggu dari jalur scan absensi —
+// hanya boleh dipanggil: (a) saat cache belum ada untuk generate DI BACKGROUND
+// tanpa menunggu (lihat generateTtsAudioBackground), atau (b) dari endpoint
+// prewarm yang sengaja dijalankan lebih dulu (mis. sebelum jam masuk sekolah).
 async function generateTtsAudio({ apiKey, text, voiceName, uploadDir, tenantId }) {
   const voice = voiceName || DEFAULT_VOICE
   const dir = cacheDirFor(uploadDir)
@@ -74,7 +81,7 @@ async function generateTtsAudio({ apiKey, text, voiceName, uploadDir, tenantId }
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
-    signal: AbortSignal.timeout(15000),
+    signal: AbortSignal.timeout(25000),
   })
   if (!response.ok) {
     const errText = await response.text().catch(() => '')
@@ -93,4 +100,38 @@ async function generateTtsAudio({ apiKey, text, voiceName, uploadDir, tenantId }
   return { audioUrl: publicUrl, cached: false }
 }
 
-module.exports = { generateTtsAudio, DEFAULT_VOICE, GEMINI_TTS_MODEL }
+// Cek APAKAH sudah ada di cache TANPA memanggil API sama sekali — dipakai
+// oleh endpoint /api/tts/announce agar respons ke browser selalu instan.
+function checkTtsCache({ text, voiceName, uploadDir, tenantId }) {
+  const voice = voiceName || DEFAULT_VOICE
+  const dir = cacheDirFor(uploadDir)
+  const key = cacheKey(tenantId, voice, text)
+  const filePath = path.join(dir, `${key}.wav`)
+  const publicUrl = `/uploads/tts_cache/${key}.wav`
+  return fs.existsSync(filePath) ? { audioUrl: publicUrl, cached: true } : null
+}
+
+// Set in-memory kecil supaya request duplikat (mis. dua scan hampir bersamaan
+// utk nama yang sama) tidak memicu 2 panggilan API paralel ke Gemini.
+const inFlight = new Set()
+
+// Generate DI BACKGROUND (fire-and-forget) — dipanggil dari endpoint
+// /api/tts/announce saat cache belum ada, supaya SCAN SEKARANG tidak
+// menunggu, tapi SCAN BERIKUTNYA untuk nama yang sama sudah dapat cache.
+function generateTtsAudioBackground({ apiKey, text, voiceName, uploadDir, tenantId }) {
+  const voice = voiceName || DEFAULT_VOICE
+  const flightKey = `${tenantId}|${voice}|${text}`
+  if (inFlight.has(flightKey)) return
+  inFlight.add(flightKey)
+  generateTtsAudio({ apiKey, text, voiceName: voice, uploadDir, tenantId })
+    .catch((err) => console.error('[gemini-tts background]', text, err.message))
+    .finally(() => inFlight.delete(flightKey))
+}
+
+module.exports = {
+  generateTtsAudio,
+  generateTtsAudioBackground,
+  checkTtsCache,
+  DEFAULT_VOICE,
+  GEMINI_TTS_MODEL,
+}

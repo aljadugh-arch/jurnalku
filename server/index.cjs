@@ -5119,6 +5119,12 @@ app.delete('/api/ai-config/me', authMiddleware, (req, res) => {
 // Fallback: kalau tenant belum konfigurasi API key Gemini (di ai_config),
 // frontend otomatis pakai Web Speech API browser (lihat feedbackSound.ts) —
 // jadi fitur ini murni peningkatan opsional, absensi tidak pernah terhambat.
+//
+// PENTING (root cause delay yang dilaporkan user): Gemini TTS API diukur
+// nyata butuh 3-14 DETIK per generate — jauh dari instan. Endpoint ini
+// SENGAJA TIDAK menunggu Gemini generate sama sekali: kalau cache belum
+// ada, langsung balas 404 (frontend fallback instan ke Web Speech API)
+// SAMBIL memicu generate di background untuk cache scan berikutnya.
 app.post('/api/tts/announce', authMiddleware, async (req, res) => {
   const text = String(req.body?.text || '').trim().slice(0, 200)
   if (!text) return res.status(400).json({ error: 'Teks kosong' })
@@ -5126,20 +5132,72 @@ app.post('/api/tts/announce', authMiddleware, async (req, res) => {
   if (!cfg || cfg.provider !== 'gemini' || !cfg.apiKey) {
     return res.status(404).json({ error: 'TTS Gemini belum dikonfigurasi untuk lembaga ini' })
   }
-  try {
-    const { generateTtsAudio, DEFAULT_VOICE } = require('./gemini-tts.cjs')
-    const result = await generateTtsAudio({
-      apiKey: cfg.apiKey,
-      text,
-      voiceName: DEFAULT_VOICE,
-      uploadDir: UPLOAD_DIR,
-      tenantId: req.tenantId,
-    })
-    res.json(result)
-  } catch (err) {
-    console.error('[tts/announce]', err.message)
-    res.status(502).json({ error: 'Gagal menghasilkan audio TTS' })
+  const { checkTtsCache, generateTtsAudioBackground, DEFAULT_VOICE } = require('./gemini-tts.cjs')
+  const cached = checkTtsCache({ text, voiceName: DEFAULT_VOICE, uploadDir: UPLOAD_DIR, tenantId: req.tenantId })
+  if (cached) return res.json(cached)
+  // Tidak ada di cache: balas 404 SEKARANG (instan, tanpa nunggu Gemini) agar
+  // frontend langsung fallback ke Web Speech API untuk scan ini, sambil
+  // generate berjalan di background untuk scan berikutnya dengan nama sama.
+  generateTtsAudioBackground({ apiKey: cfg.apiKey, text, voiceName: DEFAULT_VOICE, uploadDir: UPLOAD_DIR, tenantId: req.tenantId })
+  res.status(404).json({ error: 'Audio belum tersedia di cache, sedang dibuat di background', generating: true })
+})
+
+// Pre-warm cache TTS untuk semua nama panggilan siswa aktif + GTK di tenant
+// ini sekaligus (dipanggil manual dari Pengaturan, idealnya sebelum jam
+// masuk sekolah) — supaya saat jam absensi tiba, SEMUA nama sudah ada di
+// cache dan scan langsung dapat suara pria instan, tidak pernah fallback
+// female karena menunggu generate pertama kali.
+app.post('/api/tts/prewarm', ADMIN, async (req, res) => {
+  const cfg = resolveAiConfig(db, req.tenantId, req.user?.id)
+  if (!cfg || cfg.provider !== 'gemini' || !cfg.apiKey) {
+    return res.status(404).json({ error: 'TTS Gemini belum dikonfigurasi untuk lembaga ini' })
   }
+  const { generateTtsAudio, checkTtsCache, DEFAULT_VOICE } = require('./gemini-tts.cjs')
+  const siswaRows = db.prepare("SELECT nama, nama_panggilan FROM siswa WHERE tenant_id=? AND COALESCE(status,'aktif')='aktif'").all(req.tenantId)
+  const gtkRows = db.prepare('SELECT nama FROM gtk WHERE tenant_id=?').all(req.tenantId)
+  const firstWord = (s) => String(s || '').trim().split(/\s+/)[0] || ''
+  const names = new Set()
+  for (const s of siswaRows) { const n = firstWord(s.nama_panggilan) || firstWord(s.nama); if (n) names.add(n) }
+  for (const g of gtkRows) { const n = firstWord(g.nama); if (n) names.add(n) }
+
+  const phrases = []
+  for (const n of names) { phrases.push(`${n} masuk`); phrases.push(`${n} pulang`) }
+  const todo = phrases.filter(p => !checkTtsCache({ text: p, voiceName: DEFAULT_VOICE, uploadDir: UPLOAD_DIR, tenantId: req.tenantId }))
+
+  res.json({ total: phrases.length, alreadyCached: phrases.length - todo.length, queued: todo.length })
+
+  // Proses berurutan (bukan paralel) di background setelah respons dikirim,
+  // supaya tidak membanjiri kuota Gemini API dengan burst request sekaligus.
+  ;(async () => {
+    for (const text of todo) {
+      try {
+        await generateTtsAudio({ apiKey: cfg.apiKey, text, voiceName: DEFAULT_VOICE, uploadDir: UPLOAD_DIR, tenantId: req.tenantId })
+      } catch (err) {
+        console.error('[tts/prewarm]', text, err.message)
+      }
+    }
+    console.log(`[tts/prewarm] selesai untuk tenant ${req.tenantId}: ${todo.length} frasa`)
+  })()
+})
+
+// Status pre-warm: berapa dari total frasa nama+sesi yang sudah ter-cache,
+// dipakai UI Pengaturan untuk menampilkan progress tanpa perlu polling berat.
+app.get('/api/tts/prewarm/status', ADMIN, (req, res) => {
+  const cfg = resolveAiConfig(db, req.tenantId, req.user?.id)
+  if (!cfg || cfg.provider !== 'gemini' || !cfg.apiKey) {
+    return res.status(404).json({ error: 'TTS Gemini belum dikonfigurasi untuk lembaga ini' })
+  }
+  const { checkTtsCache, DEFAULT_VOICE } = require('./gemini-tts.cjs')
+  const siswaRows = db.prepare("SELECT nama, nama_panggilan FROM siswa WHERE tenant_id=? AND COALESCE(status,'aktif')='aktif'").all(req.tenantId)
+  const gtkRows = db.prepare('SELECT nama FROM gtk WHERE tenant_id=?').all(req.tenantId)
+  const firstWord = (s) => String(s || '').trim().split(/\s+/)[0] || ''
+  const names = new Set()
+  for (const s of siswaRows) { const n = firstWord(s.nama_panggilan) || firstWord(s.nama); if (n) names.add(n) }
+  for (const g of gtkRows) { const n = firstWord(g.nama); if (n) names.add(n) }
+  const phrases = []
+  for (const n of names) { phrases.push(`${n} masuk`); phrases.push(`${n} pulang`) }
+  const cachedCount = phrases.filter(p => checkTtsCache({ text: p, voiceName: DEFAULT_VOICE, uploadDir: UPLOAD_DIR, tenantId: req.tenantId })).length
+  res.json({ total: phrases.length, cached: cachedCount })
 })
 
 // ===== Google OAuth (login akun Google berlangganan Gemini Pro, dipakai sbg kredensial AI personal guru) =====
