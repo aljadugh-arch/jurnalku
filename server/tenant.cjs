@@ -384,6 +384,23 @@ function registerTenantRoutes(app, db, authMiddleware, uuidv4, SUPER) {
     res.json(tenants)
   })
 
+  // Cross-tenant: Get rombel from other tenants in same foundation (read-only).
+  app.get('/api/foundation/rombels', authMiddleware, (req, res) => {
+    const userFoundationId = db.prepare('SELECT foundation_id FROM tenants WHERE id = ?').get(req.tenantId)?.foundation_id
+    if (!userFoundationId) return res.status(403).json({ error: 'Tenant tidak tergabung dalam yayasan' })
+    if (!['admin', 'super_admin', 'operator', 'kepala'].includes(req.user.role)) return res.status(403).json({ error: 'Forbidden' })
+
+    const { tenant_id } = req.query
+    const foundationTenantIds = db.prepare('SELECT id FROM tenants WHERE foundation_id = ? AND aktif = 1').all(userFoundationId).map(t => t.id)
+    if (tenant_id) {
+      if (!foundationTenantIds.includes(tenant_id)) return res.status(403).json({ error: 'Tenant tidak dalam yayasan yang sama' })
+      return res.json(db.prepare('SELECT id, nama, tingkat, tenant_id FROM rombel WHERE tenant_id = ? ORDER BY tingkat, nama').all(tenant_id))
+    }
+    if (!foundationTenantIds.length) return res.json([])
+    const placeholders = foundationTenantIds.map(() => '?').join(',')
+    res.json(db.prepare(`SELECT id, nama, tingkat, tenant_id FROM rombel WHERE tenant_id IN (${placeholders}) ORDER BY tenant_id, tingkat, nama`).all(...foundationTenantIds))
+  })
+
   // Cross-tenant: Get students from other tenants in same foundation (admin+)
   app.get('/api/foundation/students', authMiddleware, (req, res) => {
     const userFoundationId = db.prepare('SELECT foundation_id FROM tenants WHERE id = ?').get(req.tenantId)?.foundation_id
@@ -403,6 +420,12 @@ function registerTenantRoutes(app, db, authMiddleware, uuidv4, SUPER) {
       sql += ' AND (s.nama LIKE ? OR s.nis LIKE ? OR s.nisn LIKE ?)'
       const q = `%${search}%`
       params.push(q, q, q)
+    }
+    if (rombel_id) {
+      const selectedRombel = db.prepare(`SELECT id FROM rombel WHERE id = ? AND tenant_id IN (${targetTenants.map(() => '?').join(',')})`).get(rombel_id, ...targetTenants)
+      if (!selectedRombel) return res.status(400).json({ error: 'Rombel tidak ditemukan dalam cakupan lembaga' })
+      sql += ' AND s.rombel_id = ?'
+      params.push(rombel_id)
     }
     sql += ' ORDER BY CASE WHEN r.id IS NULL THEN 1 ELSE 0 END, s.nama COLLATE NOCASE LIMIT ? OFFSET ?'
     params.push(Number(limit), Number(offset))

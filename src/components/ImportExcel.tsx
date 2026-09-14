@@ -1,18 +1,19 @@
 import { useState, useRef } from 'react'
-import { Upload, FileSpreadsheet, X } from 'lucide-react'
+import { Upload, FileSpreadsheet, X, Download } from 'lucide-react'
 import * as XLSX from 'xlsx'
 import toast from 'react-hot-toast'
 
 interface ImportExcelProps {
   title: string
   templateName?: string
+  templateUrl?: string
   headerRow: number // 0-indexed row where headers are
   columnMap: Record<string, string> // excel column name -> api field name
   onImport: (data: Record<string, any>[]) => Promise<void>
   onClose: () => void
 }
 
-export default function ImportExcel({ title, templateName, headerRow, columnMap, onImport, onClose }: ImportExcelProps) {
+export default function ImportExcel({ title, templateName, templateUrl, headerRow, columnMap, onImport, onClose }: ImportExcelProps) {
   const [preview, setPreview] = useState<Record<string, any>[]>([])
   const [loading, setLoading] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
@@ -68,9 +69,20 @@ export default function ImportExcel({ title, templateName, headerRow, columnMap,
         </div>
 
         {templateName && (
-          <div className="bg-blue-50 border border-blue-100 rounded-lg p-3 mb-4">
-            <p className="text-sm text-blue-700">Template: <strong>{templateName}</strong></p>
-            <p className="text-xs text-blue-500 mt-1">Download template dari folder template-jurnal/, isi data, lalu upload kembali.</p>
+          <div className="bg-blue-50 border border-blue-100 rounded-lg p-3 mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="text-sm text-blue-700">Template: <strong>{templateName}</strong></p>
+              <p className="text-xs text-blue-500 mt-1">Unduh template, isi data mulai baris kedua, lalu unggah kembali.</p>
+            </div>
+            {templateUrl && (
+              <a
+                href={templateUrl}
+                download={templateName}
+                className="inline-flex shrink-0 items-center justify-center gap-2 rounded-lg bg-blue-600 px-3 py-2 text-sm font-medium text-white hover:bg-blue-700"
+              >
+                <Download size={16} /> Unduh Template
+              </a>
+            )}
           </div>
         )}
 

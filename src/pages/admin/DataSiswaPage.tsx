@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Search, Plus, Edit, Trash2, Download, Upload, X, Camera, ChevronRight } from 'lucide-react'
+import { Search, Plus, Edit, Trash2, Download, Upload, X, Camera, ChevronRight, UsersRound } from 'lucide-react'
 import toast from 'react-hot-toast'
 import api from '../../services/api'
 import ImportExcel from '../../components/ImportExcel'
@@ -57,6 +57,12 @@ export default function DataSiswaPage() {
   const [showImport, setShowImport] = useState(false)
   const [uploadingFoto, setUploadingFoto] = useState(false)
   const [foundationTenantId, setFoundationTenantId] = useState<string | null>(null)
+  const [selectedRombelId, setSelectedRombelId] = useState('')
+  const [showBulkDelete, setShowBulkDelete] = useState(false)
+  const [bulkDeleteScope, setBulkDeleteScope] = useState<'rombel' | 'all'>('rombel')
+  const [bulkDeleteCount, setBulkDeleteCount] = useState(0)
+  const [bulkDeleteConfirmation, setBulkDeleteConfirmation] = useState('')
+  const [bulkDeleting, setBulkDeleting] = useState(false)
   const isLocalTenant = !foundationTenantId
 
   // Detail panel
@@ -65,12 +71,14 @@ export default function DataSiswaPage() {
   const fetchData = async () => {
     try {
       const params: any = { search }
+      if (selectedRombelId) params.rombel_id = selectedRombelId
       if (foundationTenantId && foundationTenantId !== 'all') {
         params.tenant_id = foundationTenantId
       }
+      const rombelParams = foundationTenantId && foundationTenantId !== 'all' ? { tenant_id: foundationTenantId } : {}
       const [res, rombelRes] = await Promise.all([
         api.get(foundationTenantId ? '/foundation/students' : '/siswa', { params }),
-        api.get('/rombel')
+        api.get(foundationTenantId ? '/foundation/rombels' : '/rombel', { params: rombelParams })
       ])
       setData(res.data)
       setRombels(rombelRes.data)
@@ -81,7 +89,7 @@ export default function DataSiswaPage() {
     }
   }
 
-  useEffect(() => { fetchData() }, [search, foundationTenantId])
+  useEffect(() => { fetchData() }, [search, foundationTenantId, selectedRombelId])
 
   // Sync selected panel when data refreshes
   useEffect(() => {
@@ -164,6 +172,42 @@ export default function DataSiswaPage() {
     }
   }
 
+  const openBulkDelete = async (scope: 'rombel' | 'all') => {
+    if (scope === 'rombel' && !selectedRombelId) {
+      toast.error('Pilih rombel/kelas yang akan dihapus')
+      return
+    }
+    try {
+      const params = scope === 'rombel' ? { rombel_id: selectedRombelId } : {}
+      const response = await api.get('/siswa/bulk-delete/count', { params })
+      setBulkDeleteScope(scope)
+      setBulkDeleteCount(response.data.total || 0)
+      setBulkDeleteConfirmation('')
+      setShowBulkDelete(true)
+    } catch (err: any) {
+      toast.error(err.response?.data?.error || 'Gagal menghitung data yang akan dihapus')
+    }
+  }
+
+  const handleBulkDelete = async () => {
+    const expected = bulkDeleteScope === 'rombel' ? 'HAPUS SISWA ROMBEL' : 'HAPUS SEMUA SISWA'
+    if (bulkDeleteConfirmation !== expected) return
+    setBulkDeleting(true)
+    try {
+      const body: Record<string, string> = { confirmation: expected }
+      if (bulkDeleteScope === 'rombel') body.rombel_id = selectedRombelId
+      const response = await api.post('/siswa/bulk-delete', body)
+      toast.success(`${response.data.deleted || 0} siswa berhasil dihapus`)
+      setShowBulkDelete(false)
+      setSelectedSiswa(null)
+      await fetchData()
+    } catch (err: any) {
+      toast.error(err.response?.data?.error || 'Gagal menghapus data siswa')
+    } finally {
+      setBulkDeleting(false)
+    }
+  }
+
   const handleExport = () => {
     const header = 'NIK,NIS,NISN,Nama,Nama Panggilan,JK,Tempat Lahir,Tgl Lahir,Alamat,No HP,Nama Ortu,Status'
     const rows = data.map((s) =>
@@ -212,6 +256,7 @@ export default function DataSiswaPage() {
         selectedTenantId={foundationTenantId}
         onSelectTenant={(tenantId) => {
           setFoundationTenantId(tenantId)
+          setSelectedRombelId('')
           setSelectedSiswa(null)
           setShowModal(false)
           setShowImport(false)
@@ -220,18 +265,48 @@ export default function DataSiswaPage() {
         allOptionLabel="Semua lembaga yayasan (gabungan)"
       />
 
-      {/* Search */}
-      <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
-        <div className="relative">
-          <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-          <input
-            type="text"
-            placeholder="Cari berdasarkan nama atau NIS..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
-          />
+      {/* Search dan filter rombel aktual tenant */}
+      <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100 space-y-3">
+        <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_minmax(220px,320px)]">
+          <div className="relative">
+            <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+            <input
+              type="text"
+              placeholder="Cari berdasarkan nama atau NIS..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
+            />
+          </div>
+          <select
+            aria-label="Filter rombel atau kelas"
+            value={selectedRombelId}
+            onChange={(e) => { setSelectedRombelId(e.target.value); setSelectedSiswa(null) }}
+            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary/20"
+          >
+            <option value="">Semua rombel / kelas</option>
+            {rombels.map((rombel) => <option key={rombel.id} value={rombel.id}>{rombel.nama}</option>)}
+          </select>
         </div>
+        {isLocalTenant && (
+          <div className="flex flex-wrap gap-2 border-t border-gray-100 pt-3">
+            <button
+              type="button"
+              onClick={() => openBulkDelete('rombel')}
+              disabled={!selectedRombelId}
+              className="inline-flex items-center gap-2 rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-sm font-medium text-red-700 hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              <UsersRound size={16} /> Hapus Rombel
+            </button>
+            <button
+              type="button"
+              onClick={() => openBulkDelete('all')}
+              className="inline-flex items-center gap-2 rounded-lg bg-red-600 px-3 py-2 text-sm font-medium text-white hover:bg-red-700"
+            >
+              <Trash2 size={16} /> Hapus Semua Siswa
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Card grid */}
@@ -438,24 +513,68 @@ export default function DataSiswaPage() {
         </Modal>
       )}
 
+      {isLocalTenant && (
+        <Modal
+          open={showBulkDelete}
+          onClose={() => !bulkDeleting && setShowBulkDelete(false)}
+          title={bulkDeleteScope === 'rombel' ? 'Hapus Siswa per Rombel' : 'Hapus Semua Siswa'}
+          maxWidth="md:max-w-md"
+          footer={
+            <div className="flex gap-3">
+              <button onClick={() => setShowBulkDelete(false)} disabled={bulkDeleting} className="flex-1 px-4 py-2 border rounded-lg text-sm hover:bg-gray-50 disabled:opacity-50">Batal</button>
+              <button
+                onClick={handleBulkDelete}
+                disabled={bulkDeleting || bulkDeleteCount === 0 || bulkDeleteConfirmation !== (bulkDeleteScope === 'rombel' ? 'HAPUS SISWA ROMBEL' : 'HAPUS SEMUA SISWA')}
+                className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg text-sm hover:bg-red-700 disabled:opacity-40"
+              >
+                {bulkDeleting ? 'Menghapus...' : `Hapus ${bulkDeleteCount} Siswa`}
+              </button>
+            </div>
+          }
+        >
+          <div className="space-y-4">
+            <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800">
+              {bulkDeleteScope === 'rombel'
+                ? <>Sebanyak <strong>{bulkDeleteCount}</strong> siswa dalam rombel <strong>{rombels.find((r) => r.id === selectedRombelId)?.nama || '-'}</strong> beserta data terkaitnya akan dihapus permanen.</>
+                : <>Seluruh <strong>{bulkDeleteCount}</strong> siswa lembaga ini beserta data terkaitnya akan dihapus permanen. Tenant lain tidak disentuh.</>}
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Ketik <code className="rounded bg-gray-100 px-1 text-red-600">{bulkDeleteScope === 'rombel' ? 'HAPUS SISWA ROMBEL' : 'HAPUS SEMUA SISWA'}</code> untuk konfirmasi
+              </label>
+              <input
+                value={bulkDeleteConfirmation}
+                onChange={(e) => setBulkDeleteConfirmation(e.target.value)}
+                autoComplete="off"
+                className="w-full rounded-lg border border-red-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-200"
+              />
+            </div>
+          </div>
+        </Modal>
+      )}
+
       {/* Modal Import Excel */}
       {isLocalTenant && showImport && (
         <ImportExcel
           title="Import Data Siswa"
-          templateName="master-siswa-v2.xls"
+          templateName="template-import-siswa.xlsx"
+          templateUrl="/templates/template-import-siswa.xlsx"
           headerRow={0}
-          columnMap={{ 'Nama': 'nama', 'NAMA': 'nama', 'Nama Panggilan': 'nama_panggilan', 'NIK': 'nik', 'NIS': 'nis', 'NISN': 'nisn', 'JK': 'jenis_kelamin', 'Jenis Kelamin': 'jenis_kelamin', 'Tempat Lahir': 'tempat_lahir', 'Tanggal Lahir': 'tanggal_lahir', 'Alamat': 'alamat', 'No HP': 'no_hp', 'Nama Ortu': 'nama_ortu' }}
+          columnMap={{ 'Nama': 'nama', 'NAMA': 'nama', 'Nama Panggilan': 'nama_panggilan', 'NIK': 'nik', 'NIS': 'nis', 'NISN': 'nisn', 'JK': 'jenis_kelamin', 'Jenis Kelamin': 'jenis_kelamin', 'Tempat Lahir': 'tempat_lahir', 'Tanggal Lahir': 'tanggal_lahir', 'Alamat': 'alamat', 'No HP': 'no_hp', 'Nama Ortu': 'nama_ortu', 'Rombel': 'rombel_nama' }}
           onImport={async (rows) => {
             for (const row of rows) {
               if (!row.nama) continue
               const jk = (row.jenis_kelamin || 'L').toString().charAt(0).toUpperCase()
+              const rombelName = String(row.rombel_nama || '').trim().toLocaleLowerCase('id-ID')
+              const rombel = rombelName ? rombels.find((item) => item.nama.trim().toLocaleLowerCase('id-ID') === rombelName) : undefined
+              if (rombelName && !rombel) throw new Error(`Rombel "${row.rombel_nama}" tidak ditemukan. Buat rombel terlebih dahulu atau kosongkan kolom Rombel.`)
               await api.post('/siswa', {
                 nis: String(row.nis || ''), nisn: String(row.nisn || ''), nama: row.nama,
                 nama_panggilan: row.nama_panggilan || '',
                 jenis_kelamin: jk, tempat_lahir: row.tempat_lahir || '',
                 nik: String(row.nik || ''), tanggal_lahir: row.tanggal_lahir || '', alamat: row.alamat || '',
                 no_hp: String(row.no_hp || ''), nama_ortu: row.nama_ortu || '',
-                rombel_id: '', status: 'aktif'
+                rombel_id: rombel?.id || '', status: 'aktif'
               })
             }
             fetchData()

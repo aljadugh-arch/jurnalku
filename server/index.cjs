@@ -37,6 +37,7 @@ const { setupBackupTables, registerBackupRoutes, startBackupScheduler } = requir
 const { DOCUMENT_TYPES, buildPrompt, validateGenerateInput, createTemplateContent, createDocumentDocx, callAi, clean } = require('./ai-documents.cjs')
 const { encryptSecret, decryptSecret, maskKey, PROVIDER_ENDPOINTS, setupAiConfigTables, resolveAiConfig } = require('./ai-config.cjs')
 const { setupEkskulMembership } = require('./extracurricular-membership.cjs')
+const { countStudents, deleteStudents } = require('./student-data-delete.cjs')
 
 const app = express()
 const PORT = process.env.PORT || 3001
@@ -2543,6 +2544,29 @@ app.get('/api/siswa', authMiddleware, (req, res) => {
   // terlihat, tetapi selalu ditempatkan setelah siswa dengan rombel valid.
   sql += ' ORDER BY CASE WHEN r.id IS NULL THEN 1 ELSE 0 END, s.nama COLLATE NOCASE'
   res.json(db.prepare(sql).all(...params))
+})
+
+app.get('/api/siswa/bulk-delete/count', ADMIN, (req, res) => {
+  const rombelId = String(req.query.rombel_id || '').trim() || undefined
+  const total = countStudents(db, { tenantId: req.tenantId, rombelId })
+  res.json({ total, scope: rombelId ? 'rombel' : 'all', rombel_id: rombelId || null })
+})
+
+app.post('/api/siswa/bulk-delete', ADMIN, (req, res) => {
+  const rombelId = String(req.body?.rombel_id || '').trim() || undefined
+  const confirmation = String(req.body?.confirmation || '').trim()
+  const expected = rombelId ? 'HAPUS SISWA ROMBEL' : 'HAPUS SEMUA SISWA'
+  if (confirmation !== expected) {
+    return res.status(400).json({ error: `Konfirmasi wajib tepat: ${expected}` })
+  }
+
+  try {
+    const result = deleteStudents(db, { tenantId: req.tenantId, rombelId })
+    res.json({ success: true, deleted: result.students, related: result.related })
+  } catch (error) {
+    console.error('Bulk delete siswa error:', error.message)
+    res.status(500).json({ error: 'Gagal menghapus data siswa secara atomik' })
+  }
 })
 
 app.post('/api/siswa', ADMIN, (req, res) => {
