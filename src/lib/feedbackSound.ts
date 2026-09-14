@@ -1,9 +1,11 @@
 // Umpan balik suara untuk aksi absensi (ceklok GTK dan scan QR siswa).
 //
-// Memakai WebAudio oscillator, bukan file audio: bundle tidak bertambah, tetap
-// berbunyi saat PWA offline, dan tidak perlu aset tambahan di dist/.
-// Semua kegagalan (browser lama, autoplay diblokir, izin audio) ditelan diam-diam
-// karena suara hanyalah pelengkap; alur absensi tidak boleh ikut gagal.
+// Memakai WebAudio oscillator untuk beep, bukan file audio: bundle tidak
+// bertambah, tetap berbunyi saat PWA offline, dan tidak perlu aset tambahan
+// di dist/. Semua kegagalan (browser lama, autoplay diblokir, izin audio)
+// ditelan diam-diam karena suara hanyalah pelengkap; alur absensi tidak
+// boleh ikut gagal.
+import api from '../services/api'
 
 type Tone = 'masuk' | 'pulang' | 'duplicate' | 'error'
 type AttendanceSession = 'masuk' | 'pulang'
@@ -192,9 +194,49 @@ function speakClear(text: string) {
   }
 }
 
+// Cache in-memory audio Gemini TTS yang sudah pernah diputar di sesi ini,
+// supaya nama yang sama berulang (scan pagi lalu pulang) tidak perlu
+// request ulang ke server dalam sesi browser yang sama.
+const geminiAudioCache = new Map<string, HTMLAudioElement>()
+// Kalau server pernah menjawab "belum dikonfigurasi" (404), jangan coba lagi
+// di sesi ini — langsung ke Web Speech API supaya tidak ada delay percuma.
+let geminiTtsUnavailable = false
+
+/**
+ * Coba TTS server-side (Gemini, voice pria natural, id-ID) lebih dulu.
+ * Kalau gagal/tidak dikonfigurasi/offline, fallback otomatis ke Web Speech
+ * API browser (speakClear) — absensi tidak boleh pernah terhambat oleh TTS.
+ */
+async function speakViaGeminiOrFallback(text: string) {
+  if (geminiTtsUnavailable) return speakClear(text)
+  const cached = geminiAudioCache.get(text)
+  if (cached) {
+    try {
+      cached.currentTime = 0
+      await cached.play()
+      return
+    } catch {
+      // lanjut ke fallback di bawah
+    }
+  }
+  try {
+    const res = await api.post('/tts/announce', { text }, { timeout: 6000 })
+    const audioUrl = res.data?.audioUrl
+    if (!audioUrl) throw new Error('no audio url')
+    const audio = new Audio(audioUrl)
+    geminiAudioCache.set(text, audio)
+    await audio.play()
+  } catch (err: any) {
+    // 404 = tenant belum konfigurasi API key Gemini → tandai unavailable
+    // supaya panggilan TTS berikutnya di sesi ini tidak menunggu network lagi.
+    if (err?.response?.status === 404) geminiTtsUnavailable = true
+    speakClear(text)
+  }
+}
+
 export function announceAttendanceSuccess(name: string | undefined | null, session: AttendanceSession) {
   const nickname = firstName(name) || 'Berhasil'
-  speakClear(`${nickname} ${session}`)
+  void speakViaGeminiOrFallback(`${nickname} ${session}`)
 }
 
 export function announceStudentScanSuccess(name: string | undefined | null, session: AttendanceSession, already?: boolean) {

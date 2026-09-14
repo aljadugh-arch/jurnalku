@@ -48,6 +48,7 @@ function roleItems(role?: string, hideStaffCeklok?: boolean): NavItem[] {
       { label: 'Ceklok', path: '/guru/absensi-guru', icon: <MapPin size={iconSize} /> },
       { label: 'Jadwal', path: '/guru/jadwal', icon: <Calendar size={iconSize} /> },
       { label: 'Nilai', path: '/guru/penilaian-harian', icon: <BookOpen size={iconSize} /> },
+      { label: 'STS/SAS', path: '/guru/nilai-sumatif', icon: <ClipboardCheck size={iconSize} /> },
       { label: 'Absen Harian', path: '/guru/absensi-siswa', icon: <UserCheck size={iconSize} /> },
       { label: 'Absen Mapel', path: '/guru/absensi-mapel', icon: <ListChecks size={iconSize} /> },
       { label: 'Jurnal', path: '/guru/jurnal', icon: <ClipboardList size={iconSize} /> },

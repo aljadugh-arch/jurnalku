@@ -5115,6 +5115,33 @@ app.delete('/api/ai-config/me', authMiddleware, (req, res) => {
   res.json({ ok: true })
 })
 
+// ===== TTS pengumuman absensi (Gemini TTS, voice pria natural) =====
+// Fallback: kalau tenant belum konfigurasi API key Gemini (di ai_config),
+// frontend otomatis pakai Web Speech API browser (lihat feedbackSound.ts) —
+// jadi fitur ini murni peningkatan opsional, absensi tidak pernah terhambat.
+app.post('/api/tts/announce', authMiddleware, async (req, res) => {
+  const text = String(req.body?.text || '').trim().slice(0, 200)
+  if (!text) return res.status(400).json({ error: 'Teks kosong' })
+  const cfg = resolveAiConfig(db, req.tenantId, req.user?.id)
+  if (!cfg || cfg.provider !== 'gemini' || !cfg.apiKey) {
+    return res.status(404).json({ error: 'TTS Gemini belum dikonfigurasi untuk lembaga ini' })
+  }
+  try {
+    const { generateTtsAudio, DEFAULT_VOICE } = require('./gemini-tts.cjs')
+    const result = await generateTtsAudio({
+      apiKey: cfg.apiKey,
+      text,
+      voiceName: DEFAULT_VOICE,
+      uploadDir: UPLOAD_DIR,
+      tenantId: req.tenantId,
+    })
+    res.json(result)
+  } catch (err) {
+    console.error('[tts/announce]', err.message)
+    res.status(502).json({ error: 'Gagal menghasilkan audio TTS' })
+  }
+})
+
 // ===== Google OAuth (login akun Google berlangganan Gemini Pro, dipakai sbg kredensial AI personal guru) =====
 app.get('/api/ai-config/google/start', authMiddleware, (req, res) => {
   const clientId = process.env.GOOGLE_OAUTH_CLIENT_ID

@@ -12,14 +12,16 @@ const guruCeklok = read('src/pages/guru/GuruAbsensiPage.tsx')
 const adminCeklok = read('src/pages/admin/CekLokAdminPage.tsx')
 const qrPage = read('src/pages/admin/AbsensiSiswaPage.tsx')
 
-test('helper suara memakai WebAudio bawaan tanpa aset biner agar tetap jalan offline', () => {
+test('helper suara memakai WebAudio bawaan untuk beep, tanpa aset biner statis di bundle', () => {
   assert.match(soundLib, /window\.AudioContext \|\| \(window as any\)\.webkitAudioContext/)
   assert.match(soundLib, /export function primeFeedbackSound\(\)/)
   assert.match(soundLib, /export function playFeedbackSound\(/)
   assert.match(soundLib, /export function announceAttendanceSuccess\(/)
   assert.match(soundLib, /export function announceStudentScanSuccess\(/)
-  // Tidak boleh bergantung pada file audio eksternal.
-  assert.doesNotMatch(soundLib, /\.mp3|\.wav|\.ogg|new Audio\(/)
+  // Tidak boleh ada file audio statis dibundel; new Audio(...) untuk hasil
+  // TTS server (Gemini) diperbolehkan karena URL-nya dinamis per-request,
+  // bukan aset biner tetap yang menambah ukuran bundle.
+  assert.doesNotMatch(soundLib, /\.mp3|\.wav|\.ogg/)
 })
 
 test('helper suara aman di lingkungan tanpa AudioContext dan tidak melempar error', () => {
@@ -45,12 +47,17 @@ test('helper suara mengucapkan nama depan dengan TTS Indonesia langsung tanpa de
   assert.match(soundLib, /utterance\.volume = 1/)
   assert.match(soundLib, /utterance\.rate = 0\.86/)
   assert.match(soundLib, /firstName\(name\)/)
-  assert.match(soundLib, /speakClear\(`\$\{nickname\} \$\{session\}`\)/)
+  // Sukses memicu speakViaGeminiOrFallback (coba TTS server Gemini voice pria
+  // lebih dulu, fallback otomatis ke speakClear/Web Speech API bila gagal
+  // atau belum dikonfigurasi) — bukan langsung speakClear seperti sebelumnya.
+  assert.match(soundLib, /void speakViaGeminiOrFallback\(`\$\{nickname\} \$\{session\}`\)/)
   assert.match(soundLib, /toNaturalCase/, 'nama harus dinormalisasi agar tidak dieja huruf per huruf')
-  assert.match(soundLib, /(male|pria|laki|man)/, 'prioritas voice male/pria')
-  assert.match(soundLib, /pickBestVoice/, 'pemilihan voice memakai helper pickBestVoice')
-  const speakClearBlock = soundLib.slice(soundLib.indexOf('function speakClear'), soundLib.indexOf('export function announceAttendanceSuccess'))
-  assert.doesNotMatch(speakClearBlock, /setTimeout/, 'TTS sukses tidak boleh delay')
+  assert.match(soundLib, /(male|pria|laki|man)/, 'prioritas voice male/pria pada fallback Web Speech API')
+  assert.match(soundLib, /pickBestVoice/, 'pemilihan voice fallback memakai helper pickBestVoice')
+  assert.match(soundLib, /speakViaGeminiOrFallback/, 'harus ada jalur TTS server Gemini dengan fallback')
+  assert.match(soundLib, /geminiTtsUnavailable/, 'harus menandai tidak tersedia agar tidak retry percuma tiap panggilan')
+  const speakClearBlock = soundLib.slice(soundLib.indexOf('function speakClear'), soundLib.indexOf('// Cache in-memory audio Gemini'))
+  assert.doesNotMatch(speakClearBlock, /setTimeout/, 'TTS fallback tidak boleh delay')
   const successBlock = soundLib.slice(soundLib.indexOf('export function announceAttendanceSuccess'), soundLib.indexOf('export function announceStudentScanSuccess'))
   assert.doesNotMatch(successBlock, /playFeedbackSound/, 'sukses tidak boleh campur beep')
 })
