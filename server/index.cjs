@@ -297,6 +297,16 @@ db.exec(`
     created_at TEXT DEFAULT (datetime('now'))
   );
 
+  CREATE TABLE IF NOT EXISTS qr_siswa_identifiers (
+    tenant_id TEXT NOT NULL,
+    token TEXT NOT NULL,
+    siswa_id TEXT NOT NULL,
+    identifier_type TEXT NOT NULL DEFAULT 'legacy',
+    created_at TEXT DEFAULT (datetime('now')),
+    PRIMARY KEY (tenant_id, token)
+  );
+  CREATE INDEX IF NOT EXISTS idx_qr_siswa_identifiers_student ON qr_siswa_identifiers(tenant_id, siswa_id);
+
   CREATE TABLE IF NOT EXISTS gtk (
     id TEXT PRIMARY KEY,
     nik TEXT,
@@ -996,6 +1006,30 @@ function studentActiveIdentifier(siswa) {
   const nisn = String(siswa?.nisn || '').trim()
   return nisn || String(siswa?.nis || '').trim()
 }
+
+// Simpan setiap identifier lama agar QR yang sudah tercetak tetap valid
+// setelah NIS/NISN siswa diperbaiki. Payload QR baru tidak memakai field ini.
+function rememberStudentQrIdentifiers(siswa, tenantId) {
+  if (!siswa?.id || !tenantId) return
+  const insert = db.prepare(`
+    INSERT OR IGNORE INTO qr_siswa_identifiers (tenant_id, token, siswa_id, identifier_type)
+    VALUES (?, ?, ?, ?)
+  `)
+  const identifiers = [
+    [String(siswa.nis || '').trim(), 'legacy_nis'],
+    [String(siswa.nisn || '').trim(), 'legacy_nisn'],
+  ]
+  for (const [token, type] of identifiers) {
+    if (token) insert.run(tenantId, token, siswa.id, type)
+  }
+}
+
+function backfillLegacyQrIdentifiers() {
+  const students = db.prepare('SELECT id, nis, nisn, tenant_id FROM siswa').all()
+  for (const siswa of students) rememberStudentQrIdentifiers(siswa, siswa.tenant_id)
+}
+
+backfillLegacyQrIdentifiers()
 
 function studentLocalEmail(tenantId, nis) {
   const safeTenant = String(tenantId || 'default').replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 36) || 'default'
@@ -2523,6 +2557,7 @@ app.post('/api/siswa', ADMIN, (req, res) => {
     db.prepare('INSERT INTO siswa (id, nik, nis, nisn, nama, jenis_kelamin, tempat_lahir, tanggal_lahir, alamat, no_hp, nama_ortu, nama_panggilan, rombel_id, tenant_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
       .run(id, nik || null, nis, nisn, nama, jenis_kelamin, tempat_lahir, tanggal_lahir, alamat, no_hp, nama_ortu, (nama_panggilan || '').trim() || null, rombel_id || null, req.tenantId)
     const siswa = db.prepare('SELECT * FROM siswa WHERE id = ? AND tenant_id = ?').get(id, req.tenantId)
+    rememberStudentQrIdentifiers(siswa, req.tenantId)
     ensureStudentUser(siswa, req.tenantId)
     res.json({ id, akun_siswa: true })
   } catch (e) {
@@ -2554,6 +2589,9 @@ app.put('/api/siswa/:id', ADMIN, (req, res) => {
     db.prepare(`UPDATE siswa SET ${setClause} WHERE id=? AND tenant_id=?`)
       .run(...updates.map(field => field === 'nik' ? (values[field] || null) : values[field]), req.params.id, req.tenantId)
     const siswa = db.prepare('SELECT * FROM siswa WHERE id = ? AND tenant_id = ?').get(req.params.id, req.tenantId)
+    // Simpan nilai NIS/NISN terbaru tanpa menghapus mapping lama.
+    rememberStudentQrIdentifiers(current, req.tenantId)
+    rememberStudentQrIdentifiers(siswa, req.tenantId)
     if (siswa && siswa.status === 'aktif') ensureStudentUser(siswa, req.tenantId)
     res.json({ success: true })
   } catch (e) {
@@ -3607,8 +3645,9 @@ app.get('/api/siswa/qr-identifiers', STAFF, (req, res) => {
   sql += ' ORDER BY nama'
   const data = db.prepare(sql).all(...params).map(siswa => ({
     ...siswa,
-    identifier: studentActiveIdentifier(siswa),
-    identifier_type: String(siswa.nisn || '').trim() ? 'NISN' : 'NIS'
+    // QR baru memakai UUID internal yang tidak berubah saat NIS/NISN diedit.
+    identifier: siswa.id,
+    identifier_type: 'ID SISWA'
   }))
   res.json(data)
 })
@@ -5542,9 +5581,16 @@ app.post('/api/absensi-siswa/qr-scan', STAFF, (req, res) => {
   const token = normalizeQrToken(req.body.token)
   if (!token) return res.status(400).json({ error: 'Token QR kosong' })
   let siswa = db.prepare('SELECT * FROM siswa WHERE id = ? AND tenant_id = ?').get(token, req.tenantId)
-  // Fallback: QR lama/manual mungkin memuat NIS/NISN.
+  // QR lama tetap valid melalui mapping historis yang menyimpan siswa_id.
+  if (!siswa) {
+    const legacy = db.prepare('SELECT siswa_id FROM qr_siswa_identifiers WHERE tenant_id=? AND token=?').get(req.tenantId, token)
+    if (legacy) siswa = db.prepare('SELECT * FROM siswa WHERE id=? AND tenant_id=?').get(legacy.siswa_id, req.tenantId)
+  }
+  // Fallback tambahan untuk QR lama/manual yang belum sempat masuk mapping.
   if (!siswa) siswa = db.prepare('SELECT * FROM siswa WHERE (nis = ? OR nisn = ?) AND tenant_id = ?').get(token, token, req.tenantId)
   if (!siswa) return res.status(404).json({ error: 'QR tidak dikenali / siswa tidak ditemukan' })
+  // Simpan identifier aktif juga agar perubahan berikutnya tetap kompatibel.
+  rememberStudentQrIdentifiers(siswa, req.tenantId)
   const tanggal = /^\d{4}-\d{2}-\d{2}$/.test(String(req.body.tanggal || '')) ? String(req.body.tanggal) : todayJakarta()
   const adminWrite = requireAdminDailyAttendanceWriteAccess(req)
   if (!adminWrite.allowed) return res.status(adminWrite.status).json({ error: adminWrite.error })
