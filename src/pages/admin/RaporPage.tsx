@@ -175,7 +175,10 @@ export default function RaporPage() {
                   {settings.nama_lembaga || 'Nama Lembaga'}
                 </h2>
                 {settings.npsn && (
-                  <div className="text-sm text-gray-600">NPSN: {settings.npsn}</div>
+                  <div className="text-sm text-gray-600">NPSN: {settings.npsn}{settings.nsm ? ` · NSM: ${settings.nsm}` : ''}</div>
+                )}
+                {!settings.npsn && settings.nsm && (
+                  <div className="text-sm text-gray-600">NSM: {settings.nsm}</div>
                 )}
                 {settings.alamat && (
                   <div className="text-sm text-gray-600">{settings.alamat}</div>

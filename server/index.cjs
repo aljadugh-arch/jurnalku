@@ -863,6 +863,7 @@ try {
   if (!settingsCols.includes('kepala_sekolah')) db.exec("ALTER TABLE settings ADD COLUMN kepala_sekolah TEXT DEFAULT ''")
   if (!settingsCols.includes('npsn'))           db.exec("ALTER TABLE settings ADD COLUMN npsn TEXT DEFAULT ''")
   if (!settingsCols.includes('kota_cetak'))     db.exec("ALTER TABLE settings ADD COLUMN kota_cetak TEXT DEFAULT ''")
+  if (!settingsCols.includes('nsm'))            db.exec("ALTER TABLE settings ADD COLUMN nsm TEXT DEFAULT ''")
 } catch (e) { console.error('[migrate] settings kop rapor failed', e.message) }
 
 // Migrasi siswa: kolom nama_panggilan (opsional) sebagai basis TTS absensi.
@@ -2393,7 +2394,7 @@ app.get('/api/geocode/search', async (req, res) => {
 })
 
 app.put('/api/settings', ADMIN, (req, res) => {
-  const { nama_lembaga, alamat, telepon, email, theme, primary_color, accent_color, sidebar_color, geo_latitude, geo_longitude, geo_radius, jenjang, hari_libur, bg_size, bg_position, bg_repeat, bg_blur, pwa_enabled, pwa_name, pwa_theme_color, pwa_bg_color, dashboard_quick_menus, kepala_sekolah, npsn, kota_cetak } = req.body
+  const { nama_lembaga, alamat, telepon, email, theme, primary_color, accent_color, sidebar_color, geo_latitude, geo_longitude, geo_radius, jenjang, hari_libur, bg_size, bg_position, bg_repeat, bg_blur, pwa_enabled, pwa_name, pwa_theme_color, pwa_bg_color, dashboard_quick_menus, kepala_sekolah, npsn, nsm, kota_cetak } = req.body
   const id = canonicalSettingsId(req.tenantId)
   const bg_size_v = bg_size || 'cover'
   const bg_position_v = bg_position || 'center'
@@ -2404,10 +2405,10 @@ app.put('/api/settings', ADMIN, (req, res) => {
   const normalizedQuickMenus = [...new Set(dashboard_quick_menus.filter(item => typeof item === 'string' && allowedQuickMenus.has(item)))]
   if (normalizedQuickMenus.length < 1 || normalizedQuickMenus.length > allowedQuickMenus.size) return res.status(400).json({ error: 'Pilih minimal 1 pintasan dashboard yang valid. Anda memilih: ' + normalizedQuickMenus.length })
   const quickMenus = JSON.stringify(normalizedQuickMenus)
-  db.prepare(`INSERT INTO settings (id, tenant_id, nama_lembaga, alamat, telepon, email, theme, primary_color, accent_color, sidebar_color, geo_latitude, geo_longitude, geo_radius, jenjang, hari_libur, bg_size, bg_position, bg_repeat, bg_blur, pwa_enabled, pwa_name, pwa_theme_color, pwa_bg_color, dashboard_quick_menus, kepala_sekolah, npsn, kota_cetak, updated_at)
-    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,datetime('now'))
-    ON CONFLICT(id) DO UPDATE SET tenant_id=excluded.tenant_id, nama_lembaga=excluded.nama_lembaga, alamat=excluded.alamat, telepon=excluded.telepon, email=excluded.email, theme=excluded.theme, primary_color=excluded.primary_color, accent_color=excluded.accent_color, sidebar_color=excluded.sidebar_color, geo_latitude=excluded.geo_latitude, geo_longitude=excluded.geo_longitude, geo_radius=excluded.geo_radius, jenjang=excluded.jenjang, hari_libur=excluded.hari_libur, bg_size=excluded.bg_size, bg_position=excluded.bg_position, bg_repeat=excluded.bg_repeat, bg_blur=excluded.bg_blur, pwa_enabled=excluded.pwa_enabled, pwa_name=excluded.pwa_name, pwa_theme_color=excluded.pwa_theme_color, pwa_bg_color=excluded.pwa_bg_color, dashboard_quick_menus=excluded.dashboard_quick_menus, kepala_sekolah=excluded.kepala_sekolah, npsn=excluded.npsn, kota_cetak=excluded.kota_cetak, updated_at=datetime('now')`)
-    .run(id, req.tenantId, nama_lembaga, alamat, telepon, email, theme, primary_color, accent_color, sidebar_color, geo_latitude || null, geo_longitude || null, geo_radius || 200, jenjang || '', JSON.stringify(hari_libur || []), bg_size_v, bg_position_v, bg_repeat_v, bg_blur_v, pwa_enabled ? 1 : 0, pwa_name || '', pwa_theme_color || '#1e40af', pwa_bg_color || '#ffffff', quickMenus, kepala_sekolah || '', npsn || '', kota_cetak || '')
+  db.prepare(`INSERT INTO settings (id, tenant_id, nama_lembaga, alamat, telepon, email, theme, primary_color, accent_color, sidebar_color, geo_latitude, geo_longitude, geo_radius, jenjang, hari_libur, bg_size, bg_position, bg_repeat, bg_blur, pwa_enabled, pwa_name, pwa_theme_color, pwa_bg_color, dashboard_quick_menus, kepala_sekolah, npsn, nsm, kota_cetak, updated_at)
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,datetime('now'))
+    ON CONFLICT(id) DO UPDATE SET tenant_id=excluded.tenant_id, nama_lembaga=excluded.nama_lembaga, alamat=excluded.alamat, telepon=excluded.telepon, email=excluded.email, theme=excluded.theme, primary_color=excluded.primary_color, accent_color=excluded.accent_color, sidebar_color=excluded.sidebar_color, geo_latitude=excluded.geo_latitude, geo_longitude=excluded.geo_longitude, geo_radius=excluded.geo_radius, jenjang=excluded.jenjang, hari_libur=excluded.hari_libur, bg_size=excluded.bg_size, bg_position=excluded.bg_position, bg_repeat=excluded.bg_repeat, bg_blur=excluded.bg_blur, pwa_enabled=excluded.pwa_enabled, pwa_name=excluded.pwa_name, pwa_theme_color=excluded.pwa_theme_color, pwa_bg_color=excluded.pwa_bg_color, dashboard_quick_menus=excluded.dashboard_quick_menus, kepala_sekolah=excluded.kepala_sekolah, npsn=excluded.npsn, nsm=excluded.nsm, kota_cetak=excluded.kota_cetak, updated_at=datetime('now')`)
+    .run(id, req.tenantId, nama_lembaga, alamat, telepon, email, theme, primary_color, accent_color, sidebar_color, geo_latitude || null, geo_longitude || null, geo_radius || 200, jenjang || '', JSON.stringify(hari_libur || []), bg_size_v, bg_position_v, bg_repeat_v, bg_blur_v, pwa_enabled ? 1 : 0, pwa_name || '', pwa_theme_color || '#1e40af', pwa_bg_color || '#ffffff', quickMenus, kepala_sekolah || '', npsn || '', nsm || '', kota_cetak || '')
   res.json({ success: true, dashboard_quick_menus: JSON.parse(quickMenus) })
 })
 
