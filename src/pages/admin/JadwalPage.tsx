@@ -50,7 +50,7 @@ export default function JadwalPage() {
   const jenjang = (settings.jenjang as string) || ''
   const isGuruKelasJenjang = ['mi', 'sd'].includes(jenjang.toLowerCase())
   const hariLibur: string[] = useMemo(() => {
-    try { return JSON.parse((settings as any).hari_libur || '["jumat"]') } catch { return ['jumat'] }
+    try { return JSON.parse((settings as any).hari_libur || '[]') } catch { return [] }
   }, [settings])
   const hari = useMemo(() => SEMUA_HARI.filter(h => !hariLibur.includes(h)), [hariLibur])
   const jamPelajaran = useMemo(() => generateJamPelajaran(jenjang, 10), [jenjang])

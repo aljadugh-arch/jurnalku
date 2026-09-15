@@ -26,7 +26,7 @@ export default function SettingsPage() {
   const [form, setForm] = useState({
     nama_lembaga: '', alamat: '', telepon: '', email: '',
     theme: 'light', primary_color: '#1e40af', accent_color: '#059669', sidebar_color: '#1e293b',
-    geo_latitude: '', geo_longitude: '', geo_radius: '200', jenjang: '', hari_libur: ['jumat'] as string[],
+    geo_latitude: '', geo_longitude: '', geo_radius: '200', jenjang: '', hari_libur: [] as string[],
     bg_size: 'cover', bg_position: 'center', bg_repeat: 'no-repeat', bg_blur: 0,
     pwa_enabled: false, pwa_name: '', pwa_theme_color: '#1e40af', pwa_bg_color: '#ffffff',
     dashboard_quick_menus: defaultAdminDashboardShortcutKeys as string[]
@@ -74,7 +74,7 @@ export default function SettingsPage() {
         nama_lembaga: s.nama_lembaga || '', alamat: s.alamat || '', telepon: s.telepon || '', email: s.email || '',
         theme: s.theme || 'light', primary_color: s.primary_color || '#1e40af', accent_color: s.accent_color || '#059669', sidebar_color: s.sidebar_color || '#1e293b',
         geo_latitude: s.geo_latitude || '', geo_longitude: s.geo_longitude || '', geo_radius: s.geo_radius || '200', jenjang: s.jenjang || '',
-        hari_libur: (() => { try { return JSON.parse(s.hari_libur || '["jumat"]') } catch { return ['jumat'] } })(),
+        hari_libur: (() => { try { return JSON.parse(s.hari_libur || '[]') } catch { return [] } })(),
         bg_size: s.bg_size || 'cover', bg_position: s.bg_position || 'center',
         bg_repeat: s.bg_repeat || 'no-repeat', bg_blur: s.bg_blur || 0,
         pwa_enabled: s.pwa_enabled === true || s.pwa_enabled === 1,

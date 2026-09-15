@@ -941,7 +941,7 @@ for (const col of [
   ['settings', 'geo_radius', 'INTEGER DEFAULT 200'],
   ['settings', 'background', "TEXT DEFAULT ''"],
   ['settings', 'jenjang', "TEXT DEFAULT ''"],
-  ['settings', 'hari_libur', "TEXT DEFAULT '[\"jumat\"]'"],
+  ['settings', 'hari_libur', "TEXT DEFAULT '[]'"],
   ['settings', 'bg_size', "TEXT DEFAULT 'cover'"],
   ['settings', 'bg_position', "TEXT DEFAULT 'center'"],
   ['settings', 'bg_repeat', "TEXT DEFAULT 'no-repeat'"],
@@ -4375,7 +4375,7 @@ function isHolidayDate(tanggal, tenantId) {
     const events = db.prepare("SELECT jenis FROM kalender_kbm WHERE tenant_id=? AND tanggal=? AND jenis='libur'").all(tenantId, tanggal)
     return isHoliday({ date: tanggal, holidayDays: settings?.hari_libur, calendarEvents: events })
   }
-  return ['jumat', 'minggu'].includes(dayNameForDate(tanggal))
+  return false
 }
 function assertKbmActive(req, tanggal) {
   if (isHolidayDate(tanggal, req.tenantId)) throw new Error('Hari libur: absensi nonaktif')
