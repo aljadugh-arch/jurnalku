@@ -849,12 +849,21 @@ try {
   }
 } catch (e) { console.error('[migrate] ekskul jenis_kegiatan/scope_rombel failed', e.message) }
 
-// Migrasi rapor: kolom nilai_sts dan nilai_sas untuk input nilai sumatif.
+// Migrasi rapor: kolom nilai_sts, nilai_sas, dan nilai_harian.
 try {
   const raporCols = db.prepare('PRAGMA table_info(rapor)').all()
-  if (!raporCols.some(col => col.name === 'nilai_sts')) db.exec('ALTER TABLE rapor ADD COLUMN nilai_sts INTEGER DEFAULT 0')
-  if (!raporCols.some(col => col.name === 'nilai_sas')) db.exec('ALTER TABLE rapor ADD COLUMN nilai_sas INTEGER DEFAULT 0')
-} catch (e) { console.error('[migrate] rapor nilai_sts/nilai_sas failed', e.message) }
+  if (!raporCols.some(col => col.name === 'nilai_sts'))    db.exec('ALTER TABLE rapor ADD COLUMN nilai_sts INTEGER DEFAULT 0')
+  if (!raporCols.some(col => col.name === 'nilai_sas'))    db.exec('ALTER TABLE rapor ADD COLUMN nilai_sas INTEGER DEFAULT 0')
+  if (!raporCols.some(col => col.name === 'nilai_harian')) db.exec('ALTER TABLE rapor ADD COLUMN nilai_harian INTEGER DEFAULT 0')
+} catch (e) { console.error('[migrate] rapor kolom tambahan failed', e.message) }
+
+// Migrasi settings: kolom kop lembaga untuk cetak rapor.
+try {
+  const settingsCols = db.prepare('PRAGMA table_info(settings)').all().map(c => c.name)
+  if (!settingsCols.includes('kepala_sekolah')) db.exec("ALTER TABLE settings ADD COLUMN kepala_sekolah TEXT DEFAULT ''")
+  if (!settingsCols.includes('npsn'))           db.exec("ALTER TABLE settings ADD COLUMN npsn TEXT DEFAULT ''")
+  if (!settingsCols.includes('kota_cetak'))     db.exec("ALTER TABLE settings ADD COLUMN kota_cetak TEXT DEFAULT ''")
+} catch (e) { console.error('[migrate] settings kop rapor failed', e.message) }
 
 // Migrasi siswa: kolom nama_panggilan (opsional) sebagai basis TTS absensi.
 // Berbeda dari uniqueStudentNickname() (dihitung otomatis dari nama untuk memastikan
@@ -1241,7 +1250,7 @@ function authMiddleware(req, res, next) {
     // - /api/auth/me              (cek sesi)
     // - /api/auth/change-password (proses ganti)
     // - /api/auth/logout          (logout)
-    const allowList = ['/api/auth/me', '/api/auth/change-password', '/api/auth/logout', '/api/siswa/dashboard', '/api/siswa/portal', '/api/siswa/absensi', '/api/siswa/ekskul', '/api/siswa/penilaian', '/api/siswa/tugas', '/api/settings']
+    const allowList = ['/api/auth/me', '/api/auth/change-password', '/api/auth/logout', '/api/siswa/dashboard', '/api/siswa/portal', '/api/siswa/absensi', '/api/siswa/ekskul', '/api/siswa/penilaian', '/api/siswa/penilaian/rekap', '/api/siswa/tugas', '/api/settings']
     if (!allowList.includes(req.path) && !req.path.startsWith('/api/siswa/') && !req.path.startsWith('/api/settings')) {
       try {
         const row = db.prepare('SELECT must_change_password FROM users WHERE id = ?').get(req.user.id)
@@ -2384,7 +2393,7 @@ app.get('/api/geocode/search', async (req, res) => {
 })
 
 app.put('/api/settings', ADMIN, (req, res) => {
-  const { nama_lembaga, alamat, telepon, email, theme, primary_color, accent_color, sidebar_color, geo_latitude, geo_longitude, geo_radius, jenjang, hari_libur, bg_size, bg_position, bg_repeat, bg_blur, pwa_enabled, pwa_name, pwa_theme_color, pwa_bg_color, dashboard_quick_menus } = req.body
+  const { nama_lembaga, alamat, telepon, email, theme, primary_color, accent_color, sidebar_color, geo_latitude, geo_longitude, geo_radius, jenjang, hari_libur, bg_size, bg_position, bg_repeat, bg_blur, pwa_enabled, pwa_name, pwa_theme_color, pwa_bg_color, dashboard_quick_menus, kepala_sekolah, npsn, kota_cetak } = req.body
   const id = canonicalSettingsId(req.tenantId)
   const bg_size_v = bg_size || 'cover'
   const bg_position_v = bg_position || 'center'
@@ -2395,10 +2404,10 @@ app.put('/api/settings', ADMIN, (req, res) => {
   const normalizedQuickMenus = [...new Set(dashboard_quick_menus.filter(item => typeof item === 'string' && allowedQuickMenus.has(item)))]
   if (normalizedQuickMenus.length < 1 || normalizedQuickMenus.length > allowedQuickMenus.size) return res.status(400).json({ error: 'Pilih minimal 1 pintasan dashboard yang valid. Anda memilih: ' + normalizedQuickMenus.length })
   const quickMenus = JSON.stringify(normalizedQuickMenus)
-  db.prepare(`INSERT INTO settings (id, tenant_id, nama_lembaga, alamat, telepon, email, theme, primary_color, accent_color, sidebar_color, geo_latitude, geo_longitude, geo_radius, jenjang, hari_libur, bg_size, bg_position, bg_repeat, bg_blur, pwa_enabled, pwa_name, pwa_theme_color, pwa_bg_color, dashboard_quick_menus, updated_at)
-    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,datetime('now'))
-    ON CONFLICT(id) DO UPDATE SET tenant_id=excluded.tenant_id, nama_lembaga=excluded.nama_lembaga, alamat=excluded.alamat, telepon=excluded.telepon, email=excluded.email, theme=excluded.theme, primary_color=excluded.primary_color, accent_color=excluded.accent_color, sidebar_color=excluded.sidebar_color, geo_latitude=excluded.geo_latitude, geo_longitude=excluded.geo_longitude, geo_radius=excluded.geo_radius, jenjang=excluded.jenjang, hari_libur=excluded.hari_libur, bg_size=excluded.bg_size, bg_position=excluded.bg_position, bg_repeat=excluded.bg_repeat, bg_blur=excluded.bg_blur, pwa_enabled=excluded.pwa_enabled, pwa_name=excluded.pwa_name, pwa_theme_color=excluded.pwa_theme_color, pwa_bg_color=excluded.pwa_bg_color, dashboard_quick_menus=excluded.dashboard_quick_menus, updated_at=datetime('now')`)
-    .run(id, req.tenantId, nama_lembaga, alamat, telepon, email, theme, primary_color, accent_color, sidebar_color, geo_latitude || null, geo_longitude || null, geo_radius || 200, jenjang || '', JSON.stringify(hari_libur || []), bg_size_v, bg_position_v, bg_repeat_v, bg_blur_v, pwa_enabled ? 1 : 0, pwa_name || '', pwa_theme_color || '#1e40af', pwa_bg_color || '#ffffff', quickMenus)
+  db.prepare(`INSERT INTO settings (id, tenant_id, nama_lembaga, alamat, telepon, email, theme, primary_color, accent_color, sidebar_color, geo_latitude, geo_longitude, geo_radius, jenjang, hari_libur, bg_size, bg_position, bg_repeat, bg_blur, pwa_enabled, pwa_name, pwa_theme_color, pwa_bg_color, dashboard_quick_menus, kepala_sekolah, npsn, kota_cetak, updated_at)
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,datetime('now'))
+    ON CONFLICT(id) DO UPDATE SET tenant_id=excluded.tenant_id, nama_lembaga=excluded.nama_lembaga, alamat=excluded.alamat, telepon=excluded.telepon, email=excluded.email, theme=excluded.theme, primary_color=excluded.primary_color, accent_color=excluded.accent_color, sidebar_color=excluded.sidebar_color, geo_latitude=excluded.geo_latitude, geo_longitude=excluded.geo_longitude, geo_radius=excluded.geo_radius, jenjang=excluded.jenjang, hari_libur=excluded.hari_libur, bg_size=excluded.bg_size, bg_position=excluded.bg_position, bg_repeat=excluded.bg_repeat, bg_blur=excluded.bg_blur, pwa_enabled=excluded.pwa_enabled, pwa_name=excluded.pwa_name, pwa_theme_color=excluded.pwa_theme_color, pwa_bg_color=excluded.pwa_bg_color, dashboard_quick_menus=excluded.dashboard_quick_menus, kepala_sekolah=excluded.kepala_sekolah, npsn=excluded.npsn, kota_cetak=excluded.kota_cetak, updated_at=datetime('now')`)
+    .run(id, req.tenantId, nama_lembaga, alamat, telepon, email, theme, primary_color, accent_color, sidebar_color, geo_latitude || null, geo_longitude || null, geo_radius || 200, jenjang || '', JSON.stringify(hari_libur || []), bg_size_v, bg_position_v, bg_repeat_v, bg_blur_v, pwa_enabled ? 1 : 0, pwa_name || '', pwa_theme_color || '#1e40af', pwa_bg_color || '#ffffff', quickMenus, kepala_sekolah || '', npsn || '', kota_cetak || '')
   res.json({ success: true, dashboard_quick_menus: JSON.parse(quickMenus) })
 })
 
@@ -4272,6 +4281,28 @@ app.get('/api/siswa/penilaian', authMiddleware, (req, res) => {
   res.json(db.prepare(`SELECT p.tanggal, p.sikap, p.keaktifan, p.pengetahuan, p.catatan, m.nama AS mapel_nama
     FROM penilaian_harian p LEFT JOIN mapel m ON m.id=p.mapel_id AND m.tenant_id=p.tenant_id
     WHERE p.siswa_id=? AND p.tenant_id=? ORDER BY p.tanggal DESC`).all(studentId, req.tenantId))
+})
+
+// Rekap nilai per-mapel untuk siswa (rata-rata harian, ditampilkan di dashboard siswa)
+app.get('/api/siswa/penilaian/rekap', authMiddleware, (req, res) => {
+  if (!['siswa', 'wali_murid'].includes(req.user.role)) return res.status(403).json({ error: 'Akses ditolak' })
+  const linked = db.prepare('SELECT student_id FROM user_students WHERE tenant_id=? AND user_id=? ORDER BY student_id').all(req.tenantId, req.user.id).map(row => row.student_id)
+  let studentId
+  try { studentId = selectPenilaianStudentId(req.user.role, linked, req.query.student_id) }
+  catch (error) { return res.status(403).json({ error: error.message }) }
+  const siswa = db.prepare('SELECT id FROM siswa WHERE id=? AND tenant_id=?').get(studentId, req.tenantId)
+  if (!siswa) return res.status(404).json({ error: 'Siswa tidak ditemukan' })
+  const rows = db.prepare(`SELECT m.nama AS mapel_nama,
+    COUNT(*) AS jumlah_penilaian,
+    AVG(p.sikap) AS rata_sikap,
+    AVG(p.keaktifan) AS rata_keaktifan,
+    AVG(p.pengetahuan) AS rata_pengetahuan,
+    ROUND(AVG(p.pengetahuan * 0.5 + p.keaktifan * 0.3 + p.sikap * 0.2)) AS nilai_harian
+    FROM penilaian_harian p
+    LEFT JOIN mapel m ON m.id = p.mapel_id AND m.tenant_id = p.tenant_id
+    WHERE p.siswa_id=? AND p.tenant_id=?
+    GROUP BY p.mapel_id ORDER BY m.nama`).all(studentId, req.tenantId)
+  res.json(rows)
 })
 
 app.get('/api/siswa/ekskul', authMiddleware, (req, res) => {
@@ -6204,7 +6235,20 @@ app.post('/api/catatan-kepribadian/bulk', STAFF, (req, res) => {
   res.json({ count })
 })
 
-// ==================== RAPOR TENGAH SEMESTER ====================
+// ==================== RAPOR / PENILAIAN ====================
+// Terminologi baru (konsisten):
+//   jenis='sts'  → Sumatif Tengah Semester: nilai asesmen STS yang diinput guru per-mapel
+//   jenis='sas'  → Sumatif Akhir Semester : nilai asesmen SAS yang diinput guru per-mapel
+//   jenis='rapor_sts' → Rapor STS (generate dari nilai harian + asesmen STS)
+//   jenis='rapor_sas' → Rapor SAS (generate dari nilai harian + asesmen STS + asesmen SAS)
+//
+// Formula:
+//   nilai_harian  = AVG(pengetahuan*0.5 + keaktifan*0.3 + sikap*0.2) dari penilaian_harian
+//   Rapor STS     = (nilai_harian * 0.6) + (asesmen_STS * 0.4)
+//   Rapor SAS     = (nilai_harian * 0.4) + (asesmen_STS * 0.2) + (asesmen_SAS * 0.4)
+//
+// Backward-compat: jenis='tengah'/'akhir'/'sumatif' lama masih bisa dibaca (tidak dihapus).
+
 function predikatFromNilai(n) {
   if (n >= 90) return 'A'
   if (n >= 80) return 'B'
@@ -6212,7 +6256,31 @@ function predikatFromNilai(n) {
   return 'D'
 }
 
-// Get rapor list (filter by siswa/rombel/semester)
+// Hitung nilai_harian dari rata-rata penilaian_harian dalam rentang tanggal untuk satu siswa+mapel
+function hitungNilaiHarian(siswaId, mapelId, tenantId, from, to) {
+  const row = db.prepare(`SELECT AVG(pengetahuan*0.5 + keaktifan*0.3 + sikap*0.2) as nh
+    FROM penilaian_harian WHERE siswa_id=? AND mapel_id=? AND tenant_id=? AND tanggal>=? AND tanggal<=?`)
+    .get(siswaId, mapelId, tenantId, from, to)
+  return Math.round(row?.nh || 0)
+}
+
+// Ambil nilai asesmen STS atau SAS yang sudah diinput guru
+function getAsesmenNilai(siswaId, mapelId, tahunAjaran, semester, jenisAsesmen, tenantId) {
+  const row = db.prepare(`SELECT nilai_sts FROM rapor WHERE siswa_id=? AND mapel_id=? AND tahun_ajaran=? AND semester=? AND jenis=? AND tenant_id=?`)
+    .get(siswaId, mapelId, tahunAjaran, semester, jenisAsesmen, tenantId)
+  return Math.max(0, Math.min(100, Number(row?.nilai_sts) || 0))
+}
+
+// Rentang tanggal semester
+function semesterRange(tahunAjaran, semester) {
+  const [thn1, thn2] = tahunAjaran.split('/')
+  const y1 = thn1, y2 = thn2 || thn1
+  const from = semester === 'ganjil' ? `${y1}-07-01` : `${y2}-01-01`
+  const to   = semester === 'ganjil' ? `${y1}-12-31` : `${y2}-06-30`
+  return { from, to }
+}
+
+// GET /api/rapor — list rapor (filter by siswa/rombel/semester/jenis)
 app.get('/api/rapor', authMiddleware, (req, res) => {
   const { siswa_id, tahun_ajaran, semester, jenis } = req.query
   let sql = `SELECT r.*, s.nama as siswa_nama, s.nis, m.nama as mapel_nama
@@ -6229,118 +6297,144 @@ app.get('/api/rapor', authMiddleware, (req, res) => {
   res.json(db.prepare(sql).all(...params))
 })
 
-// Generate rapor tengah semester dari penilaian_harian (agregasi)
-app.post('/api/rapor/generate', STAFF, (req, res) => {
-  const { rombel_id, tahun_ajaran, semester, jenis } = req.body
-  if (!rombel_id || !tahun_ajaran || !semester) return res.status(400).json({ error: 'rombel_id, tahun_ajaran, semester wajib' })
-  const jenisR = jenis || 'tengah'
-  const startMonth = semester === 'ganjil' ? '07' : '01'
-  const endMonth = semester === 'ganjil' ? '12' : '06'
-  const from = `${tahun_ajaran.split('/')[0]}-${startMonth}-01`
-  const to = `${semester === 'ganjil' ? tahun_ajaran.split('/')[0] : tahun_ajaran.split('/')[1] || tahun_ajaran.split('/')[0]}-${endMonth}-31`
-
-  const siswaList = db.prepare('SELECT id FROM siswa WHERE rombel_id = ? AND tenant_id=?').all(rombel_id, req.tenantId)
-  let count = 0
-  const insert = db.prepare(`INSERT INTO rapor (id, siswa_id, mapel_id, tahun_ajaran, semester, jenis, nilai_pengetahuan, nilai_keterampilan, nilai_sikap, nilai_akhir, nilai_sts, nilai_sas, predikat, deskripsi, tenant_id, updated_at)
-    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,datetime('now'))
-    ON CONFLICT(siswa_id, mapel_id, tahun_ajaran, semester, jenis) DO UPDATE SET
-    nilai_pengetahuan=excluded.nilai_pengetahuan, nilai_keterampilan=excluded.nilai_keterampilan, nilai_sikap=excluded.nilai_sikap, nilai_akhir=excluded.nilai_akhir,
-    nilai_sts=COALESCE(excluded.nilai_sts, nilai_sts), nilai_sas=COALESCE(excluded.nilai_sas, nilai_sas),
-    predikat=excluded.predikat, updated_at=datetime('now')`)
-
-  for (const s of siswaList) {
-    const rekap = db.prepare(`SELECT mapel_id, AVG(pengetahuan) as p, AVG(keaktifan) as k, AVG(sikap) as sk
-      FROM penilaian_harian WHERE siswa_id=? AND tenant_id=? AND tanggal>=? AND tanggal<=? GROUP BY mapel_id`).all(s.id, req.tenantId, from, to)
-    for (const r of rekap) {
-      const peng = Math.round(r.p || 0)
-      const ket = Math.round(r.k || 0)
-      const sik = Math.round(r.sk || 0)
-      const stsRow = db.prepare(`SELECT nilai_sts, nilai_sas FROM rapor WHERE siswa_id=? AND mapel_id=? AND tahun_ajaran=? AND semester=? AND jenis='sumatif' AND tenant_id=?`).get(s.id, r.mapel_id, tahun_ajaran, semester, req.tenantId)
-      const sts = Number(stsRow?.nilai_sts) || 0
-      const sas = Number(stsRow?.nilai_sas) || 0
-      const akhir = sts || sas
-        ? Math.round((((peng * 0.5) + (ket * 0.3) + (sik * 0.2)) + ((sts + sas) / 2)) / 2)
-        : Math.round((peng * 0.5) + (ket * 0.3) + (sik * 0.2))
-      insert.run(uuidv4(), s.id, r.mapel_id, tahun_ajaran, semester, jenisR, peng, ket, sik, akhir, sts, sas, predikatFromNilai(akhir), '', req.tenantId)
-      count++
+// POST /api/rapor/asesmen — input nilai asesmen STS atau SAS oleh guru mapel
+// body: { jenis: 'sts'|'sas', tahun_ajaran, semester, items: [{ siswa_id, mapel_id, nilai }] }
+app.post('/api/rapor/asesmen', STAFF, (req, res) => {
+  const { jenis, tahun_ajaran, semester, items } = req.body
+  if (!['sts', 'sas'].includes(jenis)) return res.status(400).json({ error: "jenis harus 'sts' atau 'sas'" })
+  if (!isStr(tahun_ajaran) || !semester || !Array.isArray(items) || !items.length)
+    return res.status(400).json({ error: 'tahun_ajaran, semester, dan items wajib diisi' })
+  if (isTeacherContext(req)) {
+    const gtk = resolveGtkForUser(req.user.id, req.tenantId)
+    if (!gtk) return res.status(403).json({ error: 'Guru tidak ditemukan' })
+    // Validasi guru hanya bisa input untuk mapel yang diajar
+    for (const item of items) {
+      const mapelId = String(item.mapel_id || '').trim()
+      const isAssigned = !!db.prepare(`SELECT 1 FROM pengajar WHERE gtk_id=? AND mapel_id=? AND tenant_id=?`).get(gtk.id, mapelId, req.tenantId)
+        || !!db.prepare(`SELECT 1 FROM jadwal WHERE gtk_id=? AND mapel_id=? AND tenant_id=?`).get(gtk.id, mapelId, req.tenantId)
+      if (!isAssigned) return res.status(403).json({ error: `Anda tidak mengajar mapel ini: ${mapelId}` })
     }
   }
-  res.json({ count, message: `${count} nilai rapor ${jenisR} semester berhasil digenerate` })
-})
-
-// Update single rapor entry
-app.put('/api/rapor/:id', STAFF, (req, res) => {
-  const { nilai_pengetahuan, nilai_keterampilan, nilai_sikap, deskripsi } = req.body
-  const akhir = Math.round(((nilai_pengetahuan||0) * 0.5) + ((nilai_keterampilan||0) * 0.3) + ((nilai_sikap||0) * 0.2))
-  db.prepare(`UPDATE rapor SET nilai_pengetahuan=?, nilai_keterampilan=?, nilai_sikap=?, nilai_akhir=?, predikat=?, deskripsi=?, updated_at=datetime('now') WHERE id=? AND tenant_id=?`)
-    .run(nilai_pengetahuan||0, nilai_keterampilan||0, nilai_sikap||0, akhir, predikatFromNilai(akhir), deskripsi||'', req.params.id, req.tenantId)
-  res.json({ success: true })
-})
-
-// Input/entry nilai STS (sumatif tengah semester) dan SAS (sumatif akhir semester).
-// body: { items: [{ siswa_id, mapel_id, nilai_sts?, nilai_sas? }], tahun_ajaran, semester }
-app.post('/api/rapor/nilai-sumatif', STAFF, (req, res) => {
-  const { tahun_ajaran, semester, items } = req.body
-  if (!isStr(tahun_ajaran) || !semester || !Array.isArray(items) || !items.length) {
-    return res.status(400).json({ error: 'tahun_ajaran, semester, dan items wajib diisi' })
-  }
-  const rows = items.slice(0, 500)
-  const upsert = db.prepare(`INSERT INTO rapor (id, siswa_id, mapel_id, tahun_ajaran, semester, jenis, nilai_sts, nilai_sas, kkm, tenant_id, created_at, updated_at)
-    VALUES (?,?,?,?,?, 'sumatif', ?, ?, 70, ?, datetime('now'), datetime('now'))
+  const upsert = db.prepare(`INSERT INTO rapor (id, siswa_id, mapel_id, tahun_ajaran, semester, jenis, nilai_sts, kkm, tenant_id, created_at, updated_at)
+    VALUES (?,?,?,?,?,?,?,70,?,datetime('now'),datetime('now'))
     ON CONFLICT(siswa_id, mapel_id, tahun_ajaran, semester, jenis) DO UPDATE SET
-      nilai_sts=excluded.nilai_sts, nilai_sas=excluded.nilai_sas, updated_at=datetime('now')`)
+      nilai_sts=excluded.nilai_sts, updated_at=datetime('now')`)
   const trx = db.transaction(() => {
     let count = 0
-    for (const item of rows) {
+    for (const item of items.slice(0, 500)) {
       const siswa_id = String(item.siswa_id || '').trim()
       const mapel_id = String(item.mapel_id || '').trim()
       if (!db.prepare('SELECT 1 FROM siswa WHERE id=? AND tenant_id=?').get(siswa_id, req.tenantId)) continue
       if (!db.prepare('SELECT 1 FROM mapel WHERE id=? AND tenant_id=?').get(mapel_id, req.tenantId)) continue
-      const sts = Math.max(0, Math.min(100, Number(item.nilai_sts) || 0))
-      const sas = Math.max(0, Math.min(100, Number(item.nilai_sas) || 0))
-      upsert.run(uuidv4(), siswa_id, mapel_id, tahun_ajaran, semester, sts, sas, req.tenantId)
+      const nilai = Math.max(0, Math.min(100, Number(item.nilai) || 0))
+      upsert.run(uuidv4(), siswa_id, mapel_id, tahun_ajaran, semester, jenis, nilai, req.tenantId)
+      count++
+    }
+    return count
+  })
+  const count = trx()
+  res.json({ success: true, count, message: `${count} nilai asesmen ${jenis.toUpperCase()} berhasil disimpan` })
+})
+
+// POST /api/rapor/generate — generate rapor STS atau SAS untuk satu rombel
+// body: { rombel_id, tahun_ajaran, semester, jenis: 'rapor_sts'|'rapor_sas' }
+app.post('/api/rapor/generate', STAFF, (req, res) => {
+  const { rombel_id, tahun_ajaran, semester, jenis } = req.body
+  if (!rombel_id || !tahun_ajaran || !semester) return res.status(400).json({ error: 'rombel_id, tahun_ajaran, semester wajib' })
+  const jenisR = (['rapor_sts', 'rapor_sas'].includes(jenis)) ? jenis : 'rapor_sts'
+  const { from, to } = semesterRange(tahun_ajaran, semester)
+
+  const siswaList = db.prepare('SELECT id FROM siswa WHERE rombel_id=? AND tenant_id=?').all(rombel_id, req.tenantId)
+  let count = 0
+  const insert = db.prepare(`INSERT INTO rapor (id, siswa_id, mapel_id, tahun_ajaran, semester, jenis,
+      nilai_pengetahuan, nilai_keterampilan, nilai_sikap, nilai_harian, nilai_sts, nilai_sas, nilai_akhir,
+      predikat, deskripsi, tenant_id, updated_at)
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,datetime('now'))
+    ON CONFLICT(siswa_id, mapel_id, tahun_ajaran, semester, jenis) DO UPDATE SET
+      nilai_pengetahuan=excluded.nilai_pengetahuan, nilai_keterampilan=excluded.nilai_keterampilan,
+      nilai_sikap=excluded.nilai_sikap, nilai_harian=excluded.nilai_harian,
+      nilai_sts=excluded.nilai_sts, nilai_sas=excluded.nilai_sas,
+      nilai_akhir=excluded.nilai_akhir, predikat=excluded.predikat, updated_at=datetime('now')`)
+
+  for (const s of siswaList) {
+    // Ambil semua mapel yang punya penilaian harian di semester ini
+    const mapelRows = db.prepare(`SELECT mapel_id, AVG(pengetahuan) as p, AVG(keaktifan) as k, AVG(sikap) as sk
+      FROM penilaian_harian WHERE siswa_id=? AND tenant_id=? AND tanggal>=? AND tanggal<=? GROUP BY mapel_id`)
+      .all(s.id, req.tenantId, from, to)
+    for (const r of mapelRows) {
+      const peng = Math.round(r.p || 0)
+      const ket  = Math.round(r.k || 0)
+      const sik  = Math.round(r.sk || 0)
+      // Nilai harian: komposit dari tiga aspek penilaian harian
+      const nilaiHarian = Math.round(peng * 0.5 + ket * 0.3 + sik * 0.2)
+      // Asesmen yang sudah diinput guru
+      const nilaiSTS = getAsesmenNilai(s.id, r.mapel_id, tahun_ajaran, semester, 'sts', req.tenantId)
+      const nilaiSAS = jenisR === 'rapor_sas'
+        ? getAsesmenNilai(s.id, r.mapel_id, tahun_ajaran, semester, 'sas', req.tenantId)
+        : 0
+      // Formula:
+      //   STS: harian*60% + asesmen_STS*40%
+      //   SAS: harian*40% + asesmen_STS*20% + asesmen_SAS*40%
+      const akhir = jenisR === 'rapor_sas'
+        ? Math.round(nilaiHarian * 0.4 + nilaiSTS * 0.2 + nilaiSAS * 0.4)
+        : Math.round(nilaiHarian * 0.6 + nilaiSTS * 0.4)
+      insert.run(uuidv4(), s.id, r.mapel_id, tahun_ajaran, semester, jenisR,
+        peng, ket, sik, nilaiHarian, nilaiSTS, nilaiSAS, akhir,
+        predikatFromNilai(akhir), '', req.tenantId)
+      count++
+    }
+  }
+  res.json({ count, message: `${count} rapor ${jenisR === 'rapor_sas' ? 'SAS' : 'STS'} berhasil digenerate` })
+})
+
+// PUT /api/rapor/:id — update manual satu baris rapor (admin/guru)
+// nilai_akhir dihitung ulang dari komponen yang sama dengan generate
+app.put('/api/rapor/:id', STAFF, (req, res) => {
+  const { nilai_pengetahuan, nilai_keterampilan, nilai_sikap, nilai_sts, nilai_sas, jenis, deskripsi } = req.body
+  const peng = nilai_pengetahuan || 0
+  const ket  = nilai_keterampilan || 0
+  const sik  = nilai_sikap || 0
+  const sts  = nilai_sts || 0
+  const sas  = nilai_sas || 0
+  const nilaiHarian = Math.round(peng * 0.5 + ket * 0.3 + sik * 0.2)
+  const jenisR = jenis || 'rapor_sts'
+  const akhir = jenisR === 'rapor_sas'
+    ? Math.round(nilaiHarian * 0.4 + sts * 0.2 + sas * 0.4)
+    : Math.round(nilaiHarian * 0.6 + sts * 0.4)
+  db.prepare(`UPDATE rapor SET nilai_pengetahuan=?, nilai_keterampilan=?, nilai_sikap=?,
+      nilai_harian=?, nilai_sts=?, nilai_sas=?, nilai_akhir=?, predikat=?, deskripsi=?,
+      updated_at=datetime('now') WHERE id=? AND tenant_id=?`)
+    .run(peng, ket, sik, nilaiHarian, sts, sas, akhir, predikatFromNilai(akhir), deskripsi||'', req.params.id, req.tenantId)
+  res.json({ success: true })
+})
+
+// POST /api/rapor/nilai-sumatif — backward-compat alias untuk /api/rapor/asesmen (jenis STS+SAS sekaligus)
+// Dipertahankan agar kode lama tidak langsung error
+app.post('/api/rapor/nilai-sumatif', STAFF, (req, res) => {
+  const { tahun_ajaran, semester, items } = req.body
+  if (!isStr(tahun_ajaran) || !semester || !Array.isArray(items) || !items.length)
+    return res.status(400).json({ error: 'tahun_ajaran, semester, dan items wajib diisi' })
+  const upsertSts = db.prepare(`INSERT INTO rapor (id, siswa_id, mapel_id, tahun_ajaran, semester, jenis, nilai_sts, kkm, tenant_id, created_at, updated_at)
+    VALUES (?,?,?,?,?,'sts',?,70,?,datetime('now'),datetime('now'))
+    ON CONFLICT(siswa_id, mapel_id, tahun_ajaran, semester, jenis) DO UPDATE SET nilai_sts=excluded.nilai_sts, updated_at=datetime('now')`)
+  const upsertSas = db.prepare(`INSERT INTO rapor (id, siswa_id, mapel_id, tahun_ajaran, semester, jenis, nilai_sts, kkm, tenant_id, created_at, updated_at)
+    VALUES (?,?,?,?,?,'sas',?,70,?,datetime('now'),datetime('now'))
+    ON CONFLICT(siswa_id, mapel_id, tahun_ajaran, semester, jenis) DO UPDATE SET nilai_sts=excluded.nilai_sts, updated_at=datetime('now')`)
+  const trx = db.transaction(() => {
+    let count = 0
+    for (const item of items.slice(0, 500)) {
+      const siswa_id = String(item.siswa_id || '').trim()
+      const mapel_id = String(item.mapel_id || '').trim()
+      if (!db.prepare('SELECT 1 FROM siswa WHERE id=? AND tenant_id=?').get(siswa_id, req.tenantId)) continue
+      if (!db.prepare('SELECT 1 FROM mapel WHERE id=? AND tenant_id=?').get(mapel_id, req.tenantId)) continue
+      if (item.nilai_sts != null) { const v = Math.max(0, Math.min(100, Number(item.nilai_sts)||0)); upsertSts.run(uuidv4(), siswa_id, mapel_id, tahun_ajaran, semester, v, req.tenantId) }
+      if (item.nilai_sas != null) { const v = Math.max(0, Math.min(100, Number(item.nilai_sas)||0)); upsertSas.run(uuidv4(), siswa_id, mapel_id, tahun_ajaran, semester, v, req.tenantId) }
       count++
     }
     return count
   })
   const count = trx()
   res.json({ success: true, count, message: `${count} nilai sumatif berhasil disimpan` })
-})
-
-// Sync rapor akhir semester ke RDM (Rapor Digital Madrasah)
-app.post('/api/rapor/sync-rdm', ADMIN, async (req, res) => {
-  const { rombel_id, tahun_ajaran, semester, rdm_url, nama_sheet } = req.body
-  const target = rdm_url || 'https://rapor.mtsplussd7.cc.cd/api/sync-sheets'
-  const rapors = db.prepare(`SELECT r.*, s.nis, s.nama as siswa_nama, m.nama as mapel_nama
-    FROM rapor r LEFT JOIN siswa s ON r.siswa_id=s.id LEFT JOIN mapel m ON r.mapel_id=m.id
-    WHERE r.tenant_id=? AND r.tahun_ajaran=? AND r.semester=? AND r.jenis='akhir'
-    ${rombel_id ? 'AND s.rombel_id=?' : ''} ORDER BY s.nama, m.nama`)
-    .all(...(rombel_id ? [req.tenantId, tahun_ajaran, semester, rombel_id] : [req.tenantId, tahun_ajaran, semester]))
-
-  // Group by siswa: [no, nama, nilai per mapel...]
-  const bySiswa = {}
-  rapors.forEach((r, i) => {
-    if (!bySiswa[r.siswa_id]) bySiswa[r.siswa_id] = { nis: r.nis, nama: r.siswa_nama, nilai: {} }
-    bySiswa[r.siswa_id].nilai[r.mapel_nama] = r.nilai_akhir
-  })
-  const payload = Object.values(bySiswa).map((s, idx) => ({ no: idx+1, nis: s.nis, nama: s.nama, ...s.nilai }))
-
-  const logId = uuidv4()
-  try {
-    const resp = await fetch(target, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ payload, nama_sheet: nama_sheet || 'KELAS 7 A' })
-    })
-    const txt = await resp.text()
-    db.prepare(`INSERT INTO rapor_sync_log (id, target, rombel_id, tahun_ajaran, semester, total_records, status, response, tenant_id) VALUES (?,?,?,?,?,?,?,?,?)`)
-      .run(logId, target, rombel_id||null, tahun_ajaran, semester, payload.length, resp.ok ? 'success' : 'failed', txt.slice(0, 500), req.tenantId)
-    res.json({ success: resp.ok, total: payload.length, rdm_response: txt.slice(0, 300) })
-  } catch (e) {
-    db.prepare(`INSERT INTO rapor_sync_log (id, target, rombel_id, tahun_ajaran, semester, total_records, status, response, tenant_id) VALUES (?,?,?,?,?,?,?,?,?)`)
-      .run(logId, target, rombel_id||null, tahun_ajaran, semester, payload.length, 'error', e.message, req.tenantId)
-    res.status(500).json({ error: e.message, total: payload.length })
-  }
 })
 
 // ==================== DASHBOARD STATS ====================

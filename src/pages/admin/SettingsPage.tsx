@@ -25,6 +25,7 @@ export default function SettingsPage() {
   const isSuperadmin = user?.role === 'super_admin'
   const [form, setForm] = useState({
     nama_lembaga: '', alamat: '', telepon: '', email: '',
+    kepala_sekolah: '', npsn: '', kota_cetak: '',
     theme: 'light', primary_color: '#1e40af', accent_color: '#059669', sidebar_color: '#1e293b',
     geo_latitude: '', geo_longitude: '', geo_radius: '200', jenjang: '', hari_libur: [] as string[],
     bg_size: 'cover', bg_position: 'center', bg_repeat: 'no-repeat', bg_blur: 0,
@@ -72,6 +73,7 @@ export default function SettingsPage() {
       setKts({ depan: s.kts_depan || '', belakang: s.kts_belakang || '' })
       setForm({
         nama_lembaga: s.nama_lembaga || '', alamat: s.alamat || '', telepon: s.telepon || '', email: s.email || '',
+        kepala_sekolah: s.kepala_sekolah || '', npsn: s.npsn || '', kota_cetak: s.kota_cetak || '',
         theme: s.theme || 'light', primary_color: s.primary_color || '#1e40af', accent_color: s.accent_color || '#059669', sidebar_color: s.sidebar_color || '#1e293b',
         geo_latitude: s.geo_latitude || '', geo_longitude: s.geo_longitude || '', geo_radius: s.geo_radius || '200', jenjang: s.jenjang || '',
         hari_libur: (() => { try { return JSON.parse(s.hari_libur || '[]') } catch { return [] } })(),
@@ -283,6 +285,23 @@ export default function SettingsPage() {
             <div className="min-w-0">
               <label className="block text-sm font-medium text-gray-600 mb-1">Email</label>
               <input value={form.email} onChange={e => setForm({...form, email: e.target.value})} className="w-full px-4 py-2 border rounded-lg text-sm" />
+            </div>
+          </div>
+          {/* Informasi untuk kop rapor */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div className="min-w-0">
+              <label className="block text-sm font-medium text-gray-600 mb-1">Kepala Sekolah / Pimpinan</label>
+              <input value={form.kepala_sekolah} onChange={e => setForm({...form, kepala_sekolah: e.target.value})} placeholder="Nama lengkap kepala sekolah" className="w-full px-4 py-2 border rounded-lg text-sm" />
+              <p className="text-xs text-gray-400 mt-1">Ditampilkan di tanda tangan cetak rapor</p>
+            </div>
+            <div className="min-w-0">
+              <label className="block text-sm font-medium text-gray-600 mb-1">NPSN</label>
+              <input value={form.npsn} onChange={e => setForm({...form, npsn: e.target.value})} placeholder="Nomor Pokok Sekolah Nasional" className="w-full px-4 py-2 border rounded-lg text-sm" />
+            </div>
+            <div className="min-w-0">
+              <label className="block text-sm font-medium text-gray-600 mb-1">Kota / Kabupaten (cetak)</label>
+              <input value={form.kota_cetak} onChange={e => setForm({...form, kota_cetak: e.target.value})} placeholder="Bondowoso" className="w-full px-4 py-2 border rounded-lg text-sm" />
+              <p className="text-xs text-gray-400 mt-1">Muncul di "Bondowoso, 16 September 2026" pada rapor</p>
             </div>
           </div>
           <div>

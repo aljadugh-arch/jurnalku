@@ -102,10 +102,10 @@ test('admin report actions use the registered report endpoints', () => {
   const fs = require('fs')
   const path = require('path')
   const raporPage = fs.readFileSync(path.join(__dirname, '..', 'src', 'pages', 'admin', 'RaporPage.tsx'), 'utf8')
+  // RDM sync dihapus (diganti sistem STS/SAS terpadu)
   assert.match(server, /app\.post\('\/api\/rapor\/generate', STAFF/)
-  assert.match(server, /app\.post\('\/api\/rapor\/sync-rdm', ADMIN/)
+  assert.match(server, /app\.post\('\/api\/rapor\/asesmen', STAFF/)
   assert.match(raporPage, /api\.post\('\/rapor\/generate'/)
-  assert.match(raporPage, /api\.post\('\/rapor\/sync-rdm'/)
   assert.doesNotMatch(raporPage, /api\.get\('\/rapor\/(generate|sync-rdm)'/)
 })
 

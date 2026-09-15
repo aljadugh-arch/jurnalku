@@ -57,7 +57,8 @@ import GuruJadwalPage from './pages/guru/GuruJadwalPage'
 import GuruModulAjarPage from './pages/guru/GuruModulAjarPage'
 import GuruRombelPage from './pages/guru/GuruRombelPage'
 import GuruPenilaianHarianPage from './pages/guru/GuruPenilaianHarianPage'
-import GuruNilaiSumatifPage from './pages/guru/GuruNilaiSumatifPage'
+import GuruNilaiSTSPage from './pages/guru/GuruNilaiSTSPage'
+import GuruNilaiSASPage from './pages/guru/GuruNilaiSASPage'
 import GuruKoreksiJawabanPage from './pages/guru/GuruKoreksiJawabanPage'
 import GuruPostingPage from './pages/guru/GuruPostingPage'
 import GuruCatatanKepribadianPage from './pages/guru/GuruCatatanKepribadianPage'
@@ -259,7 +260,8 @@ export default function App() {
           <Route path="modul-ajar" element={<GuruModulAjarPage />} />
           <Route path="rombel" element={<GuruRombelPage />} />
           <Route path="penilaian-harian" element={<GuruPenilaianHarianPage />} />
-          <Route path="nilai-sumatif" element={<GuruNilaiSumatifPage />} />
+          <Route path="nilai-sts" element={<GuruNilaiSTSPage />} />
+          <Route path="nilai-sas" element={<GuruNilaiSASPage />} />
           <Route path="koreksi-jawaban" element={<GuruKoreksiJawabanPage />} />
           <Route path="profile" element={<ProfilePage />} />
           <Route path="change-password" element={<ChangePasswordPage />} />

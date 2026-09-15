@@ -1,26 +1,29 @@
 import { useState, useEffect } from 'react'
 import api from '../../services/api'
-import { FileText, Zap, Download, RefreshCw, Send, Save } from 'lucide-react'
+import { FileText, Zap, Printer } from 'lucide-react'
 import FoundationTenantPicker from '../../components/FoundationTenantPicker'
 
 export default function RaporPage() {
   const [rombelList, setRombelList] = useState<any[]>([])
   const [siswaList, setSiswaList] = useState<any[]>([])
   const [rapor, setRapor] = useState<any[]>([])
+  const [settings, setSettings] = useState<any>({})
   const [selectedRombel, setSelectedRombel] = useState('')
   const [selectedSiswa, setSelectedSiswa] = useState('')
   const [tahunAjaran, setTahunAjaran] = useState('2026/2027')
   const [semester, setSemester] = useState('ganjil')
-  const [jenis, setJenis] = useState('tengah')
+  const [jenis, setJenis] = useState<'rapor_sts' | 'rapor_sas'>('rapor_sts')
   const [loading, setLoading] = useState(false)
   const [msg, setMsg] = useState('')
   const [foundationTenantId, setFoundationTenantId] = useState<string | null>(null)
-  const [stsSas, setStsSas] = useState<Record<string, { sts: number | ''; sas: number | '' }>>({})
-  const [savingStsSas, setSavingStsSas] = useState(false)
 
-  useEffect(() => { loadRombel() }, [foundationTenantId])
+  useEffect(() => { loadRombel(); loadSettings() }, [foundationTenantId])
   useEffect(() => { if (selectedRombel) loadSiswa() }, [selectedRombel, foundationTenantId])
   useEffect(() => { if (selectedSiswa) loadRapor() }, [selectedSiswa, tahunAjaran, semester, jenis, foundationTenantId])
+
+  const loadSettings = async () => {
+    try { const { data } = await api.get('/settings'); setSettings(data) } catch {}
+  }
 
   const loadRombel = async () => {
     try {
@@ -30,44 +33,28 @@ export default function RaporPage() {
       setRombelList(data)
     } catch (e) { console.error(e) }
   }
+
   const loadSiswa = async () => {
     try {
       const params: any = { rombel_id: selectedRombel }
       if (foundationTenantId && foundationTenantId !== 'all') params.tenant_id = foundationTenantId
-      const { data } = await api.get(foundationTenantId ? '/foundation/students' : `/siswa`, { params })
-      setSiswaList(data)
-      setSelectedSiswa('')
+      const { data } = await api.get(foundationTenantId ? '/foundation/students' : '/siswa', { params })
+      setSiswaList(data); setSelectedSiswa('')
     } catch (e) { console.error(e) }
   }
-  const loadRapor = async () => {
-      try {
-        const params: any = { siswa_id: selectedSiswa, tahun_ajaran: tahunAjaran, semester, jenis }
-        if (foundationTenantId && foundationTenantId !== 'all') params.tenant_id = foundationTenantId
-        const { data } = await api.get(foundationTenantId ? '/foundation/nilai' : '/rapor', { params })
-        setRapor(data)
-        const seed: Record<string, { sts: number | ''; sas: number | '' }> = {}
-        for (const r of data) seed[r.mapel_id] = { sts: r.nilai_sts || '', sas: r.nilai_sas || '' }
-        setStsSas(seed)
-      } catch (e) { console.error(e) }
-    }
 
-    const saveStsSas = async () => {
-      const items = rapor
-        .filter(r => stsSas[r.mapel_id])
-        .map(r => ({ siswa_id: selectedSiswa, mapel_id: r.mapel_id, nilai_sts: stsSas[r.mapel_id]?.sts, nilai_sas: stsSas[r.mapel_id]?.sas }))
-      if (!items.length || foundationTenantId) return setMsg(foundationTenantId ? '✗ Input nilai sumatif hanya untuk data lembaga sendiri (non-yayasan)' : '✗ Belum ada mapel untuk disimpan')
-      setSavingStsSas(true); setMsg('')
-      try {
-        const { data } = await api.post('/rapor/nilai-sumatif', { tahun_ajaran: tahunAjaran, semester, items })
-        setMsg(`✓ ${data.message}`)
-        loadRapor()
-      } catch (e: any) {
-        setMsg(`✗ ${e.response?.data?.error || 'Gagal simpan nilai sumatif'}`)
-      } finally { setSavingStsSas(false) }
-    }
+  const loadRapor = async () => {
+    try {
+      const params: any = { siswa_id: selectedSiswa, tahun_ajaran: tahunAjaran, semester, jenis }
+      if (foundationTenantId && foundationTenantId !== 'all') params.tenant_id = foundationTenantId
+      const { data } = await api.get(foundationTenantId ? '/foundation/nilai' : '/rapor', { params })
+      setRapor(data)
+    } catch (e) { console.error(e) }
+  }
 
   const handleGenerate = async () => {
     if (!selectedRombel) return setMsg('Pilih kelas dulu')
+    if (foundationTenantId) return setMsg('✗ Generate rapor hanya untuk data lembaga sendiri')
     setLoading(true); setMsg('')
     try {
       const { data } = await api.post('/rapor/generate', { rombel_id: selectedRombel, tahun_ajaran: tahunAjaran, semester, jenis })
@@ -78,52 +65,48 @@ export default function RaporPage() {
     } finally { setLoading(false) }
   }
 
-  const handleSyncRDM = async () => {
-    if (!confirm(`Sync rapor akhir semester ke RDM (Rapor Digital Madrasah)? Kelas: ${rombelList.find(r=>r.id===selectedRombel)?.nama}`)) return
-    setLoading(true); setMsg('')
-    try {
-      const namaSheet = `KELAS ${rombelList.find(r=>r.id===selectedRombel)?.nama || '7 A'}`
-      const { data } = await api.post('/rapor/sync-rdm', { rombel_id: selectedRombel, tahun_ajaran: tahunAjaran, semester, nama_sheet: namaSheet })
-      setMsg(`✓ Sync RDM berhasil: ${data.total} data. Respons: ${data.rdm_response}`)
-    } catch (e: any) {
-      setMsg(`✗ Sync gagal: ${e.response?.data?.error || 'Error'}`)
-    } finally { setLoading(false) }
-  }
-
   const handlePrint = () => window.print()
 
+  const siswa = siswaList.find(s => s.id === selectedSiswa)
+  const rombel = rombelList.find(r => r.id === selectedRombel)
   const rataAkhir = rapor.length ? Math.round(rapor.reduce((s, r) => s + (r.nilai_akhir || 0), 0) / rapor.length) : 0
+  const jenisLabel = jenis === 'rapor_sas' ? 'AKHIR SEMESTER (SAS)' : 'TENGAH SEMESTER (STS)'
+  const formulaLabel = jenis === 'rapor_sas'
+    ? 'Nilai Akhir = (Nilai Harian × 40%) + (Asesmen STS × 20%) + (Asesmen SAS × 40%)'
+    : 'Nilai Akhir = (Nilai Harian × 60%) + (Asesmen STS × 40%)'
+
+  // Tentukan tanggal cetak
+  const now = new Date()
+  const tanggalCetak = `${settings.kota_cetak || 'Bondowoso'}, ${now.toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}`
 
   return (
     <div className="space-y-6">
+      {/* Header — disembunyikan saat print */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between print:hidden">
         <div className="min-w-0">
           <h1 className="text-2xl font-display font-bold text-gray-800">Rapor Siswa</h1>
-          <p className="text-gray-500 mt-1 text-sm">Rapor tengah semester (auto-generate dari penilaian harian) &amp; rapor akhir semester (sync ke RDM)</p>
+          <p className="text-gray-500 mt-1 text-sm">
+            Generate &amp; cetak rapor STS atau SAS dari penilaian harian + nilai asesmen guru
+          </p>
         </div>
         <div className="flex flex-wrap gap-2 shrink-0">
-          <button onClick={handleGenerate} disabled={loading || !selectedRombel} className="px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary-dark flex items-center gap-2 disabled:opacity-50">
-            <Zap size={16} /> Generate Rapor
+          <button onClick={handleGenerate} disabled={loading || !selectedRombel}
+            className="px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary-dark flex items-center gap-2 disabled:opacity-50">
+            <Zap size={16} /> {loading ? 'Memproses...' : `Generate Rapor ${jenis === 'rapor_sas' ? 'SAS' : 'STS'}`}
           </button>
-          {jenis === 'sumatif' && (
-            <button onClick={saveStsSas} disabled={savingStsSas || !selectedSiswa} className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 flex items-center gap-2 disabled:opacity-50">
-              <Save size={16} /> {savingStsSas ? 'Menyimpan...' : 'Simpan Nilai STS/SAS'}
-            </button>
-          )}
-          {jenis === 'akhir' && (
-            <button onClick={handleSyncRDM} disabled={loading || !selectedRombel} className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 flex items-center gap-2 disabled:opacity-50">
-              <Send size={16} /> Sync ke RDM
-            </button>
-          )}
-          <button onClick={handlePrint} disabled={rapor.length === 0} className="px-4 py-2 border rounded-lg hover:bg-gray-50 flex items-center gap-2 disabled:opacity-50">
-            <Download size={16} /> Cetak
+          <button onClick={handlePrint} disabled={rapor.length === 0}
+            className="px-4 py-2 border rounded-lg hover:bg-gray-50 flex items-center gap-2 disabled:opacity-50">
+            <Printer size={16} /> Cetak
           </button>
         </div>
       </div>
 
-      {msg && <div className={`p-4 rounded-lg border print:hidden ${msg.startsWith('✓') ? 'bg-green-50 border-green-200 text-green-700' : 'bg-red-50 border-red-200 text-red-700'}`}>{msg}</div>}
+      {msg && (
+        <div className={`p-4 rounded-lg border print:hidden ${msg.startsWith('✓') ? 'bg-green-50 border-green-200 text-green-700' : 'bg-red-50 border-red-200 text-red-700'}`}>
+          {msg}
+        </div>
+      )}
 
-      {/* Foundation Tenant Picker (Cross-tenant data) */}
       <FoundationTenantPicker
         selectedTenantId={foundationTenantId}
         onSelectTenant={setFoundationTenantId}
@@ -131,6 +114,7 @@ export default function RaporPage() {
         allOptionLabel="Semua lembaga yayasan (gabungan)"
       />
 
+      {/* Filter panel */}
       <div className="bg-white rounded-xl shadow-sm border p-6 print:hidden">
         <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
           <div>
@@ -159,47 +143,85 @@ export default function RaporPage() {
             </select>
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Jenis</label>
-            <select value={jenis} onChange={e => setJenis(e.target.value)} className="w-full px-3 py-2 border rounded-lg">
-              <option value="tengah">Tengah Semester (PTS)</option>
-              <option value="akhir">Akhir Semester (PAS)</option>
-              <option value="sumatif">Sumatif (STS/SAS)</option>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Jenis Rapor</label>
+            <select value={jenis} onChange={e => setJenis(e.target.value as any)} className="w-full px-3 py-2 border rounded-lg">
+              <option value="rapor_sts">Rapor STS (Tengah Semester)</option>
+              <option value="rapor_sas">Rapor SAS (Akhir Semester)</option>
             </select>
           </div>
         </div>
       </div>
 
+      {/* ======= AREA CETAK ======= */}
       {selectedSiswa && rapor.length > 0 && (
-        <div className="bg-white rounded-xl shadow-sm border overflow-hidden print:shadow-none print:border-black">
-          <div className="p-6 border-b bg-gradient-to-r from-primary/5 to-indigo-500/5">
-            <div className="text-center">
-              <h2 className="text-xl font-bold font-display">RAPOR {jenis === 'tengah' ? 'TENGAH' : 'AKHIR'} SEMESTER</h2>
-              <p className="text-gray-600 mt-1">Semester {semester.toUpperCase()} - Tahun Ajaran {tahunAjaran}</p>
-              <div className="mt-4 grid grid-cols-2 gap-4 text-left max-w-md mx-auto text-sm">
-                <div><span className="text-gray-500">Nama:</span> <strong>{siswaList.find(s => s.id === selectedSiswa)?.nama}</strong></div>
-                <div><span className="text-gray-500">NIS:</span> <strong>{siswaList.find(s => s.id === selectedSiswa)?.nis}</strong></div>
-                <div><span className="text-gray-500">Kelas:</span> <strong>{rombelList.find(r => r.id === selectedRombel)?.nama}</strong></div>
-                <div><span className="text-gray-500">Rata-rata:</span> <strong className="text-primary text-lg">{rataAkhir}</strong></div>
+        <div className="bg-white rounded-xl shadow-sm border overflow-hidden print:shadow-none print:border-0 print:rounded-none">
+
+          {/* KOP LEMBAGA */}
+          <div className="p-6 border-b print:border-b-2 print:border-black">
+            <div className="flex items-center gap-4">
+              {settings.logo && (
+                <img
+                  src={settings.logo}
+                  alt="Logo"
+                  className="w-20 h-20 object-contain shrink-0"
+                  onError={e => { (e.target as HTMLImageElement).style.display = 'none' }}
+                />
+              )}
+              <div className="flex-1 text-center">
+                <div className="text-xs font-medium text-gray-500 uppercase tracking-wide print:text-black">
+                  RAPOR {jenisLabel}
+                </div>
+                <h2 className="text-xl font-bold mt-1 text-gray-900 print:text-2xl">
+                  {settings.nama_lembaga || 'Nama Lembaga'}
+                </h2>
+                {settings.npsn && (
+                  <div className="text-sm text-gray-600">NPSN: {settings.npsn}</div>
+                )}
+                {settings.alamat && (
+                  <div className="text-sm text-gray-600">{settings.alamat}</div>
+                )}
+                {(settings.telepon || settings.email) && (
+                  <div className="text-sm text-gray-500">
+                    {settings.telepon && `Telp: ${settings.telepon}`}
+                    {settings.telepon && settings.email && ' · '}
+                    {settings.email}
+                  </div>
+                )}
               </div>
+              {/* spacer agar logo seimbang */}
+              {settings.logo && <div className="w-20 shrink-0" />}
             </div>
           </div>
-          {/* Desktop: table */}
-          <div className="hidden md:block overflow-x-auto -mx-2 px-2">
+
+          {/* Info semester */}
+          <div className="px-6 py-3 bg-primary/5 text-center text-sm text-gray-700 border-b print:bg-white print:border-b print:border-gray-300">
+            Semester <strong>{semester.toUpperCase()}</strong> — Tahun Ajaran <strong>{tahunAjaran}</strong>
+          </div>
+
+          {/* Identitas siswa */}
+          <div className="p-6 border-b">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm max-w-2xl mx-auto">
+              <div><span className="text-gray-500">Nama</span><br /><strong>{siswa?.nama}</strong></div>
+              <div><span className="text-gray-500">NIS</span><br /><strong>{siswa?.nis}</strong></div>
+              <div><span className="text-gray-500">Kelas</span><br /><strong>{rombel?.nama}</strong></div>
+              <div><span className="text-gray-500">Rata-rata</span><br /><strong className="text-primary text-lg">{rataAkhir}</strong></div>
+            </div>
+          </div>
+
+          {/* Tabel nilai */}
+          <div className="overflow-x-auto">
             <table className="w-full">
-              <thead className="bg-gray-50">
+              <thead className="bg-gray-50 print:bg-gray-100">
                 <tr>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">No</th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Mata Pelajaran</th>
-                  {jenis === 'sumatif' ? (<>
-                    <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Nilai STS</th>
-                    <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Nilai SAS</th>
-                  </>) : (<>
-                    <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Peng.</th>
-                    <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Ket.</th>
-                    <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Sikap</th>
-                    <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase bg-primary/10">Akhir</th>
-                    <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Predikat</th>
-                  </>)}
+                  <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Nilai Harian</th>
+                  <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Asesmen STS</th>
+                  {jenis === 'rapor_sas' && (
+                    <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Asesmen SAS</th>
+                  )}
+                  <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase bg-primary/10 print:bg-blue-100">Nilai Akhir</th>
+                  <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Predikat</th>
                 </tr>
               </thead>
               <tbody className="divide-y">
@@ -207,64 +229,52 @@ export default function RaporPage() {
                   <tr key={r.id} className="hover:bg-gray-50">
                     <td className="px-4 py-3 text-sm text-gray-500">{i + 1}</td>
                     <td className="px-4 py-3 text-sm font-medium text-gray-900">{r.mapel_nama}</td>
-                    {jenis === 'sumatif' ? (<>
-                      <td className="px-4 py-3 text-center text-sm"><input type="number" min={0} max={100} value={stsSas[r.mapel_id]?.sts ?? ''} onChange={e => setStsSas(prev => ({ ...prev, [r.mapel_id]: { sts: e.target.value === '' ? '' : Math.max(0, Math.min(100, Number(e.target.value))), sas: prev[r.mapel_id]?.sas ?? '' } }))} className="w-20 px-2 py-1 border rounded text-center" /></td>
-                      <td className="px-4 py-3 text-center text-sm"><input type="number" min={0} max={100} value={stsSas[r.mapel_id]?.sas ?? ''} onChange={e => setStsSas(prev => ({ ...prev, [r.mapel_id]: { sts: prev[r.mapel_id]?.sts ?? '', sas: e.target.value === '' ? '' : Math.max(0, Math.min(100, Number(e.target.value))) } }))} className="w-20 px-2 py-1 border rounded text-center" /></td>
-                    </>) : (<>
-                      <td className="px-4 py-3 text-center text-sm">{r.nilai_pengetahuan}</td>
-                      <td className="px-4 py-3 text-center text-sm">{r.nilai_keterampilan}</td>
-                      <td className="px-4 py-3 text-center text-sm">{r.nilai_sikap}</td>
-                      <td className="px-4 py-3 text-center text-lg font-bold text-primary bg-primary/5">{r.nilai_akhir}</td>
-                      <td className="px-4 py-3 text-center">
-                        <span className={`px-2 py-1 rounded text-xs font-bold ${r.predikat === 'A' ? 'bg-green-100 text-green-700' : r.predikat === 'B' ? 'bg-blue-100 text-blue-700' : r.predikat === 'C' ? 'bg-yellow-100 text-yellow-700' : 'bg-red-100 text-red-700'}`}>
-                          {r.predikat}
-                        </span>
-                      </td>
-                    </>)}
+                    <td className="px-4 py-3 text-center text-sm">{r.nilai_harian ?? '-'}</td>
+                    <td className="px-4 py-3 text-center text-sm">{r.nilai_sts ?? '-'}</td>
+                    {jenis === 'rapor_sas' && (
+                      <td className="px-4 py-3 text-center text-sm">{r.nilai_sas ?? '-'}</td>
+                    )}
+                    <td className="px-4 py-3 text-center text-lg font-bold text-primary bg-primary/5 print:bg-blue-50">{r.nilai_akhir}</td>
+                    <td className="px-4 py-3 text-center">
+                      <span className={`px-2 py-1 rounded text-xs font-bold ${r.predikat === 'A' ? 'bg-green-100 text-green-700' : r.predikat === 'B' ? 'bg-blue-100 text-blue-700' : r.predikat === 'C' ? 'bg-yellow-100 text-yellow-700' : 'bg-red-100 text-red-700'}`}>
+                        {r.predikat}
+                      </span>
+                    </td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
 
-          {/* Mobile: cards */}
-          <div className="md:hidden p-3 space-y-2.5">
-            {rapor.map((r, i) => (
-              <div key={r.id} className="bg-gray-50 rounded-lg p-3 border border-gray-100">
-                <div className="flex items-start justify-between gap-2 mb-2">
-                  <p className="font-medium text-gray-900 text-sm min-w-0 break-words">{i + 1}. {r.mapel_nama}</p>
-                </div>
-                {jenis === 'sumatif' ? (
-                  <div className="grid grid-cols-2 gap-2">
-                    <div>
-                      <p className="text-xs text-gray-500">Nilai STS</p>
-                      <input type="number" min={0} max={100} value={stsSas[r.mapel_id]?.sts ?? ''} onChange={e => setStsSas(prev => ({ ...prev, [r.mapel_id]: { sts: e.target.value === '' ? '' : Math.max(0, Math.min(100, Number(e.target.value))), sas: prev[r.mapel_id]?.sas ?? '' } }))} className="w-full px-2 py-1.5 border rounded text-sm" />
-                    </div>
-                    <div>
-                      <p className="text-xs text-gray-500">Nilai SAS</p>
-                      <input type="number" min={0} max={100} value={stsSas[r.mapel_id]?.sas ?? ''} onChange={e => setStsSas(prev => ({ ...prev, [r.mapel_id]: { sts: prev[r.mapel_id]?.sts ?? '', sas: e.target.value === '' ? '' : Math.max(0, Math.min(100, Number(e.target.value))) } }))} className="w-full px-2 py-1.5 border rounded text-sm" />
-                    </div>
-                  </div>
-                ) : (
-                  <div className="grid grid-cols-4 gap-1 text-center text-xs">
-                    <div><p className="text-gray-500">Peng.</p><p className="font-medium">{r.nilai_pengetahuan}</p></div>
-                    <div><p className="text-gray-500">Ket.</p><p className="font-medium">{r.nilai_keterampilan}</p></div>
-                    <div><p className="text-gray-500">Sikap</p><p className="font-medium">{r.nilai_sikap}</p></div>
-                    <div className="bg-primary/5 rounded"><p className="text-gray-500">Akhir</p><p className="font-bold text-primary">{r.nilai_akhir}</p></div>
-                  </div>
+          {/* Footer: formula + tanda tangan */}
+          <div className="p-6 border-t bg-gray-50 print:bg-white">
+            <p className="text-xs text-gray-500 mb-6">
+              <strong>Formula:</strong> {formulaLabel} &nbsp;·&nbsp;
+              <strong>Predikat:</strong> A ≥ 90 | B ≥ 80 | C ≥ 70 | D &lt; 70
+            </p>
+
+            {/* Tanda tangan */}
+            <div className="flex justify-between mt-4 text-sm">
+              <div className="text-center min-w-[180px]">
+                <p className="text-gray-600">Mengetahui,</p>
+                <p className="text-gray-600">Orang Tua / Wali</p>
+                <div className="mt-16 border-b border-gray-400 w-40 mx-auto" />
+                <p className="mt-1 text-gray-700">( ________________________ )</p>
+              </div>
+              <div className="text-center min-w-[180px]">
+                <p className="text-gray-600">{tanggalCetak}</p>
+                <p className="text-gray-600">
+                  {settings.kepala_sekolah ? 'Kepala' : 'Wali Kelas'}
+                </p>
+                <div className="mt-16 border-b border-gray-400 w-40 mx-auto" />
+                <p className="mt-1 font-semibold text-gray-900">
+                  {settings.kepala_sekolah || '_____________________'}
+                </p>
+                {settings.kepala_sekolah && (
+                  <p className="text-xs text-gray-500">Kepala {settings.nama_lembaga || 'Lembaga'}</p>
                 )}
               </div>
-            ))}
-          </div>
-          <div className="p-6 border-t bg-gray-50 text-xs text-gray-600">
-            {jenis === 'sumatif' ? (
-              <p><strong>STS:</strong> Sumatif Tengah Semester · <strong>SAS:</strong> Sumatif Akhir Semester. Nilai ini dipakai saat Generate Rapor (tengah/akhir).</p>
-            ) : (
-              <>
-                <p><strong>Formula:</strong> Nilai Akhir = (Pengetahuan × 50%) + (Keterampilan × 30%) + (Sikap × 20%)</p>
-                <p className="mt-1"><strong>Predikat:</strong> A ≥ 90 | B ≥ 80 | C ≥ 70 | D &lt; 70</p>
-              </>
-            )}
+            </div>
           </div>
         </div>
       )}
@@ -272,9 +282,7 @@ export default function RaporPage() {
       {selectedSiswa && rapor.length === 0 && (
         <div className="bg-white rounded-xl border p-12 text-center text-gray-400">
           <FileText size={48} className="mx-auto mb-4 opacity-50" />
-          {jenis === 'sumatif'
-            ? <p>Belum ada nilai sumatif. Isi STS dan SAS lalu klik <strong>Simpan Nilai STS/SAS</strong>.</p>
-            : <p>Belum ada rapor. Klik <strong>Generate Rapor</strong> untuk auto-generate dari penilaian harian.</p>}
+          <p>Belum ada rapor. Klik <strong>Generate Rapor {jenis === 'rapor_sas' ? 'SAS' : 'STS'}</strong> untuk auto-generate dari penilaian harian + asesmen guru.</p>
         </div>
       )}
 

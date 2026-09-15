@@ -109,21 +109,22 @@ test('sync anggota wajib menolak siswa di luar scope rombel dan mengecualikan si
   db.close()
 })
 
-test('rapor mendukung input nilai sumatif STS dan SAS', () => {
-  assert.match(indexSource, /post\('\/api\/rapor\/nilai-sumatif'/, 'endpoint input nilai sumatif ada')
+test('rapor mendukung input nilai asesmen STS dan SAS', () => {
+  assert.match(indexSource, /post\('\/api\/rapor\/asesmen'/, 'endpoint input asesmen STS/SAS ada')
   assert.match(indexSource, /nilai_sts|nilai_sas/, 'kolom STS/SAS dipakai')
-  assert.match(indexSource, /ON CONFLICT\(siswa_id, mapel_id, tahun_ajaran, semester, jenis\)/, 'upsert sumatif ada')
+  assert.match(indexSource, /ON CONFLICT\(siswa_id, mapel_id, tahun_ajaran, semester, jenis\)/, 'upsert asesmen ada')
 })
 
-test('UI rapor menawarkan mode sumatif (STS/SAS) dan input kolom STS/SAS', () => {
+test('UI rapor menawarkan mode rapor_sts dan rapor_sas', () => {
   const raporPage = fs.readFileSync(path.join(__dirname, '..', 'src', 'pages', 'admin', 'RaporPage.tsx'), 'utf8')
-  assert.match(raporPage, /value="sumatif"/, 'opsi jenis sumatif di UI')
-  assert.match(raporPage, /Nilai STS/, 'header kolom STS')
-  assert.match(raporPage, /Nilai SAS/, 'header kolom SAS')
-  assert.match(raporPage, /stsSas\[r\.mapel_id\]/, 'input per-mapel terhubung ke state STS/SAS')
+  assert.match(raporPage, /value="rapor_sts"/, 'opsi jenis rapor_sts di UI')
+  assert.match(raporPage, /value="rapor_sas"/, 'opsi jenis rapor_sas di UI')
+  assert.match(raporPage, /Asesmen STS/, 'header kolom Asesmen STS')
+  assert.match(raporPage, /Asesmen SAS/, 'header kolom Asesmen SAS')
 })
 
-test('generate rapor memadukan STS/SAS bila tersedia pada nilai akhir', () => {
-  assert.match(indexSource, /stsRow\?\.nilai_sts/, 'generate membaca STS yang tersimpan')
-  assert.match(indexSource, /sts \|\| sas/, 'generate memasukkan STS/SAS ke nilai akhir')
+test('generate rapor STS menggunakan formula nilai_harian*0.6 + asesmen_STS*0.4', () => {
+  assert.match(indexSource, /getAsesmenNilai/, 'generate membaca asesmen STS/SAS yang tersimpan')
+  assert.match(indexSource, /nilaiHarian \* 0\.6/, 'formula STS: harian*60%')
+  assert.match(indexSource, /nilaiSTS \* 0\.4/, 'formula STS: asesmen*40%')
 })

@@ -12,11 +12,12 @@ const serverIndex = read('server/index.cjs')
 const geminiTts = read('server/gemini-tts.cjs')
 const feedbackSound = read('src/lib/feedbackSound.ts')
 
-test('menu Nilai STS/SAS guru terdaftar di sidebar/menu lengkap (regresi sumber kebenaran)', () => {
-  assert.match(menuItems, /nilai-sumatif/, 'menuItems.tsx harus mendaftarkan path nilai sumatif untuk guru')
+test('menu Nilai STS dan SAS guru terdaftar di sidebar/menu lengkap (regresi sumber kebenaran)', () => {
+  assert.match(menuItems, /nilai-sts/, 'menuItems.tsx harus mendaftarkan path nilai-sts untuk guru')
+  assert.match(menuItems, /nilai-sas/, 'menuItems.tsx harus mendaftarkan path nilai-sas untuk guru')
 })
 
-test('bottom navigation mobile guru menampilkan menu Nilai STS/SAS (bug: hilang di mobile/tablet)', () => {
+test('bottom navigation mobile guru menampilkan menu Nilai STS dan SAS (bug: hilang di mobile/tablet)', () => {
   // roleItems() di BottomNavigation.tsx adalah daftar TERPISAH dari menuItems.tsx
   // (bukan derivasi/flatten dari sumber yang sama) — jadi menu baru wajib
   // ditambahkan manual di sini juga, atau akan hilang khusus di tampilan
@@ -25,8 +26,8 @@ test('bottom navigation mobile guru menampilkan menu Nilai STS/SAS (bug: hilang 
     bottomNav.indexOf("role === 'guru' || role === 'wali_kelas'"),
     bottomNav.indexOf("if (role === 'siswa'")
   )
-  assert.match(teacherBlock, /\/guru\/nilai-sumatif/, 'path nilai sumatif harus ada di daftar nav mobile guru')
-  assert.match(teacherBlock, /STS\/SAS/, 'label STS/SAS harus ada di nav mobile guru')
+  assert.match(teacherBlock, /\/guru\/nilai-sts/, 'path nilai-sts harus ada di daftar nav mobile guru')
+  assert.match(teacherBlock, /\/guru\/nilai-sas/, 'path nilai-sas harus ada di daftar nav mobile guru')
 })
 
 test('gemini-tts.cjs menyediakan generateTtsAudio dengan cache berbasis hash dan konversi PCM ke WAV', () => {
