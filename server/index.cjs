@@ -538,6 +538,114 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_rapor_semester ON rapor(tahun_ajaran, semester, jenis);
   CREATE UNIQUE INDEX IF NOT EXISTS idx_rapor_unique ON rapor(siswa_id, mapel_id, tahun_ajaran, semester, jenis);
 
+  // ==================== BANK SOAL & UJIAN ====================
+  CREATE TABLE IF NOT EXISTS bank_soal (
+    id TEXT PRIMARY KEY,
+    mapel_id TEXT NOT NULL,
+    tingkat TEXT DEFAULT '',
+    tipe TEXT NOT NULL DEFAULT 'pg',
+    level_kognitif TEXT DEFAULT 'C1',
+    kompetensi_dasar TEXT DEFAULT '',
+    indikator TEXT DEFAULT '',
+    soal TEXT NOT NULL,
+    opsi TEXT DEFAULT '[]',
+    kunci_jawaban TEXT DEFAULT '',
+    skor INTEGER DEFAULT 1,
+    pembahasan TEXT DEFAULT '',
+    media TEXT DEFAULT '',
+    tenant_id TEXT NOT NULL DEFAULT 'default',
+    created_by TEXT DEFAULT '',
+    created_at TEXT DEFAULT (datetime('now')),
+    updated_at TEXT,
+    FOREIGN KEY (mapel_id) REFERENCES mapel(id)
+  );
+  CREATE INDEX IF NOT EXISTS idx_bank_soal_tenant ON bank_soal(tenant_id);
+  CREATE INDEX IF NOT EXISTS idx_bank_soal_mapel ON bank_soal(mapel_id, tenant_id);
+  CREATE INDEX IF NOT EXISTS idx_bank_soal_tipe ON bank_soal(tipe, tenant_id);
+
+  CREATE TABLE IF NOT EXISTS kisi_kisi (
+    id TEXT PRIMARY KEY,
+    nama TEXT NOT NULL,
+    mapel_id TEXT NOT NULL,
+    tingkat TEXT DEFAULT '',
+    jenis_ujian TEXT DEFAULT 'sts',
+    tahun_ajaran TEXT DEFAULT '',
+    semester TEXT DEFAULT '',
+    items TEXT DEFAULT '[]',
+    tenant_id TEXT NOT NULL DEFAULT 'default',
+    created_by TEXT DEFAULT '',
+    created_at TEXT DEFAULT (datetime('now')),
+    updated_at TEXT,
+    FOREIGN KEY (mapel_id) REFERENCES mapel(id)
+  );
+  CREATE INDEX IF NOT EXISTS idx_kisi_kisi_tenant ON kisi_kisi(tenant_id);
+
+  CREATE TABLE IF NOT EXISTS paket_ujian (
+    id TEXT PRIMARY KEY,
+    nama TEXT NOT NULL,
+    mapel_id TEXT NOT NULL,
+    jenis TEXT NOT NULL DEFAULT 'sts',
+    model TEXT NOT NULL DEFAULT 'online',
+    tingkat TEXT DEFAULT '',
+    tahun_ajaran TEXT DEFAULT '',
+    semester TEXT DEFAULT '',
+    durasi_menit INTEGER DEFAULT 90,
+    acak_soal INTEGER DEFAULT 0,
+    acak_opsi INTEGER DEFAULT 0,
+    tampil_nilai INTEGER DEFAULT 1,
+    tampil_pembahasan INTEGER DEFAULT 0,
+    soal_ids TEXT DEFAULT '[]',
+    rombel_ids TEXT DEFAULT '[]',
+    kisi_kisi_id TEXT,
+    password TEXT DEFAULT '',
+    status TEXT DEFAULT 'draft',
+    mulai TEXT,
+    selesai TEXT,
+    tenant_id TEXT NOT NULL DEFAULT 'default',
+    created_by TEXT DEFAULT '',
+    created_at TEXT DEFAULT (datetime('now')),
+    updated_at TEXT,
+    FOREIGN KEY (mapel_id) REFERENCES mapel(id)
+  );
+  CREATE INDEX IF NOT EXISTS idx_paket_ujian_tenant ON paket_ujian(tenant_id);
+  CREATE INDEX IF NOT EXISTS idx_paket_ujian_status ON paket_ujian(status, tenant_id);
+
+  CREATE TABLE IF NOT EXISTS jawaban_ujian (
+    id TEXT PRIMARY KEY,
+    paket_id TEXT NOT NULL,
+    siswa_id TEXT NOT NULL,
+    soal_id TEXT NOT NULL,
+    jawaban TEXT DEFAULT '',
+    skor INTEGER,
+    skor_manual INTEGER,
+    komentar_koreksi TEXT DEFAULT '',
+    tenant_id TEXT NOT NULL DEFAULT 'default',
+    created_at TEXT DEFAULT (datetime('now')),
+    updated_at TEXT,
+    FOREIGN KEY (paket_id) REFERENCES paket_ujian(id),
+    FOREIGN KEY (siswa_id) REFERENCES siswa(id),
+    FOREIGN KEY (soal_id) REFERENCES bank_soal(id)
+  );
+  CREATE INDEX IF NOT EXISTS idx_jawaban_ujian_paket ON jawaban_ujian(paket_id, siswa_id, tenant_id);
+  CREATE UNIQUE INDEX IF NOT EXISTS idx_jawaban_ujian_unique ON jawaban_ujian(paket_id, siswa_id, soal_id);
+
+  CREATE TABLE IF NOT EXISTS sesi_ujian (
+    id TEXT PRIMARY KEY,
+    paket_id TEXT NOT NULL,
+    siswa_id TEXT NOT NULL,
+    mulai TEXT,
+    selesai TEXT,
+    status TEXT DEFAULT 'belum',
+    skor_total INTEGER DEFAULT 0,
+    skor_max INTEGER DEFAULT 0,
+    tenant_id TEXT NOT NULL DEFAULT 'default',
+    created_at TEXT DEFAULT (datetime('now')),
+    FOREIGN KEY (paket_id) REFERENCES paket_ujian(id),
+    FOREIGN KEY (siswa_id) REFERENCES siswa(id)
+  );
+  CREATE INDEX IF NOT EXISTS idx_sesi_ujian_paket ON sesi_ujian(paket_id, siswa_id, tenant_id);
+  CREATE UNIQUE INDEX IF NOT EXISTS idx_sesi_ujian_unique ON sesi_ujian(paket_id, siswa_id);
+
   CREATE TABLE IF NOT EXISTS catatan_kepribadian (
     id TEXT PRIMARY KEY,
     siswa_id TEXT NOT NULL,
@@ -6467,6 +6575,321 @@ app.post('/api/rapor/nilai-sumatif', STAFF, (req, res) => {
   })
   const count = trx()
   res.json({ success: true, count, message: `${count} nilai sumatif berhasil disimpan` })
+})
+
+// ==================== BANK SOAL & UJIAN ====================
+const EXAM_ROLES = requireRole('guru', 'wali_kelas', 'admin', 'super_admin', 'kepala', 'operator', 'tata_usaha', 'tu', 'siswa', 'wali_murid')
+
+// --- Bank Soal CRUD ---
+app.get('/api/bank-soal', EXAM_ROLES, (req, res) => {
+  const { mapel_id, tipe, tingkat, level_kognitif, search } = req.query
+  let sql = 'SELECT bs.*, m.nama as mapel_nama, m.kode as mapel_kode FROM bank_soal bs LEFT JOIN mapel m ON bs.mapel_id = m.id WHERE bs.tenant_id = ?'
+  const params = [req.tenantId]
+  if (mapel_id) { sql += ' AND bs.mapel_id = ?'; params.push(mapel_id) }
+  if (tipe) { sql += ' AND bs.tipe = ?'; params.push(tipe) }
+  if (tingkat) { sql += ' AND bs.tingkat = ?'; params.push(tingkat) }
+  if (level_kognitif) { sql += ' AND bs.level_kognitif = ?'; params.push(level_kognitif) }
+  if (search) { sql += ' AND (bs.soal LIKE ? OR bs.kompetensi_dasar LIKE ? OR bs.indikator LIKE ?)'; const s = `%${search}%`; params.push(s, s, s) }
+  sql += ' ORDER BY bs.created_at DESC'
+  res.json(db.prepare(sql).all(...params))
+})
+
+app.post('/api/bank-soal', STAFF, (req, res) => {
+  const { mapel_id, tingkat, tipe, level_kognitif, kompetensi_dasar, indikator, soal, opsi, kunci_jawaban, skor, pembahasan, media } = req.body
+  if (!mapel_id || !soal) return res.status(400).json({ error: 'Mapel dan soal wajib diisi' })
+  const validTipe = ['pg', 'pg_kompleks', 'isian', 'uraian']
+  const t = validTipe.includes(tipe) ? tipe : 'pg'
+  const id = uuidv4()
+  db.prepare(`INSERT INTO bank_soal (id, mapel_id, tingkat, tipe, level_kognitif, kompetensi_dasar, indikator, soal, opsi, kunci_jawaban, skor, pembahasan, media, tenant_id, created_by) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
+    .run(id, mapel_id, tingkat || '', t, level_kognitif || 'C1', kompetensi_dasar || '', indikator || '', soal, JSON.stringify(opsi || []), kunci_jawaban || '', skor || 1, pembahasan || '', media || '', req.tenantId, req.user?.id || '')
+  res.json({ id })
+})
+
+app.put('/api/bank-soal/:id', STAFF, (req, res) => {
+  const { mapel_id, tingkat, tipe, level_kognitif, kompetensi_dasar, indikator, soal, opsi, kunci_jawaban, skor, pembahasan, media } = req.body
+  const validTipe = ['pg', 'pg_kompleks', 'isian', 'uraian']
+  const t = validTipe.includes(tipe) ? tipe : 'pg'
+  const r = db.prepare(`UPDATE bank_soal SET mapel_id=?, tingkat=?, tipe=?, level_kognitif=?, kompetensi_dasar=?, indikator=?, soal=?, opsi=?, kunci_jawaban=?, skor=?, pembahasan=?, media=?, updated_at=datetime('now') WHERE id=? AND tenant_id=?`)
+    .run(mapel_id, tingkat || '', t, level_kognitif || 'C1', kompetensi_dasar || '', indikator || '', soal, JSON.stringify(opsi || []), kunci_jawaban || '', skor || 1, pembahasan || '', media || '', req.params.id, req.tenantId)
+  if (!r.changes) return res.status(404).json({ error: 'Soal tidak ditemukan' })
+  res.json({ ok: true })
+})
+
+app.delete('/api/bank-soal/:id', STAFF, (req, res) => {
+  const r = db.prepare('DELETE FROM bank_soal WHERE id = ? AND tenant_id = ?').run(req.params.id, req.tenantId)
+  if (!r.changes) return res.status(404).json({ error: 'Soal tidak ditemukan' })
+  res.json({ ok: true })
+})
+
+// --- Kisi-kisi CRUD ---
+app.get('/api/kisi-kisi', EXAM_ROLES, (req, res) => {
+  const { mapel_id, jenis_ujian } = req.query
+  let sql = 'SELECT k.*, m.nama as mapel_nama FROM kisi_kisi k LEFT JOIN mapel m ON k.mapel_id = m.id WHERE k.tenant_id = ?'
+  const params = [req.tenantId]
+  if (mapel_id) { sql += ' AND k.mapel_id = ?'; params.push(mapel_id) }
+  if (jenis_ujian) { sql += ' AND k.jenis_ujian = ?'; params.push(jenis_ujian) }
+  sql += ' ORDER BY k.created_at DESC'
+  res.json(db.prepare(sql).all(...params))
+})
+
+app.post('/api/kisi-kisi', STAFF, (req, res) => {
+  const { nama, mapel_id, tingkat, jenis_ujian, tahun_ajaran, semester, items } = req.body
+  if (!nama || !mapel_id) return res.status(400).json({ error: 'Nama dan mapel wajib diisi' })
+  const id = uuidv4()
+  db.prepare(`INSERT INTO kisi_kisi (id, nama, mapel_id, tingkat, jenis_ujian, tahun_ajaran, semester, items, tenant_id, created_by) VALUES (?,?,?,?,?,?,?,?,?,?)`)
+    .run(id, nama, mapel_id, tingkat || '', jenis_ujian || 'sts', tahun_ajaran || '', semester || '', JSON.stringify(items || []), req.tenantId, req.user?.id || '')
+  res.json({ id })
+})
+
+app.put('/api/kisi-kisi/:id', STAFF, (req, res) => {
+  const { nama, mapel_id, tingkat, jenis_ujian, tahun_ajaran, semester, items } = req.body
+  const r = db.prepare(`UPDATE kisi_kisi SET nama=?, mapel_id=?, tingkat=?, jenis_ujian=?, tahun_ajaran=?, semester=?, items=?, updated_at=datetime('now') WHERE id=? AND tenant_id=?`)
+    .run(nama, mapel_id, tingkat || '', jenis_ujian || 'sts', tahun_ajaran || '', semester || '', JSON.stringify(items || []), req.params.id, req.tenantId)
+  if (!r.changes) return res.status(404).json({ error: 'Kisi-kisi tidak ditemukan' })
+  res.json({ ok: true })
+})
+
+app.delete('/api/kisi-kisi/:id', STAFF, (req, res) => {
+  const r = db.prepare('DELETE FROM kisi_kisi WHERE id = ? AND tenant_id = ?').run(req.params.id, req.tenantId)
+  if (!r.changes) return res.status(404).json({ error: 'Kisi-kisi tidak ditemukan' })
+  res.json({ ok: true })
+})
+
+// --- Paket Ujian CRUD ---
+app.get('/api/paket-ujian', EXAM_ROLES, (req, res) => {
+  const { mapel_id, jenis, status, model } = req.query
+  let sql = 'SELECT p.*, m.nama as mapel_nama FROM paket_ujian p LEFT JOIN mapel m ON p.mapel_id = m.id WHERE p.tenant_id = ?'
+  const params = [req.tenantId]
+  if (mapel_id) { sql += ' AND p.mapel_id = ?'; params.push(mapel_id) }
+  if (jenis) { sql += ' AND p.jenis = ?'; params.push(jenis) }
+  if (status) { sql += ' AND p.status = ?'; params.push(status) }
+  if (model) { sql += ' AND p.model = ?'; params.push(model) }
+  sql += ' ORDER BY p.created_at DESC'
+  res.json(db.prepare(sql).all(...params))
+})
+
+app.get('/api/paket-ujian/:id', EXAM_ROLES, (req, res) => {
+  const paket = db.prepare('SELECT p.*, m.nama as mapel_nama FROM paket_ujian p LEFT JOIN mapel m ON p.mapel_id = m.id WHERE p.id = ? AND p.tenant_id = ?').get(req.params.id, req.tenantId)
+  if (!paket) return res.status(404).json({ error: 'Paket ujian tidak ditemukan' })
+  // Ambil soal-soal
+  let soalIds = []
+  try { soalIds = JSON.parse(paket.soal_ids || '[]') } catch {}
+  let soalList = []
+  if (soalIds.length > 0) {
+    const placeholders = soalIds.map(() => '?').join(',')
+    soalList = db.prepare(`SELECT * FROM bank_soal WHERE id IN (${placeholders}) AND tenant_id = ?`).all(...soalIds, req.tenantId)
+    // Urutkan sesuai soal_ids
+    const soalMap = Object.fromEntries(soalList.map(s => [s.id, s]))
+    soalList = soalIds.map(id => soalMap[id]).filter(Boolean)
+  }
+  // Untuk siswa: sembunyikan kunci jawaban dan pembahasan kecuali paket mengizinkan
+  const isSiswa = req.user?.role === 'siswa' || req.user?.role === 'wali_murid'
+  if (isSiswa) {
+    soalList = soalList.map(s => ({ ...s, kunci_jawaban: undefined, pembahasan: undefined }))
+  }
+  res.json({ ...paket, soal_list: soalList })
+})
+
+app.post('/api/paket-ujian', STAFF, (req, res) => {
+  const { nama, mapel_id, jenis, model, tingkat, tahun_ajaran, semester, durasi_menit, acak_soal, acak_opsi, tampil_nilai, tampil_pembahasan, soal_ids, rombel_ids, kisi_kisi_id, password, status, mulai, selesai } = req.body
+  if (!nama || !mapel_id) return res.status(400).json({ error: 'Nama dan mapel wajib diisi' })
+  const validJenis = ['sts', 'sas', 'sumatif_harian', 'ulangan', 'latihan']
+  const validModel = ['cetak', 'online', 'cbt']
+  const id = uuidv4()
+  db.prepare(`INSERT INTO paket_ujian (id, nama, mapel_id, jenis, model, tingkat, tahun_ajaran, semester, durasi_menit, acak_soal, acak_opsi, tampil_nilai, tampil_pembahasan, soal_ids, rombel_ids, kisi_kisi_id, password, status, mulai, selesai, tenant_id, created_by) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
+    .run(id, nama, mapel_id, validJenis.includes(jenis) ? jenis : 'sts', validModel.includes(model) ? model : 'online', tingkat || '', tahun_ajaran || '', semester || '', durasi_menit || 90, acak_soal ? 1 : 0, acak_opsi ? 1 : 0, tampil_nilai !== false ? 1 : 0, tampil_pembahasan ? 1 : 0, JSON.stringify(soal_ids || []), JSON.stringify(rombel_ids || []), kisi_kisi_id || null, password || '', status || 'draft', mulai || null, selesai || null, req.tenantId, req.user?.id || '')
+  res.json({ id })
+})
+
+app.put('/api/paket-ujian/:id', STAFF, (req, res) => {
+  const { nama, mapel_id, jenis, model, tingkat, tahun_ajaran, semester, durasi_menit, acak_soal, acak_opsi, tampil_nilai, tampil_pembahasan, soal_ids, rombel_ids, kisi_kisi_id, password, status, mulai, selesai } = req.body
+  const validJenis = ['sts', 'sas', 'sumatif_harian', 'ulangan', 'latihan']
+  const validModel = ['cetak', 'online', 'cbt']
+  const r = db.prepare(`UPDATE paket_ujian SET nama=?, mapel_id=?, jenis=?, model=?, tingkat=?, tahun_ajaran=?, semester=?, durasi_menit=?, acak_soal=?, acak_opsi=?, tampil_nilai=?, tampil_pembahasan=?, soal_ids=?, rombel_ids=?, kisi_kisi_id=?, password=?, status=?, mulai=?, selesai=?, updated_at=datetime('now') WHERE id=? AND tenant_id=?`)
+    .run(nama, mapel_id, validJenis.includes(jenis) ? jenis : 'sts', validModel.includes(model) ? model : 'online', tingkat || '', tahun_ajaran || '', semester || '', durasi_menit || 90, acak_soal ? 1 : 0, acak_opsi ? 1 : 0, tampil_nilai !== false ? 1 : 0, tampil_pembahasan ? 1 : 0, JSON.stringify(soal_ids || []), JSON.stringify(rombel_ids || []), kisi_kisi_id || null, password || '', status || 'draft', mulai || null, selesai || null, req.params.id, req.tenantId)
+  if (!r.changes) return res.status(404).json({ error: 'Paket ujian tidak ditemukan' })
+  res.json({ ok: true })
+})
+
+app.delete('/api/paket-ujian/:id', STAFF, (req, res) => {
+  db.prepare('DELETE FROM jawaban_ujian WHERE paket_id = ? AND tenant_id = ?').run(req.params.id, req.tenantId)
+  db.prepare('DELETE FROM sesi_ujian WHERE paket_id = ? AND tenant_id = ?').run(req.params.id, req.tenantId)
+  const r = db.prepare('DELETE FROM paket_ujian WHERE id = ? AND tenant_id = ?').run(req.params.id, req.tenantId)
+  if (!r.changes) return res.status(404).json({ error: 'Paket ujian tidak ditemukan' })
+  res.json({ ok: true })
+})
+
+// --- Sesi & Jawaban Ujian (untuk siswa mengerjakan) ---
+app.post('/api/ujian/:paketId/mulai', EXAM_ROLES, (req, res) => {
+  const paket = db.prepare('SELECT * FROM paket_ujian WHERE id = ? AND tenant_id = ?').get(req.params.paketId, req.tenantId)
+  if (!paket) return res.status(404).json({ error: 'Paket ujian tidak ditemukan' })
+  if (paket.status !== 'aktif') return res.status(400).json({ error: 'Ujian belum dibuka' })
+  if (paket.password && req.body.password !== paket.password) return res.status(403).json({ error: 'Password ujian salah' })
+  const siswaId = req.user?.siswa_id || req.user?.id
+  // Cek apakah sudah ada sesi
+  let sesi = db.prepare('SELECT * FROM sesi_ujian WHERE paket_id = ? AND siswa_id = ? AND tenant_id = ?').get(paket.id, siswaId, req.tenantId)
+  if (sesi && sesi.status === 'selesai') return res.status(400).json({ error: 'Anda sudah menyelesaikan ujian ini' })
+  if (!sesi) {
+    const id = uuidv4()
+    db.prepare('INSERT INTO sesi_ujian (id, paket_id, siswa_id, mulai, status, tenant_id) VALUES (?,?,?,datetime(\'now\'),\'mengerjakan\',?)').run(id, paket.id, siswaId, req.tenantId)
+    sesi = { id, paket_id: paket.id, siswa_id: siswaId, status: 'mengerjakan' }
+  }
+  // Ambil soal
+  let soalIds = []; try { soalIds = JSON.parse(paket.soal_ids || '[]') } catch {}
+  let soalList = []
+  if (soalIds.length) {
+    const ph = soalIds.map(() => '?').join(',')
+    soalList = db.prepare(`SELECT id, tipe, soal, opsi, skor, media FROM bank_soal WHERE id IN (${ph}) AND tenant_id = ?`).all(...soalIds, req.tenantId)
+    const sm = Object.fromEntries(soalList.map(s => [s.id, s]))
+    soalList = soalIds.map(id => sm[id]).filter(Boolean)
+  }
+  // Acak soal jika perlu
+  if (paket.acak_soal) soalList.sort(() => Math.random() - 0.5)
+  // Acak opsi PG jika perlu
+  if (paket.acak_opsi) {
+    soalList = soalList.map(s => {
+      if (s.tipe === 'pg' || s.tipe === 'pg_kompleks') {
+        try {
+          const opsi = JSON.parse(s.opsi || '[]')
+          const shuffled = [...opsi].sort(() => Math.random() - 0.5)
+          return { ...s, opsi: JSON.stringify(shuffled) }
+        } catch { return s }
+      }
+      return s
+    })
+  }
+  // Ambil jawaban yang sudah ada
+  const jawabanList = db.prepare('SELECT soal_id, jawaban FROM jawaban_ujian WHERE paket_id = ? AND siswa_id = ? AND tenant_id = ?').all(paket.id, siswaId, req.tenantId)
+  const jawabanMap = Object.fromEntries(jawabanList.map(j => [j.soal_id, j.jawaban]))
+  res.json({ sesi, soal: soalList, jawaban: jawabanMap, durasi_menit: paket.durasi_menit })
+})
+
+app.post('/api/ujian/:paketId/jawab', EXAM_ROLES, (req, res) => {
+  const { soal_id, jawaban } = req.body
+  if (!soal_id) return res.status(400).json({ error: 'soal_id wajib' })
+  const siswaId = req.user?.siswa_id || req.user?.id
+  const sesi = db.prepare('SELECT * FROM sesi_ujian WHERE paket_id = ? AND siswa_id = ? AND tenant_id = ?').get(req.params.paketId, siswaId, req.tenantId)
+  if (!sesi || sesi.status === 'selesai') return res.status(400).json({ error: 'Sesi ujian tidak aktif' })
+  db.prepare(`INSERT INTO jawaban_ujian (id, paket_id, siswa_id, soal_id, jawaban, tenant_id) VALUES (?,?,?,?,?,?) ON CONFLICT(paket_id, siswa_id, soal_id) DO UPDATE SET jawaban=excluded.jawaban, updated_at=datetime('now')`)
+    .run(uuidv4(), req.params.paketId, siswaId, soal_id, jawaban || '', req.tenantId)
+  res.json({ ok: true })
+})
+
+app.post('/api/ujian/:paketId/selesai', EXAM_ROLES, (req, res) => {
+  const siswaId = req.user?.siswa_id || req.user?.id
+  const sesi = db.prepare('SELECT * FROM sesi_ujian WHERE paket_id = ? AND siswa_id = ? AND tenant_id = ?').get(req.params.paketId, siswaId, req.tenantId)
+  if (!sesi) return res.status(404).json({ error: 'Sesi tidak ditemukan' })
+  if (sesi.status === 'selesai') return res.json({ ok: true, message: 'Sudah selesai sebelumnya' })
+  // Auto-koreksi PG & isian
+  const paket = db.prepare('SELECT * FROM paket_ujian WHERE id = ? AND tenant_id = ?').get(req.params.paketId, req.tenantId)
+  let soalIds = []; try { soalIds = JSON.parse(paket?.soal_ids || '[]') } catch {}
+  let skorTotal = 0, skorMax = 0
+  if (soalIds.length) {
+    const ph = soalIds.map(() => '?').join(',')
+    const soalList = db.prepare(`SELECT id, tipe, kunci_jawaban, skor FROM bank_soal WHERE id IN (${ph}) AND tenant_id = ?`).all(...soalIds, req.tenantId)
+    const soalMap = Object.fromEntries(soalList.map(s => [s.id, s]))
+    const jawabanList = db.prepare('SELECT * FROM jawaban_ujian WHERE paket_id = ? AND siswa_id = ? AND tenant_id = ?').all(req.params.paketId, siswaId, req.tenantId)
+    const updateSkor = db.prepare('UPDATE jawaban_ujian SET skor = ? WHERE id = ?')
+    for (const j of jawabanList) {
+      const s = soalMap[j.soal_id]
+      if (!s) continue
+      skorMax += (s.skor || 1)
+      if (s.tipe === 'pg' || s.tipe === 'isian') {
+        const benar = (j.jawaban || '').trim().toLowerCase() === (s.kunci_jawaban || '').trim().toLowerCase()
+        const sk = benar ? (s.skor || 1) : 0
+        updateSkor.run(sk, j.id)
+        skorTotal += sk
+      } else if (s.tipe === 'pg_kompleks') {
+        // PG kompleks: kunci_jawaban berisi array JSON jawaban benar
+        try {
+          const kunci = JSON.parse(s.kunci_jawaban || '[]').map(k => k.toString().trim().toLowerCase()).sort()
+          const jwb = JSON.parse(j.jawaban || '[]').map(k => k.toString().trim().toLowerCase()).sort()
+          const benar = JSON.stringify(kunci) === JSON.stringify(jwb)
+          const sk = benar ? (s.skor || 1) : 0
+          updateSkor.run(sk, j.id)
+          skorTotal += sk
+        } catch { updateSkor.run(0, j.id) }
+      }
+      // uraian: skor null, perlu koreksi manual
+    }
+    // Soal yang tidak dijawab tetap hitung skor max
+    for (const sid of soalIds) {
+      const s = soalMap[sid]
+      if (s && !jawabanList.find(j => j.soal_id === sid)) {
+        skorMax += 0 // sudah dihitung di atas hanya untuk yang dijawab
+      }
+    }
+    // Hitung ulang skor max dari semua soal
+    skorMax = soalIds.reduce((sum, sid) => sum + ((soalMap[sid]?.skor || 1)), 0)
+  }
+  db.prepare("UPDATE sesi_ujian SET status = 'selesai', selesai = datetime('now'), skor_total = ?, skor_max = ? WHERE id = ?").run(skorTotal, skorMax, sesi.id)
+  res.json({ ok: true, skor_total: skorTotal, skor_max: skorMax })
+})
+
+// --- Hasil & Koreksi Ujian ---
+app.get('/api/ujian/:paketId/hasil', EXAM_ROLES, (req, res) => {
+  const paket = db.prepare('SELECT * FROM paket_ujian WHERE id = ? AND tenant_id = ?').get(req.params.paketId, req.tenantId)
+  if (!paket) return res.status(404).json({ error: 'Paket ujian tidak ditemukan' })
+  const isSiswa = req.user?.role === 'siswa' || req.user?.role === 'wali_murid'
+  const siswaId = req.user?.siswa_id || req.user?.id
+  if (isSiswa) {
+    // Siswa hanya lihat hasil sendiri
+    const sesi = db.prepare('SELECT * FROM sesi_ujian WHERE paket_id = ? AND siswa_id = ? AND tenant_id = ?').get(paket.id, siswaId, req.tenantId)
+    if (!sesi) return res.json({ sesi: null, jawaban: [] })
+    const jawaban = db.prepare('SELECT ju.*, bs.soal, bs.tipe, bs.kunci_jawaban, bs.pembahasan, bs.skor as skor_soal, bs.opsi FROM jawaban_ujian ju LEFT JOIN bank_soal bs ON ju.soal_id = bs.id WHERE ju.paket_id = ? AND ju.siswa_id = ? AND ju.tenant_id = ?').all(paket.id, siswaId, req.tenantId)
+    if (!paket.tampil_pembahasan) jawaban.forEach(j => { j.pembahasan = undefined })
+    if (!paket.tampil_nilai) jawaban.forEach(j => { j.skor = undefined; j.skor_soal = undefined })
+    return res.json({ sesi, jawaban, paket: { tampil_nilai: paket.tampil_nilai, tampil_pembahasan: paket.tampil_pembahasan } })
+  }
+  // Staff: semua peserta
+  const sesiList = db.prepare('SELECT su.*, s.nama as siswa_nama, s.nis FROM sesi_ujian su LEFT JOIN siswa s ON su.siswa_id = s.id WHERE su.paket_id = ? AND su.tenant_id = ? ORDER BY s.nama').all(paket.id, req.tenantId)
+  res.json({ paket, sesi_list: sesiList })
+})
+
+app.get('/api/ujian/:paketId/koreksi/:siswaId', STAFF, (req, res) => {
+  const jawaban = db.prepare('SELECT ju.*, bs.soal, bs.tipe, bs.kunci_jawaban, bs.pembahasan, bs.skor as skor_soal, bs.opsi FROM jawaban_ujian ju LEFT JOIN bank_soal bs ON ju.soal_id = bs.id WHERE ju.paket_id = ? AND ju.siswa_id = ? AND ju.tenant_id = ? ORDER BY bs.created_at').all(req.params.paketId, req.params.siswaId, req.tenantId)
+  const sesi = db.prepare('SELECT * FROM sesi_ujian WHERE paket_id = ? AND siswa_id = ? AND tenant_id = ?').get(req.params.paketId, req.params.siswaId, req.tenantId)
+  res.json({ sesi, jawaban })
+})
+
+app.put('/api/ujian/:paketId/koreksi/:siswaId', STAFF, (req, res) => {
+  const { koreksi } = req.body // [{soal_id, skor_manual, komentar_koreksi}]
+  if (!Array.isArray(koreksi)) return res.status(400).json({ error: 'Format koreksi salah' })
+  const update = db.prepare('UPDATE jawaban_ujian SET skor_manual = ?, komentar_koreksi = ?, updated_at = datetime(\'now\') WHERE paket_id = ? AND siswa_id = ? AND soal_id = ? AND tenant_id = ?')
+  let skorTotal = 0
+  db.transaction(() => {
+    for (const k of koreksi) {
+      update.run(k.skor_manual ?? null, k.komentar_koreksi || '', req.params.paketId, req.params.siswaId, k.soal_id, req.tenantId)
+    }
+    // Recalculate skor total
+    const allJawaban = db.prepare('SELECT skor, skor_manual FROM jawaban_ujian WHERE paket_id = ? AND siswa_id = ? AND tenant_id = ?').all(req.params.paketId, req.params.siswaId, req.tenantId)
+    skorTotal = allJawaban.reduce((sum, j) => sum + (j.skor_manual !== null ? j.skor_manual : (j.skor || 0)), 0)
+    db.prepare('UPDATE sesi_ujian SET skor_total = ? WHERE paket_id = ? AND siswa_id = ? AND tenant_id = ?').run(skorTotal, req.params.paketId, req.params.siswaId, req.tenantId)
+  })()
+  res.json({ ok: true, skor_total: skorTotal })
+})
+
+// --- Kartu Ujian ---
+app.get('/api/ujian/:paketId/kartu', STAFF, (req, res) => {
+  const paket = db.prepare('SELECT p.*, m.nama as mapel_nama FROM paket_ujian p LEFT JOIN mapel m ON p.mapel_id = m.id WHERE p.id = ? AND p.tenant_id = ?').get(req.params.paketId, req.tenantId)
+  if (!paket) return res.status(404).json({ error: 'Paket ujian tidak ditemukan' })
+  let rombelIds = []; try { rombelIds = JSON.parse(paket.rombel_ids || '[]') } catch {}
+  let siswaList = []
+  if (rombelIds.length > 0) {
+    const ph = rombelIds.map(() => '?').join(',')
+    siswaList = db.prepare(`SELECT s.*, r.nama as rombel_nama FROM siswa s LEFT JOIN rombel r ON s.rombel_id = r.id WHERE s.rombel_id IN (${ph}) AND s.tenant_id = ? AND s.status = 'aktif' ORDER BY r.nama, s.nama`).all(...rombelIds, req.tenantId)
+  } else {
+    siswaList = db.prepare("SELECT s.*, r.nama as rombel_nama FROM siswa s LEFT JOIN rombel r ON s.rombel_id = r.id WHERE s.tenant_id = ? AND s.status = 'aktif' ORDER BY r.nama, s.nama").all(req.tenantId)
+  }
+  const settings = getTenantSettings(db, req.tenantId) || {}
+  res.json({ paket, siswa: siswaList, settings })
+})
+
+// --- Ujian tersedia untuk siswa ---
+app.get('/api/ujian/aktif', EXAM_ROLES, (req, res) => {
+  const siswaId = req.user?.siswa_id || req.user?.id
+  const list = db.prepare(`SELECT p.*, m.nama as mapel_nama, su.status as sesi_status, su.skor_total, su.skor_max FROM paket_ujian p LEFT JOIN mapel m ON p.mapel_id = m.id LEFT JOIN sesi_ujian su ON su.paket_id = p.id AND su.siswa_id = ? AND su.tenant_id = p.tenant_id WHERE p.tenant_id = ? AND p.status = 'aktif' ORDER BY p.created_at DESC`).all(siswaId, req.tenantId)
+  res.json(list)
 })
 
 // ==================== DASHBOARD STATS ====================

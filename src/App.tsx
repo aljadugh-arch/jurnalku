@@ -92,6 +92,10 @@ const CashlessBankConfigPage = lazy(() => import('./pages/admin/CashlessBankConf
 const KantinScannerPage = lazy(() => import('./pages/admin/KantinScannerPage'))
 const DeveloperApiPage = lazy(() => import('./pages/admin/DeveloperApiPage'))
 const MobileCeklok = lazy(() => import('./pages/admin/MobileCeklok'))
+const BankSoalPage = lazy(() => import('./pages/admin/BankSoalPage'))
+const KisiKisiPage = lazy(() => import('./pages/admin/KisiKisiPage'))
+const PaketUjianPage = lazy(() => import('./pages/admin/PaketUjianPage'))
+const SiswaUjianPage = lazy(() => import('./pages/siswa/SiswaUjianPage'))
 
 /** Loading spinner untuk Suspense fallback */
 function PageLoader() {
@@ -246,6 +250,9 @@ export default function App() {
           <Route path="kantin-scanner" element={<KantinScannerPage />} />
           {/* Routes baru dari GitHub */}
           <Route path="erkam" element={<ErkamPage />} />
+          <Route path="bank-soal" element={<BankSoalPage />} />
+          <Route path="kisi-kisi" element={<KisiKisiPage />} />
+          <Route path="paket-ujian" element={<PaketUjianPage />} />
           <Route path="superadmin" element={
             <ProtectedRoute allowedRoles={['super_admin']}><SuperadminDashboard /></ProtectedRoute>
           } />
@@ -304,6 +311,7 @@ export default function App() {
           <Route path="tagihan" element={<SiswaSectionPage section="tagihan" />} />
           <Route path="tabungan" element={<SiswaSectionPage section="tabungan" />} />
           <Route path="perpustakaan" element={<PerpustakaanPage />} />
+          <Route path="ujian" element={<SiswaUjianPage />} />
           <Route path="menu" element={<SiswaMenuPage />} />
         </Route>
 

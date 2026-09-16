@@ -2,7 +2,8 @@ import {
   LayoutDashboard, Users, GraduationCap, BookOpen, Calendar,
   ClipboardList, UserCheck, QrCode, MapPin,
   Layers, Activity, Globe, Sparkles, DollarSign, Settings, MessageSquare,
-  FileText, ClipboardCheck, ScrollText, School, Wallet, Receipt, DatabaseBackup, Code2, ScanText
+  FileText, ClipboardCheck, ScrollText, School, Wallet, Receipt, DatabaseBackup, Code2, ScanText,
+  FileQuestion, Grid3X3, Package, PenTool
 } from 'lucide-react'
 
 export interface MenuItem {
@@ -47,6 +48,14 @@ export const adminMenuItems: MenuItem[] = [
   { label: 'Absensi Saya', icon: <UserCheck size={20} />, path: '/admin/absensi-saya' },
   { label: 'Jurnal Mengajar', icon: <ClipboardList size={20} />, path: '/admin/jurnal' },
   { label: 'Rapor Siswa', icon: <FileText size={20} />, path: '/admin/rapor' },
+  {
+    label: 'Ujian & Bank Soal', icon: <FileQuestion size={20} />,
+    children: [
+      { label: 'Bank Soal', path: '/admin/bank-soal' },
+      { label: 'Kisi-kisi Soal', path: '/admin/kisi-kisi' },
+      { label: 'Paket Ujian', path: '/admin/paket-ujian' },
+    ]
+  },
   { label: 'Catatan Kepribadian', icon: <ScrollText size={20} />, path: '/admin/catatan-kepribadian' },
   { label: 'Generator AI Guru', icon: <Sparkles size={20} />, path: '/admin/modul-ajar' },
   { label: 'Perpustakaan Digital', icon: <BookOpen size={20} />, path: '/admin/perpustakaan' },
@@ -92,6 +101,14 @@ export const guruMenuItems: MenuItem[] = [
   { label: 'Nilai STS', icon: <ClipboardCheck size={20} />, path: '/guru/nilai-sts' },
   { label: 'Nilai SAS', icon: <ClipboardCheck size={20} />, path: '/guru/nilai-sas' },
   { label: 'Koreksi Jawaban (AI+OCR)', icon: <ScanText size={20} />, path: '/guru/koreksi-jawaban' },
+  {
+    label: 'Ujian & Bank Soal', icon: <FileQuestion size={20} />,
+    children: [
+      { label: 'Bank Soal', path: '/admin/bank-soal' },
+      { label: 'Kisi-kisi Soal', path: '/admin/kisi-kisi' },
+      { label: 'Paket Ujian', path: '/admin/paket-ujian' },
+    ]
+  },
   { label: 'Catatan Kepribadian', icon: <ScrollText size={20} />, path: '/guru/catatan-kepribadian' },
   { label: 'Jadwal Saya', icon: <Calendar size={20} />, path: '/guru/jadwal' },
   { label: 'Penugasan', icon: <ClipboardCheck size={20} />, path: '/guru#tugas' },
@@ -107,6 +124,7 @@ export const siswaMenuItems: MenuItem[] = [
   { label: 'Absensi Saya', icon: <QrCode size={20} />, path: '/siswa/absensi' },
   { label: 'Jadwal', icon: <Calendar size={20} />, path: '/siswa/jadwal' },
   { label: 'Ekskul', icon: <Activity size={20} />, path: '/siswa/ekskul' },
+  { label: 'Ujian', icon: <FileQuestion size={20} />, path: '/siswa/ujian' },
   { label: 'Perpustakaan Digital', icon: <BookOpen size={20} />, path: '/siswa/perpustakaan' },
 ]
 
