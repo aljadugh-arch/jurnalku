@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react'
-import { Link } from 'react-router-dom'
-import { Building2, CheckCircle2, XCircle, Users, GraduationCap, UserCheck, CreditCard, Gift, Crown, AlertTriangle, CalendarDays } from 'lucide-react'
+import { Link, useNavigate } from 'react-router-dom'
+import { Building2, CheckCircle2, XCircle, Users, GraduationCap, UserCheck, CreditCard, Gift, Crown, AlertTriangle, CalendarDays, Moon, Sun, LogOut, User, Lock, ChevronDown } from 'lucide-react'
 import api from '../../services/api'
 import { useAuthStore } from '../../stores/authStore'
+import { useThemeStore } from '../../stores/themeStore'
 import MobileMenuGrid from '../../components/MobileMenuGrid'
 
 function StatCard({ label, value, icon, gradient, sub, to }: { label: string; value: number; icon: React.ReactNode; gradient: string; sub?: string; to?: string }) {
@@ -28,7 +29,12 @@ function StatCard({ label, value, icon, gradient, sub, to }: { label: string; va
 export default function SuperadminDashboard() {
   const [tenants, setTenants] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
-  const { user } = useAuthStore()
+  const { user, logout } = useAuthStore()
+  const { dark, toggle: toggleDark } = useThemeStore()
+  const navigate = useNavigate()
+  const [showDropdown, setShowDropdown] = useState(false)
+
+  const handleLogout = () => { logout(); navigate('/login') }
 
   useEffect(() => {
     api.get('/tenants').then(res => { setTenants(res.data); setLoading(false) }).catch(() => setLoading(false))
@@ -69,6 +75,47 @@ export default function SuperadminDashboard() {
 
   return (
     <div className="space-y-3">
+      {/* Mobile/tablet header — hanya tampil di bawah lg (desktop pakai DashboardLayout Header) */}
+      <div className="lg:hidden sticky top-0 z-30 -mx-4 -mt-4 px-4 py-3 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 flex items-center justify-between mb-2">
+        <div className="flex items-center gap-2">
+          <Crown size={18} className="text-amber-500" />
+          <span className="font-bold text-sm text-gray-800 dark:text-gray-100">Superadmin</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <button onClick={toggleDark} className="p-2 rounded-lg text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800 dark:text-gray-400" title={dark ? 'Mode Terang' : 'Mode Gelap'}>
+            {dark ? <Sun size={18} /> : <Moon size={18} />}
+          </button>
+          <div className="relative">
+            <button onClick={() => setShowDropdown(!showDropdown)} className="flex items-center gap-1.5 hover:bg-gray-50 dark:hover:bg-gray-800 rounded-lg px-2 py-1">
+              <div className="w-7 h-7 bg-amber-500 rounded-full flex items-center justify-center text-white text-xs font-bold">
+                {user?.nama?.charAt(0) || 'S'}
+              </div>
+              <ChevronDown size={14} className="text-gray-400" />
+            </button>
+            {showDropdown && (
+              <>
+                <div className="fixed inset-0 z-40" onClick={() => setShowDropdown(false)} />
+                <div className="absolute right-0 mt-2 w-48 bg-white dark:bg-gray-900 rounded-lg shadow-lg border dark:border-gray-700 z-50">
+                  <div className="px-4 py-2 border-b dark:border-gray-700">
+                    <p className="text-sm font-medium text-gray-700 dark:text-gray-200 truncate">{user?.nama}</p>
+                    <p className="text-xs text-gray-400">Super Admin</p>
+                  </div>
+                  <button onClick={() => { navigate('/admin/profile'); setShowDropdown(false) }} className="w-full flex items-center gap-2 px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800">
+                    <User size={16} /> Profil Saya
+                  </button>
+                  <button onClick={() => { navigate('/admin/change-password'); setShowDropdown(false) }} className="w-full flex items-center gap-2 px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800">
+                    <Lock size={16} /> Ubah Password
+                  </button>
+                  <button onClick={handleLogout} className="w-full flex items-center gap-2 px-4 py-2 text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-b-lg">
+                    <LogOut size={16} /> Keluar
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      </div>
+
       <div>
         <h1 className="text-xl md:text-2xl font-extrabold text-gray-900">Dashboard Superadmin 👑</h1>
         <p className="text-sm text-gray-500 mt-0.5 flex items-center gap-1.5"><CalendarDays size={14} /> {today}</p>

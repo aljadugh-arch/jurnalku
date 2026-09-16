@@ -334,7 +334,12 @@ function registerTenantRoutes(app, db, authMiddleware, uuidv4, SUPER) {
     const tenant = resolved
       ? { slug: resolved.slug, nama: resolved.nama, logo: resolved.logo || null, plan: resolved.plan || 'free' }
       : { slug: 'default', nama: 'JURNALKU', logo: null, plan: 'free' }
-    res.json({ ...tenant, registered_host: Boolean(req.isRegisteredTenantHost) })
+    // registered_host: true jika host adalah subdomain tenant terdaftar ATAU
+    // host adalah BASE_DOMAIN sendiri (jurnal.cc.cd / jurnalmadrasah.web.id)
+    // Keduanya harus menampilkan halaman login, bukan landing page
+    const host = (req.headers.host || '').split(':')[0].toLowerCase()
+    const isBaseDomain = BASE_DOMAINS.some(bd => host === bd || host === `www.${bd}`)
+    res.json({ ...tenant, registered_host: Boolean(req.isRegisteredTenantHost) || isBaseDomain })
   })
 
   // ==================== FOUNDATION ROUTES (Cross-tenant sharing) ====================

@@ -67,14 +67,19 @@ app.use(cors({
   origin: (origin, cb) => {
     if (!origin) return cb(null, true) // curl / same-origin / mobile
     if (!IS_PROD) return cb(null, true)
-    // allow main domains + any *.jurnal.cc.cd or *.jurnalmadrasah.web.id subdomain (multi-tenant, multi-canonical-domain)
-    if (ALLOWED_ORIGINS.includes(origin) || /^https:\/\/[a-z0-9-]+\.(jurnal\.cc\.cd|jurnalmadrasah\.web\.id)$/i.test(origin)) {
+    // allow main domains
+    if (ALLOWED_ORIGINS.includes(origin)) return cb(null, true)
+    // allow any subdomain under jurnal.cc.cd or jurnalmadrasah.web.id
+    // termasuk multi-level: jurnal.mtsplussd7.cc.cd → ends with .cc.cd
+    if (/^https:\/\/[a-z0-9][a-z0-9.-]+\.(jurnal\.cc\.cd|jurnalmadrasah\.web\.id|cc\.cd|web\.id)$/i.test(origin)) {
       return cb(null, true)
     }
     // allow registered custom domains (from tenant DB)
-    const host = origin.replace(/^https?:\/\//, '').split(':')[0].toLowerCase().replace(/\.$/, '')
-    const tenant = db.prepare("SELECT id FROM tenants WHERE lower(trim(domain_custom, '.')) = ? AND aktif = 1").get(host)
-    if (tenant) return cb(null, true)
+    try {
+      const host = origin.replace(/^https?:\/\//, '').split(':')[0].toLowerCase().replace(/\.$/, '')
+      const tenant = db.prepare("SELECT id FROM tenants WHERE lower(trim(domain_custom, '.')) = ? AND aktif = 1").get(host)
+      if (tenant) return cb(null, true)
+    } catch {}
     return cb(new Error('Not allowed by CORS'))
   },
   credentials: true
