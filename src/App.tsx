@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from 'react'
+import { useEffect, useState, Suspense, lazy, type ReactNode } from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { Toaster } from 'react-hot-toast'
 import { useAuthStore } from './stores/authStore'
@@ -8,88 +8,95 @@ import LandingPage from './pages/LandingPage'
 import LoginPage from './pages/auth/LoginPage'
 import RegisterPage from './pages/auth/RegisterPage'
 import ForgotPasswordPage from './pages/auth/ForgotPasswordPage'
-import AdminDashboard from './pages/admin/AdminDashboard'
-import DataSiswaPage from './pages/admin/DataSiswaPage'
-import DataGTKPage from './pages/admin/DataGTKPage'
-import MapelPage from './pages/admin/MapelPage'
-import RombelPage from './pages/admin/RombelPage'
-import JadwalPage from './pages/admin/JadwalPage'
-import PengajarPage from './pages/admin/PengajarPage'
-import WaliKelasPage from './pages/admin/WaliKelasPage'
-import JurnalPage from './pages/admin/JurnalPage'
-import AbsensiSiswaPage from './pages/admin/AbsensiSiswaPage'
-import AbsensiEkskulPage from './pages/admin/AbsensiEkskulPage'
-import AbsensiKokurikulerPage from './pages/admin/AbsensiKokurikulerPage'
-import AbsensiKegiatanPage from './pages/admin/AbsensiKegiatanPage'
-import AbsensiJamaahPage from './pages/admin/AbsensiJamaahPage'
-import AbsensiGuruPage from './pages/admin/AbsensiGuruPage'
-import ModulAjarPage from './pages/admin/ModulAjarPage'
-import TahunAjaranPage from './pages/admin/TahunAjaranPage'
-import TagihanPage from './pages/admin/TagihanPage'
-import TabunganPage from './pages/admin/TabunganPage'
-import SettingsPage from './pages/admin/SettingsPage'
-import PerpustakaanPage from './pages/PerpustakaanPage'
-import WAGatewayPage from './pages/admin/WAGatewayPage'
-import BroadcastPage from './pages/admin/BroadcastPage'
-import KalenderKBMPage from './pages/admin/KalenderKBMPage'
-import RekapAbsensiPage from './pages/admin/RekapAbsensiPage'
-import NotifSettingsPage from './pages/admin/NotifSettingsPage'
-import TenantManagementPage from './pages/admin/TenantManagementPage'
-import RaporPage from './pages/admin/RaporPage'
-import UserManagementPage from './pages/admin/UserManagementPage'
-// Halaman baru (sesuai live bundle)
-import PostingPage from './pages/admin/PostingPage'
-import CatatanKepribadianPage from './pages/admin/CatatanKepribadianPage'
-import SupervisiPage from './pages/admin/SupervisiPage'
-import BeasiswaPage from './pages/admin/BeasiswaPage'
-import CashlessPage from './pages/admin/CashlessPage'
-import BackupRestorePage from './pages/admin/BackupRestorePage'
-import CekLokAdminPage from './pages/admin/CekLokAdminPage'
-import GuruAbsensiPage from './pages/guru/GuruAbsensiPage'
-import BendaharaDashboard from './pages/admin/BendaharaDashboard'
-import LaporanKeuanganPage from './pages/admin/LaporanKeuanganPage'
-import BukuKasPage from './pages/admin/BukuKasPage'
-import EkskulPage from './pages/admin/EkskulPage'
-import GuruDashboard from './pages/guru/GuruDashboard'
-import GuruJurnalPage from './pages/guru/GuruJurnalPage'
-import GuruAbsensiSiswaPage from './pages/guru/GuruAbsensiSiswaPage'
-import GuruJadwalPage from './pages/guru/GuruJadwalPage'
-import GuruModulAjarPage from './pages/guru/GuruModulAjarPage'
-import GuruRombelPage from './pages/guru/GuruRombelPage'
-import GuruPenilaianHarianPage from './pages/guru/GuruPenilaianHarianPage'
-import GuruNilaiSTSPage from './pages/guru/GuruNilaiSTSPage'
-import GuruNilaiSASPage from './pages/guru/GuruNilaiSASPage'
-import GuruKoreksiJawabanPage from './pages/guru/GuruKoreksiJawabanPage'
-import GuruPostingPage from './pages/guru/GuruPostingPage'
-import GuruCatatanKepribadianPage from './pages/guru/GuruCatatanKepribadianPage'
-import GuruAbsensiEkskulPage from './pages/guru/GuruAbsensiEkskulPage'
-import GuruAbsensiSiswaQRPage from './pages/guru/GuruAbsensiSiswaQRPage'
-import SiswaDashboard from './pages/siswa/SiswaDashboard'
-import SiswaAbsensiPage from './pages/siswa/SiswaAbsensiPage'
-import SiswaJadwalPage from './pages/siswa/SiswaJadwalPage'
-import SiswaEkskulPage from './pages/siswa/SiswaEkskulPage'
-import SiswaPostingPage from './pages/siswa/SiswaPostingPage'
-import SiswaNilaiPage from './pages/siswa/SiswaNilaiPage'
-import SiswaKantinPage from './pages/siswa/SiswaKantinPage'
-import SiswaQrisTopupPage from './pages/siswa/SiswaQrisTopupPage'
-import SiswaSectionPage from './pages/siswa/SiswaSectionPage'
-import SiswaMenuPage from './pages/siswa/SiswaMenuPage'
-import ChangePasswordPage from './pages/ChangePasswordPage'
-import ProfilePage from './pages/ProfilePage'
-import PanduanPage from './pages/PanduanPage'
-import ErkamPage from './pages/admin/ErkamPage'
-import SuperadminDashboard from './pages/admin/SuperadminDashboard'
 import SubscriptionGate from './components/SubscriptionGate'
 import { useSubscriptionStore } from './stores/subscriptionStore'
-import KantinMenuPage from './pages/admin/KantinMenuPage'
-import KantinOrdersPage from './pages/admin/KantinOrdersPage'
-import CashlessTopupPage from './pages/admin/CashlessTopupPage'
-import CashlessBankConfigPage from './pages/admin/CashlessBankConfigPage'
-import KantinScannerPage from './pages/admin/KantinScannerPage'
-import DeveloperApiPage from './pages/admin/DeveloperApiPage'
 import PwaInstallPrompt from './components/PwaInstallPrompt'
 import api from './services/api'
 import type { User } from './types'
+
+// Lazy-loaded pages — setiap halaman jadi chunk terpisah
+const AdminDashboard = lazy(() => import('./pages/admin/AdminDashboard'))
+const DataSiswaPage = lazy(() => import('./pages/admin/DataSiswaPage'))
+const DataGTKPage = lazy(() => import('./pages/admin/DataGTKPage'))
+const MapelPage = lazy(() => import('./pages/admin/MapelPage'))
+const RombelPage = lazy(() => import('./pages/admin/RombelPage'))
+const JadwalPage = lazy(() => import('./pages/admin/JadwalPage'))
+const PengajarPage = lazy(() => import('./pages/admin/PengajarPage'))
+const WaliKelasPage = lazy(() => import('./pages/admin/WaliKelasPage'))
+const JurnalPage = lazy(() => import('./pages/admin/JurnalPage'))
+const AbsensiSiswaPage = lazy(() => import('./pages/admin/AbsensiSiswaPage'))
+const AbsensiEkskulPage = lazy(() => import('./pages/admin/AbsensiEkskulPage'))
+const AbsensiKokurikulerPage = lazy(() => import('./pages/admin/AbsensiKokurikulerPage'))
+const AbsensiKegiatanPage = lazy(() => import('./pages/admin/AbsensiKegiatanPage'))
+const AbsensiJamaahPage = lazy(() => import('./pages/admin/AbsensiJamaahPage'))
+const AbsensiGuruPage = lazy(() => import('./pages/admin/AbsensiGuruPage'))
+const ModulAjarPage = lazy(() => import('./pages/admin/ModulAjarPage'))
+const TahunAjaranPage = lazy(() => import('./pages/admin/TahunAjaranPage'))
+const TagihanPage = lazy(() => import('./pages/admin/TagihanPage'))
+const TabunganPage = lazy(() => import('./pages/admin/TabunganPage'))
+const SettingsPage = lazy(() => import('./pages/admin/SettingsPage'))
+const PerpustakaanPage = lazy(() => import('./pages/PerpustakaanPage'))
+const WAGatewayPage = lazy(() => import('./pages/admin/WAGatewayPage'))
+const BroadcastPage = lazy(() => import('./pages/admin/BroadcastPage'))
+const KalenderKBMPage = lazy(() => import('./pages/admin/KalenderKBMPage'))
+const RekapAbsensiPage = lazy(() => import('./pages/admin/RekapAbsensiPage'))
+const NotifSettingsPage = lazy(() => import('./pages/admin/NotifSettingsPage'))
+const TenantManagementPage = lazy(() => import('./pages/admin/TenantManagementPage'))
+const RaporPage = lazy(() => import('./pages/admin/RaporPage'))
+const UserManagementPage = lazy(() => import('./pages/admin/UserManagementPage'))
+const PostingPage = lazy(() => import('./pages/admin/PostingPage'))
+const CatatanKepribadianPage = lazy(() => import('./pages/admin/CatatanKepribadianPage'))
+const SupervisiPage = lazy(() => import('./pages/admin/SupervisiPage'))
+const BeasiswaPage = lazy(() => import('./pages/admin/BeasiswaPage'))
+const CashlessPage = lazy(() => import('./pages/admin/CashlessPage'))
+const BackupRestorePage = lazy(() => import('./pages/admin/BackupRestorePage'))
+const CekLokAdminPage = lazy(() => import('./pages/admin/CekLokAdminPage'))
+const GuruAbsensiPage = lazy(() => import('./pages/guru/GuruAbsensiPage'))
+const BendaharaDashboard = lazy(() => import('./pages/admin/BendaharaDashboard'))
+const LaporanKeuanganPage = lazy(() => import('./pages/admin/LaporanKeuanganPage'))
+const BukuKasPage = lazy(() => import('./pages/admin/BukuKasPage'))
+const EkskulPage = lazy(() => import('./pages/admin/EkskulPage'))
+const GuruDashboard = lazy(() => import('./pages/guru/GuruDashboard'))
+const GuruJurnalPage = lazy(() => import('./pages/guru/GuruJurnalPage'))
+const GuruAbsensiSiswaPage = lazy(() => import('./pages/guru/GuruAbsensiSiswaPage'))
+const GuruJadwalPage = lazy(() => import('./pages/guru/GuruJadwalPage'))
+const GuruModulAjarPage = lazy(() => import('./pages/guru/GuruModulAjarPage'))
+const GuruRombelPage = lazy(() => import('./pages/guru/GuruRombelPage'))
+const GuruPenilaianHarianPage = lazy(() => import('./pages/guru/GuruPenilaianHarianPage'))
+const GuruNilaiSTSPage = lazy(() => import('./pages/guru/GuruNilaiSTSPage'))
+const GuruNilaiSASPage = lazy(() => import('./pages/guru/GuruNilaiSASPage'))
+const GuruKoreksiJawabanPage = lazy(() => import('./pages/guru/GuruKoreksiJawabanPage'))
+const GuruPostingPage = lazy(() => import('./pages/guru/GuruPostingPage'))
+const GuruCatatanKepribadianPage = lazy(() => import('./pages/guru/GuruCatatanKepribadianPage'))
+const GuruAbsensiEkskulPage = lazy(() => import('./pages/guru/GuruAbsensiEkskulPage'))
+const GuruAbsensiSiswaQRPage = lazy(() => import('./pages/guru/GuruAbsensiSiswaQRPage'))
+const SiswaDashboard = lazy(() => import('./pages/siswa/SiswaDashboard'))
+const SiswaAbsensiPage = lazy(() => import('./pages/siswa/SiswaAbsensiPage'))
+const SiswaJadwalPage = lazy(() => import('./pages/siswa/SiswaJadwalPage'))
+const SiswaEkskulPage = lazy(() => import('./pages/siswa/SiswaEkskulPage'))
+const SiswaPostingPage = lazy(() => import('./pages/siswa/SiswaPostingPage'))
+const SiswaNilaiPage = lazy(() => import('./pages/siswa/SiswaNilaiPage'))
+const SiswaKantinPage = lazy(() => import('./pages/siswa/SiswaKantinPage'))
+const SiswaQrisTopupPage = lazy(() => import('./pages/siswa/SiswaQrisTopupPage'))
+const SiswaSectionPage = lazy(() => import('./pages/siswa/SiswaSectionPage'))
+const SiswaMenuPage = lazy(() => import('./pages/siswa/SiswaMenuPage'))
+const ChangePasswordPage = lazy(() => import('./pages/ChangePasswordPage'))
+const ProfilePage = lazy(() => import('./pages/ProfilePage'))
+const PanduanPage = lazy(() => import('./pages/PanduanPage'))
+const ErkamPage = lazy(() => import('./pages/admin/ErkamPage'))
+const SuperadminDashboard = lazy(() => import('./pages/admin/SuperadminDashboard'))
+const KantinMenuPage = lazy(() => import('./pages/admin/KantinMenuPage'))
+const KantinOrdersPage = lazy(() => import('./pages/admin/KantinOrdersPage'))
+const CashlessTopupPage = lazy(() => import('./pages/admin/CashlessTopupPage'))
+const CashlessBankConfigPage = lazy(() => import('./pages/admin/CashlessBankConfigPage'))
+const KantinScannerPage = lazy(() => import('./pages/admin/KantinScannerPage'))
+const DeveloperApiPage = lazy(() => import('./pages/admin/DeveloperApiPage'))
+const MobileCeklok = lazy(() => import('./pages/admin/MobileCeklok'))
+
+/** Loading spinner untuk Suspense fallback */
+function PageLoader() {
+  return <div className="flex items-center justify-center py-20"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" /></div>
+}
 
 function canAccessRole(user: User, allowedRoles?: string[]) {
   if (!allowedRoles || allowedRoles.includes(user.role)) return true
@@ -154,6 +161,7 @@ export default function App() {
     <BrowserRouter>
       <Toaster position="top-right" />
       <PwaInstallPrompt />
+      <Suspense fallback={<PageLoader />}>
       <Routes>
         <Route path="/" element={<RootRoute />} />
         <Route path="/login" element={<LoginPage />} />
@@ -301,6 +309,7 @@ export default function App() {
 
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
+      </Suspense>
     </BrowserRouter>
   )
 }

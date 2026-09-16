@@ -69,8 +69,9 @@ test('switch role kepala-guru terlihat di header desktop, mobile, sidebar, dan b
 })
 
 test('Buku Kas bendahara memiliki route, menu, CRUD tenant-aware, dan saldo berjalan', () => {
-  assert.match(app, /import BukuKasPage/)
-  assert.match(app, /<Route path="buku-kas" element=\{<BukuKasPage \/>\} \/>/)
+  assert.match(app, /BukuKasPage/)
+  assert.match(app, /path="buku-kas"/)
+  assert.match(app, /<BukuKasPage/)
   assert.match(sidebar, /Buku Kas[\s\S]*\/admin\/buku-kas/)
   assert.match(bottomNav, /Buku Kas[\s\S]*\/admin\/buku-kas/)
   const api = block(server, '// ==================== BUKU KAS', '// ==================== LAPORAN MINGGUAN')
