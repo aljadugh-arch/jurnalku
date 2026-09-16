@@ -100,17 +100,20 @@ app.use('/uploads', (_req, res) => res.status(404).type('text/plain').send('Medi
 // Thumbnail endpoint — resize on-the-fly, cache di disk
 const THUMB_DIR = path.join(UPLOAD_DIR, '.thumbs')
 fs.mkdirSync(THUMB_DIR, { recursive: true })
-app.get('/api/thumb/:filename', async (req, res) => {
+app.get('/api/thumb/:filename(*)', async (req, res) => {
   try {
-    const filename = path.basename(req.params.filename)
+    // Express decode params; pakai req.path untuk handle spasi dan karakter khusus
+    const raw = decodeURIComponent(req.params.filename || '')
+    const filename = path.basename(raw)
     if (!filename || filename.includes('..')) return res.status(400).end()
     const size = Math.min(Math.max(parseInt(req.query.s) || 200, 48), 800)
-    const thumbName = `${size}-${filename.replace(/\.[^.]+$/, '')}.webp`
+    const ext = filename.replace(/\.[^.]+$/, '')
+    const thumbName = `${size}-${ext}.webp`
     const thumbPath = path.join(THUMB_DIR, thumbName)
-    // Serve dari cache jika ada
+    // Serve dari cache jika ada — gunakan root option agar spasi di nama file tidak jadi masalah
     if (fs.existsSync(thumbPath)) {
       res.set({ 'Content-Type': 'image/webp', 'Cache-Control': 'public, max-age=31536000, immutable' })
-      return res.sendFile(path.resolve(thumbPath))
+      return res.sendFile(thumbName, { root: THUMB_DIR })
     }
     const srcPath = path.join(UPLOAD_DIR, filename)
     if (!fs.existsSync(srcPath)) return res.status(404).end()
