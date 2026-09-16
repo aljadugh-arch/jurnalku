@@ -1,8 +1,8 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import {
   Plus, Trash2, Edit, Printer, Eye, CheckCircle, Play, Lock,
   FileText, ClipboardList, Monitor, BookOpen, Users, Search,
-  GripVertical, CreditCard, BarChart3, X, ChevronLeft, Save
+  GripVertical, CreditCard, BarChart3, X, ChevronLeft, Save, ScanText, Upload, Loader2
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import api from '../../services/api'
@@ -104,6 +104,10 @@ export default function PaketUjianPage() {
   const [kartuList, setKartuList] = useState<KartuUjian[]>([])
   const [koreksiSiswa, setKoreksiSiswa] = useState<{ nama: string; nis: string; items: KoreksiItem[] } | null>(null)
   const [koreksiScores, setKoreksiScores] = useState<Record<number, number>>({})
+  const [ocrUploading, setOcrUploading] = useState<string | null>(null) // siswa_id being uploaded
+  const [ocrResult, setOcrResult] = useState<{ siswa_nama: string; skor_total: number; skor_max: number; hasil: any[]; ocrText: string } | null>(null)
+  const ocrFileRef = useRef<HTMLInputElement>(null)
+  const ocrTargetSiswa = useRef<{ id: string; nama: string }>({ id: '', nama: '' })
 
   const fetchData = useCallback(async () => {
     try {
@@ -272,7 +276,42 @@ export default function PaketUjianPage() {
 
   const backToList = () => {
     setViewMode('list'); setViewPaket(null); setViewSoalList([]); setHasilList([])
-    setKartuList([]); setKoreksiSiswa(null)
+    setKartuList([]); setKoreksiSiswa(null); setOcrResult(null)
+  }
+
+  // --- OCR Upload & Koreksi Jawaban Tulis ---
+  const triggerOcrUpload = (siswaId: string, nama: string) => {
+    ocrTargetSiswa.current = { id: siswaId, nama }
+    ocrFileRef.current?.click()
+  }
+
+  const handleOcrFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file || !viewPaket) return
+    e.target.value = '' // reset input
+    const siswaId = ocrTargetSiswa.current.id
+    const nama = ocrTargetSiswa.current.nama
+    setOcrUploading(siswaId)
+    try {
+      const fd = new FormData()
+      fd.append('image', file)
+      const { data } = await api.post(`/ujian/${viewPaket.id}/ocr-koreksi/${siswaId}`, fd, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+        timeout: 120000 // 2 menit karena OCR + AI butuh waktu
+      })
+      setOcrResult({ siswa_nama: nama, ...data })
+      toast.success(data.message || 'OCR & koreksi selesai')
+      // Refresh hasil
+      if (viewPaket) openHasil(viewPaket)
+    } catch (err: any) {
+      const msg = err.response?.data?.error || 'Gagal memproses jawaban tulis'
+      toast.error(msg)
+      if (err.response?.data?.ocrText) {
+        setOcrResult({ siswa_nama: nama, skor_total: 0, skor_max: 0, hasil: [], ocrText: err.response.data.ocrText })
+      }
+    } finally {
+      setOcrUploading(null)
+    }
   }
 
   const mapelName = (id: string) => mapelList.find(m => m.id === id)?.nama || '-'
@@ -430,12 +469,22 @@ export default function PaketUjianPage() {
                       </span>
                     </td>
                     <td className="px-4 py-3 text-center">
-                      <button
-                        onClick={() => openKoreksi(viewPaket.id, h.siswa_id)}
-                        className="px-3 py-1 bg-blue-50 text-blue-600 rounded-lg text-xs hover:bg-blue-100"
-                      >
-                        Koreksi
-                      </button>
+                      <div className="flex items-center justify-center gap-1">
+                        <button
+                          onClick={() => openKoreksi(viewPaket.id, h.siswa_id)}
+                          className="px-3 py-1 bg-blue-50 text-blue-600 rounded-lg text-xs hover:bg-blue-100"
+                        >
+                          Koreksi
+                        </button>
+                        <button
+                          onClick={() => triggerOcrUpload(h.siswa_id, h.nama)}
+                          disabled={ocrUploading === h.siswa_id}
+                          className="px-3 py-1 bg-purple-50 text-purple-600 rounded-lg text-xs hover:bg-purple-100 disabled:opacity-50 flex items-center gap-1"
+                        >
+                          {ocrUploading === h.siswa_id ? <Loader2 size={12} className="animate-spin" /> : <ScanText size={12} />}
+                          {ocrUploading === h.siswa_id ? 'Proses...' : 'OCR'}
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -814,6 +863,62 @@ export default function PaketUjianPage() {
             </div>
           </div>
         </div>
+      </Modal>
+
+      {/* Hidden file input for OCR upload */}
+      <input ref={ocrFileRef} type="file" accept="image/*" className="hidden" onChange={handleOcrFile} />
+
+      {/* OCR Result Modal */}
+      <Modal open={!!ocrResult} onClose={() => setOcrResult(null)} title={`Hasil OCR — ${ocrResult?.siswa_nama || ''}`} maxWidth="md:max-w-3xl" footer={
+        <button onClick={() => setOcrResult(null)} className="px-4 py-2 bg-primary text-white rounded-lg text-sm hover:bg-primary-dark">Tutup</button>
+      }>
+        {ocrResult && (
+          <div className="space-y-4">
+            <div className="flex items-center gap-4">
+              <div className="bg-green-50 border border-green-200 rounded-lg p-3 flex-1 text-center">
+                <p className="text-xs text-green-600">Skor Total</p>
+                <p className="text-2xl font-bold text-green-700">{ocrResult.skor_total} / {ocrResult.skor_max}</p>
+                <p className="text-xs text-green-500">{ocrResult.skor_max > 0 ? Math.round(ocrResult.skor_total / ocrResult.skor_max * 100) : 0} poin</p>
+              </div>
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 flex-1 text-center">
+                <p className="text-xs text-blue-600">Soal Dikoreksi</p>
+                <p className="text-2xl font-bold text-blue-700">{ocrResult.hasil?.length || 0}</p>
+              </div>
+            </div>
+
+            {ocrResult.hasil && ocrResult.hasil.length > 0 && (
+              <div className="overflow-x-auto border rounded-lg max-h-72 overflow-y-auto">
+                <table className="w-full text-xs">
+                  <thead className="bg-gray-50 sticky top-0">
+                    <tr>
+                      <th className="px-3 py-2 text-left">No</th>
+                      <th className="px-3 py-2 text-left">Tipe</th>
+                      <th className="px-3 py-2 text-left">Jawaban OCR</th>
+                      <th className="px-3 py-2 text-center">Skor</th>
+                      <th className="px-3 py-2 text-left">Komentar</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y">
+                    {ocrResult.hasil.map((h: any) => (
+                      <tr key={h.no} className={h.skor > 0 || (h.skor_manual && h.skor_manual > 0) ? 'bg-green-50/50' : ''}>
+                        <td className="px-3 py-2 font-medium">{h.no}</td>
+                        <td className="px-3 py-2"><span className="px-1.5 py-0.5 bg-gray-100 rounded text-[10px] uppercase">{h.tipe}</span></td>
+                        <td className="px-3 py-2 max-w-[200px] truncate">{h.jawaban || '-'}</td>
+                        <td className="px-3 py-2 text-center font-bold">{h.skor_manual !== null && h.skor_manual !== undefined ? h.skor_manual : (h.skor ?? '-')}</td>
+                        <td className="px-3 py-2 text-gray-500 max-w-[200px] truncate">{h.komentar || '-'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            <details className="text-xs">
+              <summary className="cursor-pointer text-gray-400 hover:text-gray-600">Lihat teks OCR mentah</summary>
+              <pre className="mt-2 p-3 bg-gray-50 rounded-lg text-[11px] whitespace-pre-wrap max-h-40 overflow-y-auto text-gray-600">{ocrResult.ocrText}</pre>
+            </details>
+          </div>
+        )}
       </Modal>
     </div>
   )

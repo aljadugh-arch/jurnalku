@@ -6885,6 +6885,141 @@ app.get('/api/ujian/:paketId/kartu', STAFF, (req, res) => {
   res.json({ paket, siswa: siswaList, settings })
 })
 
+// --- OCR & AI Koreksi Jawaban Tulis untuk Paket Ujian ---
+app.post('/api/ujian/:paketId/ocr-koreksi/:siswaId', STAFF, ocrUpload.single('image'), async (req, res) => {
+  if (!req.file) return res.status(400).json({ error: 'File gambar lembar jawaban wajib diunggah' })
+  const paket = db.prepare('SELECT * FROM paket_ujian WHERE id = ? AND tenant_id = ?').get(req.params.paketId, req.tenantId)
+  if (!paket) return res.status(404).json({ error: 'Paket ujian tidak ditemukan' })
+  
+  // Ambil soal-soal paket
+  let soalIds = []; try { soalIds = JSON.parse(paket.soal_ids || '[]') } catch {}
+  if (!soalIds.length) return res.status(400).json({ error: 'Paket ujian tidak memiliki soal' })
+  const ph = soalIds.map(() => '?').join(',')
+  const soalList = db.prepare(`SELECT * FROM bank_soal WHERE id IN (${ph}) AND tenant_id = ?`).all(...soalIds, req.tenantId)
+  const soalMap = Object.fromEntries(soalList.map(s => [s.id, s]))
+  const orderedSoal = soalIds.map(id => soalMap[id]).filter(Boolean)
+  
+  try {
+    // Step 1: OCR scan foto lembar jawaban
+    const { createWorker } = require('tesseract.js')
+    const worker = await createWorker(['ind', 'eng'])
+    const { data: ocrData } = await worker.recognize(req.file.buffer)
+    await worker.terminate()
+    const ocrText = (ocrData.text || '').trim()
+    if (!ocrText) return res.status(400).json({ error: 'Tidak ada teks yang terdeteksi pada gambar' })
+
+    // Step 2: AI parse jawaban per nomor soal
+    const soalSummary = orderedSoal.map((s, i) => {
+      const no = i + 1
+      return `${no}. [${s.tipe.toUpperCase()}] ${s.soal.substring(0, 100)}`
+    }).join('\n')
+
+    const parsePrompt = `Anda adalah asisten yang mengekstrak jawaban siswa dari hasil OCR lembar jawaban ujian.
+
+Daftar soal (${orderedSoal.length} soal):
+${soalSummary}
+
+Hasil OCR lembar jawaban:
+${ocrText}
+
+Tugas: Ekstrak jawaban siswa untuk setiap nomor soal. Cocokkan teks OCR dengan nomor soal.
+- Untuk soal PG: jawaban berupa huruf (A/B/C/D/E)
+- Untuk soal PG_KOMPLEKS: jawaban berupa array huruf, contoh ["A","C"]
+- Untuk soal ISIAN: jawaban berupa teks singkat
+- Untuk soal URAIAN: jawaban berupa teks lengkap
+
+Keluarkan HANYA JSON array valid tanpa markdown, format: [{"no": 1, "jawaban": "A"}, {"no": 2, "jawaban": "teks jawaban"}, ...]
+Jika jawaban tidak terbaca atau kosong, gunakan "" (string kosong).`
+
+    const aiOverride = resolveAiConfig(db, req.tenantId, req.user?.id) || {}
+    const parseRaw = await callAi(parsePrompt, aiOverride)
+    let parsedJawaban = []
+    try {
+      const jsonMatch = parseRaw.match(/\[[\s\S]*\]/)
+      parsedJawaban = JSON.parse(jsonMatch ? jsonMatch[0] : parseRaw)
+    } catch {
+      return res.status(502).json({ error: 'AI gagal mengekstrak jawaban dari OCR, coba foto lebih jelas', ocrText })
+    }
+
+    // Step 3: Simpan jawaban + auto-koreksi PG/isian, AI koreksi uraian
+    const siswaId = req.params.siswaId
+    // Pastikan sesi ujian ada
+    let sesi = db.prepare('SELECT * FROM sesi_ujian WHERE paket_id = ? AND siswa_id = ? AND tenant_id = ?').get(paket.id, siswaId, req.tenantId)
+    if (!sesi) {
+      const sesiId = uuidv4()
+      db.prepare("INSERT INTO sesi_ujian (id, paket_id, siswa_id, mulai, selesai, status, tenant_id) VALUES (?,?,?,datetime('now'),datetime('now'),'selesai',?)").run(sesiId, paket.id, siswaId, req.tenantId)
+      sesi = { id: sesiId }
+    }
+
+    const insertJawaban = db.prepare(`INSERT INTO jawaban_ujian (id, paket_id, siswa_id, soal_id, jawaban, skor, skor_manual, komentar_koreksi, tenant_id) VALUES (?,?,?,?,?,?,?,?,?) ON CONFLICT(paket_id, siswa_id, soal_id) DO UPDATE SET jawaban=excluded.jawaban, skor=excluded.skor, skor_manual=excluded.skor_manual, komentar_koreksi=excluded.komentar_koreksi, updated_at=datetime('now')`)
+    
+    const results = []
+    let skorTotal = 0, skorMax = 0
+
+    for (let i = 0; i < orderedSoal.length; i++) {
+      const s = orderedSoal[i]
+      const pj = parsedJawaban.find(p => p.no === i + 1)
+      const jawaban = pj ? (typeof pj.jawaban === 'object' ? JSON.stringify(pj.jawaban) : String(pj.jawaban || '')) : ''
+      skorMax += (s.skor || 1)
+      
+      let skor = null, skorManual = null, komentar = ''
+
+      if (s.tipe === 'pg' || s.tipe === 'isian') {
+        const benar = jawaban.trim().toLowerCase() === (s.kunci_jawaban || '').trim().toLowerCase()
+        skor = benar ? (s.skor || 1) : 0
+        skorTotal += skor
+        komentar = benar ? 'Benar (auto-koreksi)' : `Salah — kunci: ${s.kunci_jawaban}`
+      } else if (s.tipe === 'pg_kompleks') {
+        try {
+          const kunci = JSON.parse(s.kunci_jawaban || '[]').map(k => k.toString().trim().toLowerCase()).sort()
+          const jwb = JSON.parse(jawaban || '[]').map(k => k.toString().trim().toLowerCase()).sort()
+          const benar = JSON.stringify(kunci) === JSON.stringify(jwb)
+          skor = benar ? (s.skor || 1) : 0
+          skorTotal += skor
+          komentar = benar ? 'Benar (auto-koreksi)' : `Salah — kunci: ${s.kunci_jawaban}`
+        } catch { skor = 0; komentar = 'Gagal parse jawaban PG kompleks' }
+      } else if (s.tipe === 'uraian' && jawaban.trim()) {
+        // AI koreksi untuk uraian
+        try {
+          const koreksiPrompt = `Anda guru yang mengoreksi jawaban uraian siswa. Toleransi typo OCR.
+Soal: ${s.soal}
+Kunci Jawaban: ${s.kunci_jawaban || '(tidak tersedia)'}
+Jawaban Siswa (dari OCR, mungkin ada typo): ${jawaban}
+Skor maksimal: ${s.skor || 1}
+Keluarkan HANYA JSON: {"skor": angka, "komentar": "alasan singkat"}`
+          const koreksiRaw = await callAi(koreksiPrompt, aiOverride)
+          const km = koreksiRaw.match(/\{[\s\S]*\}/)
+          const kp = JSON.parse(km ? km[0] : koreksiRaw)
+          skorManual = Math.max(0, Math.min(s.skor || 1, Number(kp.skor) || 0))
+          komentar = clean(kp.komentar) || 'AI koreksi'
+          skorTotal += skorManual
+        } catch (e) {
+          komentar = 'AI koreksi gagal: ' + e.message
+          skorManual = 0
+        }
+      }
+
+      insertJawaban.run(uuidv4(), paket.id, siswaId, s.id, jawaban, skor, skorManual, komentar, req.tenantId)
+      results.push({ no: i + 1, soal_id: s.id, tipe: s.tipe, jawaban, skor, skor_manual: skorManual, komentar })
+    }
+
+    // Update sesi
+    db.prepare("UPDATE sesi_ujian SET status = 'selesai', selesai = datetime('now'), skor_total = ?, skor_max = ? WHERE paket_id = ? AND siswa_id = ? AND tenant_id = ?").run(skorTotal, skorMax, paket.id, siswaId, req.tenantId)
+
+    res.json({ 
+      ok: true, 
+      ocrText, 
+      skor_total: skorTotal, 
+      skor_max: skorMax, 
+      hasil: results,
+      message: `${results.length} jawaban berhasil diekstrak dan dikoreksi`
+    })
+  } catch (error) {
+    console.error('[OCR Koreksi Ujian]', error.message)
+    res.status(500).json({ error: 'Gagal memproses: ' + error.message })
+  }
+})
+
 // --- Ujian tersedia untuk siswa ---
 app.get('/api/ujian/aktif', EXAM_ROLES, (req, res) => {
   const siswaId = req.user?.siswa_id || req.user?.id
