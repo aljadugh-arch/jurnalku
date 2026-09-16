@@ -105,7 +105,7 @@ app.get('/api/thumb/:filename', async (req, res) => {
     // Serve dari cache jika ada
     if (fs.existsSync(thumbPath)) {
       res.set({ 'Content-Type': 'image/webp', 'Cache-Control': 'public, max-age=31536000, immutable' })
-      return res.sendFile(thumbPath)
+      return res.sendFile(path.resolve(thumbPath))
     }
     const srcPath = path.join(UPLOAD_DIR, filename)
     if (!fs.existsSync(srcPath)) return res.status(404).end()
