@@ -2063,22 +2063,46 @@ function resolveGtkForUser(userId, tenantId) {
 
 
 const DEMO_HOSTS = new Set(['jurnal.cc.cd', 'jurnalmadrasah.web.id'])
+// Demo tenant terpisah dari default (superadmin).
+// Cari/buat tenant khusus demo — BUKAN 'default'.
+const DEMO_TENANT_ID = 'demo-tenant'
+;(() => {
+  // 1. Ubah slug 'default' tenant dari 'demo' ke 'platform' agar tidak konflik
+  //    dan agar demo.jurnal.cc.cd tidak resolve ke tenant superadmin
+  try {
+    const defT = db.prepare("SELECT slug FROM tenants WHERE id='default'").get()
+    if (defT && defT.slug === 'demo') {
+      db.prepare("UPDATE tenants SET slug='platform', nama='Platform Jurnalku' WHERE id='default'").run()
+    }
+  } catch {}
+
+  // 2. Buat tenant demo terpisah jika belum ada
+  let dt = db.prepare("SELECT id FROM tenants WHERE id=?").get(DEMO_TENANT_ID)
+  if (!dt) {
+    try {
+      db.prepare("INSERT INTO tenants (id, slug, nama, email, plan, aktif, base_domain) VALUES (?,?,?,?,?,?,?)")
+        .run(DEMO_TENANT_ID, 'demo', 'Demo Jurnal Madrasah', 'demo@jurnalmadrasah.web.id', 'premium', 1, 'jurnal.cc.cd')
+      ensureTenantSettings(db, DEMO_TENANT_ID, { nama_lembaga: 'Demo Jurnal Madrasah' })
+    } catch {}
+  }
+
+  // 3. Migrasi: pindahkan user demo dari 'default' ke demo-tenant
+  try {
+    db.prepare("UPDATE users SET tenant_id=? WHERE tenant_id='default' AND email LIKE 'demo-%@jurnalmadrasah.web.id'").run(DEMO_TENANT_ID)
+    db.prepare("UPDATE gtk SET tenant_id=? WHERE tenant_id='default' AND email LIKE 'demo-%@jurnalmadrasah.web.id'").run(DEMO_TENANT_ID)
+    db.prepare("UPDATE siswa SET tenant_id=? WHERE tenant_id='default' AND nis='DEMO001'").run(DEMO_TENANT_ID)
+    db.prepare("UPDATE rombel SET tenant_id=? WHERE tenant_id='default' AND nama='Demo A'").run(DEMO_TENANT_ID)
+  } catch {}
+})()
+
 app.post('/api/auth/demo', (req, res) => {
   const demoHost = String(req.headers.host || '').split(':')[0].replace(/\.$/, '').toLowerCase()
   if (!DEMO_HOSTS.has(demoHost)) return res.status(404).json({ error: 'Not found' })
   const role = String(req.body?.role || 'admin')
   const allowed = ['admin','kepala','guru','wali_kelas','bendahara','siswa']
   if (!allowed.includes(role)) return res.status(400).json({ error: 'Role demo tidak tersedia' })
-  const demoTenant = () => {
-    let t = db.prepare('SELECT id FROM tenants WHERE slug=? OR id=? LIMIT 1').get('demo','default')
-    if (t) return t.id
-    const id = 'default'
-    db.prepare('INSERT INTO tenants (id, slug, nama, email) VALUES (?,?,?,?)').run(id, 'demo', 'Demo Jurnal Madrasah', 'demo@jurnalmadrasah.web.id')
-    try { ensureTenantSettings(db, id, { nama_lembaga: 'Demo Jurnal Madrasah' }) } catch {}
-    return id
-  }
   const makeDemo = (wantRole) => {
-    const tenantId = demoTenant()
+    const tenantId = DEMO_TENANT_ID
     const actualRole = wantRole === 'wali_kelas' ? 'guru' : wantRole
     let user = db.prepare('SELECT * FROM users WHERE tenant_id=? AND role=? ORDER BY created_at LIMIT 1').get(tenantId, actualRole)
     if (user) return user
@@ -2100,7 +2124,7 @@ app.post('/api/auth/demo', (req, res) => {
     db.prepare('INSERT INTO users (id,nama,email,password,role,tenant_id,gtk_id,siswa_id,nis,must_change_password) VALUES (?,?,?,?,?,?,?,?,?,0)').run(id,nama,email,pass,actualRole,tenantId,gtkId,siswaId,nis)
     return db.prepare('SELECT * FROM users WHERE id=?').get(id)
   }
-  const tenantId = 'default'
+  const tenantId = DEMO_TENANT_ID
   let user = db.prepare('SELECT * FROM users WHERE tenant_id=? AND role=? ORDER BY created_at LIMIT 1').get(tenantId, role)
   if (!user && role === 'wali_kelas') user = db.prepare("SELECT * FROM users WHERE tenant_id=? AND role='guru' ORDER BY created_at LIMIT 1").get(tenantId)
   if (!user) user = makeDemo(role)

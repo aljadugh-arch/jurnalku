@@ -125,11 +125,11 @@ function setupTenantTables(db) {
     }
   } catch {}
 
-  // Ensure default tenant exists
+  // Ensure default tenant exists (platform/superadmin tenant)
   const defaultTenant = db.prepare('SELECT id FROM tenants WHERE id = ?').get('default')
   if (!defaultTenant) {
     db.prepare(`INSERT INTO tenants (id, slug, nama) VALUES (?, ?, ?)`)
-      .run('default', 'demo', 'Demo Lembaga')
+      .run('default', 'platform', 'Platform Jurnalku')
   }
 }
 
@@ -195,7 +195,15 @@ function registerTenantRoutes(app, db, authMiddleware, uuidv4, SUPER) {
   // List all tenants (super_admin only)
   app.get('/api/tenants', authMiddleware, (req, res) => {
     if (req.user.role !== 'super_admin') return res.status(403).json({ error: 'Forbidden' })
-    const tenants = db.prepare('SELECT * FROM tenants ORDER BY created_at DESC').all()
+    const tenants = db.prepare(`
+      SELECT t.*,
+        (SELECT count(*) FROM users u WHERE u.tenant_id=t.id) as user_count,
+        (SELECT count(*) FROM siswa s WHERE s.tenant_id=t.id) as siswa_count,
+        (SELECT count(*) FROM gtk g WHERE g.tenant_id=t.id) as gtk_count
+      FROM tenants t
+      WHERE t.id != 'default'
+      ORDER BY t.created_at DESC
+    `).all()
     res.json(tenants)
   })
 

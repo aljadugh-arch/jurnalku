@@ -12,13 +12,13 @@ const routeBlock = (signature) => {
   return server.slice(start, end > start ? end : server.length)
 }
 
-test('demo auth is restricted to explicit public demo hosts and default tenant', () => {
+test('demo auth is restricted to explicit public demo hosts and separate demo tenant', () => {
   const block = routeBlock("app.post('/api/auth/demo'")
   assert.match(block, /DEMO_HOSTS/)
   assert.match(block, /req\.headers\.host/)
   assert.match(block, /status\(404\)/)
-  assert.match(block, /const tenantId = 'default'/)
-  assert.doesNotMatch(block, /req\.tenantId \|\| 'default'/)
+  assert.match(block, /DEMO_TENANT_ID/)
+  assert.doesNotMatch(block, /tenantId = 'default'/)
 })
 
 test('GTK resolver repairs stale or cross-tenant user linkage after scoped fallback', () => {
