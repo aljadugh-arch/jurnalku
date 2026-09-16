@@ -538,7 +538,7 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_rapor_semester ON rapor(tahun_ajaran, semester, jenis);
   CREATE UNIQUE INDEX IF NOT EXISTS idx_rapor_unique ON rapor(siswa_id, mapel_id, tahun_ajaran, semester, jenis);
 
-  // ==================== BANK SOAL & UJIAN ====================
+  -- Bank Soal & Ujian
   CREATE TABLE IF NOT EXISTS bank_soal (
     id TEXT PRIMARY KEY,
     mapel_id TEXT NOT NULL,
