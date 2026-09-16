@@ -7,16 +7,58 @@ interface ImportExcelProps {
   title: string
   templateName?: string
   templateUrl?: string
-  headerRow: number // 0-indexed row where headers are
+  headerRow: number // 0-indexed row where headers are (0-indexed: row 0 = baris 1 di Excel)
   columnMap: Record<string, string> // excel column name -> api field name
+  sampleRows?: Record<string, any>[] // contoh data untuk template (opsional)
   onImport: (data: Record<string, any>[]) => Promise<void>
   onClose: () => void
 }
 
-export default function ImportExcel({ title, templateName, templateUrl, headerRow, columnMap, onImport, onClose }: ImportExcelProps) {
+export default function ImportExcel({ title, templateName, templateUrl, headerRow, columnMap, sampleRows, onImport, onClose }: ImportExcelProps) {
   const [preview, setPreview] = useState<Record<string, any>[]>([])
   const [loading, setLoading] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
+
+  /** Generate template XLSX dari columnMap + sampleRows (jika templateUrl tidak tersedia) */
+  const generateTemplate = () => {
+    const headers = Object.keys(columnMap)
+    // Baris-baris: title row (jika headerRow > 0), header row, lalu sample rows
+    const sheetData: any[][] = []
+    // Jika headerRow > 0, tambah baris judul di atas
+    for (let i = 0; i < headerRow; i++) {
+      if (i === 0) {
+        sheetData.push([title])
+      } else {
+        sheetData.push([])
+      }
+    }
+    // Header row
+    sheetData.push(headers)
+    // Sample rows
+    if (sampleRows && sampleRows.length > 0) {
+      for (const sample of sampleRows) {
+        const row = headers.map(h => {
+          const field = columnMap[h]
+          return sample[field] ?? ''
+        })
+        sheetData.push(row)
+      }
+    }
+    const ws = XLSX.utils.aoa_to_sheet(sheetData)
+    // Set column widths
+    ws['!cols'] = headers.map(h => ({ wch: Math.max(h.length + 4, 15) }))
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, 'Data')
+    const buf = XLSX.write(wb, { bookType: 'xlsx', type: 'array' })
+    const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = (templateName || 'template').replace(/\.xls$/, '.xlsx')
+    a.click()
+    URL.revokeObjectURL(url)
+    toast.success('Template berhasil diunduh')
+  }
 
   const handleFile = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -72,9 +114,9 @@ export default function ImportExcel({ title, templateName, templateUrl, headerRo
           <div className="bg-blue-50 border border-blue-100 rounded-lg p-3 mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <p className="text-sm text-blue-700">Template: <strong>{templateName}</strong></p>
-              <p className="text-xs text-blue-500 mt-1">Unduh template, isi data mulai baris kedua, lalu unggah kembali.</p>
+              <p className="text-xs text-blue-500 mt-1">Unduh template, isi data sesuai kolom, lalu unggah kembali.</p>
             </div>
-            {templateUrl && (
+            {templateUrl ? (
               <a
                 href={templateUrl}
                 download={templateName}
@@ -82,6 +124,13 @@ export default function ImportExcel({ title, templateName, templateUrl, headerRo
               >
                 <Download size={16} /> Unduh Template
               </a>
+            ) : (
+              <button
+                onClick={generateTemplate}
+                className="inline-flex shrink-0 items-center justify-center gap-2 rounded-lg bg-blue-600 px-3 py-2 text-sm font-medium text-white hover:bg-blue-700"
+              >
+                <Download size={16} /> Unduh Template
+              </button>
             )}
           </div>
         )}

@@ -289,19 +289,51 @@ export default function DataGTKPage() {
       {isLocalTenant && showImport && (
         <ImportExcel
           title="Import Data GTK"
-          templateName="master-gtk-v2.xls"
-          headerRow={2}
-          columnMap={{ 'NIK': 'nik', 'Kode GTK': 'nip', 'Nama Lengkap': 'nama', 'TGL Lahir': 'tanggal_lahir', 'NIP/NUPTK': 'nuptk', 'No. HP': 'no_hp' }}
+          templateName="template-data-gtk.xlsx"
+          headerRow={1}
+          columnMap={{
+            'NIK': 'nik',
+            'NIP': 'nip',
+            'NUPTK': 'nuptk',
+            'Nama Lengkap': 'nama',
+            'Jenis Kelamin (L/P)': 'jenis_kelamin',
+            'Tempat Lahir': 'tempat_lahir',
+            'Tanggal Lahir (YYYY-MM-DD)': 'tanggal_lahir',
+            'No HP': 'no_hp',
+            'Email': 'email',
+            'Jabatan': 'jabatan',
+            'Status Kepegawaian': 'status_kepegawaian',
+            'Bidang Studi': 'bidang_studi',
+            'Alamat': 'alamat',
+          }}
+          sampleRows={[
+            { nik: '3512345678901234', nip: '198501012010011001', nuptk: '1234567890123456', nama: 'Ahmad Fauzi, S.Pd', jenis_kelamin: 'L', tempat_lahir: 'Bondowoso', tanggal_lahir: '1985-01-01', no_hp: '081234567890', email: 'ahmad@email.com', jabatan: 'guru', status_kepegawaian: 'pns', bidang_studi: 'Matematika', alamat: 'Jl. Merdeka No. 1' },
+            { nik: '3512345678901235', nip: '', nuptk: '', nama: 'Siti Aminah, S.Pd.I', jenis_kelamin: 'P', tempat_lahir: 'Jember', tanggal_lahir: '1990-06-15', no_hp: '082345678901', email: '', jabatan: 'guru', status_kepegawaian: 'honorer', bidang_studi: 'Bahasa Arab', alamat: 'Jl. Sukarno No. 5' },
+          ]}
           onImport={async (rows) => {
+            let ok = 0, skip = 0
             for (const row of rows) {
-              await api.post('/gtk', {
-                ...row,
-                nik: String(row.nik || ''), jenis_kelamin: 'L',
-                jabatan: 'guru',
-                status_kepegawaian: 'honorer',
-                status: 'aktif'
-              })
+              try {
+                await api.post('/gtk', {
+                  nik: String(row.nik || ''),
+                  nip: String(row.nip || ''),
+                  nuptk: String(row.nuptk || ''),
+                  nama: row.nama || '',
+                  jenis_kelamin: (row.jenis_kelamin || 'L').toString().trim().toUpperCase().charAt(0) === 'P' ? 'P' : 'L',
+                  tempat_lahir: row.tempat_lahir || '',
+                  tanggal_lahir: row.tanggal_lahir || '',
+                  no_hp: String(row.no_hp || ''),
+                  email: row.email || '',
+                  jabatan: row.jabatan || 'guru',
+                  status_kepegawaian: row.status_kepegawaian || 'honorer',
+                  bidang_studi: row.bidang_studi || '',
+                  alamat: row.alamat || '',
+                  status: 'aktif',
+                })
+                ok++
+              } catch { skip++ }
             }
+            if (skip > 0) toast(`${ok} berhasil, ${skip} dilewati (duplikat/error)`, { icon: '⚠️' })
             fetchData()
           }}
           onClose={() => setShowImport(false)}

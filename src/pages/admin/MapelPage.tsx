@@ -225,13 +225,36 @@ export default function MapelPage() {
       {showImport && (
         <ImportExcel
           title="Import Mata Pelajaran"
-          templateName="master-mapel-v2.xls"
-          headerRow={2}
-          columnMap={{ 'Kode MAPEL': 'kode', 'Nama Mata Pelajaran': 'nama' }}
+          templateName="template-mapel.xlsx"
+          headerRow={1}
+          columnMap={{
+            'Kode': 'kode',
+            'Nama Mata Pelajaran': 'nama',
+            'Kelompok (wajib/peminatan/muatan_lokal)': 'kelompok',
+            'Jam per Minggu': 'jam_per_minggu',
+          }}
+          sampleRows={[
+            { kode: 'MTK', nama: 'Matematika', kelompok: 'wajib', jam_per_minggu: 4 },
+            { kode: 'BIN', nama: 'Bahasa Indonesia', kelompok: 'wajib', jam_per_minggu: 4 },
+            { kode: 'IPA', nama: 'Ilmu Pengetahuan Alam', kelompok: 'wajib', jam_per_minggu: 3 },
+            { kode: 'BARB', nama: 'Bahasa Arab', kelompok: 'peminatan', jam_per_minggu: 2 },
+            { kode: 'MULOK', nama: 'Bahasa Daerah', kelompok: 'muatan_lokal', jam_per_minggu: 2 },
+          ]}
           onImport={async (rows) => {
+            let ok = 0, skip = 0
             for (const row of rows) {
-              await api.post('/mapel', { ...row, kelompok: 'wajib', jam_per_minggu: 2 })
+              try {
+                const kelompok = (row.kelompok || 'wajib').toString().trim().toLowerCase()
+                await api.post('/mapel', {
+                  kode: (row.kode || '').toString().trim(),
+                  nama: (row.nama || '').toString().trim(),
+                  kelompok: ['wajib', 'peminatan', 'muatan_lokal'].includes(kelompok) ? kelompok : 'wajib',
+                  jam_per_minggu: parseInt(row.jam_per_minggu) || 2,
+                })
+                ok++
+              } catch { skip++ }
             }
+            if (skip > 0) toast(`${ok} berhasil, ${skip} dilewati (duplikat/error)`, { icon: '⚠️' })
             fetchData()
           }}
           onClose={() => setShowImport(false)}
