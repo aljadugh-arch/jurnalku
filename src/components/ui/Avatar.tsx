@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { thumbUrl } from '../../lib/thumbUrl'
 
 // Circular avatar: shows photo if available, else gradient initials fallback.
 export default function Avatar({ src, name, size = 72, className = '' }: {
@@ -20,11 +21,14 @@ export default function Avatar({ src, name, size = 72, className = '' }: {
   const dim = { width: size, height: size }
 
   if (src && !failed) {
+    // Pakai thumbnail untuk avatar kecil (≤128px), full-size untuk besar
+    const imgSrc = size <= 128 ? thumbUrl(src, size * 2) || src : src
     return (
       <img
-        src={src}
+        src={imgSrc}
         alt={name || 'avatar'}
         style={dim}
+        loading="lazy"
         onError={() => setFailed(true)}
         className={'rounded-full object-cover border-4 border-white shadow-md ' + className}
       />

@@ -221,7 +221,7 @@ export default function SiswaKantinPage() {
               <div key={item.id} className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden hover:shadow-lg transition-shadow">
                 <div className="relative aspect-video overflow-hidden">
                   {item.gambar ? (
-                    <img src={item.gambar} alt={item.nama} className="w-full h-full object-cover" />
+                    <img src={item.gambar} alt={item.nama} loading="lazy" className="w-full h-full object-cover" />
                   ) : (
                     <div className="w-full h-full bg-gray-100 dark:bg-gray-700 flex items-center justify-center">
                       <Heart size={32} className="text-gray-300 dark:text-gray-600" />
@@ -285,7 +285,7 @@ export default function SiswaKantinPage() {
                       <div key={item.id} className="flex gap-3 p-2 bg-gray-50 dark:bg-gray-700 rounded-lg">
                         <div className="w-16 h-16 rounded-lg bg-gray-100 dark:bg-gray-600 flex-shrink-0 overflow-hidden">
                           {item.gambar ? (
-                            <img src={item.gambar} alt={item.nama} className="w-full h-full object-cover" />
+                            <img src={item.gambar} alt={item.nama} loading="lazy" className="w-full h-full object-cover" />
                           ) : (
                             <Heart size={24} className="mx-auto my-auto text-gray-300" />
                           )}

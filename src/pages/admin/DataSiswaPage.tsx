@@ -5,6 +5,7 @@ import api from '../../services/api'
 import ImportExcel from '../../components/ImportExcel'
 import FoundationTenantPicker from '../../components/FoundationTenantPicker'
 import Modal from '../../components/ui/Modal'
+import { thumbUrl } from '../../lib/thumbUrl'
 
 interface Siswa {
   id: string
@@ -42,7 +43,7 @@ function getInitials(nama: string): string {
 function SiswaPhoto({ foto, nama, size = 'w-12 h-12' }: { foto?: string; nama: string; size?: string }) {
   const [failed, setFailed] = useState(false)
   useEffect(() => setFailed(false), [foto])
-  if (foto && !failed) return <img src={encodeURI(foto)} alt={nama} onError={() => setFailed(true)} className={`${size} rounded-full object-cover border border-gray-200`} />
+  if (foto && !failed) return <img src={thumbUrl(foto, 96)} alt={nama} loading="lazy" onError={() => setFailed(true)} className={`${size} rounded-full object-cover border border-gray-200`} />
   return <div className={`${size} rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold text-sm`}>{getInitials(nama)}</div>
 }
 

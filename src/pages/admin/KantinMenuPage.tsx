@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Plus, Edit, Trash2, X, Image, ChevronUp, ChevronDown, Search, Loader2, Upload } from 'lucide-react'
 import toast from 'react-hot-toast'
+import { thumbUrl } from '../../lib/thumbUrl'
 import api from '../../services/api'
 import { imageFileToDataUrl } from '../../lib/image'
 
@@ -216,7 +217,7 @@ export default function KantinMenuPage() {
                   <tr key={menu.id} className="hover:bg-gray-50">
                     <td className="px-4 py-3">
                       {menu.foto ? (
-                        <img src={menu.foto} alt={menu.nama} className="w-12 h-12 rounded-lg object-cover" />
+                        <img src={thumbUrl(menu.foto, 96)} alt={menu.nama} loading="lazy" className="w-12 h-12 rounded-lg object-cover" />
                       ) : (
                         <div className="w-12 h-12 rounded-lg bg-gray-100 flex items-center justify-center">
                           <Image size={20} className="text-gray-400" />

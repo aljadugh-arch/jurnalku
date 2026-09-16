@@ -91,6 +91,37 @@ app.use('/uploads', express.static(UPLOAD_DIR, {
 }))
 // Missing media must stay a real 404; never serve SPA HTML as an image.
 app.use('/uploads', (_req, res) => res.status(404).type('text/plain').send('Media not found'))
+
+// Thumbnail endpoint — resize on-the-fly, cache di disk
+const THUMB_DIR = path.join(UPLOAD_DIR, '.thumbs')
+fs.mkdirSync(THUMB_DIR, { recursive: true })
+app.get('/api/thumb/:filename', async (req, res) => {
+  try {
+    const filename = path.basename(req.params.filename)
+    if (!filename || filename.includes('..')) return res.status(400).end()
+    const size = Math.min(Math.max(parseInt(req.query.s) || 200, 48), 800)
+    const thumbName = `${size}-${filename.replace(/\.[^.]+$/, '')}.webp`
+    const thumbPath = path.join(THUMB_DIR, thumbName)
+    // Serve dari cache jika ada
+    if (fs.existsSync(thumbPath)) {
+      res.set({ 'Content-Type': 'image/webp', 'Cache-Control': 'public, max-age=31536000, immutable' })
+      return res.sendFile(thumbPath)
+    }
+    const srcPath = path.join(UPLOAD_DIR, filename)
+    if (!fs.existsSync(srcPath)) return res.status(404).end()
+    const buf = await sharp(srcPath, { failOn: 'error', limitInputPixels: 40_000_000 })
+      .rotate()
+      .resize(size, size, { fit: 'cover', position: 'centre' })
+      .webp({ quality: 70, effort: 4 })
+      .toBuffer()
+    await fs.promises.writeFile(thumbPath, buf)
+    res.set({ 'Content-Type': 'image/webp', 'Cache-Control': 'public, max-age=31536000, immutable' })
+    res.send(buf)
+  } catch (err) {
+    console.error('[thumb]', err.message)
+    res.status(500).end()
+  }
+})
 app.use(express.static(path.join(__dirname, '..', 'dist'), {
   index: false,
   fallthrough: true,

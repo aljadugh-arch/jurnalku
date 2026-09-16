@@ -5,6 +5,7 @@ import api from '../../services/api'
 import ImportExcel from '../../components/ImportExcel'
 import FoundationTenantPicker from '../../components/FoundationTenantPicker'
 import Modal from '../../components/ui/Modal'
+import { thumbUrl } from '../../lib/thumbUrl'
 
 interface GTK {
   id: string; nik: string; nip: string; nuptk: string; nama: string; jenis_kelamin: string
@@ -26,10 +27,11 @@ const statusColor: Record<string, string> = {
 
 const gtkPhotoUrl = (foto?: string) => foto ? encodeURI(foto) : ''
 
-function GTKPhoto({ foto, nama }: { foto?: string; nama: string }) {
+function GTKPhoto({ foto, nama, size = 'sm' }: { foto?: string; nama: string; size?: 'sm' | 'lg' }) {
   const [failed, setFailed] = useState(false)
   useEffect(() => setFailed(false), [foto])
-  if (foto && !failed) return <img src={gtkPhotoUrl(foto)} alt={nama} onError={() => setFailed(true)} className="w-full h-full object-cover" />
+  const src = size === 'sm' ? thumbUrl(foto, 96) : gtkPhotoUrl(foto)
+  if (foto && !failed) return <img src={src} alt={nama} loading="lazy" onError={() => setFailed(true)} className="w-full h-full object-cover" />
   return <div className="w-full h-full bg-primary/10 flex items-center justify-center text-primary font-bold text-lg">{nama.charAt(0)}</div>
 }
 
@@ -207,7 +209,7 @@ export default function DataGTKPage() {
           <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
             <div className="flex items-center gap-3">
               <div className="w-12 h-12 rounded-full overflow-hidden border flex-shrink-0 bg-gray-100">
-                <GTKPhoto foto={selected.foto} nama={selected.nama} />
+                <GTKPhoto foto={selected.foto} nama={selected.nama} size="lg" />
               </div>
               <div>
                 <h2 className="font-bold text-gray-800">{selected.nama}</h2>
