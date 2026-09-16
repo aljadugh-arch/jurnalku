@@ -77,6 +77,12 @@ export default function SiswaUjianPage() {
   const [passwordVisible, setPasswordVisible] = useState(false)
   const [startingId, setStartingId] = useState<string | null>(null)
 
+  // Token CBT
+  const [showTokenInput, setShowTokenInput] = useState(false)
+  const [tokenInput, setTokenInput] = useState('')
+  const [tokenValidating, setTokenValidating] = useState(false)
+  const [tokenPaketId, setTokenPaketId] = useState<string | null>(null)
+
   // Ujian state
   const [session, setSession] = useState<UjianSession | null>(null)
   const [currentIdx, setCurrentIdx] = useState(0)
@@ -168,7 +174,17 @@ export default function SiswaUjianPage() {
       setViewMode('ujian')
       setShowPassword(false)
       setPasswordInput('')
+      setShowTokenInput(false)
+      setTokenInput('')
     } catch (err: any) {
+      // CBT: jika backend minta token
+      if (err.response?.data?.requires_token) {
+        setTokenPaketId(id)
+        setTokenInput('')
+        setShowTokenInput(true)
+        setShowPassword(false)
+        return
+      }
       toast.error(err.response?.data?.error || 'Gagal memulai ujian')
     }
   }
@@ -190,6 +206,22 @@ export default function SiswaUjianPage() {
   const handlePasswordSubmit = () => {
     if (!startingId) return
     startUjian(startingId, passwordInput)
+  }
+
+  const handleTokenSubmit = async () => {
+    if (!tokenPaketId || !tokenInput.trim()) return
+    setTokenValidating(true)
+    try {
+      await api.post(`/ujian/${tokenPaketId}/validasi-token`, { token: tokenInput.trim() })
+      toast.success('Token valid')
+      setShowTokenInput(false)
+      // Setelah token valid, mulai ujian
+      startUjian(tokenPaketId, passwordInput)
+    } catch (err: any) {
+      toast.error(err.response?.data?.error || 'Token tidak valid')
+    } finally {
+      setTokenValidating(false)
+    }
   }
 
   // Answer handlers with debounced save
@@ -578,6 +610,36 @@ export default function SiswaUjianPage() {
               {passwordVisible ? <EyeOff size={16} /> : <Eye size={16} />}
             </button>
           </div>
+        </div>
+      </Modal>
+
+      {/* Token CBT Modal */}
+      <Modal open={showTokenInput} onClose={() => setShowTokenInput(false)} title="Token CBT" maxWidth="md:max-w-sm"
+        footer={
+          <div className="flex gap-3">
+            <button onClick={() => setShowTokenInput(false)} className="flex-1 px-4 py-2 border rounded-lg text-sm">Batal</button>
+            <button onClick={handleTokenSubmit} disabled={tokenValidating || !tokenInput.trim()} className="flex-1 px-4 py-2 bg-primary text-white rounded-lg text-sm hover:bg-primary-dark disabled:opacity-50">
+              {tokenValidating ? 'Memvalidasi...' : 'Validasi & Mulai'}
+            </button>
+          </div>
+        }
+      >
+        <div className="space-y-3">
+          <div className="w-12 h-12 bg-purple-100 rounded-full flex items-center justify-center mx-auto mb-2">
+            <Lock size={24} className="text-purple-600" />
+          </div>
+          <p className="text-sm text-gray-500 text-center mb-3">Masukkan token CBT dari proktor/pengawas ujian</p>
+          <input
+            type="text"
+            value={tokenInput}
+            onChange={e => setTokenInput(e.target.value.toUpperCase())}
+            onKeyDown={e => e.key === 'Enter' && handleTokenSubmit()}
+            placeholder="Contoh: ABC123"
+            maxLength={6}
+            className="w-full px-4 py-3 border-2 rounded-lg text-center text-2xl font-mono font-bold tracking-[0.3em] uppercase focus:border-primary focus:ring-2 focus:ring-primary/20"
+            autoFocus
+          />
+          <p className="text-xs text-gray-400 text-center">6 karakter, ditampilkan di layar pengawas</p>
         </div>
       </Modal>
     </div>

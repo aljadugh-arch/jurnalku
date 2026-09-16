@@ -646,6 +646,22 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_sesi_ujian_paket ON sesi_ujian(paket_id, siswa_id, tenant_id);
   CREATE UNIQUE INDEX IF NOT EXISTS idx_sesi_ujian_unique ON sesi_ujian(paket_id, siswa_id);
 
+  CREATE TABLE IF NOT EXISTS token_cbt (
+    id TEXT PRIMARY KEY,
+    paket_id TEXT NOT NULL,
+    token TEXT NOT NULL,
+    siswa_id TEXT,
+    rombel_id TEXT,
+    used_by TEXT,
+    used_at TEXT,
+    expired_at TEXT,
+    tenant_id TEXT NOT NULL DEFAULT 'default',
+    created_at TEXT DEFAULT (datetime('now')),
+    FOREIGN KEY (paket_id) REFERENCES paket_ujian(id)
+  );
+  CREATE INDEX IF NOT EXISTS idx_token_cbt_paket ON token_cbt(paket_id, tenant_id);
+  CREATE UNIQUE INDEX IF NOT EXISTS idx_token_cbt_token ON token_cbt(token, tenant_id);
+
   CREATE TABLE IF NOT EXISTS catatan_kepribadian (
     id TEXT PRIMARY KEY,
     siswa_id TEXT NOT NULL,
@@ -6726,6 +6742,15 @@ app.post('/api/ujian/:paketId/mulai', EXAM_ROLES, (req, res) => {
   if (paket.status !== 'aktif') return res.status(400).json({ error: 'Ujian belum dibuka' })
   if (paket.password && req.body.password !== paket.password) return res.status(403).json({ error: 'Password ujian salah' })
   const siswaId = req.user?.siswa_id || req.user?.id
+  // CBT: wajib validasi token terlebih dahulu
+  if (paket.model === 'cbt') {
+    const tokenCount = db.prepare('SELECT COUNT(*) as c FROM token_cbt WHERE paket_id = ? AND tenant_id = ?').get(paket.id, req.tenantId)
+    if (tokenCount && tokenCount.c > 0) {
+      // Ada token yang di-generate, cek apakah siswa ini sudah validasi
+      const validated = db.prepare("SELECT id FROM token_cbt WHERE paket_id = ? AND used_by = ? AND tenant_id = ?").get(paket.id, siswaId, req.tenantId)
+      if (!validated) return res.status(403).json({ error: 'Masukkan token CBT terlebih dahulu', requires_token: true })
+    }
+  }
   // Cek apakah sudah ada sesi
   let sesi = db.prepare('SELECT * FROM sesi_ujian WHERE paket_id = ? AND siswa_id = ? AND tenant_id = ?').get(paket.id, siswaId, req.tenantId)
   if (sesi && sesi.status === 'selesai') return res.status(400).json({ error: 'Anda sudah menyelesaikan ujian ini' })
@@ -7018,6 +7043,204 @@ Keluarkan HANYA JSON: {"skor": angka, "komentar": "alasan singkat"}`
     console.error('[OCR Koreksi Ujian]', error.message)
     res.status(500).json({ error: 'Gagal memproses: ' + error.message })
   }
+})
+
+// --- Token CBT ---
+const generateCbtToken = () => {
+  // 6 karakter alfanumerik uppercase, mudah dibaca/diketik
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789' // tanpa I,O,0,1 agar tidak ambigu
+  let token = ''
+  const bytes = crypto.randomBytes(6)
+  for (let i = 0; i < 6; i++) token += chars[bytes[i] % chars.length]
+  return token
+}
+
+// Generate tokens untuk satu paket CBT
+app.post('/api/ujian/:paketId/token-cbt/generate', STAFF, (req, res) => {
+  const paket = db.prepare('SELECT * FROM paket_ujian WHERE id = ? AND tenant_id = ?').get(req.params.paketId, req.tenantId)
+  if (!paket) return res.status(404).json({ error: 'Paket ujian tidak ditemukan' })
+  if (paket.model !== 'cbt') return res.status(400).json({ error: 'Token hanya untuk ujian model CBT' })
+  
+  const { mode, rombel_id } = req.body // mode: 'per_rombel' | 'per_siswa' | 'universal'
+  const durasi = paket.durasi_menit || 90
+  const expiredAt = new Date(Date.now() + (durasi + 30) * 60000).toISOString() // durasi + 30 menit buffer
+  
+  const tokens = []
+  const insert = db.prepare('INSERT INTO token_cbt (id, paket_id, token, siswa_id, rombel_id, expired_at, tenant_id) VALUES (?,?,?,?,?,?,?)')
+  
+  if (mode === 'per_siswa') {
+    // Satu token per siswa di rombel terpilih
+    let rombelIds = []
+    if (rombel_id) { rombelIds = [rombel_id] }
+    else { try { rombelIds = JSON.parse(paket.rombel_ids || '[]') } catch {} }
+    
+    let siswaList = []
+    if (rombelIds.length) {
+      const ph = rombelIds.map(() => '?').join(',')
+      siswaList = db.prepare(`SELECT id, nama, nis, rombel_id FROM siswa WHERE rombel_id IN (${ph}) AND tenant_id = ? AND status = 'aktif' ORDER BY nama`).all(...rombelIds, req.tenantId)
+    }
+    
+    db.transaction(() => {
+      for (const s of siswaList) {
+        // Cek apakah sudah ada token untuk siswa ini
+        const existing = db.prepare('SELECT id FROM token_cbt WHERE paket_id = ? AND siswa_id = ? AND tenant_id = ?').get(paket.id, s.id, req.tenantId)
+        if (existing) continue
+        const token = generateCbtToken()
+        const id = uuidv4()
+        insert.run(id, paket.id, token, s.id, s.rombel_id, expiredAt, req.tenantId)
+        tokens.push({ id, token, siswa_id: s.id, siswa_nama: s.nama, nis: s.nis })
+      }
+    })()
+  } else if (mode === 'per_rombel') {
+    // Satu token per rombel
+    let rombelIds = []
+    if (rombel_id) { rombelIds = [rombel_id] }
+    else { try { rombelIds = JSON.parse(paket.rombel_ids || '[]') } catch {} }
+    
+    const rombelList = rombelIds.length
+      ? db.prepare(`SELECT id, nama FROM rombel WHERE id IN (${rombelIds.map(() => '?').join(',')}) AND tenant_id = ?`).all(...rombelIds, req.tenantId)
+      : []
+    
+    db.transaction(() => {
+      for (const r of rombelList) {
+        const existing = db.prepare('SELECT id FROM token_cbt WHERE paket_id = ? AND rombel_id = ? AND siswa_id IS NULL AND tenant_id = ?').get(paket.id, r.id, req.tenantId)
+        if (existing) continue
+        const token = generateCbtToken()
+        const id = uuidv4()
+        insert.run(id, paket.id, token, null, r.id, expiredAt, req.tenantId)
+        tokens.push({ id, token, rombel_id: r.id, rombel_nama: r.nama })
+      }
+    })()
+  } else {
+    // Universal: satu token untuk semua
+    const existing = db.prepare('SELECT id FROM token_cbt WHERE paket_id = ? AND siswa_id IS NULL AND rombel_id IS NULL AND tenant_id = ?').get(paket.id, req.tenantId)
+    if (!existing) {
+      const token = generateCbtToken()
+      const id = uuidv4()
+      insert.run(id, paket.id, token, null, null, expiredAt, req.tenantId)
+      tokens.push({ id, token, mode: 'universal' })
+    }
+  }
+  
+  res.json({ ok: true, tokens, count: tokens.length })
+})
+
+// List tokens untuk satu paket
+app.get('/api/ujian/:paketId/token-cbt', STAFF, (req, res) => {
+  const tokens = db.prepare(`
+    SELECT t.*, s.nama as siswa_nama, s.nis, r.nama as rombel_nama,
+           su.nama as used_by_nama
+    FROM token_cbt t
+    LEFT JOIN siswa s ON t.siswa_id = s.id
+    LEFT JOIN rombel r ON t.rombel_id = r.id
+    LEFT JOIN siswa su ON t.used_by = su.id
+    WHERE t.paket_id = ? AND t.tenant_id = ?
+    ORDER BY r.nama, s.nama, t.created_at
+  `).all(req.params.paketId, req.tenantId)
+  res.json(tokens)
+})
+
+// Delete semua token paket
+app.delete('/api/ujian/:paketId/token-cbt', STAFF, (req, res) => {
+  const r = db.prepare('DELETE FROM token_cbt WHERE paket_id = ? AND tenant_id = ?').run(req.params.paketId, req.tenantId)
+  res.json({ ok: true, deleted: r.changes })
+})
+
+// Validasi token CBT (dipanggil siswa saat mulai ujian CBT)
+app.post('/api/ujian/:paketId/validasi-token', EXAM_ROLES, (req, res) => {
+  const { token } = req.body
+  if (!token) return res.status(400).json({ error: 'Token CBT wajib diisi' })
+  const paket = db.prepare('SELECT * FROM paket_ujian WHERE id = ? AND tenant_id = ?').get(req.params.paketId, req.tenantId)
+  if (!paket) return res.status(404).json({ error: 'Paket ujian tidak ditemukan' })
+  if (paket.model !== 'cbt') return res.status(400).json({ error: 'Paket ini bukan ujian CBT' })
+  
+  const siswaId = req.user?.siswa_id || req.user?.id
+  const tokenUpper = token.trim().toUpperCase()
+  
+  // Cari token: prioritas siswa spesifik > rombel > universal
+  const siswaToken = db.prepare('SELECT * FROM token_cbt WHERE paket_id = ? AND token = ? AND siswa_id = ? AND tenant_id = ?').get(paket.id, tokenUpper, siswaId, req.tenantId)
+  
+  let matchedToken = siswaToken
+  if (!matchedToken) {
+    // Cek token rombel (siswa harus di rombel tersebut)
+    const siswa = db.prepare('SELECT rombel_id FROM siswa WHERE id = ? AND tenant_id = ?').get(siswaId, req.tenantId)
+    if (siswa) {
+      matchedToken = db.prepare('SELECT * FROM token_cbt WHERE paket_id = ? AND token = ? AND rombel_id = ? AND siswa_id IS NULL AND tenant_id = ?').get(paket.id, tokenUpper, siswa.rombel_id, req.tenantId)
+    }
+  }
+  if (!matchedToken) {
+    // Cek token universal
+    matchedToken = db.prepare('SELECT * FROM token_cbt WHERE paket_id = ? AND token = ? AND siswa_id IS NULL AND rombel_id IS NULL AND tenant_id = ?').get(paket.id, tokenUpper, req.tenantId)
+  }
+  
+  if (!matchedToken) return res.status(403).json({ error: 'Token CBT tidak valid' })
+  
+  // Cek expired
+  if (matchedToken.expired_at && new Date(matchedToken.expired_at) < new Date()) {
+    return res.status(403).json({ error: 'Token CBT sudah kedaluwarsa' })
+  }
+  
+  // Cek apakah token per-siswa sudah dipakai orang lain
+  if (matchedToken.siswa_id && matchedToken.used_by && matchedToken.used_by !== siswaId) {
+    return res.status(403).json({ error: 'Token ini sudah digunakan siswa lain' })
+  }
+  
+  // Mark token as used
+  if (!matchedToken.used_by) {
+    db.prepare("UPDATE token_cbt SET used_by = ?, used_at = datetime('now') WHERE id = ?").run(siswaId, matchedToken.id)
+  }
+  
+  res.json({ ok: true, message: 'Token valid' })
+})
+
+// Dashboard proktor: real-time status sesi ujian
+app.get('/api/ujian/:paketId/proktor', STAFF, (req, res) => {
+  const paket = db.prepare('SELECT p.*, m.nama as mapel_nama FROM paket_ujian p LEFT JOIN mapel m ON p.mapel_id = m.id WHERE p.id = ? AND p.tenant_id = ?').get(req.params.paketId, req.tenantId)
+  if (!paket) return res.status(404).json({ error: 'Paket ujian tidak ditemukan' })
+  
+  // Ambil semua siswa yang seharusnya ikut (dari rombel)
+  let rombelIds = []; try { rombelIds = JSON.parse(paket.rombel_ids || '[]') } catch {}
+  let allSiswa = []
+  if (rombelIds.length) {
+    const ph = rombelIds.map(() => '?').join(',')
+    allSiswa = db.prepare(`SELECT s.id, s.nama, s.nis, r.nama as rombel_nama FROM siswa s LEFT JOIN rombel r ON s.rombel_id = r.id WHERE s.rombel_id IN (${ph}) AND s.tenant_id = ? AND s.status = 'aktif' ORDER BY r.nama, s.nama`).all(...rombelIds, req.tenantId)
+  }
+  
+  // Ambil sesi yang sudah ada
+  const sesiList = db.prepare('SELECT * FROM sesi_ujian WHERE paket_id = ? AND tenant_id = ?').all(paket.id, req.tenantId)
+  const sesiMap = Object.fromEntries(sesiList.map(s => [s.siswa_id, s]))
+  
+  // Ambil token status
+  const tokenList = db.prepare('SELECT * FROM token_cbt WHERE paket_id = ? AND tenant_id = ?').all(paket.id, req.tenantId)
+  const tokenBySiswa = Object.fromEntries(tokenList.filter(t => t.siswa_id).map(t => [t.siswa_id, t]))
+  
+  // Gabungkan
+  const peserta = allSiswa.map(s => {
+    const sesi = sesiMap[s.id]
+    const token = tokenBySiswa[s.id]
+    return {
+      siswa_id: s.id,
+      nama: s.nama,
+      nis: s.nis,
+      rombel: s.rombel_nama,
+      token: token?.token || null,
+      token_used: !!token?.used_by,
+      status: sesi?.status || 'belum',
+      mulai: sesi?.mulai || null,
+      selesai: sesi?.selesai || null,
+      skor_total: sesi?.skor_total || 0,
+      skor_max: sesi?.skor_max || 0,
+    }
+  })
+  
+  const stats = {
+    total: peserta.length,
+    belum: peserta.filter(p => p.status === 'belum').length,
+    mengerjakan: peserta.filter(p => p.status === 'mengerjakan').length,
+    selesai: peserta.filter(p => p.status === 'selesai').length,
+  }
+  
+  res.json({ paket, peserta, stats, tokens: tokenList })
 })
 
 // --- Ujian tersedia untuk siswa ---
