@@ -57,7 +57,9 @@ app.set('trust proxy', 1) // behind nginx reverse proxy
 // Security headers (allow inline for SPA + same-origin API)
 app.use(helmet({
   contentSecurityPolicy: false, // SPA index.html served locally; nginx handles TLS
-  crossOriginEmbedderPolicy: false
+  crossOriginEmbedderPolicy: false,
+  crossOriginResourcePolicy: { policy: 'cross-origin' }, // foto harus bisa dimuat dari custom domains
+  referrerPolicy: { policy: 'strict-origin-when-cross-origin' } // default Helmet no-referrer terlalu ketat untuk mobile
 }))
 
 // CORS: restrict to known origins in production, allow all in dev
