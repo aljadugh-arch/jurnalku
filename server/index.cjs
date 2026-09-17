@@ -100,11 +100,10 @@ app.use('/uploads', (_req, res) => res.status(404).type('text/plain').send('Medi
 // Thumbnail endpoint — resize on-the-fly, cache di disk
 const THUMB_DIR = path.join(UPLOAD_DIR, '.thumbs')
 fs.mkdirSync(THUMB_DIR, { recursive: true })
-app.get('/api/thumb/:filename(*)', async (req, res) => {
+app.get('/api/thumb/:filename', async (req, res) => {
   try {
-    // Express decode params; pakai req.path untuk handle spasi dan karakter khusus
-    const raw = decodeURIComponent(req.params.filename || '')
-    const filename = path.basename(raw)
+    // Express auto-decode :filename (%20 → spasi, %27 → apostrof, dll)
+    const filename = path.basename(req.params.filename || '')
     if (!filename || filename.includes('..')) return res.status(400).end()
     const size = Math.min(Math.max(parseInt(req.query.s) || 200, 48), 800)
     const ext = filename.replace(/\.[^.]+$/, '')
