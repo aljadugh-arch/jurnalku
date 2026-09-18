@@ -6,15 +6,14 @@ import { useSettingsStore } from '../../stores/settingsStore'
 import {
   LayoutDashboard, Users, GraduationCap, BookOpen, Calendar,
   ClipboardList, UserCheck, QrCode, MapPin,
-  X, ChevronDown, ChevronRight, LogOut, School, Layers,
-  Activity, Globe, Sparkles, DollarSign, FileText,
-  Newspaper, NotebookPen, ClipboardCheck, PiggyBank
+  X, ChevronDown, ChevronRight, LogOut, Layers,
+  DollarSign, FileText, Newspaper, PiggyBank, ClipboardCheck, NotebookPen
 } from 'lucide-react'
 import { clsx } from 'clsx'
 import { roleLabel } from '../../lib/roles'
 import { useSubscriptionStore } from '../../stores/subscriptionStore'
 import { pathEnabled } from '../../lib/featureAccess'
-import { menuForRole } from '../../lib/menuItems'
+import { guruMenuItems as sharedGuruMenuItems, menuForRole } from '../../lib/menuItems'
 
 interface MenuItem {
   label: string
@@ -24,21 +23,6 @@ interface MenuItem {
   children?: { label: string; path: string; external?: string }[]
 }
 
-
-const guruMenuItems: MenuItem[] = [
-  { label: 'Dashboard', icon: <LayoutDashboard size={20} />, path: '/guru' },
-  { label: 'Posting', icon: <Newspaper size={20} />, path: '/guru/posting' },
-  { label: 'Jurnal Mengajar', icon: <ClipboardList size={20} />, path: '/guru/jurnal' },
-  { label: 'Penilaian Harian', icon: <BookOpen size={20} />, path: '/guru/penilaian-harian' },
-  { label: 'Catatan Kepribadian', icon: <NotebookPen size={20} />, path: '/guru/catatan-kepribadian' },
-  { label: 'Jadwal Saya', icon: <Calendar size={20} />, path: '/guru/jadwal' },
-  { label: 'Penugasan', icon: <ClipboardCheck size={20} />, path: '/guru#tugas' },
-  { label: 'Absensi Siswa', icon: <QrCode size={20} />, path: '/guru/absensi-siswa' },
-  { label: 'Absensi Ekskul/Peminatan', icon: <UserCheck size={20} />, path: '/guru/absensi-ekskul' },
-  { label: 'Absensi Saya', icon: <MapPin size={20} />, path: '/guru/absensi-guru' },
-  { label: 'Modul Ajar', icon: <Sparkles size={20} />, path: '/guru/modul-ajar' },
-  { label: 'Perpustakaan Digital', icon: <BookOpen size={20} />, path: '/guru/perpustakaan' },
-]
 
 const siswaMenuItems: MenuItem[] = [
   { label: 'Dashboard', icon: <LayoutDashboard size={20} />, path: '/siswa' },
@@ -98,7 +82,7 @@ const bendaharaMenuItems: MenuItem[] = [
 ]
 
 export default function Sidebar() {
-  const { isOpen, toggle, close } = useSidebarStore()
+  const { isOpen, close } = useSidebarStore()
   const { user, logout } = useAuthStore()
   const settings = useSettingsStore(s => s.settings)
   const features = useSubscriptionStore(s => s.subscription?.features)
@@ -111,12 +95,14 @@ export default function Sidebar() {
     user?.role === 'bendahara'
       ? bendaharaMenuItems
       : user?.role === 'kepala'
-        ? teacherMode ? guruMenuItems : kepalaMenuItems
+        ? teacherMode ? sharedGuruMenuItems : kepalaMenuItems
         : user?.role === 'admin' || user?.role === 'super_admin' || user?.role === 'operator' || user?.role === 'tata_usaha' || user?.role === 'tu'
           ? menuForRole(user?.role)
           : user?.role === 'guru' || user?.role === 'wali_kelas'
-            ? guruMenuItems
-            : siswaMenuItems
+            ? sharedGuruMenuItems
+            : user?.role === 'proktor'
+              ? menuForRole(user.role)
+              : siswaMenuItems
   )
     .concat(user?.role === 'wali_kelas' ? [{ label: 'Kelas Wali Saya', icon: <Layers size={20} />, path: '/guru/rombel' }] : [])
     .map(item => ({ ...item, children: item.children?.filter(child => pathEnabled(child.path, features)) }))
@@ -136,14 +122,6 @@ export default function Sidebar() {
 
   return (
     <>
-      {/* Mobile backdrop overlay */}
-      {false && isOpen && (
-        <div
-          className="fixed inset-0 bg-black/50 z-30 lg:hidden"
-          onClick={close}
-        />
-      )}
-
       {/* Sidebar */}
       <aside
         className={clsx(

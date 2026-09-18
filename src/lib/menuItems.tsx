@@ -3,7 +3,7 @@ import {
   ClipboardList, UserCheck, QrCode, MapPin,
   Layers, Activity, Globe, Sparkles, DollarSign, Settings, MessageSquare,
   FileText, ClipboardCheck, ScrollText, School, Wallet, Receipt, DatabaseBackup, Code2, ScanText,
-  FileQuestion, Grid3X3, Package, PenTool
+  FileQuestion, Monitor
 } from 'lucide-react'
 
 export interface MenuItem {
@@ -104,9 +104,9 @@ export const guruMenuItems: MenuItem[] = [
   {
     label: 'Ujian & Bank Soal', icon: <FileQuestion size={20} />,
     children: [
-      { label: 'Bank Soal', path: '/admin/bank-soal' },
-      { label: 'Kisi-kisi Soal', path: '/admin/kisi-kisi' },
-      { label: 'Paket Ujian', path: '/admin/paket-ujian' },
+      { label: 'Bank Soal', path: '/guru/bank-soal' },
+      { label: 'Kisi-kisi Soal', path: '/guru/kisi-kisi' },
+      { label: 'Paket Ujian', path: '/guru/paket-ujian' },
     ]
   },
   { label: 'Catatan Kepribadian', icon: <ScrollText size={20} />, path: '/guru/catatan-kepribadian' },
@@ -117,6 +117,10 @@ export const guruMenuItems: MenuItem[] = [
   { label: 'Absensi Saya', icon: <MapPin size={20} />, path: '/guru/absensi-guru' },
   { label: 'Generator AI Guru', icon: <Sparkles size={20} />, path: '/guru/modul-ajar' },
   { label: 'Perpustakaan Digital', icon: <BookOpen size={20} />, path: '/guru/perpustakaan' },
+]
+
+export const proktorMenuItems: MenuItem[] = [
+  { label: 'Monitor Ujian', icon: <Monitor size={20} />, path: '/proktor' },
 ]
 
 export const siswaMenuItems: MenuItem[] = [
@@ -209,6 +213,7 @@ export function menuForRole(role?: string): MenuItem[] {
     : role === 'bendahara' ? bendaharaMenuItems
     : ['admin', 'operator', 'tata_usaha', 'tu'].includes(role || '') ? adminMenuItems
     : role === 'guru' || role === 'wali_kelas' ? guruMenuItems
+    : role === 'proktor' ? proktorMenuItems
     : siswaMenuItems
   const visible = filterRoleItems(items, role)
   return role === 'wali_kelas'

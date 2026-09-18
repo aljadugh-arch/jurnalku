@@ -10,6 +10,7 @@ const CREATABLE = [
   { value: 'admin', label: 'Admin Lembaga / Operator (akses penuh)' },
   { value: 'bendahara', label: 'Bendahara' },
   { value: 'guru', label: 'Guru' },
+  { value: 'proktor', label: 'Proktor' },
   { value: 'wali_kelas', label: 'Wali Kelas' },
 ]
 

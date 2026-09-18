@@ -26,6 +26,7 @@ const { setupPortalCashless, registerPortalRoutes, registerKantinRoutes, selectP
 const waQueue = require('./wa-queue.cjs')
 const notificationMonitor = require('./notification-monitor.cjs')
 const { getAttendanceOverview, studentAttendance } = require('./attendance-summary.cjs')
+const { monitorStatus, sanitizeExamForMonitor } = require('./exam-proctor.cjs')
 const { getCategoryRecap } = require('./attendance-recap.cjs')
 const { buildRekapRange, getPeriodicAttendanceRecap, deduplicateAttendance } = require('./attendance-periodic-recap.cjs')
 const { isDriveFolderUrl } = require('./library-config.cjs')
@@ -679,6 +680,35 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_sesi_ujian_paket ON sesi_ujian(paket_id, siswa_id, tenant_id);
   CREATE UNIQUE INDEX IF NOT EXISTS idx_sesi_ujian_unique ON sesi_ujian(paket_id, siswa_id);
 
+  CREATE TABLE IF NOT EXISTS ujian_proktor_assignments (
+    id TEXT PRIMARY KEY,
+    tenant_id TEXT NOT NULL,
+    paket_id TEXT NOT NULL,
+    user_id TEXT NOT NULL,
+    rombel_id TEXT NOT NULL,
+    created_at TEXT DEFAULT (datetime('now')),
+    UNIQUE(tenant_id, paket_id, user_id, rombel_id),
+    FOREIGN KEY (paket_id) REFERENCES paket_ujian(id),
+    FOREIGN KEY (user_id) REFERENCES users(id),
+    FOREIGN KEY (rombel_id) REFERENCES rombel(id)
+  );
+  CREATE INDEX IF NOT EXISTS idx_ujian_proktor_assignment_user ON ujian_proktor_assignments(tenant_id, user_id, paket_id);
+
+  CREATE TABLE IF NOT EXISTS ujian_proktor_audit (
+    id TEXT PRIMARY KEY,
+    tenant_id TEXT NOT NULL,
+    paket_id TEXT NOT NULL,
+    siswa_id TEXT NOT NULL,
+    actor_id TEXT NOT NULL,
+    action TEXT NOT NULL,
+    details TEXT DEFAULT '{}',
+    created_at TEXT DEFAULT (datetime('now')),
+    FOREIGN KEY (paket_id) REFERENCES paket_ujian(id),
+    FOREIGN KEY (siswa_id) REFERENCES siswa(id),
+    FOREIGN KEY (actor_id) REFERENCES users(id)
+  );
+  CREATE INDEX IF NOT EXISTS idx_ujian_proktor_audit_paket ON ujian_proktor_audit(tenant_id, paket_id, created_at);
+
   CREATE TABLE IF NOT EXISTS token_cbt (
     id TEXT PRIMARY KEY,
     paket_id TEXT NOT NULL,
@@ -1003,6 +1033,18 @@ try {
     db.exec('ALTER TABLE users ADD COLUMN can_teach INTEGER NOT NULL DEFAULT 0')
   }
 } catch {}
+
+try {
+  const sessionColumns = db.prepare('PRAGMA table_info(sesi_ujian)').all()
+  const addSessionColumn = (name, definition) => {
+    if (!sessionColumns.some(column => column.name === name)) db.exec(`ALTER TABLE sesi_ujian ADD COLUMN ${name} ${definition}`)
+  }
+  addSessionColumn('last_seen_at', 'TEXT')
+  addSessionColumn('current_question_id', 'TEXT')
+  addSessionColumn('extra_time_minutes', 'INTEGER NOT NULL DEFAULT 0')
+} catch (error) {
+  console.error('[migrate] sesi_ujian monitoring columns failed', error.message)
+}
 
 // Seed WA Gateway config
 const existWA = db.prepare("SELECT id FROM wa_gateway_config WHERE id = 'main'").get()
@@ -1508,6 +1550,7 @@ function requireCapability(capability) {
 }
 const ADMIN = requireRole('admin', 'super_admin')
 const SUPER = requireRole('super_admin')
+const PROCTOR = requireRole('admin', 'super_admin', 'proktor')
 const STAFF = requireRole('admin', 'super_admin', 'guru', 'wali_kelas', 'operator', 'tata_usaha', 'tu', 'kepala')
 const TEACHER = requireCapability('teacher')
 const JOURNAL_REVIEWER = requireRole('admin', 'super_admin', 'kepala', 'operator')
@@ -2403,7 +2446,7 @@ app.post('/api/auth/avatar', authMiddleware, imageUpload.single('avatar'), compr
 
 // ==================== USER MANAGEMENT (admin lembaga) ====================
 // Roles yang boleh dibuat operator lembaga. Kepala = pimpinan read-only.
-const ASSIGNABLE_ROLES = ['kepala', 'admin', 'bendahara', 'guru', 'wali_kelas', 'siswa', 'wali_murid']
+const ASSIGNABLE_ROLES = ['kepala', 'admin', 'bendahara', 'guru', 'wali_kelas', 'proktor', 'siswa', 'wali_murid']
 
 app.get('/api/users', ADMIN, (req, res) => {
   const rows = db.prepare('SELECT id, nama, email, role, nip, nis, avatar, gtk_id, can_teach FROM users WHERE tenant_id = ? ORDER BY role, nama').all(req.tenantId)
@@ -7079,7 +7122,9 @@ app.post('/api/ujian/:paketId/mulai', EXAM_ROLES, (req, res) => {
   // Ambil jawaban yang sudah ada
   const jawabanList = db.prepare('SELECT soal_id, jawaban FROM jawaban_ujian WHERE paket_id = ? AND siswa_id = ? AND tenant_id = ?').all(paket.id, siswaId, req.tenantId)
   const jawabanMap = Object.fromEntries(jawabanList.map(j => [j.soal_id, j.jawaban]))
-  res.json({ sesi, soal: soalList, jawaban: jawabanMap, durasi_menit: paket.durasi_menit })
+  db.prepare("UPDATE sesi_ujian SET last_seen_at = datetime('now') WHERE id = ? AND tenant_id = ?").run(sesi.id, req.tenantId)
+  sesi.last_seen_at = new Date().toISOString()
+  res.json({ sesi, soal: soalList, jawaban: jawabanMap, durasi_menit: paket.durasi_menit + Number(sesi.extra_time_minutes || 0) })
 })
 
 app.post('/api/ujian/:paketId/jawab', EXAM_ROLES, (req, res) => {
@@ -7088,8 +7133,16 @@ app.post('/api/ujian/:paketId/jawab', EXAM_ROLES, (req, res) => {
   const siswaId = req.user?.siswa_id || req.user?.id
   const sesi = db.prepare('SELECT * FROM sesi_ujian WHERE paket_id = ? AND siswa_id = ? AND tenant_id = ?').get(req.params.paketId, siswaId, req.tenantId)
   if (!sesi || sesi.status === 'selesai') return res.status(400).json({ error: 'Sesi ujian tidak aktif' })
-  db.prepare(`INSERT INTO jawaban_ujian (id, paket_id, siswa_id, soal_id, jawaban, tenant_id) VALUES (?,?,?,?,?,?) ON CONFLICT(paket_id, siswa_id, soal_id) DO UPDATE SET jawaban=excluded.jawaban, updated_at=datetime('now')`)
-    .run(uuidv4(), req.params.paketId, siswaId, soal_id, jawaban || '', req.tenantId)
+  const paket = db.prepare('SELECT soal_ids FROM paket_ujian WHERE id = ? AND tenant_id = ?').get(req.params.paketId, req.tenantId)
+  let soalIds = []
+  try { soalIds = JSON.parse(paket?.soal_ids || '[]') } catch {}
+  if (!paket || !soalIds.includes(soal_id)) return res.status(400).json({ error: 'Soal tidak termasuk paket ujian' })
+  db.transaction(() => {
+    db.prepare(`INSERT INTO jawaban_ujian (id, paket_id, siswa_id, soal_id, jawaban, tenant_id) VALUES (?,?,?,?,?,?) ON CONFLICT(paket_id, siswa_id, soal_id) DO UPDATE SET jawaban=excluded.jawaban, updated_at=datetime('now')`)
+      .run(uuidv4(), req.params.paketId, siswaId, soal_id, typeof jawaban === 'object' ? JSON.stringify(jawaban) : String(jawaban ?? ''), req.tenantId)
+    db.prepare("UPDATE sesi_ujian SET last_seen_at = datetime('now'), current_question_id = ? WHERE id = ? AND tenant_id = ?")
+      .run(soal_id, sesi.id, req.tenantId)
+  })()
   res.json({ ok: true })
 })
 
@@ -7107,7 +7160,7 @@ app.post('/api/ujian/:paketId/selesai', EXAM_ROLES, (req, res) => {
     const soalList = db.prepare(`SELECT id, tipe, kunci_jawaban, skor FROM bank_soal WHERE id IN (${ph}) AND tenant_id = ?`).all(...soalIds, req.tenantId)
     const soalMap = Object.fromEntries(soalList.map(s => [s.id, s]))
     const jawabanList = db.prepare('SELECT * FROM jawaban_ujian WHERE paket_id = ? AND siswa_id = ? AND tenant_id = ?').all(req.params.paketId, siswaId, req.tenantId)
-    const updateSkor = db.prepare('UPDATE jawaban_ujian SET skor = ? WHERE id = ?')
+    const updateSkor = db.prepare('UPDATE jawaban_ujian SET skor = ? WHERE id = ? AND tenant_id = ?')
     for (const j of jawabanList) {
       const s = soalMap[j.soal_id]
       if (!s) continue
@@ -7115,7 +7168,7 @@ app.post('/api/ujian/:paketId/selesai', EXAM_ROLES, (req, res) => {
       if (s.tipe === 'pg' || s.tipe === 'isian') {
         const benar = (j.jawaban || '').trim().toLowerCase() === (s.kunci_jawaban || '').trim().toLowerCase()
         const sk = benar ? (s.skor || 1) : 0
-        updateSkor.run(sk, j.id)
+        updateSkor.run(sk, j.id, req.tenantId)
         skorTotal += sk
       } else if (s.tipe === 'pg_kompleks') {
         // PG kompleks: kunci_jawaban berisi array JSON jawaban benar
@@ -7124,9 +7177,9 @@ app.post('/api/ujian/:paketId/selesai', EXAM_ROLES, (req, res) => {
           const jwb = JSON.parse(j.jawaban || '[]').map(k => k.toString().trim().toLowerCase()).sort()
           const benar = JSON.stringify(kunci) === JSON.stringify(jwb)
           const sk = benar ? (s.skor || 1) : 0
-          updateSkor.run(sk, j.id)
+          updateSkor.run(sk, j.id, req.tenantId)
           skorTotal += sk
-        } catch { updateSkor.run(0, j.id) }
+        } catch { updateSkor.run(0, j.id, req.tenantId) }
       }
       // uraian: skor null, perlu koreksi manual
     }
@@ -7140,8 +7193,182 @@ app.post('/api/ujian/:paketId/selesai', EXAM_ROLES, (req, res) => {
     // Hitung ulang skor max dari semua soal
     skorMax = soalIds.reduce((sum, sid) => sum + ((soalMap[sid]?.skor || 1)), 0)
   }
-  db.prepare("UPDATE sesi_ujian SET status = 'selesai', selesai = datetime('now'), skor_total = ?, skor_max = ? WHERE id = ?").run(skorTotal, skorMax, sesi.id)
+  db.prepare("UPDATE sesi_ujian SET status = 'selesai', selesai = datetime('now'), last_seen_at = datetime('now'), skor_total = ?, skor_max = ? WHERE id = ? AND tenant_id = ?").run(skorTotal, skorMax, sesi.id, req.tenantId)
   res.json({ ok: true, skor_total: skorTotal, skor_max: skorMax })
+})
+
+app.post('/api/ujian/:paketId/heartbeat', requireRole('siswa'), (req, res) => {
+  const siswaId = req.user?.siswa_id || req.user?.id
+  const currentQuestionId = req.body?.current_question_id == null ? null : String(req.body.current_question_id)
+  const paket = db.prepare('SELECT soal_ids FROM paket_ujian WHERE id = ? AND tenant_id = ?').get(req.params.paketId, req.tenantId)
+  if (!paket) return res.status(404).json({ error: 'Paket ujian tidak ditemukan' })
+
+  let soalIds = []
+  try { soalIds = JSON.parse(paket.soal_ids || '[]') } catch {}
+  if (currentQuestionId && !soalIds.includes(currentQuestionId)) return res.status(400).json({ error: 'current_question_id tidak valid' })
+
+  const result = db.prepare("UPDATE sesi_ujian SET last_seen_at=datetime('now'), current_question_id=? WHERE paket_id=? AND siswa_id=? AND tenant_id=? AND status='mengerjakan'")
+    .run(currentQuestionId, req.params.paketId, siswaId, req.tenantId)
+  if (!result.changes) return res.status(404).json({ error: 'Sesi ujian aktif tidak ditemukan' })
+  res.json({ ok: true })
+})
+
+function canMonitorExam(req, paketId, rombelId = null) {
+  if (['admin', 'super_admin'].includes(req.user?.role)) return true
+  if (req.user?.role === 'proktor') {
+    let sql = 'SELECT 1 FROM ujian_proktor_assignments WHERE tenant_id=? AND paket_id=? AND user_id=?'
+    const params = [req.tenantId, paketId, req.user.id]
+    if (rombelId) { sql += ' AND rombel_id=?'; params.push(rombelId) }
+    return !!db.prepare(sql).get(...params)
+  }
+  return false
+}
+
+function proctorAudit(req, paketId, siswaId, action, details = {}) {
+  const sesi = db.prepare('SELECT extra_time_minutes FROM sesi_ujian WHERE paket_id=? AND siswa_id=? AND tenant_id=?').get(paketId, siswaId, req.tenantId)
+  const before = { extra_time_minutes: sesi?.extra_time_minutes || 0 }
+  db.prepare('INSERT INTO ujian_proktor_audit (id, tenant_id, paket_id, siswa_id, actor_id, action, details) VALUES (?,?,?,?,?,?,?)')
+    .run(uuidv4(), req.tenantId, paketId, siswaId, req.user.id, action, JSON.stringify({ before, ...details }))
+}
+
+function finishExamSession(tenantId, paketId, siswaId) {
+  const sesi = db.prepare('SELECT * FROM sesi_ujian WHERE paket_id=? AND siswa_id=? AND tenant_id=?').get(paketId, siswaId, tenantId)
+  if (!sesi) return null
+
+  const paket = db.prepare('SELECT soal_ids FROM paket_ujian WHERE id=? AND tenant_id=?').get(paketId, tenantId)
+  let soalIds = []
+  try { soalIds = JSON.parse(paket?.soal_ids || '[]') } catch {}
+  const soalMap = {}
+  if (soalIds.length) {
+    const placeholders = soalIds.map(() => '?').join(',')
+    for (const soal of db.prepare(`SELECT id, tipe, kunci_jawaban, skor FROM bank_soal WHERE id IN (${placeholders}) AND tenant_id=?`).all(...soalIds, tenantId)) soalMap[soal.id] = soal
+  }
+
+  let skorTotal = 0
+  const jawabanList = db.prepare('SELECT id, soal_id, jawaban, skor_manual FROM jawaban_ujian WHERE paket_id=? AND siswa_id=? AND tenant_id=?').all(paketId, siswaId, tenantId)
+  const updateSkor = db.prepare('UPDATE jawaban_ujian SET skor=?, updated_at=datetime(\'now\') WHERE id=? AND tenant_id=?')
+  for (const jawaban of jawabanList) {
+    const soal = soalMap[jawaban.soal_id]
+    if (!soal) continue
+    let skor = jawaban.skor_manual == null ? 0 : Number(jawaban.skor_manual)
+    if (jawaban.skor_manual == null && (soal.tipe === 'pg' || soal.tipe === 'isian')) {
+      skor = String(jawaban.jawaban || '').trim().toLowerCase() === String(soal.kunci_jawaban || '').trim().toLowerCase() ? Number(soal.skor || 1) : 0
+    } else if (jawaban.skor_manual == null && soal.tipe === 'pg_kompleks') {
+      try {
+        const expected = JSON.parse(soal.kunci_jawaban || '[]').map(String).map(x => x.trim().toLowerCase()).sort()
+        const actual = JSON.parse(jawaban.jawaban || '[]').map(String).map(x => x.trim().toLowerCase()).sort()
+        skor = JSON.stringify(expected) === JSON.stringify(actual) ? Number(soal.skor || 1) : 0
+      } catch { skor = 0 }
+    }
+    updateSkor.run(skor, jawaban.id, tenantId)
+    skorTotal += Number(skor || 0)
+  }
+  const skorMax = soalIds.reduce((total, id) => total + Number(soalMap[id]?.skor || 1), 0)
+  db.prepare("UPDATE sesi_ujian SET status='selesai', selesai=datetime('now'), last_seen_at=datetime('now'), skor_total=?, skor_max=? WHERE id=? AND tenant_id=?")
+    .run(skorTotal, skorMax, sesi.id, tenantId)
+  return db.prepare('SELECT * FROM sesi_ujian WHERE id=? AND tenant_id=?').get(sesi.id, tenantId)
+}
+
+app.get('/api/ujian/proktor/assignments', ADMIN, (req, res) => {
+  const rows = db.prepare(`SELECT a.id, a.paket_id, p.nama AS paket_nama, a.user_id,
+      u.nama AS proktor_nama, a.rombel_id, r.nama AS rombel_nama, a.created_at
+    FROM ujian_proktor_assignments a
+    JOIN paket_ujian p ON p.id=a.paket_id AND p.tenant_id=a.tenant_id
+    JOIN users u ON u.id=a.user_id AND u.tenant_id=a.tenant_id AND u.role='proktor'
+    JOIN rombel r ON r.id=a.rombel_id AND r.tenant_id=a.tenant_id
+    WHERE a.tenant_id=? ORDER BY p.nama, u.nama, r.nama`).all(req.tenantId)
+  res.json(rows)
+})
+
+app.put('/api/ujian/:paketId/proktor/assignments', ADMIN, (req, res) => {
+  const assignments = req.body?.assignments
+  if (!Array.isArray(assignments)) return res.status(400).json({ error: 'assignments wajib berupa array' })
+  const paket = db.prepare('SELECT id, rombel_ids FROM paket_ujian WHERE id=? AND tenant_id=?').get(req.params.paketId, req.tenantId)
+  if (!paket) return res.status(404).json({ error: 'Paket ujian tidak ditemukan' })
+  let paketRombelIds = []
+  try { paketRombelIds = JSON.parse(paket.rombel_ids || '[]') } catch {}
+
+  const normalized = []
+  const seen = new Set()
+  for (const item of assignments) {
+    const userId = String(item?.user_id || '')
+    const rombelId = String(item?.rombel_id || '')
+    const key = `${userId}\u0000${rombelId}`
+    if (!userId || !rombelId || seen.has(key)) return res.status(400).json({ error: 'Assignment tidak valid atau duplikat' })
+    seen.add(key)
+    const proktor = db.prepare("SELECT id FROM users WHERE id=? AND tenant_id=? AND role='proktor'").get(userId, req.tenantId)
+    const rombel = db.prepare('SELECT id FROM rombel WHERE id=? AND tenant_id=?').get(rombelId, req.tenantId)
+    if (!proktor || !rombel || !paketRombelIds.includes(rombelId)) return res.status(400).json({ error: 'Proktor atau rombel tidak valid untuk paket ini' })
+    normalized.push({ userId, rombelId })
+  }
+
+  db.transaction(() => {
+    db.prepare('DELETE FROM ujian_proktor_assignments WHERE tenant_id=? AND paket_id=?').run(req.tenantId, req.params.paketId)
+    const insert = db.prepare('INSERT INTO ujian_proktor_assignments (id, tenant_id, paket_id, user_id, rombel_id) VALUES (?,?,?,?,?)')
+    for (const item of normalized) insert.run(uuidv4(), req.tenantId, req.params.paketId, item.userId, item.rombelId)
+  })()
+  proctorAudit(req, req.params.paketId, null, 'assign-proctors', { count: normalized.length, assignments: normalized })
+  res.json({ ok: true, count: normalized.length })
+})
+
+app.get('/api/ujian/:paketId/monitor', PROCTOR, (req, res) => {
+  const paket = db.prepare('SELECT p.*, m.nama AS mapel_nama FROM paket_ujian p LEFT JOIN mapel m ON m.id=p.mapel_id AND m.tenant_id=p.tenant_id WHERE p.id=? AND p.tenant_id=?').get(req.params.paketId, req.tenantId)
+  if (!paket) return res.status(404).json({ error: 'Paket ujian tidak ditemukan' })
+  if (!canMonitorExam(req, paket.id)) return res.status(403).json({ error: 'Tidak ditugaskan pada paket ujian ini' })
+
+  let rombelIds = []
+  if (req.user?.role === 'proktor') {
+    rombelIds = db.prepare('SELECT rombel_id FROM ujian_proktor_assignments WHERE tenant_id=? AND paket_id=? AND user_id=?').all(req.tenantId, paket.id, req.user.id).map(row => row.rombel_id)
+  } else {
+    try { rombelIds = JSON.parse(paket.rombel_ids || '[]') } catch {}
+  }
+  if (!rombelIds.length) return res.json({ paket: sanitizeExamForMonitor(paket), peserta: [], server_time: new Date().toISOString() })
+
+  const placeholders = rombelIds.map(() => '?').join(',')
+  const peserta = db.prepare(`SELECT s.id AS siswa_id, s.nama, s.nis, s.rombel_id, r.nama AS rombel_nama,
+      su.status AS session_status, su.mulai, su.selesai, su.last_seen_at, su.current_question_id,
+      COALESCE(su.extra_time_minutes, 0) AS extra_time_minutes,
+      COUNT(CASE WHEN trim(COALESCE(ju.jawaban,'')) <> '' THEN 1 END) AS answered_count
+    FROM siswa s
+    JOIN rombel r ON r.id=s.rombel_id AND r.tenant_id=s.tenant_id
+    LEFT JOIN sesi_ujian su ON su.siswa_id=s.id AND su.paket_id=? AND su.tenant_id=s.tenant_id
+    LEFT JOIN jawaban_ujian ju ON ju.siswa_id=s.id AND ju.paket_id=? AND ju.tenant_id=s.tenant_id
+    WHERE s.tenant_id=? AND s.status='aktif' AND s.rombel_id IN (${placeholders})
+    GROUP BY s.id, s.nama, s.nis, s.rombel_id, r.nama, su.id
+    ORDER BY r.nama, s.nama`).all(paket.id, paket.id, req.tenantId, ...rombelIds)
+  const now = new Date()
+  res.json({
+    paket: sanitizeExamForMonitor(paket),
+    peserta: peserta.map(row => ({ ...row, status: monitorStatus({ sessionStatus: row.session_status, lastSeenAt: row.last_seen_at, now }) })),
+    server_time: now.toISOString()
+  })
+})
+
+app.post('/api/ujian/:paketId/proktor/:siswaId/force-submit', PROCTOR, (req, res) => {
+  const student = db.prepare('SELECT id, rombel_id FROM siswa WHERE id=? AND tenant_id=?').get(req.params.siswaId, req.tenantId)
+  if (!student) return res.status(404).json({ error: 'Siswa tidak ditemukan' })
+  if (!canMonitorExam(req, req.params.paketId, student.rombel_id)) return res.status(403).json({ error: 'Siswa di luar penugasan proktor' })
+  const session = finishExamSession(req.tenantId, req.params.paketId, student.id)
+  if (!session) return res.status(404).json({ error: 'Sesi ujian tidak ditemukan' })
+  proctorAudit(req, req.params.paketId, student.id, 'force-submit', { reason: String(req.body?.reason || '').slice(0, 500) })
+  res.json({ ok: true, status: session.status, skor_total: session.skor_total, skor_max: session.skor_max })
+})
+
+app.post('/api/ujian/:paketId/proktor/:siswaId/tambah-waktu', PROCTOR, (req, res) => {
+  const minutes = Number(req.body?.minutes)
+  if (!Number.isInteger(minutes) || minutes < 1 || minutes > 180) return res.status(400).json({ error: 'minutes harus bilangan bulat 1-180' })
+  const student = db.prepare('SELECT id, rombel_id FROM siswa WHERE id=? AND tenant_id=?').get(req.params.siswaId, req.tenantId)
+  if (!student) return res.status(404).json({ error: 'Siswa tidak ditemukan' })
+  if (!canMonitorExam(req, req.params.paketId, student.rombel_id)) return res.status(403).json({ error: 'Siswa di luar penugasan proktor' })
+  const session = db.prepare("SELECT id, extra_time_minutes FROM sesi_ujian WHERE paket_id=? AND siswa_id=? AND tenant_id=? AND status='mengerjakan'").get(req.params.paketId, student.id, req.tenantId)
+  if (!session) return res.status(404).json({ error: 'Sesi ujian aktif tidak ditemukan' })
+  const total = Number(session.extra_time_minutes || 0) + minutes
+  if (total > 360) return res.status(400).json({ error: 'Total tambahan waktu maksimal 360 menit' })
+  db.transaction(() => {
+    db.prepare('UPDATE sesi_ujian SET extra_time_minutes=? WHERE id=? AND tenant_id=?').run(total, session.id, req.tenantId)
+    proctorAudit(req, req.params.paketId, student.id, 'tambah-waktu', { minutes, total })
+  })()
+  res.json({ ok: true, extra_time_minutes: total })
 })
 
 // --- Hasil & Koreksi Ujian ---

@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import {
-  Clock, BookOpen, Play, Lock, Monitor, ChevronLeft, ChevronRight,
+  Clock, BookOpen, Play, Lock, ChevronLeft, ChevronRight,
   CheckCircle, AlertTriangle, Eye, EyeOff, Send, Shield, Grid3X3,
   List, Trophy, FileText
 } from 'lucide-react'
@@ -112,6 +112,18 @@ export default function SiswaUjianPage() {
 
   useEffect(() => { fetchUjian() }, [fetchUjian])
 
+  // Heartbeat membuat status peserta pada dashboard proktor tetap aktual.
+  useEffect(() => {
+    if (viewMode !== 'ujian' || !session || !currentUjianId) return
+    const sendHeartbeat = () => {
+      const currentQuestionId = session.soal[currentIdx]?.id || null
+      void api.post(`/ujian/${currentUjianId}/heartbeat`, { current_question_id: currentQuestionId }).catch(() => {})
+    }
+    sendHeartbeat()
+    const heartbeatTimer = setInterval(sendHeartbeat, 15000)
+    return () => clearInterval(heartbeatTimer)
+  }, [viewMode, session, currentUjianId, currentIdx])
+
   // Timer
   useEffect(() => {
     if (viewMode !== 'ujian' || !session) return
@@ -166,7 +178,9 @@ export default function SiswaUjianPage() {
       const data = res.data
       setSession(data)
       setAnswers(data.jawaban || {})
-      setTimeLeft(data.sisa_detik || data.durasi_menit * 60)
+      const baseDurasi = data.durasi_menit * 60
+      const extraTime = (data.extra_time_minutes || 0) * 60
+      setTimeLeft(data.sisa_detik || (baseDurasi + extraTime))
       setCurrentIdx(0)
       setShowAll(false)
       setTabWarning(0)

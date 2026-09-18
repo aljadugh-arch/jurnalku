@@ -95,6 +95,7 @@ const MobileCeklok = lazy(() => import('./pages/admin/MobileCeklok'))
 const BankSoalPage = lazy(() => import('./pages/admin/BankSoalPage'))
 const KisiKisiPage = lazy(() => import('./pages/admin/KisiKisiPage'))
 const PaketUjianPage = lazy(() => import('./pages/admin/PaketUjianPage'))
+const ProktorDashboardPage = lazy(() => import('./pages/proktor/ProktorDashboardPage'))
 const SiswaUjianPage = lazy(() => import('./pages/siswa/SiswaUjianPage'))
 
 /** Loading spinner untuk Suspense fallback */
@@ -122,7 +123,7 @@ function ProtectedRoute({ children, allowedRoles }: { children: ReactNode, allow
   if (!isAuthenticated) return <Navigate to="/login" replace />
   if (allowedRoles && user && !canAccessRole(user, allowedRoles)) {
     const path = user.role === 'admin' || user.role === 'super_admin' || user.role === 'kepala' || user.role === 'bendahara' || user.role === 'operator' || user.role === 'tata_usaha' || user.role === 'tu' ? '/admin' :
-                 user.role === 'guru' || user.role === 'wali_kelas' ? '/guru' : '/siswa'
+                 user.role === 'guru' || user.role === 'wali_kelas' ? '/guru' : user.role === 'proktor' ? '/proktor' : '/siswa'
     return <Navigate to={path} replace />
   }
   return <>{children}</>
@@ -139,7 +140,7 @@ function RootRoute() {
   if (!registeredHost) return <LandingPage />
   if (!isAuthenticated) return <Navigate to="/login" replace />
   const role = user?.role || ''
-  const destination = ['admin', 'super_admin', 'kepala', 'bendahara', 'operator', 'tata_usaha', 'tu'].includes(role) ? '/admin' : ['guru', 'wali_kelas'].includes(role) ? '/guru' : '/siswa'
+  const destination = ['admin', 'super_admin', 'kepala', 'bendahara', 'operator', 'tata_usaha', 'tu'].includes(role) ? '/admin' : ['guru', 'wali_kelas'].includes(role) ? '/guru' : role === 'proktor' ? '/proktor' : '/siswa'
   return <Navigate to={destination} replace />
 }
 
@@ -258,6 +259,19 @@ export default function App() {
           } />
         </Route>
 
+        {/* Proktor Routes */}
+        <Route path="/proktor" element={
+          <ProtectedRoute allowedRoles={['proktor']}>
+            <SubscriptionGate>
+              <DashboardLayout />
+            </SubscriptionGate>
+          </ProtectedRoute>
+        }>
+          <Route index element={<ProktorDashboardPage />} />
+          <Route path="profile" element={<ProfilePage />} />
+          <Route path="change-password" element={<ChangePasswordPage />} />
+        </Route>
+
         {/* Guru Routes */}
         <Route path="/guru" element={
           <ProtectedRoute allowedRoles={['guru', 'wali_kelas']}>
@@ -278,6 +292,9 @@ export default function App() {
           <Route path="nilai-sts" element={<GuruNilaiSTSPage />} />
           <Route path="nilai-sas" element={<GuruNilaiSASPage />} />
           <Route path="koreksi-jawaban" element={<GuruKoreksiJawabanPage />} />
+          <Route path="bank-soal" element={<BankSoalPage />} />
+          <Route path="kisi-kisi" element={<KisiKisiPage />} />
+          <Route path="paket-ujian" element={<PaketUjianPage />} />
           <Route path="profile" element={<ProfilePage />} />
           <Route path="change-password" element={<ChangePasswordPage />} />
           {/* Halaman baru sesuai live */}

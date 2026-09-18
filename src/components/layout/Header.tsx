@@ -12,7 +12,7 @@ export default function Header() {
   const [showDropdown, setShowDropdown] = useState(false)
 
   const base = user?.role === 'admin' || user?.role === 'super_admin' || user?.role === 'kepala' || user?.role === 'bendahara' || user?.role === 'operator' || user?.role === 'tata_usaha' || user?.role === 'tu' ? '/admin'
-    : user?.role === 'guru' || user?.role === 'wali_kelas' ? '/guru' : '/siswa'
+    : user?.role === 'guru' || user?.role === 'wali_kelas' ? '/guru' : user?.role === 'proktor' ? '/proktor' : '/siswa'
   const teacherMode = window.location.pathname.startsWith('/guru')
 
   const handleLogout = () => {

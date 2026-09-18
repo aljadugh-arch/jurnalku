@@ -5,6 +5,7 @@ export const ROLE_LABELS: Record<string, string> = {
   admin: 'Admin Lembaga / Operator',
   kepala: 'Kepala Madrasah / Sekolah',
   guru: 'Guru',
+  proktor: 'Proktor',
   wali_kelas: 'Wali Kelas',
   siswa: 'Siswa',
 }

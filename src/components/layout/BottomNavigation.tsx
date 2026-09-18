@@ -42,6 +42,10 @@ const iconSize = 21
 function roleItems(role?: string, hideStaffCeklok?: boolean): NavItem[] {
   const ceklokStaff: NavItem = { label: 'Ceklok', path: '/admin/ceklok', icon: <MapPin size={iconSize} /> }
   const absensiSaya: NavItem = { label: 'Absensi Saya', path: '/admin/absensi-saya', icon: <UserCheck size={iconSize} /> }
+  if (role === 'proktor') {
+    return [{ label: 'Monitor Ujian', path: '/proktor', icon: <ShieldCheck size={iconSize} /> }]
+  }
+
   if (role === 'guru' || role === 'wali_kelas') {
     const teacherItems = [
       { label: 'Home', path: '/guru', icon: <Home size={iconSize} /> },

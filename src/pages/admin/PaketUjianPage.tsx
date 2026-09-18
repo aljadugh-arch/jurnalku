@@ -1,12 +1,13 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import {
-  Plus, Trash2, Edit, Printer, Eye, CheckCircle, Play, Lock,
+  Plus, Trash2, Edit, Printer, CheckCircle, Play, Lock,
   FileText, ClipboardList, Monitor, BookOpen, Users, Search,
-  GripVertical, CreditCard, BarChart3, X, ChevronLeft, Save, ScanText, Upload, Loader2
+  GripVertical, CreditCard, BarChart3, X, ChevronLeft, Save, ScanText, Loader2, ShieldCheck
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import api from '../../services/api'
 import Modal from '../../components/ui/Modal'
+import { useAuthStore } from '../../stores/authStore'
 
 /* ─── Types ─── */
 interface Mapel { id: string; nama: string; kode: string }
@@ -38,6 +39,8 @@ interface KartuUjian {
   siswa_id: string; nama: string; nis: string; rombel: string; foto?: string
   ujian_nama: string; mapel: string; tanggal: string; durasi: number; ruang?: string
 }
+interface ProktorUser { id: string; nama: string; email: string }
+interface ProktorAssignment { user_id: string; rombel_id: string }
 
 const JENIS_OPTIONS = [
   { value: 'sts', label: 'STS' }, { value: 'sas', label: 'SAS' },
@@ -83,6 +86,8 @@ const emptyForm = (): Omit<PaketUjian, 'id' | 'mapel' | 'soal' | 'jumlah_soal'> 
 type ViewMode = 'list' | 'cetak_soal' | 'cetak_kartu' | 'hasil' | 'koreksi'
 
 export default function PaketUjianPage() {
+  const role = useAuthStore(state => state.user?.role)
+  const canAssignProktor = role === 'admin' || role === 'super_admin'
   const [data, setData] = useState<PaketUjian[]>([])
   const [mapelList, setMapelList] = useState<Mapel[]>([])
   const [rombelList, setRombelList] = useState<Rombel[]>([])
@@ -90,6 +95,11 @@ export default function PaketUjianPage() {
   const [showModal, setShowModal] = useState(false)
   const [editing, setEditing] = useState<PaketUjian | null>(null)
   const [form, setForm] = useState(emptyForm())
+  const [assignmentPaket, setAssignmentPaket] = useState<PaketUjian | null>(null)
+  const [proktorUsers, setProktorUsers] = useState<ProktorUser[]>([])
+  const [assignments, setAssignments] = useState<ProktorAssignment[]>([])
+  const [loadingAssignments, setLoadingAssignments] = useState(false)
+  const [savingAssignments, setSavingAssignments] = useState(false)
 
   // Soal picker
   const [bankSoal, setBankSoal] = useState<Soal[]>([])
@@ -164,6 +174,47 @@ export default function PaketUjianPage() {
     if (!confirm('Hapus paket ujian ini?')) return
     try { await api.delete('/paket-ujian/' + id); toast.success('Berhasil dihapus'); fetchData() }
     catch { toast.error('Gagal menghapus') }
+  }
+
+  const openAssignments = async (paket: PaketUjian) => {
+    setAssignmentPaket(paket)
+    setLoadingAssignments(true)
+    try {
+      const [usersResponse, assignmentResponse] = await Promise.all([
+        api.get('/users', { params: { role: 'proktor' } }),
+        api.get('/ujian/proktor/assignments'),
+      ])
+      const users = Array.isArray(usersResponse.data) ? usersResponse.data : usersResponse.data.data || []
+      const rows = Array.isArray(assignmentResponse.data) ? assignmentResponse.data : assignmentResponse.data.assignments || assignmentResponse.data.data || []
+      setProktorUsers(users.filter((user: any) => user.role === 'proktor'))
+      setAssignments(rows.filter((item: any) => item.paket_id === paket.id).map((item: any) => ({ user_id: item.user_id, rombel_id: item.rombel_id })))
+    } catch (error: any) {
+      toast.error(error.response?.data?.error || 'Gagal memuat assignment proktor')
+      setAssignmentPaket(null)
+    } finally {
+      setLoadingAssignments(false)
+    }
+  }
+
+  const toggleAssignment = (userId: string, rombelId: string) => {
+    const exists = assignments.some(item => item.user_id === userId && item.rombel_id === rombelId)
+    setAssignments(current => exists
+      ? current.filter(item => item.user_id !== userId || item.rombel_id !== rombelId)
+      : [...current, { user_id: userId, rombel_id: rombelId }])
+  }
+
+  const saveAssignments = async () => {
+    if (!assignmentPaket) return
+    setSavingAssignments(true)
+    try {
+      await api.put(`/ujian/${assignmentPaket.id}/proktor/assignments`, { assignments })
+      toast.success('Assignment proktor tersimpan')
+      setAssignmentPaket(null)
+    } catch (error: any) {
+      toast.error(error.response?.data?.error || 'Gagal menyimpan assignment proktor')
+    } finally {
+      setSavingAssignments(false)
+    }
   }
 
   const handleAktifkan = async (p: PaketUjian) => {
@@ -637,6 +688,11 @@ export default function PaketUjianPage() {
                 <button onClick={() => openHasil(p)} className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 text-blue-600 rounded-lg text-xs hover:bg-blue-100 border border-blue-200">
                   <BarChart3 size={12} /> Hasil
                 </button>
+                {canAssignProktor && (
+                  <button onClick={() => void openAssignments(p)} className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-50 text-indigo-700 rounded-lg text-xs hover:bg-indigo-100 border border-indigo-200">
+                    <ShieldCheck size={12} /> Proktor
+                  </button>
+                )}
                 <button onClick={() => openEdit(p)} className="p-2 hover:bg-blue-50 rounded-lg text-blue-600" title="Edit">
                   <Edit size={14} />
                 </button>
@@ -863,6 +919,41 @@ export default function PaketUjianPage() {
             </div>
           </div>
         </div>
+      </Modal>
+
+      <Modal
+        open={!!assignmentPaket}
+        onClose={() => !savingAssignments && setAssignmentPaket(null)}
+        title={`Assignment Proktor — ${assignmentPaket?.nama || ''}`}
+        maxWidth="md:max-w-3xl"
+        footer={
+          <div className="flex justify-end gap-2">
+            <button onClick={() => setAssignmentPaket(null)} disabled={savingAssignments} className="rounded-lg border px-4 py-2 text-sm">Batal</button>
+            <button onClick={() => void saveAssignments()} disabled={savingAssignments || loadingAssignments} className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm text-white disabled:opacity-50">
+              {savingAssignments && <Loader2 size={15} className="animate-spin" />} Simpan Assignment
+            </button>
+          </div>
+        }
+      >
+        {loadingAssignments ? (
+          <div className="flex items-center justify-center gap-2 py-10 text-sm text-gray-500"><Loader2 size={18} className="animate-spin" /> Memuat assignment...</div>
+        ) : proktorUsers.length === 0 ? (
+          <div className="rounded-lg bg-amber-50 p-4 text-sm text-amber-700">Belum ada pengguna dengan role Proktor. Buat akun proktor melalui Manajemen Pengguna.</div>
+        ) : (assignmentPaket?.rombel_ids || []).length === 0 ? (
+          <div className="rounded-lg bg-amber-50 p-4 text-sm text-amber-700">Paket ini belum memiliki target rombel.</div>
+        ) : (
+          <div className="space-y-4">
+            <p className="text-sm text-gray-500">Centang pasangan proktor dan rombel yang akan diawasi. Seorang proktor dapat ditugaskan ke lebih dari satu rombel.</p>
+            <div className="overflow-x-auto rounded-lg border">
+              <table className="w-full text-sm">
+                <thead className="bg-gray-50 text-left text-xs text-gray-500"><tr><th className="px-4 py-3">Proktor</th>{assignmentPaket?.rombel_ids.map(rombelId => <th key={rombelId} className="px-4 py-3 text-center">{rombelList.find(item => item.id === rombelId)?.nama || rombelId}</th>)}</tr></thead>
+                <tbody className="divide-y">
+                  {proktorUsers.map(proktor => <tr key={proktor.id}><td className="px-4 py-3"><p className="font-medium text-gray-800">{proktor.nama}</p><p className="text-xs text-gray-400">{proktor.email}</p></td>{assignmentPaket?.rombel_ids.map(rombelId => <td key={rombelId} className="px-4 py-3 text-center"><input type="checkbox" className="h-4 w-4 accent-primary" checked={assignments.some(item => item.user_id === proktor.id && item.rombel_id === rombelId)} onChange={() => toggleAssignment(proktor.id, rombelId)} aria-label={`Tugaskan ${proktor.nama}`} /></td>)}</tr>)}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
       </Modal>
 
       {/* Hidden file input for OCR upload */}

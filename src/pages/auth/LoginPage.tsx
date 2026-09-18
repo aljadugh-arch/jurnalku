@@ -8,6 +8,7 @@ import { useThemeStore } from '../../stores/themeStore'
 const getRedirectPath = (role: string) => {
   if (['admin', 'super_admin', 'kepala', 'bendahara', 'operator', 'tata_usaha', 'tu'].includes(role)) return '/admin'
   if (role === 'guru' || role === 'wali_kelas') return '/guru'
+  if (role === 'proktor') return '/proktor'
   return '/siswa'
 }
 

@@ -1,6 +1,6 @@
 // Types for SIMS/M (Sistem Informasi Managemen Sekolah/Madrasah)
 
-export type UserRole = 'super_admin' | 'admin' | 'kepala' | 'guru' | 'siswa' | 'wali_kelas' | 'bendahara' | 'operator' | 'tata_usaha' | 'tu' | 'wali_murid'
+export type UserRole = 'super_admin' | 'admin' | 'kepala' | 'guru' | 'proktor' | 'siswa' | 'wali_kelas' | 'bendahara' | 'operator' | 'tata_usaha' | 'tu' | 'wali_murid'
 
 export interface User {
   id: string
