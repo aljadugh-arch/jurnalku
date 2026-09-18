@@ -5468,10 +5468,17 @@ app.post('/api/tts/prewarm', ADMIN, async (req, res) => {
     await runTtsQueue(todo, text => generateTtsAudio({
       apiKey: cfg.apiKey, text, voiceName: DEFAULT_VOICE, uploadDir: UPLOAD_DIR, tenantId,
     }), {
-      concurrency: 3,
+      concurrency: 1,
+      maxRetries: 3,
+      rateLimitDelayMs: 7000,
+      onRetry: () => {
+        job.retrying++
+        job.updatedAt = Date.now()
+      },
       onProgress: (error) => {
         if (error) job.failed++
         else job.done++
+        job.processed = job.done + job.failed
         job.updatedAt = Date.now()
         if (error) console.error('[tts/prewarm]', error.message)
       },

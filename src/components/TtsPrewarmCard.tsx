@@ -27,8 +27,10 @@ export default function TtsPrewarmCard() {
     try {
       if (jobId) {
         const res = await api.get('/tts/prewarm/status', { params: { jobId } })
-        const job = res.data as { status: string; total: number; done: number; failed: number }
-        setStatus({ total: job.total, cached: job.done })
+        const job = res.data as { status: string; total: number; done: number; failed: number; processed?: number; retrying?: number }
+        // Progress adalah jumlah item yang sudah diproses, bukan hanya sukses.
+        // Dengan begitu UI tidak macet ketika sebagian nama gagal permanen.
+        setStatus({ total: job.total, cached: job.processed ?? (job.done + job.failed) })
         if (job.status !== 'running') {
           setRunning(false)
           setJobId(null)
@@ -63,7 +65,7 @@ export default function TtsPrewarmCard() {
         setStatus({ total: queued, cached: 0 })
         setJobId(newJobId || null)
         setRunning(true)
-        toast.success(`Memproses ${queued} audio dengan 3 proses paralel (${alreadyCached} sudah ada)`)
+        toast.success(`Memproses ${queued} audio bertahap sesuai batas Google (${alreadyCached} sudah ada)`)
       }
     } catch (err: any) {
       if (err?.response?.status === 404) {

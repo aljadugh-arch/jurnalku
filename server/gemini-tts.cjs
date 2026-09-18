@@ -17,6 +17,23 @@ const GEMINI_TTS_MODEL = process.env.GEMINI_TTS_MODEL || 'gemini-2.5-flash-previ
 // absensi ("Azzam masuk") yang perlu terdengar positif & natural.
 const DEFAULT_VOICE = process.env.GEMINI_TTS_VOICE || 'Puck'
 
+class TtsRateLimitError extends Error {
+  constructor(message, retryAfterMs = 0) {
+    super(message)
+    this.name = 'TtsRateLimitError'
+    this.retryAfterMs = retryAfterMs
+  }
+}
+
+function retryAfterFromResponse(response, bodyText) {
+  const header = Number(response.headers.get('retry-after'))
+  if (Number.isFinite(header) && header > 0) return Math.ceil(header * 1000)
+  const match = String(bodyText).match(/retry in\s+([\d.]+)s/i)
+  return match ? Math.ceil(Number(match[1]) * 1000) : 0
+}
+
+const delay = ms => new Promise(resolve => setTimeout(resolve, ms))
+
 function cacheDirFor(uploadDir) {
   const dir = path.join(uploadDir, 'tts_cache')
   fs.mkdirSync(dir, { recursive: true })
@@ -42,7 +59,7 @@ const ttsJobs = new Map()
 function createTtsJob(total) {
   const id = crypto.randomUUID()
   const now = Date.now()
-  const job = { id, status: 'running', total, done: 0, failed: 0, startedAt: now, updatedAt: now }
+  const job = { id, status: 'running', total, done: 0, failed: 0, retrying: 0, processed: 0, startedAt: now, updatedAt: now }
   ttsJobs.set(id, job)
   for (const [jobId, value] of ttsJobs) {
     if (now - value.updatedAt > 30 * 60 * 1000) ttsJobs.delete(jobId)
@@ -54,17 +71,38 @@ function getTtsJobStatus(id) {
   return ttsJobs.get(id) || null
 }
 
-async function runTtsQueue(items, worker, { concurrency = 3, onProgress } = {}) {
+async function runTtsQueue(items, worker, {
+  concurrency = 1,
+  onProgress,
+  onRetry,
+  maxRetries = 3,
+  rateLimitDelayMs = 7000,
+} = {}) {
   let nextIndex = 0
   const runners = Array.from({ length: Math.min(concurrency, items.length) }, async () => {
     while (nextIndex < items.length) {
       const index = nextIndex++
-      try {
-        await worker(items[index], index)
-        onProgress?.(null)
-      } catch (error) {
-        onProgress?.(error)
+      let attempt = 0
+      while (true) {
+        try {
+          await worker(items[index], index)
+          onProgress?.(null)
+          break
+        } catch (error) {
+          if (error instanceof TtsRateLimitError && attempt < maxRetries) {
+            attempt++
+            const retryAfterMs = error.retryAfterMs
+            onRetry?.({ index, attempt, retryAfterMs: retryAfterMs || rateLimitDelayMs })
+            await delay(retryAfterMs || rateLimitDelayMs)
+            continue
+          }
+          onProgress?.(error)
+          break
+        }
       }
+      // Free-tier Gemini TTS membatasi request per menit. Jeda antarnama
+      // mencegah burst yang membuat semua sisa antrean langsung 429.
+      if (nextIndex < items.length) await delay(rateLimitDelayMs)
     }
   })
   await Promise.all(runners)
@@ -127,8 +165,12 @@ async function generateTtsAudio({ apiKey, text, voiceName, uploadDir, tenantId }
     signal: AbortSignal.timeout(25000),
   })
   if (!response.ok) {
-    const errText = await response.text().catch(() => '')
-    throw new Error(`Gemini TTS gagal (${response.status}): ${errText.slice(0, 200)}`)
+    const msg = await response.text().catch(() => '')
+    const message = `Gemini TTS gagal (${response.status}): ${msg.slice(0, 300)}`
+    if (response.status === 429) {
+      throw new TtsRateLimitError(message, retryAfterFromResponse(response, msg))
+    }
+    throw new Error(message)
   }
   const data = await response.json()
   const part = data?.candidates?.[0]?.content?.parts?.find((p) => p?.inlineData?.data)
