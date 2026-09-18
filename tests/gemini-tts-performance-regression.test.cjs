@@ -54,3 +54,20 @@ test('progress job menghitung kegagalan permanen sebagai processed agar UI tidak
   assert.match(route, /retrying/)
   assert.match(feedbackSound, /timeout:\s*800/)
 })
+
+test('progress menunjukkan fase menunggu rate limit, bukan 0 persen tanpa penjelasan', () => {
+  const card = read('src/components/TtsPrewarmCard.tsx')
+  assert.match(card, /phase/)
+  assert.match(card, /retryAt/)
+  assert.match(card, /Menunggu batas Google/)
+  assert.match(card, /Math\.max\(1,/)
+})
+
+test('429 menandai job sebagai menunggu sebelum retry', () => {
+  const route = serverIndex.slice(
+    serverIndex.indexOf("app.post('/api/tts/prewarm'"),
+    serverIndex.indexOf("app.get('/api/tts/prewarm/status'")
+  )
+  assert.match(route, /job\.phase\s*=\s*'waiting-rate-limit'/)
+  assert.match(route, /job\.retryAt/)
+})

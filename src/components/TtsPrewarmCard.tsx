@@ -22,15 +22,22 @@ export default function TtsPrewarmCard() {
   const [running, setRunning] = useState(false)
   const [available, setAvailable] = useState(true)
   const [jobId, setJobId] = useState<string | null>(null)
+  const [jobPhase, setJobPhase] = useState<'processing' | 'waiting-rate-limit'>('processing')
+  const [retryAt, setRetryAt] = useState<number | null>(null)
 
   const loadStatus = useCallback(async () => {
     try {
       if (jobId) {
         const res = await api.get('/tts/prewarm/status', { params: { jobId } })
-        const job = res.data as { status: string; total: number; done: number; failed: number; processed?: number; retrying?: number }
+        const job = res.data as {
+          status: string; total: number; done: number; failed: number; processed?: number
+          retrying?: number; phase?: 'processing' | 'waiting-rate-limit'; retryAt?: number | null
+        }
         // Progress adalah jumlah item yang sudah diproses, bukan hanya sukses.
         // Dengan begitu UI tidak macet ketika sebagian nama gagal permanen.
         setStatus({ total: job.total, cached: job.processed ?? (job.done + job.failed) })
+        setJobPhase(job.phase || 'processing')
+        setRetryAt(job.retryAt || null)
         if (job.status !== 'running') {
           setRunning(false)
           setJobId(null)
@@ -63,6 +70,8 @@ export default function TtsPrewarmCard() {
         toast.success(`Semua ${total} nama sudah tersimpan di cache suara pria`)
       } else {
         setStatus({ total: queued, cached: 0 })
+        setJobPhase('processing')
+        setRetryAt(null)
         setJobId(newJobId || null)
         setRunning(true)
         toast.success(`Memproses ${queued} audio bertahap sesuai batas Google (${alreadyCached} sudah ada)`)
@@ -88,7 +97,10 @@ export default function TtsPrewarmCard() {
 
   if (!available) return null
 
-  const pct = status && status.total > 0 ? Math.round((status.cached / status.total) * 100) : 0
+  const rawPct = status && status.total > 0 ? Math.round((status.cached / status.total) * 100) : 0
+  // Saat job benar-benar berjalan tetapi item pertama belum lolos rate limit,
+  // tampilkan 1% sebagai indikator aktif—bukan 0% yang terlihat macet.
+  const pct = running && status?.total && rawPct === 0 ? Math.max(1, rawPct) : rawPct
 
   return (
     <div className="bg-white rounded-xl p-4 sm:p-6 shadow-sm border border-gray-100">
@@ -103,9 +115,14 @@ export default function TtsPrewarmCard() {
       {status && (
         <div className="mb-4">
           <div className="flex justify-between text-xs text-gray-500 mb-1">
-            <span>{status.cached} dari {status.total} nama siap</span>
+            <span>{status.cached} dari {status.total} audio diproses</span>
             <span>{pct}%</span>
           </div>
+          {running && jobPhase === 'waiting-rate-limit' && (
+            <p className="text-xs text-amber-600 mb-1">
+              Menunggu batas Google{retryAt ? ` — mencoba lagi sekitar ${Math.max(1, Math.ceil((retryAt - Date.now()) / 1000))} detik` : ''}
+            </p>
+          )}
           <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
             <div className="h-full bg-indigo-500 transition-all" style={{ width: `${pct}%` }} />
           </div>

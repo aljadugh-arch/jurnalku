@@ -5471,14 +5471,18 @@ app.post('/api/tts/prewarm', ADMIN, async (req, res) => {
       concurrency: 1,
       maxRetries: 3,
       rateLimitDelayMs: 7000,
-      onRetry: () => {
+      onRetry: ({ retryAfterMs }) => {
         job.retrying++
+        job.phase = 'waiting-rate-limit'
+        job.retryAt = Date.now() + retryAfterMs
         job.updatedAt = Date.now()
       },
       onProgress: (error) => {
         if (error) job.failed++
         else job.done++
         job.processed = job.done + job.failed
+        job.phase = 'processing'
+        job.retryAt = null
         job.updatedAt = Date.now()
         if (error) console.error('[tts/prewarm]', error.message)
       },

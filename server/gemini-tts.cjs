@@ -59,7 +59,19 @@ const ttsJobs = new Map()
 function createTtsJob(total) {
   const id = crypto.randomUUID()
   const now = Date.now()
-  const job = { id, status: 'running', total, done: 0, failed: 0, retrying: 0, processed: 0, startedAt: now, updatedAt: now }
+  const job = {
+    id,
+    status: 'running',
+    phase: 'processing',
+    total,
+    done: 0,
+    failed: 0,
+    retrying: 0,
+    processed: 0,
+    retryAt: null,
+    startedAt: now,
+    updatedAt: now,
+  }
   ttsJobs.set(id, job)
   for (const [jobId, value] of ttsJobs) {
     if (now - value.updatedAt > 30 * 60 * 1000) ttsJobs.delete(jobId)
