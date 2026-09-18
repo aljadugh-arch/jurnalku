@@ -305,6 +305,7 @@ db.exec(`
 
   CREATE TABLE IF NOT EXISTS settings (
     id TEXT PRIMARY KEY DEFAULT 'main',
+    tenant_id TEXT DEFAULT 'default',
     nama_lembaga TEXT DEFAULT 'Madrasah Digital',
     alamat TEXT DEFAULT '',
     telepon TEXT DEFAULT '',
@@ -317,6 +318,7 @@ db.exec(`
     geo_latitude REAL,
     geo_longitude REAL,
     geo_radius INTEGER DEFAULT 200,
+    kts_template TEXT,
     updated_at TEXT DEFAULT (datetime('now'))
   );
 
@@ -1169,7 +1171,10 @@ for (const col of [
   ['users', 'gtk_id', 'TEXT'],
   ['users', 'kode_guru', "TEXT DEFAULT ''"],
   ['users', 'siswa_id', 'TEXT'],
+  ['users', 'nis', 'TEXT'],
+  ['users', 'nisn', 'TEXT'],
   ['users', 'must_change_password', 'INTEGER DEFAULT 0'],
+  ['settings', 'kts_template', 'TEXT'],
   ['absensi_guru', 'keterangan', "TEXT DEFAULT ''"],
   // Absensi siswa: pisah masuk & pulang (Item 1)
   ['absensi_siswa', 'waktu_masuk', 'TEXT'],
@@ -1250,20 +1255,21 @@ function ensureStudentUser(siswa, tenantId, opts = {}) {
 
   const byStudent = db.prepare('SELECT * FROM users WHERE siswa_id = ? AND tenant_id = ?').get(siswa.id, tenantId)
   const byNis = db.prepare("SELECT * FROM users WHERE role = 'siswa' AND nis = ? AND tenant_id = ?").get(siswa.nis, tenantId)
-  const user = byStudent || byNis
+  const byNisn = siswa.nisn ? db.prepare("SELECT * FROM users WHERE role = 'siswa' AND nisn = ? AND tenant_id = ?").get(siswa.nisn, tenantId) : null
+  const user = byStudent || byNis || byNisn
 
   if (user) {
     const shouldResetPassword = opts.resetPassword || (opts.resetDefaultPassword && user.must_change_password)
     const nextPassword = shouldResetPassword ? bcrypt.hashSync(initial, 10) : user.password
-    db.prepare('UPDATE users SET nama=?, nis=?, siswa_id=?, password=?, must_change_password=? WHERE id=? AND tenant_id=?')
-      .run(siswa.nama, siswa.nis, siswa.id, nextPassword, shouldResetPassword ? 1 : (user.must_change_password || 0), user.id, tenantId)
+    db.prepare('UPDATE users SET nama=?, nis=?, nisn=?, siswa_id=?, password=?, must_change_password=? WHERE id=? AND tenant_id=?')
+      .run(siswa.nama, siswa.nis, siswa.nisn || null, siswa.id, nextPassword, shouldResetPassword ? 1 : (user.must_change_password || 0), user.id, tenantId)
     return db.prepare('SELECT * FROM users WHERE id = ? AND tenant_id = ?').get(user.id, tenantId)
   }
 
   const id = uuidv4()
   const email = studentLocalEmail(tenantId, siswa.nis)
-  db.prepare('INSERT INTO users (id, nama, email, password, role, nis, siswa_id, tenant_id, must_change_password) VALUES (?,?,?,?,?,?,?,?,?)')
-    .run(id, siswa.nama, email, bcrypt.hashSync(initial, 10), 'siswa', siswa.nis, siswa.id, tenantId, 1)
+  db.prepare('INSERT INTO users (id, nama, email, password, role, nis, nisn, siswa_id, tenant_id, must_change_password) VALUES (?,?,?,?,?,?,?,?,?,?)')
+    .run(id, siswa.nama, email, bcrypt.hashSync(initial, 10), 'siswa', siswa.nis, siswa.nisn || null, siswa.id, tenantId, 1)
   return db.prepare('SELECT * FROM users WHERE id = ? AND tenant_id = ?').get(id, tenantId)
 }
 
@@ -2726,6 +2732,33 @@ app.delete('/api/settings/background', ADMIN, (req, res) => {
   res.json({ success: true })
 })
 
+app.post('/api/settings/kts-template', ADMIN, (req, res) => {
+  const { kts_template } = req.body
+  if (!kts_template || typeof kts_template !== 'string') {
+    return res.status(400).json({ error: 'Template KTS wajib berupa string HTML/text' })
+  }
+  if (kts_template.length > 100000) {
+    return res.status(400).json({ error: 'Template KTS terlalu besar (maks 100KB)' })
+  }
+  const id = canonicalSettingsId(req.tenantId)
+  db.prepare(`INSERT INTO settings (id, tenant_id, kts_template, updated_at) VALUES (?,?,?,datetime('now'))
+    ON CONFLICT(id) DO UPDATE SET kts_template=excluded.kts_template, updated_at=datetime('now')`).run(id, req.tenantId, kts_template)
+  res.json({ success: true, message: 'Template KTS tersimpan' })
+})
+app.get('/api/settings/kts-template', (req, res) => {
+  let tenantId = req.tenantId || 'default'
+  const token = req.headers.authorization?.split(' ')[1]
+  if (token) {
+    try {
+      const user = jwt.verify(token, JWT_SECRET)
+      if (user.tenant_id) tenantId = user.tenant_id
+    } catch {}
+  }
+  const id = canonicalSettingsId(tenantId)
+  const settings = db.prepare('SELECT kts_template FROM settings WHERE id=? AND tenant_id=?').get(id, tenantId)
+  res.json({ kts_template: settings?.kts_template || '' })
+})
+
 app.post('/api/settings/reset-data', ADMIN, (req, res) => {
   const { confirm } = req.body || {}
   if (confirm !== 'RESET DATA') return res.status(400).json({ error: 'Ketik RESET DATA untuk konfirmasi' })
@@ -3905,6 +3938,35 @@ app.get('/api/siswa/qr-identifiers', STAFF, (req, res) => {
     identifier_type: 'ID SISWA'
   }))
   res.json(data)
+})
+
+app.post('/api/siswa/generate-kts', STAFF, (req, res) => {
+  const { siswa_ids } = req.body
+  if (!Array.isArray(siswa_ids) || siswa_ids.length === 0) {
+    return res.status(400).json({ error: 'siswa_ids wajib berupa array tidak kosong' })
+  }
+  const id = canonicalSettingsId(req.tenantId)
+  const settings = db.prepare('SELECT kts_template FROM settings WHERE id=? AND tenant_id=?').get(id, req.tenantId)
+  const template = settings?.kts_template
+  if (!template) {
+    return res.status(400).json({ error: 'Template KTS belum diunggah di menu Settings' })
+  }
+  const siswaList = db.prepare(`SELECT s.id, s.nis, s.nisn, s.nama, s.rombel_id, s.jenis_kelamin, s.tempat_lahir, s.tanggal_lahir, s.alamat,
+    r.nama as rombel_nama, t.id as tenant_id
+    FROM siswa s
+    LEFT JOIN rombel r ON r.id=s.rombel_id AND r.tenant_id=s.tenant_id
+    LEFT JOIN tenants t ON t.id=s.tenant_id
+    WHERE s.tenant_id=? AND s.id IN (${siswa_ids.map(()=>'?').join(',')}) AND s.status='aktif'`).all(req.tenantId, ...siswa_ids)
+  if (siswaList.length === 0) {
+    return res.status(404).json({ error: 'Tidak ada siswa ditemukan' })
+  }
+  const qrMap = new Map()
+  db.prepare(`SELECT siswa_id, token FROM qr_siswa_identifiers WHERE tenant_id=? AND siswa_id IN (${siswa_ids.map(()=>'?').join(',')})`).all(req.tenantId, ...siswa_ids).forEach(r => qrMap.set(r.siswa_id, r.token))
+  res.json({
+    message: 'KTS data siap dibuat',
+    count: siswaList.length,
+    siswa_list: siswaList.map(s => ({id: s.id, nis: s.nis, nisn: s.nisn, nama: s.nama, rombel_nama: s.rombel_nama, qr_token: qrMap.get(s.id) || ''}))
+  })
 })
 
 app.get('/api/guru/absensi-saya', CEKLOK_ACCESS, (req, res) => {
