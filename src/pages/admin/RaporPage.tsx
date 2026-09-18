@@ -121,7 +121,7 @@ export default function RaporPage() {
 
       <div className="print:hidden"><FoundationTenantPicker selectedTenantId={foundationTenantId} onSelectTenant={setFoundationTenantId} /></div>
       <div className="card p-5 print:hidden">
-        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-6 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-6 gap-4">
           <Select label="Kelas" value={selectedRombel} onChange={setSelectedRombel} options={rombelList.map(r => ({ value: r.id, label: r.nama }))} placeholder="Pilih Kelas" />
           <Select label="Siswa" value={selectedSiswa} onChange={setSelectedSiswa} options={siswaList.map(s => ({ value: s.id, label: s.nama }))} placeholder="Pilih Siswa" disabled={!selectedRombel} />
           <Field label="Tahun Ajaran"><input value={tahunAjaran} onChange={e => setTahunAjaran(e.target.value)} className="input" /></Field>
@@ -135,9 +135,9 @@ export default function RaporPage() {
       {selectedSiswa && !foundationTenantId && (
         <div className="card p-5 print:hidden space-y-4">
           <h2 className="font-semibold text-gray-800">Data Pelengkap Rapor</h2>
-          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            <Field label="Tinggi Badan (cm)"><input type="number" value={pelengkap.tinggi_badan ?? ''} onChange={e => setPelengkap({ ...pelengkap, tinggi_badan: e.target.value })} className="input" /></Field>
-            <Field label="Berat Badan (kg)"><input type="number" value={pelengkap.berat_badan ?? ''} onChange={e => setPelengkap({ ...pelengkap, berat_badan: e.target.value })} className="input" /></Field>
+          <div className="grid sm:grid-cols-2 xl:grid-cols-4 gap-4">
+            <Field label="Tinggi Badan (cm)"><input type="number" value={pelengkap.tinggi_badan ?? ''} onChange={e => setPelengkap({ ...pelengkap, tinggi_badan: e.target.value })} className="input [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" /></Field>
+            <Field label="Berat Badan (kg)"><input type="number" value={pelengkap.berat_badan ?? ''} onChange={e => setPelengkap({ ...pelengkap, berat_badan: e.target.value })} className="input [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" /></Field>
             <Field label="Tanggal Pembagian"><input type="date" value={pelengkap.tanggal_pembagian || ''} onChange={e => setPelengkap({ ...pelengkap, tanggal_pembagian: e.target.value })} className="input" /></Field>
             <Field label="Keputusan"><input value={pelengkap.keputusan || ''} onChange={e => setPelengkap({ ...pelengkap, keputusan: e.target.value })} placeholder="Naik ke kelas... / Lulus" className="input" /></Field>
           </div>
