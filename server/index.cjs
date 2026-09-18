@@ -545,7 +545,29 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_rapor_tenant ON rapor(tenant_id);
   CREATE INDEX IF NOT EXISTS idx_rapor_siswa ON rapor(siswa_id);
   CREATE INDEX IF NOT EXISTS idx_rapor_semester ON rapor(tahun_ajaran, semester, jenis);
-  CREATE UNIQUE INDEX IF NOT EXISTS idx_rapor_unique ON rapor(siswa_id, mapel_id, tahun_ajaran, semester, jenis);
+  CREATE UNIQUE INDEX IF NOT EXISTS idx_rapor_unique ON rapor(tenant_id, siswa_id, mapel_id, tahun_ajaran, semester, jenis);
+
+  CREATE TABLE IF NOT EXISTS rapor_pelengkap (
+    id TEXT PRIMARY KEY,
+    siswa_id TEXT NOT NULL,
+    tahun_ajaran TEXT NOT NULL,
+    semester TEXT NOT NULL,
+    jenis TEXT NOT NULL DEFAULT 'rapor_sts',
+    tinggi_badan REAL,
+    berat_badan REAL,
+    kondisi_kesehatan TEXT DEFAULT '',
+    prestasi TEXT DEFAULT '[]',
+    catatan_wali_kelas TEXT DEFAULT '',
+    tanggapan_orang_tua TEXT DEFAULT '',
+    keputusan TEXT DEFAULT '',
+    tanggal_pembagian TEXT DEFAULT '',
+    tenant_id TEXT NOT NULL DEFAULT 'default',
+    created_at TEXT DEFAULT (datetime('now')),
+    updated_at TEXT,
+    UNIQUE(tenant_id, siswa_id, tahun_ajaran, semester, jenis),
+    FOREIGN KEY (siswa_id) REFERENCES siswa(id)
+  );
+  CREATE INDEX IF NOT EXISTS idx_rapor_pelengkap_tenant_siswa ON rapor_pelengkap(tenant_id, siswa_id);
 
   -- Bank Soal & Ujian
   CREATE TABLE IF NOT EXISTS bank_soal (
@@ -1021,6 +1043,19 @@ try {
   if (!raporCols.some(col => col.name === 'nilai_harian')) db.exec('ALTER TABLE rapor ADD COLUMN nilai_harian INTEGER DEFAULT 0')
 } catch (e) { console.error('[migrate] rapor kolom tambahan failed', e.message) }
 
+// Pastikan uniqueness rapor selalu tenant-scoped. SQLite tidak mengubah
+// definisi index yang sudah ada saat CREATE INDEX IF NOT EXISTS dipanggil.
+try {
+  const migrateRaporUnique = db.transaction(() => {
+    const duplicates = db.prepare(`SELECT tenant_id,siswa_id,mapel_id,tahun_ajaran,semester,jenis,COUNT(*) AS total
+      FROM rapor GROUP BY tenant_id,siswa_id,mapel_id,tahun_ajaran,semester,jenis HAVING COUNT(*)>1 LIMIT 1`).get()
+    if (duplicates) throw new Error('duplikat rapor harus diselesaikan sebelum migrasi index')
+    db.exec('DROP INDEX IF EXISTS idx_rapor_unique')
+    db.exec('CREATE UNIQUE INDEX idx_rapor_unique ON rapor(tenant_id, siswa_id, mapel_id, tahun_ajaran, semester, jenis)')
+  })
+  migrateRaporUnique()
+} catch (e) { console.error('[migrate] rapor unique tenant failed', e.message) }
+
 // Migrasi settings: kolom kop lembaga untuk cetak rapor.
 try {
   const settingsCols = db.prepare('PRAGMA table_info(settings)').all().map(c => c.name)
@@ -1170,10 +1205,6 @@ try {
 }
 
 function studentInitialPassword(siswa) {
-  const nisn = String(siswa?.nisn || '').trim()
-  if (nisn) return nisn
-  const tgl = String(siswa?.tanggal_lahir || '').replace(/\D/g, '')
-  if (tgl) return tgl
   return String(siswa?.nis || '').trim()
 }
 
@@ -1222,9 +1253,10 @@ function ensureStudentUser(siswa, tenantId, opts = {}) {
   const user = byStudent || byNis
 
   if (user) {
-    const nextPassword = opts.resetPassword ? bcrypt.hashSync(initial, 10) : user.password
+    const shouldResetPassword = opts.resetPassword || (opts.resetDefaultPassword && user.must_change_password)
+    const nextPassword = shouldResetPassword ? bcrypt.hashSync(initial, 10) : user.password
     db.prepare('UPDATE users SET nama=?, nis=?, siswa_id=?, password=?, must_change_password=? WHERE id=? AND tenant_id=?')
-      .run(siswa.nama, siswa.nis, siswa.id, nextPassword, opts.resetPassword ? 1 : (user.must_change_password || 0), user.id, tenantId)
+      .run(siswa.nama, siswa.nis, siswa.id, nextPassword, shouldResetPassword ? 1 : (user.must_change_password || 0), user.id, tenantId)
     return db.prepare('SELECT * FROM users WHERE id = ? AND tenant_id = ?').get(user.id, tenantId)
   }
 
@@ -2824,6 +2856,7 @@ app.put('/api/siswa/:id', ADMIN, (req, res) => {
 
 app.post('/api/siswa/generate-akun', ADMIN, (req, res) => {
   const resetPassword = req.body?.reset_password === true
+  const resetDefaultPassword = req.body?.reset_default_password === true
   const siswaList = db.prepare("SELECT * FROM siswa WHERE tenant_id = ? AND status = 'aktif' ORDER BY nama").all(req.tenantId)
   let dibuat = 0
   let sinkron = 0
@@ -2832,7 +2865,7 @@ app.post('/api/siswa/generate-akun', ADMIN, (req, res) => {
     for (const siswa of siswaList) {
       try {
         const existed = db.prepare('SELECT id FROM users WHERE (siswa_id = ? OR (role = ? AND nis = ?)) AND tenant_id = ?').get(siswa.id, 'siswa', siswa.nis, req.tenantId)
-        const user = ensureStudentUser(siswa, req.tenantId, { resetPassword })
+        const user = ensureStudentUser(siswa, req.tenantId, { resetPassword, resetDefaultPassword })
         if (user) existed ? sinkron++ : dibuat++
       } catch (e) {
         gagal.push({ nis: siswa.nis, nama: siswa.nama, error: e.message })
@@ -6505,9 +6538,42 @@ function semesterRange(tahunAjaran, semester) {
   return { from, to }
 }
 
+function validateRaporPeriod(tahunAjaran, semester, jenis) {
+  if (!/^\d{4}\/\d{4}$/.test(String(tahunAjaran || ''))) return 'Tahun ajaran harus berformat YYYY/YYYY'
+  const [awal, akhir] = String(tahunAjaran).split('/').map(Number)
+  if (akhir !== awal + 1) return 'Rentang tahun ajaran tidak valid'
+  if (!['ganjil', 'genap'].includes(semester)) return 'Semester tidak valid'
+  if (jenis != null && !['rapor_sts', 'rapor_sas'].includes(jenis)) return 'Jenis rapor tidak valid'
+  return ''
+}
+
+function canReadRaporStudent(req, siswaId) {
+  if (!isTeacherContext(req)) return true
+  return teacherCanAccessStudent(req, siswaId)
+}
+
+function canManageRaporStudent(req, siswaId) {
+  if (!isTeacherContext(req)) return true
+  const gtk = resolveGtkForUser(req.user.id, req.tenantId)
+  if (!gtk) return false
+  return !!db.prepare(`SELECT 1 FROM siswa s JOIN rombel r ON r.id=s.rombel_id AND r.tenant_id=s.tenant_id
+    WHERE s.id=? AND s.tenant_id=? AND r.wali_kelas_id=?`).get(siswaId, req.tenantId, gtk.id)
+}
+
+function canManageRaporRombel(req, rombelId) {
+  if (!isTeacherContext(req)) return true
+  const gtk = resolveGtkForUser(req.user.id, req.tenantId)
+  return !!gtk && !!db.prepare('SELECT 1 FROM rombel WHERE id=? AND tenant_id=? AND wali_kelas_id=?').get(rombelId, req.tenantId, gtk.id)
+}
+
 // GET /api/rapor — list rapor (filter by siswa/rombel/semester/jenis)
 app.get('/api/rapor', authMiddleware, (req, res) => {
   const { siswa_id, tahun_ajaran, semester, jenis } = req.query
+  if (siswa_id && !canReadRaporStudent(req, siswa_id)) return res.status(404).json({ error: 'Siswa tidak ditemukan' })
+  if (tahun_ajaran || semester || jenis) {
+    const validationError = validateRaporPeriod(tahun_ajaran, semester, jenis)
+    if (validationError) return res.status(400).json({ error: validationError })
+  }
   let sql = `SELECT r.*, s.nama as siswa_nama, s.nis, m.nama as mapel_nama
     FROM rapor r
     LEFT JOIN siswa s ON r.siswa_id = s.id
@@ -6520,6 +6586,97 @@ app.get('/api/rapor', authMiddleware, (req, res) => {
   if (jenis) { sql += ' AND r.jenis = ?'; params.push(jenis) }
   sql += ' ORDER BY m.nama'
   res.json(db.prepare(sql).all(...params))
+})
+
+// Data non-akademik yang melengkapi satu lembar rapor. Semua lookup wajib
+// tenant-scoped agar data siswa tidak pernah bocor antar-lembaga.
+app.get('/api/rapor/ringkasan', authMiddleware, (req, res) => {
+  const { siswa_id, tahun_ajaran, semester, jenis = 'rapor_sts' } = req.query
+  if (!siswa_id || !tahun_ajaran || !semester) return res.status(400).json({ error: 'siswa_id, tahun_ajaran, semester wajib' })
+  const validationError = validateRaporPeriod(tahun_ajaran, semester, jenis)
+  if (validationError) return res.status(400).json({ error: validationError })
+  const siswa = db.prepare(`SELECT s.*, r.nama AS rombel_nama, r.tingkat, g.nama AS wali_kelas_nama, g.nip AS wali_kelas_nip
+    FROM siswa s LEFT JOIN rombel r ON s.rombel_id=r.id AND r.tenant_id=s.tenant_id
+    LEFT JOIN gtk g ON r.wali_kelas_id=g.id AND g.tenant_id=s.tenant_id
+    WHERE s.id=? AND s.tenant_id=?`).get(siswa_id, req.tenantId)
+  if (!siswa || (isTeacherContext(req) && !teacherCanAccessStudent(req, siswa_id))) return res.status(404).json({ error: 'Siswa tidak ditemukan' })
+
+  const { from, to } = semesterRange(tahun_ajaran, semester)
+  const absensiRows = db.prepare(`SELECT lower(status) AS status, COUNT(DISTINCT tanggal) AS jumlah
+    FROM absensi_siswa WHERE siswa_id=? AND tenant_id=? AND tanggal>=? AND tanggal<=? GROUP BY lower(status)`)
+    .all(siswa_id, req.tenantId, from, to)
+  const kehadiran = { hadir: 0, sakit: 0, izin: 0, alpa: 0 }
+  for (const row of absensiRows) {
+    const key = ['alpha', 'tanpa_keterangan'].includes(row.status) ? 'alpa' : row.status
+    if (Object.hasOwn(kehadiran, key)) kehadiran[key] += Number(row.jumlah) || 0
+  }
+
+  const kepribadian = db.prepare(`SELECT sikap_spiritual,sikap_sosial,sikap_umum,kelakuan,kerajinan,kerapian,kedisiplinan,catatan_wali_kelas,saran
+    FROM catatan_kepribadian WHERE siswa_id=? AND tahun_ajaran=? AND semester=? AND tenant_id=? ORDER BY updated_at DESC LIMIT 1`)
+    .get(siswa_id, tahun_ajaran, semester, req.tenantId) || {}
+  const pelengkap = db.prepare(`SELECT * FROM rapor_pelengkap
+    WHERE tenant_id=? AND siswa_id=? AND tahun_ajaran=? AND semester=? AND jenis=?`)
+    .get(req.tenantId, siswa_id, tahun_ajaran, semester, jenis) || {}
+  try { pelengkap.prestasi = JSON.parse(pelengkap.prestasi || '[]') } catch { pelengkap.prestasi = [] }
+
+  const ekstrakurikuler = db.prepare(`SELECT e.id,e.nama,e.jenis_kegiatan,
+      COUNT(a.id) AS total_pertemuan,
+      SUM(CASE WHEN lower(a.status)='hadir' THEN 1 ELSE 0 END) AS hadir
+    FROM ekskul_anggota ea JOIN ekskul e ON e.id=ea.ekskul_id AND e.tenant_id=ea.tenant_id
+    LEFT JOIN absensi_ekskul a ON a.ekskul_id=e.id AND a.siswa_id=ea.siswa_id AND a.tenant_id=ea.tenant_id AND a.tanggal>=? AND a.tanggal<=?
+    WHERE ea.siswa_id=? AND ea.tenant_id=? GROUP BY e.id,e.nama,e.jenis_kegiatan ORDER BY e.jenis_kegiatan,e.nama`)
+    .all(from, to, siswa_id, req.tenantId)
+    .map(row => ({ ...row, nilai: row.total_pertemuan ? Math.round((row.hadir / row.total_pertemuan) * 100) : null }))
+
+  res.json({ siswa, kehadiran, kepribadian, ekstrakurikuler, pelengkap })
+})
+
+app.put('/api/rapor/pelengkap', STAFF, (req, res) => {
+  const { siswa_id, tahun_ajaran, semester, jenis = 'rapor_sts' } = req.body
+  if (!siswa_id || !tahun_ajaran || !semester) return res.status(400).json({ error: 'Data identitas rapor tidak lengkap' })
+  const validationError = validateRaporPeriod(tahun_ajaran, semester, jenis)
+  if (validationError) return res.status(400).json({ error: validationError })
+  const siswa = db.prepare('SELECT id FROM siswa WHERE id=? AND tenant_id=?').get(siswa_id, req.tenantId)
+  if (!siswa || !canManageRaporStudent(req, siswa_id)) return res.status(404).json({ error: 'Siswa tidak ditemukan' })
+  const numberOrNull = (value, min, max, message) => {
+    if (value === '' || value == null) return null
+    const number = Number(value)
+    if (!Number.isFinite(number) || number < min || number > max) throw new RangeError(message)
+    return number
+  }
+  let tinggiBadan, beratBadan
+  try {
+    tinggiBadan = numberOrNull(req.body.tinggi_badan, 30, 250, 'tinggi_badan harus di antara 30 dan 250 cm')
+    beratBadan = numberOrNull(req.body.berat_badan, 1, 300, 'berat_badan harus di antara 1 dan 300 kg')
+  } catch (error) { return res.status(400).json({ error: error.message }) }
+  const tanggalPembagian = String(req.body.tanggal_pembagian || '').trim()
+  if (tanggalPembagian && (!/^\d{4}-\d{2}-\d{2}$/.test(tanggalPembagian) || Number.isNaN(Date.parse(`${tanggalPembagian}T00:00:00Z`)))) return res.status(400).json({ error: 'tanggal_pembagian tidak valid' })
+  const keputusan = String(req.body.keputusan || '').trim().slice(0, 300)
+  if (jenis !== 'rapor_sas' && keputusan) return res.status(400).json({ error: 'Keputusan hanya dapat diisi pada rapor SAS' })
+  const prestasi = Array.isArray(req.body.prestasi) ? req.body.prestasi.slice(0, 20).map(item => ({
+    jenis: String(item?.jenis || '').slice(0, 60),
+    keterangan: String(item?.keterangan || '').slice(0, 300),
+  })).filter(item => item.jenis || item.keterangan) : []
+  const values = {
+    tinggi_badan: tinggiBadan,
+    berat_badan: beratBadan,
+    kondisi_kesehatan: String(req.body.kondisi_kesehatan || '').slice(0, 1000),
+    prestasi: JSON.stringify(prestasi),
+    catatan_wali_kelas: String(req.body.catatan_wali_kelas || '').slice(0, 2000),
+    tanggapan_orang_tua: String(req.body.tanggapan_orang_tua || '').slice(0, 2000),
+    keputusan,
+    tanggal_pembagian: tanggalPembagian,
+  }
+  db.prepare(`INSERT INTO rapor_pelengkap (id,siswa_id,tahun_ajaran,semester,jenis,tinggi_badan,berat_badan,kondisi_kesehatan,prestasi,catatan_wali_kelas,tanggapan_orang_tua,keputusan,tanggal_pembagian,tenant_id,updated_at)
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,datetime('now'))
+    ON CONFLICT(tenant_id,siswa_id,tahun_ajaran,semester,jenis) DO UPDATE SET
+      tinggi_badan=excluded.tinggi_badan,berat_badan=excluded.berat_badan,kondisi_kesehatan=excluded.kondisi_kesehatan,
+      prestasi=excluded.prestasi,catatan_wali_kelas=excluded.catatan_wali_kelas,tanggapan_orang_tua=excluded.tanggapan_orang_tua,
+      keputusan=excluded.keputusan,tanggal_pembagian=excluded.tanggal_pembagian,updated_at=datetime('now')`)
+    .run(uuidv4(), siswa_id, tahun_ajaran, semester, jenis, values.tinggi_badan, values.berat_badan,
+      values.kondisi_kesehatan, values.prestasi, values.catatan_wali_kelas, values.tanggapan_orang_tua,
+      values.keputusan, values.tanggal_pembagian, req.tenantId)
+  res.json({ success: true })
 })
 
 // POST /api/rapor/asesmen — input nilai asesmen STS atau SAS oleh guru mapel
@@ -6542,7 +6699,7 @@ app.post('/api/rapor/asesmen', STAFF, (req, res) => {
   }
   const upsert = db.prepare(`INSERT INTO rapor (id, siswa_id, mapel_id, tahun_ajaran, semester, jenis, nilai_sts, kkm, tenant_id, created_at, updated_at)
     VALUES (?,?,?,?,?,?,?,70,?,datetime('now'),datetime('now'))
-    ON CONFLICT(siswa_id, mapel_id, tahun_ajaran, semester, jenis) DO UPDATE SET
+    ON CONFLICT(tenant_id, siswa_id, mapel_id, tahun_ajaran, semester, jenis) DO UPDATE SET
       nilai_sts=excluded.nilai_sts, updated_at=datetime('now')`)
   const trx = db.transaction(() => {
     let count = 0
@@ -6566,7 +6723,10 @@ app.post('/api/rapor/asesmen', STAFF, (req, res) => {
 app.post('/api/rapor/generate', STAFF, (req, res) => {
   const { rombel_id, tahun_ajaran, semester, jenis } = req.body
   if (!rombel_id || !tahun_ajaran || !semester) return res.status(400).json({ error: 'rombel_id, tahun_ajaran, semester wajib' })
-  const jenisR = (['rapor_sts', 'rapor_sas'].includes(jenis)) ? jenis : 'rapor_sts'
+  const jenisR = jenis || 'rapor_sts'
+  const validationError = validateRaporPeriod(tahun_ajaran, semester, jenisR)
+  if (validationError) return res.status(400).json({ error: validationError })
+  if (!canManageRaporRombel(req, rombel_id)) return res.status(404).json({ error: 'Rombel tidak ditemukan' })
   const { from, to } = semesterRange(tahun_ajaran, semester)
 
   const siswaList = db.prepare('SELECT id FROM siswa WHERE rombel_id=? AND tenant_id=?').all(rombel_id, req.tenantId)
@@ -6575,7 +6735,7 @@ app.post('/api/rapor/generate', STAFF, (req, res) => {
       nilai_pengetahuan, nilai_keterampilan, nilai_sikap, nilai_harian, nilai_sts, nilai_sas, nilai_akhir,
       predikat, deskripsi, tenant_id, updated_at)
     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,datetime('now'))
-    ON CONFLICT(siswa_id, mapel_id, tahun_ajaran, semester, jenis) DO UPDATE SET
+    ON CONFLICT(tenant_id, siswa_id, mapel_id, tahun_ajaran, semester, jenis) DO UPDATE SET
       nilai_pengetahuan=excluded.nilai_pengetahuan, nilai_keterampilan=excluded.nilai_keterampilan,
       nilai_sikap=excluded.nilai_sikap, nilai_harian=excluded.nilai_harian,
       nilai_sts=excluded.nilai_sts, nilai_sas=excluded.nilai_sas,
@@ -6615,6 +6775,8 @@ app.post('/api/rapor/generate', STAFF, (req, res) => {
 // PUT /api/rapor/:id — update manual satu baris rapor (admin/guru)
 // nilai_akhir dihitung ulang dari komponen yang sama dengan generate
 app.put('/api/rapor/:id', STAFF, (req, res) => {
+  const existing = db.prepare('SELECT siswa_id FROM rapor WHERE id=? AND tenant_id=?').get(req.params.id, req.tenantId)
+  if (!existing || !canManageRaporStudent(req, existing.siswa_id)) return res.status(404).json({ error: 'Rapor tidak ditemukan' })
   const { nilai_pengetahuan, nilai_keterampilan, nilai_sikap, nilai_sts, nilai_sas, jenis, deskripsi } = req.body
   const peng = nilai_pengetahuan || 0
   const ket  = nilai_keterampilan || 0
@@ -6641,10 +6803,10 @@ app.post('/api/rapor/nilai-sumatif', STAFF, (req, res) => {
     return res.status(400).json({ error: 'tahun_ajaran, semester, dan items wajib diisi' })
   const upsertSts = db.prepare(`INSERT INTO rapor (id, siswa_id, mapel_id, tahun_ajaran, semester, jenis, nilai_sts, kkm, tenant_id, created_at, updated_at)
     VALUES (?,?,?,?,?,'sts',?,70,?,datetime('now'),datetime('now'))
-    ON CONFLICT(siswa_id, mapel_id, tahun_ajaran, semester, jenis) DO UPDATE SET nilai_sts=excluded.nilai_sts, updated_at=datetime('now')`)
+    ON CONFLICT(tenant_id, siswa_id, mapel_id, tahun_ajaran, semester, jenis) DO UPDATE SET nilai_sts=excluded.nilai_sts, updated_at=datetime('now')`)
   const upsertSas = db.prepare(`INSERT INTO rapor (id, siswa_id, mapel_id, tahun_ajaran, semester, jenis, nilai_sts, kkm, tenant_id, created_at, updated_at)
     VALUES (?,?,?,?,?,'sas',?,70,?,datetime('now'),datetime('now'))
-    ON CONFLICT(siswa_id, mapel_id, tahun_ajaran, semester, jenis) DO UPDATE SET nilai_sts=excluded.nilai_sts, updated_at=datetime('now')`)
+    ON CONFLICT(tenant_id, siswa_id, mapel_id, tahun_ajaran, semester, jenis) DO UPDATE SET nilai_sts=excluded.nilai_sts, updated_at=datetime('now')`)
   const trx = db.transaction(() => {
     let count = 0
     for (const item of items.slice(0, 500)) {

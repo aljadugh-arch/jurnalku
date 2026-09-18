@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Search, Plus, Edit, Trash2, Download, Upload, X, Camera, ChevronRight, UsersRound } from 'lucide-react'
+import { Search, Plus, Edit, Trash2, Download, Upload, X, Camera, ChevronRight, UsersRound, KeyRound } from 'lucide-react'
 import toast from 'react-hot-toast'
 import api from '../../services/api'
 import ImportExcel from '../../components/ImportExcel'
@@ -64,6 +64,7 @@ export default function DataSiswaPage() {
   const [bulkDeleteCount, setBulkDeleteCount] = useState(0)
   const [bulkDeleteConfirmation, setBulkDeleteConfirmation] = useState('')
   const [bulkDeleting, setBulkDeleting] = useState(false)
+  const [syncingAccounts, setSyncingAccounts] = useState(false)
   const isLocalTenant = !foundationTenantId
 
   // Detail panel
@@ -209,6 +210,20 @@ export default function DataSiswaPage() {
     }
   }
 
+  const handleSyncStudentAccounts = async () => {
+    if (!window.confirm('Buat akun yang belum tersedia dan reset password seluruh siswa aktif menjadi NIS masing-masing?')) return
+    setSyncingAccounts(true)
+    try {
+      const { data: result } = await api.post('/siswa/generate-akun', { reset_password: true })
+      const failed = Array.isArray(result.gagal) ? result.gagal.length : 0
+      toast.success(`${result.dibuat} akun dibuat, ${result.sinkron} akun direset ke NIS${failed ? `, ${failed} gagal` : ''}`)
+    } catch (error: any) {
+      toast.error(error.response?.data?.error || 'Gagal menyinkronkan akun siswa')
+    } finally {
+      setSyncingAccounts(false)
+    }
+  }
+
   const handleExport = () => {
     const header = 'NIK,NIS,NISN,Nama,Nama Panggilan,JK,Tempat Lahir,Tgl Lahir,Alamat,No HP,Nama Ortu,Status'
     const rows = data.map((s) =>
@@ -240,6 +255,9 @@ export default function DataSiswaPage() {
         <div className="flex gap-2 flex-wrap">
           {isLocalTenant && <button onClick={() => setShowImport(true)} className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg text-sm hover:bg-green-700">
             <Upload size={16} /> Import Excel
+          </button>}
+          {isLocalTenant && <button disabled={syncingAccounts} onClick={handleSyncStudentAccounts} className="flex items-center gap-2 px-4 py-2 bg-amber-600 text-white rounded-lg text-sm hover:bg-amber-700 disabled:opacity-60">
+            <KeyRound size={16} /> {syncingAccounts ? 'Memproses...' : 'Reset Password ke NIS'}
           </button>}
           <button onClick={handleExport} className="flex items-center gap-2 px-4 py-2 bg-gray-600 text-white rounded-lg text-sm hover:bg-gray-700">
             <Download size={16} /> Export

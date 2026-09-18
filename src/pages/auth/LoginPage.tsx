@@ -150,6 +150,7 @@ export default function LoginPage() {
               </Link>
               <h2 className="text-xl font-bold text-slate-900 dark:text-white">Masuk ke Akun</h2>
               <p className="text-xs text-slate-500 dark:text-gray-400 mt-1">Masukkan email/kode guru atau NISN/NIS siswa</p>
+              <p className="text-[11px] text-blue-600 dark:text-blue-400 mt-1.5">Username dan password awal siswa menggunakan NIS.</p>
             </div>
 
             {error && (

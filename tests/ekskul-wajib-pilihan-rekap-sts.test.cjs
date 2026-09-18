@@ -112,7 +112,7 @@ test('sync anggota wajib menolak siswa di luar scope rombel dan mengecualikan si
 test('rapor mendukung input nilai asesmen STS dan SAS', () => {
   assert.match(indexSource, /post\('\/api\/rapor\/asesmen'/, 'endpoint input asesmen STS/SAS ada')
   assert.match(indexSource, /nilai_sts|nilai_sas/, 'kolom STS/SAS dipakai')
-  assert.match(indexSource, /ON CONFLICT\(siswa_id, mapel_id, tahun_ajaran, semester, jenis\)/, 'upsert asesmen ada')
+  assert.match(indexSource, /ON CONFLICT\(tenant_id, siswa_id, mapel_id, tahun_ajaran, semester, jenis\)/, 'upsert asesmen tenant-scoped ada')
 })
 
 test('UI rapor menawarkan mode rapor_sts dan rapor_sas', () => {

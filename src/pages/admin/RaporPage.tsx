@@ -1,12 +1,19 @@
-import { useState, useEffect } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import api from '../../services/api'
-import { FileText, Zap, Printer } from 'lucide-react'
+import { FileText, Printer, Save, Zap } from 'lucide-react'
 import FoundationTenantPicker from '../../components/FoundationTenantPicker'
+
+const emptyPelengkap = {
+  tinggi_badan: '', berat_badan: '', kondisi_kesehatan: '', prestasi: [] as Array<{ jenis: string; keterangan: string }>,
+  catatan_wali_kelas: '', tanggapan_orang_tua: '', keputusan: '', tanggal_pembagian: '',
+}
 
 export default function RaporPage() {
   const [rombelList, setRombelList] = useState<any[]>([])
   const [siswaList, setSiswaList] = useState<any[]>([])
   const [rapor, setRapor] = useState<any[]>([])
+  const [ringkasan, setRingkasan] = useState<any>(null)
+  const [pelengkap, setPelengkap] = useState<any>(emptyPelengkap)
   const [settings, setSettings] = useState<any>({})
   const [selectedRombel, setSelectedRombel] = useState('')
   const [selectedSiswa, setSelectedSiswa] = useState('')
@@ -14,17 +21,17 @@ export default function RaporPage() {
   const [semester, setSemester] = useState('ganjil')
   const [jenis, setJenis] = useState<'rapor_sts' | 'rapor_sas'>('rapor_sts')
   const [loading, setLoading] = useState(false)
+  const [saving, setSaving] = useState(false)
   const [msg, setMsg] = useState('')
   const [foundationTenantId, setFoundationTenantId] = useState<string | null>(null)
 
   useEffect(() => { loadRombel(); loadSettings() }, [foundationTenantId])
-  useEffect(() => { if (selectedRombel) loadSiswa() }, [selectedRombel, foundationTenantId])
+  useEffect(() => { setSelectedSiswa(''); setRapor([]); setRingkasan(null); if (selectedRombel) loadSiswa() }, [selectedRombel, foundationTenantId])
   useEffect(() => { if (selectedSiswa) loadRapor() }, [selectedSiswa, tahunAjaran, semester, jenis, foundationTenantId])
 
   const loadSettings = async () => {
     try { const { data } = await api.get('/settings'); setSettings(data) } catch {}
   }
-
   const loadRombel = async () => {
     try {
       const params: any = {}
@@ -33,25 +40,33 @@ export default function RaporPage() {
       setRombelList(data)
     } catch (e) { console.error(e) }
   }
-
   const loadSiswa = async () => {
     try {
       const params: any = { rombel_id: selectedRombel }
       if (foundationTenantId && foundationTenantId !== 'all') params.tenant_id = foundationTenantId
       const { data } = await api.get(foundationTenantId ? '/foundation/students' : '/siswa', { params })
-      setSiswaList(data); setSelectedSiswa('')
+      setSiswaList(data)
     } catch (e) { console.error(e) }
   }
-
   const loadRapor = async () => {
+    setLoading(true)
     try {
       const params: any = { siswa_id: selectedSiswa, tahun_ajaran: tahunAjaran, semester, jenis }
       if (foundationTenantId && foundationTenantId !== 'all') params.tenant_id = foundationTenantId
-      const { data } = await api.get(foundationTenantId ? '/foundation/nilai' : '/rapor', { params })
-      setRapor(data)
-    } catch (e) { console.error(e) }
+      if (foundationTenantId) {
+        const { data } = await api.get('/foundation/nilai', { params })
+        setRapor(data); setRingkasan(null); setPelengkap(emptyPelengkap)
+      } else {
+        const [nilaiRes, ringkasanRes] = await Promise.all([
+          api.get('/rapor', { params }), api.get('/rapor/ringkasan', { params }),
+        ])
+        setRapor(nilaiRes.data)
+        setRingkasan(ringkasanRes.data)
+        setPelengkap({ ...emptyPelengkap, ...(ringkasanRes.data.pelengkap || {}), prestasi: ringkasanRes.data.pelengkap?.prestasi || [] })
+      }
+    } catch (e) { console.error(e); setMsg('✗ Gagal memuat data rapor') }
+    finally { setLoading(false) }
   }
-
   const handleGenerate = async () => {
     if (!selectedRombel) return setMsg('Pilih kelas dulu')
     if (foundationTenantId) return setMsg('✗ Generate rapor hanya untuk data lembaga sendiri')
@@ -59,242 +74,141 @@ export default function RaporPage() {
     try {
       const { data } = await api.post('/rapor/generate', { rombel_id: selectedRombel, tahun_ajaran: tahunAjaran, semester, jenis })
       setMsg(`✓ ${data.message}`)
-      if (selectedSiswa) loadRapor()
-    } catch (e: any) {
-      setMsg(`✗ ${e.response?.data?.error || 'Gagal generate'}`)
-    } finally { setLoading(false) }
+      if (selectedSiswa) await loadRapor()
+    } catch (e: any) { setMsg(`✗ ${e.response?.data?.error || 'Gagal generate'}`) }
+    finally { setLoading(false) }
+  }
+  const savePelengkap = async () => {
+    if (!selectedSiswa || foundationTenantId) return
+    setSaving(true); setMsg('')
+    try {
+      await api.put('/rapor/pelengkap', { siswa_id: selectedSiswa, tahun_ajaran: tahunAjaran, semester, jenis, ...pelengkap })
+      setMsg('✓ Data pelengkap rapor tersimpan')
+      await loadRapor()
+    } catch (e: any) { setMsg(`✗ ${e.response?.data?.error || 'Gagal menyimpan pelengkap rapor'}`) }
+    finally { setSaving(false) }
   }
 
-  const handlePrint = () => window.print()
-
-  const siswa = siswaList.find(s => s.id === selectedSiswa)
+  const siswa = ringkasan?.siswa || siswaList.find(s => s.id === selectedSiswa)
   const rombel = rombelList.find(r => r.id === selectedRombel)
-  const rataAkhir = rapor.length ? Math.round(rapor.reduce((s, r) => s + (r.nilai_akhir || 0), 0) / rapor.length) : 0
+  const rataAkhir = rapor.length ? Math.round(rapor.reduce((sum, row) => sum + (Number(row.nilai_akhir) || 0), 0) / rapor.length) : 0
   const jenisLabel = jenis === 'rapor_sas' ? 'AKHIR SEMESTER (SAS)' : 'TENGAH SEMESTER (STS)'
   const formulaLabel = jenis === 'rapor_sas'
     ? 'Nilai Akhir = (Nilai Harian × 40%) + (Asesmen STS × 20%) + (Asesmen SAS × 40%)'
     : 'Nilai Akhir = (Nilai Harian × 60%) + (Asesmen STS × 40%)'
-
-  // Tentukan tanggal cetak
-  const now = new Date()
-  const tanggalCetak = `${settings.kota_cetak || 'Bondowoso'}, ${now.toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}`
+  const tanggal = pelengkap.tanggal_pembagian ? new Date(`${pelengkap.tanggal_pembagian}T00:00:00`) : new Date()
+  const tanggalCetak = `${settings.kota_cetak || 'Bondowoso'}, ${tanggal.toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}`
+  const attendance = ringkasan?.kehadiran || { hadir: 0, sakit: 0, izin: 0, alpa: 0 }
+  const personality = ringkasan?.kepribadian || {}
+  const prestasi = Array.isArray(pelengkap.prestasi) ? pelengkap.prestasi : []
+  const identityRows = useMemo(() => [
+    ['Nama Peserta Didik', siswa?.nama], ['NIS / NISN', [siswa?.nis, siswa?.nisn].filter(Boolean).join(' / ')],
+    ['Tempat, Tanggal Lahir', [siswa?.tempat_lahir, siswa?.tanggal_lahir].filter(Boolean).join(', ')],
+    ['Jenis Kelamin', siswa?.jenis_kelamin], ['Kelas', siswa?.rombel_nama || rombel?.nama],
+    ['Nama Orang Tua/Wali', siswa?.nama_ortu], ['Alamat', siswa?.alamat], ['Nomor Telepon', siswa?.no_hp],
+  ], [siswa, rombel])
 
   return (
     <div className="space-y-6">
-      {/* Header — disembunyikan saat print */}
+      <style>{`@media print { @page { size: A4 portrait; margin: 12mm; } body { print-color-adjust: exact; -webkit-print-color-adjust: exact; } .report-page { width: 100%; min-height: 270mm; box-shadow: none !important; border: 0 !important; } }`}</style>
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between print:hidden">
-        <div className="min-w-0">
-          <h1 className="text-2xl font-display font-bold text-gray-800">Rapor Siswa</h1>
-          <p className="text-gray-500 mt-1 text-sm">
-            Generate &amp; cetak rapor STS atau SAS dari penilaian harian + nilai asesmen guru
-          </p>
-        </div>
-        <div className="flex flex-wrap gap-2 shrink-0">
-          <button onClick={handleGenerate} disabled={loading || !selectedRombel}
-            className="px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary-dark flex items-center gap-2 disabled:opacity-50">
-            <Zap size={16} /> {loading ? 'Memproses...' : `Generate Rapor ${jenis === 'rapor_sas' ? 'SAS' : 'STS'}`}
-          </button>
-          <button onClick={handlePrint} disabled={rapor.length === 0}
-            className="px-4 py-2 border rounded-lg hover:bg-gray-50 flex items-center gap-2 disabled:opacity-50">
-            <Printer size={16} /> Cetak
-          </button>
+        <div><h1 className="text-2xl font-display font-bold text-gray-800">Rapor Siswa</h1><p className="text-sm text-gray-500 mt-1">Rapor akademik dan perkembangan peserta didik</p></div>
+        <div className="flex gap-2">
+          {selectedSiswa && !foundationTenantId && <button onClick={savePelengkap} disabled={saving} className="btn-secondary flex items-center gap-2"><Save className="w-4 h-4" />{saving ? 'Menyimpan...' : 'Simpan Pelengkap'}</button>}
+          {selectedSiswa && rapor.length > 0 && <button onClick={() => window.print()} className="btn-primary flex items-center gap-2"><Printer className="w-4 h-4" />Cetak / PDF</button>}
         </div>
       </div>
 
-      {msg && (
-        <div className={`p-4 rounded-lg border print:hidden ${msg.startsWith('✓') ? 'bg-green-50 border-green-200 text-green-700' : 'bg-red-50 border-red-200 text-red-700'}`}>
-          {msg}
+      <div className="print:hidden"><FoundationTenantPicker selectedTenantId={foundationTenantId} onSelectTenant={setFoundationTenantId} /></div>
+      <div className="card p-5 print:hidden">
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-6 gap-4">
+          <Select label="Kelas" value={selectedRombel} onChange={setSelectedRombel} options={rombelList.map(r => ({ value: r.id, label: r.nama }))} placeholder="Pilih Kelas" />
+          <Select label="Siswa" value={selectedSiswa} onChange={setSelectedSiswa} options={siswaList.map(s => ({ value: s.id, label: s.nama }))} placeholder="Pilih Siswa" disabled={!selectedRombel} />
+          <Field label="Tahun Ajaran"><input value={tahunAjaran} onChange={e => setTahunAjaran(e.target.value)} className="input" /></Field>
+          <Select label="Semester" value={semester} onChange={setSemester} options={[{ value: 'ganjil', label: 'Ganjil' }, { value: 'genap', label: 'Genap' }]} />
+          <Field label="Jenis Rapor"><select value={jenis} onChange={e => setJenis(e.target.value as any)} className="input"><option value="rapor_sts">Rapor STS (Tengah Semester)</option><option value="rapor_sas">Rapor SAS (Akhir Semester)</option></select></Field>
+          <div className="flex items-end"><button onClick={handleGenerate} disabled={loading || !selectedRombel || !!foundationTenantId} className="btn-primary w-full flex justify-center items-center gap-2"><Zap className="w-4 h-4" />{loading ? 'Memproses...' : 'Generate'}</button></div>
         </div>
-      )}
-
-      <FoundationTenantPicker
-        selectedTenantId={foundationTenantId}
-        onSelectTenant={setFoundationTenantId}
-        placeholder="Data lokal (lembaga ini)"
-        allOptionLabel="Semua lembaga yayasan (gabungan)"
-      />
-
-      {/* Filter panel */}
-      <div className="bg-white rounded-xl shadow-sm border p-6 print:hidden">
-        <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Kelas</label>
-            <select value={selectedRombel} onChange={e => setSelectedRombel(e.target.value)} className="w-full px-3 py-2 border rounded-lg">
-              <option value="">-- Pilih --</option>
-              {rombelList.map(r => <option key={r.id} value={r.id}>{r.nama}</option>)}
-            </select>
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Siswa</label>
-            <select value={selectedSiswa} onChange={e => setSelectedSiswa(e.target.value)} disabled={!selectedRombel} className="w-full px-3 py-2 border rounded-lg disabled:bg-gray-100">
-              <option value="">-- Pilih --</option>
-              {siswaList.map(s => <option key={s.id} value={s.id}>{s.nama}</option>)}
-            </select>
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Tahun Ajaran</label>
-            <input type="text" value={tahunAjaran} onChange={e => setTahunAjaran(e.target.value)} placeholder="2026/2027" className="w-full px-3 py-2 border rounded-lg" />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Semester</label>
-            <select value={semester} onChange={e => setSemester(e.target.value)} className="w-full px-3 py-2 border rounded-lg">
-              <option value="ganjil">Ganjil</option>
-              <option value="genap">Genap</option>
-            </select>
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Jenis Rapor</label>
-            <select value={jenis} onChange={e => setJenis(e.target.value as any)} className="w-full px-3 py-2 border rounded-lg">
-              <option value="rapor_sts">Rapor STS (Tengah Semester)</option>
-              <option value="rapor_sas">Rapor SAS (Akhir Semester)</option>
-            </select>
-          </div>
-        </div>
+        {msg && <p className={`mt-3 text-sm ${msg.startsWith('✓') ? 'text-green-600' : 'text-red-600'}`}>{msg}</p>}
       </div>
 
-      {/* ======= AREA CETAK ======= */}
-      {selectedSiswa && rapor.length > 0 && (
-        <div className="bg-white rounded-xl shadow-sm border overflow-hidden print:shadow-none print:border-0 print:rounded-none">
-
-          {/* KOP LEMBAGA */}
-          <div className="p-6 border-b print:border-b-2 print:border-black">
-            <div className="flex items-center gap-4">
-              {settings.logo && (
-                <img
-                  src={settings.logo}
-                  alt="Logo"
-                  className="w-20 h-20 object-contain shrink-0"
-                  onError={e => { (e.target as HTMLImageElement).style.display = 'none' }}
-                />
-              )}
-              <div className="flex-1 text-center">
-                <div className="text-xs font-medium text-gray-500 uppercase tracking-wide print:text-black">
-                  RAPOR {jenisLabel}
-                </div>
-                <h2 className="text-xl font-bold mt-1 text-gray-900 print:text-2xl">
-                  {settings.nama_lembaga || 'Nama Lembaga'}
-                </h2>
-                {settings.npsn && (
-                  <div className="text-sm text-gray-600">NPSN: {settings.npsn}{settings.nsm ? ` · NSM: ${settings.nsm}` : ''}</div>
-                )}
-                {!settings.npsn && settings.nsm && (
-                  <div className="text-sm text-gray-600">NSM: {settings.nsm}</div>
-                )}
-                {settings.alamat && (
-                  <div className="text-sm text-gray-600">{settings.alamat}</div>
-                )}
-                {(settings.telepon || settings.email) && (
-                  <div className="text-sm text-gray-500">
-                    {settings.telepon && `Telp: ${settings.telepon}`}
-                    {settings.telepon && settings.email && ' · '}
-                    {settings.email}
-                  </div>
-                )}
-              </div>
-              {/* spacer agar logo seimbang */}
-              {settings.logo && <div className="w-20 shrink-0" />}
-            </div>
+      {selectedSiswa && !foundationTenantId && (
+        <div className="card p-5 print:hidden space-y-4">
+          <h2 className="font-semibold text-gray-800">Data Pelengkap Rapor</h2>
+          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <Field label="Tinggi Badan (cm)"><input type="number" value={pelengkap.tinggi_badan ?? ''} onChange={e => setPelengkap({ ...pelengkap, tinggi_badan: e.target.value })} className="input" /></Field>
+            <Field label="Berat Badan (kg)"><input type="number" value={pelengkap.berat_badan ?? ''} onChange={e => setPelengkap({ ...pelengkap, berat_badan: e.target.value })} className="input" /></Field>
+            <Field label="Tanggal Pembagian"><input type="date" value={pelengkap.tanggal_pembagian || ''} onChange={e => setPelengkap({ ...pelengkap, tanggal_pembagian: e.target.value })} className="input" /></Field>
+            <Field label="Keputusan"><input value={pelengkap.keputusan || ''} onChange={e => setPelengkap({ ...pelengkap, keputusan: e.target.value })} placeholder="Naik ke kelas... / Lulus" className="input" /></Field>
           </div>
-
-          {/* Info semester */}
-          <div className="px-6 py-3 bg-primary/5 text-center text-sm text-gray-700 border-b print:bg-white print:border-b print:border-gray-300">
-            Semester <strong>{semester.toUpperCase()}</strong> — Tahun Ajaran <strong>{tahunAjaran}</strong>
+          <div className="grid lg:grid-cols-2 gap-4">
+            <TextArea label="Kondisi Kesehatan" value={pelengkap.kondisi_kesehatan} onChange={(v: string) => setPelengkap({ ...pelengkap, kondisi_kesehatan: v })} />
+            <TextArea label="Catatan Wali Kelas" value={pelengkap.catatan_wali_kelas} onChange={(v: string) => setPelengkap({ ...pelengkap, catatan_wali_kelas: v })} />
+            <TextArea label="Tanggapan Orang Tua/Wali" value={pelengkap.tanggapan_orang_tua} onChange={(v: string) => setPelengkap({ ...pelengkap, tanggapan_orang_tua: v })} />
           </div>
-
-          {/* Identitas siswa */}
-          <div className="p-6 border-b">
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm max-w-2xl mx-auto">
-              <div><span className="text-gray-500">Nama</span><br /><strong>{siswa?.nama}</strong></div>
-              <div><span className="text-gray-500">NIS</span><br /><strong>{siswa?.nis}</strong></div>
-              <div><span className="text-gray-500">Kelas</span><br /><strong>{rombel?.nama}</strong></div>
-              <div><span className="text-gray-500">Rata-rata</span><br /><strong className="text-primary text-lg">{rataAkhir}</strong></div>
-            </div>
-          </div>
-
-          {/* Tabel nilai */}
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead className="bg-gray-50 print:bg-gray-100">
-                <tr>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">No</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Mata Pelajaran</th>
-                  <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Nilai Harian</th>
-                  <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Asesmen STS</th>
-                  {jenis === 'rapor_sas' && (
-                    <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Asesmen SAS</th>
-                  )}
-                  <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase bg-primary/10 print:bg-blue-100">Nilai Akhir</th>
-                  <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Predikat</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y">
-                {rapor.map((r, i) => (
-                  <tr key={r.id} className="hover:bg-gray-50">
-                    <td className="px-4 py-3 text-sm text-gray-500">{i + 1}</td>
-                    <td className="px-4 py-3 text-sm font-medium text-gray-900">{r.mapel_nama}</td>
-                    <td className="px-4 py-3 text-center text-sm">{r.nilai_harian ?? '-'}</td>
-                    <td className="px-4 py-3 text-center text-sm">{r.nilai_sts ?? '-'}</td>
-                    {jenis === 'rapor_sas' && (
-                      <td className="px-4 py-3 text-center text-sm">{r.nilai_sas ?? '-'}</td>
-                    )}
-                    <td className="px-4 py-3 text-center text-lg font-bold text-primary bg-primary/5 print:bg-blue-50">{r.nilai_akhir}</td>
-                    <td className="px-4 py-3 text-center">
-                      <span className={`px-2 py-1 rounded text-xs font-bold ${r.predikat === 'A' ? 'bg-green-100 text-green-700' : r.predikat === 'B' ? 'bg-blue-100 text-blue-700' : r.predikat === 'C' ? 'bg-yellow-100 text-yellow-700' : 'bg-red-100 text-red-700'}`}>
-                        {r.predikat}
-                      </span>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-
-          {/* Footer: formula + tanda tangan */}
-          <div className="p-6 border-t bg-gray-50 print:bg-white">
-            <p className="text-xs text-gray-500 mb-6">
-              <strong>Formula:</strong> {formulaLabel} &nbsp;·&nbsp;
-              <strong>Predikat:</strong> A ≥ 90 | B ≥ 80 | C ≥ 70 | D &lt; 70
-            </p>
-
-            {/* Tanda tangan */}
-            <div className="flex justify-between mt-4 text-sm">
-              <div className="text-center min-w-[180px]">
-                <p className="text-gray-600">Mengetahui,</p>
-                <p className="text-gray-600">Orang Tua / Wali</p>
-                <div className="mt-16 border-b border-gray-400 w-40 mx-auto" />
-                <p className="mt-1 text-gray-700">( ________________________ )</p>
-              </div>
-              <div className="text-center min-w-[180px]">
-                <p className="text-gray-600">{tanggalCetak}</p>
-                <p className="text-gray-600">
-                  {settings.kepala_sekolah ? 'Kepala' : 'Wali Kelas'}
-                </p>
-                <div className="mt-16 border-b border-gray-400 w-40 mx-auto" />
-                <p className="mt-1 font-semibold text-gray-900">
-                  {settings.kepala_sekolah || '_____________________'}
-                </p>
-                {settings.kepala_sekolah && (
-                  <p className="text-xs text-gray-500">Kepala {settings.nama_lembaga || 'Lembaga'}</p>
-                )}
-              </div>
-            </div>
+          <div>
+            <div className="flex items-center justify-between mb-2"><label className="text-sm font-medium text-gray-700">Prestasi</label><button type="button" onClick={() => setPelengkap({ ...pelengkap, prestasi: [...prestasi, { jenis: '', keterangan: '' }] })} className="text-sm text-primary-600">+ Tambah Prestasi</button></div>
+            <div className="space-y-2">{prestasi.map((p: any, i: number) => <div key={i} className="grid sm:grid-cols-[180px_1fr_auto] gap-2"><input value={p.jenis} onChange={e => { const next = [...prestasi]; next[i] = { ...p, jenis: e.target.value }; setPelengkap({ ...pelengkap, prestasi: next }) }} placeholder="Akademik/Nonakademik" className="input" /><input value={p.keterangan} onChange={e => { const next = [...prestasi]; next[i] = { ...p, keterangan: e.target.value }; setPelengkap({ ...pelengkap, prestasi: next }) }} placeholder="Nama dan tingkat prestasi" className="input" /><button onClick={() => setPelengkap({ ...pelengkap, prestasi: prestasi.filter((_: any, x: number) => x !== i) })} className="px-3 text-red-600">Hapus</button></div>)}</div>
           </div>
         </div>
       )}
 
-      {selectedSiswa && rapor.length === 0 && (
-        <div className="bg-white rounded-xl border p-12 text-center text-gray-400">
-          <FileText size={48} className="mx-auto mb-4 opacity-50" />
-          <p>Belum ada rapor. Klik <strong>Generate Rapor {jenis === 'rapor_sas' ? 'SAS' : 'STS'}</strong> untuk auto-generate dari penilaian harian + asesmen guru.</p>
-        </div>
-      )}
+      {!selectedSiswa && <div className="card py-16 text-center print:hidden"><FileText className="w-12 h-12 text-gray-300 mx-auto mb-3" /><p className="text-gray-500">Pilih kelas dan siswa untuk melihat rapor.</p></div>}
+      {selectedSiswa && !loading && rapor.length === 0 && <div className="card py-12 text-center print:hidden"><p className="text-gray-500">Nilai rapor belum tersedia. Klik Generate setelah nilai harian dan asesmen diisi.</p></div>}
 
-      {!selectedSiswa && (
-        <div className="bg-white rounded-xl border p-12 text-center text-gray-400">
-          <FileText size={48} className="mx-auto mb-4 opacity-50" />
-          <p>Pilih kelas dan siswa untuk melihat rapor</p>
-        </div>
-      )}
+      {selectedSiswa && rapor.length > 0 && <div id="rapor-print" className="space-y-6 print:space-y-0">
+        <section className="report-page bg-white rounded-xl shadow-sm border p-6 sm:p-10 print:p-0 print:break-after-page">
+          <ReportHeader settings={settings} title={`RAPOR ${jenisLabel}`} />
+          <h3 className="text-center font-bold text-lg mt-10 mb-6">IDENTITAS PESERTA DIDIK</h3>
+          <table className="w-full text-sm"><tbody>{identityRows.map(([label, value]) => <tr key={label} className="align-top"><td className="py-2 w-52 font-medium">{label}</td><td className="py-2 w-5">:</td><td className="py-2 border-b border-dotted border-gray-300">{value || '—'}</td></tr>)}</tbody></table>
+          <div className="mt-12 grid grid-cols-2 gap-8 text-sm"><div><p>Tahun Ajaran</p><p className="font-semibold mt-1">{tahunAjaran}</p></div><div><p>Semester</p><p className="font-semibold mt-1 capitalize">{semester}</p></div></div>
+        </section>
+
+        <section className="report-page bg-white rounded-xl shadow-sm border p-6 sm:p-8 print:p-0">
+          <ReportHeader settings={settings} title={`HASIL BELAJAR ${jenisLabel}`} compact />
+          <div className="grid grid-cols-2 text-sm gap-x-8 gap-y-1 my-4"><p>Nama: <strong>{siswa?.nama}</strong></p><p>Kelas: <strong>{siswa?.rombel_nama || rombel?.nama}</strong></p><p>NIS/NISN: <strong>{[siswa?.nis, siswa?.nisn].filter(Boolean).join(' / ')}</strong></p><p>Semester: <strong className="capitalize">{semester}</strong></p></div>
+          <table className="w-full text-xs border-collapse"><thead><tr className="bg-gray-100"><Th>No</Th><Th align="left">Mata Pelajaran</Th><Th>Harian</Th><Th>STS</Th>{jenis === 'rapor_sas' && <Th>SAS</Th>}<Th>Akhir</Th><Th>Predikat</Th><Th align="left">Deskripsi</Th></tr></thead><tbody>{rapor.map((r, i) => <tr key={r.id}><Td>{i + 1}</Td><Td align="left" bold>{r.mapel_nama}</Td><Td>{r.nilai_harian ?? 0}</Td><Td>{r.nilai_sts ?? 0}</Td>{jenis === 'rapor_sas' && <Td>{r.nilai_sas ?? 0}</Td>}<Td bold>{r.nilai_akhir}</Td><Td bold>{r.predikat}</Td><Td align="left">{r.deskripsi || descriptionFor(r)}</Td></tr>)}</tbody><tfoot><tr className="bg-gray-50"><Td colSpan={jenis === 'rapor_sas' ? 5 : 4} align="right" bold>Rata-rata</Td><Td bold>{rataAkhir}</Td><Td colSpan={2} /></tr></tfoot></table>
+          <p className="text-[10px] text-gray-500 mt-2">{formulaLabel}</p>
+
+          <div className="grid md:grid-cols-2 gap-4 mt-5 text-xs">
+            <ReportBox title="Sikap dan Kepribadian"><Info label="Spiritual" value={personality.sikap_spiritual || personality.sikap_umum} /><Info label="Sosial" value={personality.sikap_sosial || personality.sikap_umum} /><Info label="Kelakuan" value={personality.kelakuan} /><Info label="Kedisiplinan" value={personality.kedisiplinan} /></ReportBox>
+            <ReportBox title="Kehadiran"><Info label="Hadir" value={`${attendance.hadir || 0} hari`} /><Info label="Sakit" value={`${attendance.sakit || 0} hari`} /><Info label="Izin" value={`${attendance.izin || 0} hari`} /><Info label="Tanpa Keterangan" value={`${attendance.alpa || 0} hari`} /></ReportBox>
+            <ReportBox title="Ekstrakurikuler"><TableList empty="Belum ada data ekstrakurikuler" rows={(ringkasan?.ekstrakurikuler || []).map((e: any) => [e.nama, e.nilai == null ? '—' : `${e.nilai} / ${e.nilai >= 86 ? 'A' : e.nilai >= 76 ? 'B' : e.nilai >= 66 ? 'C' : 'D'}`])} /></ReportBox>
+            <ReportBox title="Pertumbuhan dan Kesehatan"><Info label="Tinggi Badan" value={pelengkap.tinggi_badan ? `${pelengkap.tinggi_badan} cm` : '—'} /><Info label="Berat Badan" value={pelengkap.berat_badan ? `${pelengkap.berat_badan} kg` : '—'} /><p className="mt-2 whitespace-pre-wrap">{pelengkap.kondisi_kesehatan || 'Tidak ada catatan kesehatan.'}</p></ReportBox>
+          </div>
+
+          <div className="mt-4 text-xs space-y-3">
+            <ReportBox title="Prestasi"><TableList empty="Belum ada prestasi yang dicatat" rows={prestasi.map((p: any) => [p.jenis, p.keterangan])} /></ReportBox>
+            <ReportBox title="Catatan Wali Kelas"><p className="whitespace-pre-wrap">{pelengkap.catatan_wali_kelas || personality.catatan_wali_kelas || personality.saran || 'Tetap semangat belajar dan tingkatkan prestasi.'}</p></ReportBox>
+            {pelengkap.keputusan && <ReportBox title="Keputusan"><p className="font-semibold">{pelengkap.keputusan}</p></ReportBox>}
+            <ReportBox title="Tanggapan Orang Tua/Wali"><p className="min-h-8 whitespace-pre-wrap">{pelengkap.tanggapan_orang_tua || ''}</p></ReportBox>
+          </div>
+
+          <div className="grid grid-cols-3 gap-4 text-center text-xs mt-8 break-inside-avoid">
+            <Signature title="Orang Tua/Wali" name="_____________________" />
+            <Signature title="Wali Kelas" name={siswa?.wali_kelas_nama || '_____________________'} subtitle={siswa?.wali_kelas_nip ? `NIP. ${siswa.wali_kelas_nip}` : undefined} />
+            <Signature title={tanggalCetak} name={settings.kepala_sekolah || '_____________________'} subtitle={settings.kepala_sekolah ? `Kepala ${settings.nama_lembaga || 'Lembaga'}` : undefined} />
+          </div>
+        </section>
+      </div>}
     </div>
   )
 }
+
+function descriptionFor(row: any) {
+  const score = Number(row.nilai_akhir) || 0
+  if (score >= 90) return `Sangat menguasai kompetensi ${row.mapel_nama || ''}.`
+  if (score >= 80) return `Menguasai kompetensi ${row.mapel_nama || ''} dengan baik.`
+  if (score >= 70) return `Cukup menguasai kompetensi dan perlu penguatan pada beberapa materi.`
+  return `Perlu bimbingan dan latihan lanjutan untuk meningkatkan penguasaan kompetensi.`
+}
+function Field({ label, children }: any) { return <div><label className="block text-sm font-medium text-gray-700 mb-1">{label}</label>{children}</div> }
+function TextArea({ label, value, onChange }: any) { return <Field label={label}><textarea value={value || ''} onChange={e => onChange(e.target.value)} rows={3} className="input resize-y" /></Field> }
+function Select({ label, value, onChange, options, placeholder, disabled }: any) { return <Field label={label}><select value={value} onChange={e => onChange(e.target.value)} disabled={disabled} className="input"><option value="">{placeholder || `Pilih ${label}`}</option>{options.map((o: any) => <option key={o.value} value={o.value}>{o.label}</option>)}</select></Field> }
+function ReportHeader({ settings, title, compact = false }: any) { return <div className={`flex items-center gap-4 border-b-2 border-black ${compact ? 'pb-3' : 'pb-5'}`}>{settings.logo && <img src={settings.logo} alt="Logo" className={compact ? 'w-14 h-14 object-contain' : 'w-20 h-20 object-contain'} onError={e => { (e.target as HTMLImageElement).style.display = 'none' }} />}<div className="flex-1 text-center"><p className="text-[10px] tracking-wide">{title}</p><h2 className={`${compact ? 'text-lg' : 'text-2xl'} font-bold`}>{settings.nama_lembaga || 'Nama Lembaga'}</h2><p className="text-xs">{[settings.alamat, settings.telepon && `Telp. ${settings.telepon}`, settings.email].filter(Boolean).join(' · ')}</p><p className="text-xs">{[settings.npsn && `NPSN: ${settings.npsn}`, settings.nsm && `NSM: ${settings.nsm}`].filter(Boolean).join(' · ')}</p></div>{settings.logo && <div className={compact ? 'w-14' : 'w-20'} />}</div> }
+function Th({ children, align = 'center' }: any) { return <th className={`border border-gray-400 px-2 py-2 text-${align}`}>{children}</th> }
+function Td({ children, align = 'center', bold = false, colSpan }: any) { return <td colSpan={colSpan} className={`border border-gray-400 px-2 py-1.5 text-${align} ${bold ? 'font-semibold' : ''}`}>{children}</td> }
+function ReportBox({ title, children }: any) { return <div className="border border-gray-400 p-3 break-inside-avoid"><h4 className="font-bold mb-2">{title}</h4>{children}</div> }
+function Info({ label, value }: any) { return <div className="grid grid-cols-[130px_10px_1fr] gap-1 py-0.5"><span>{label}</span><span>:</span><span>{value || '—'}</span></div> }
+function TableList({ rows, empty }: any) { return rows.length ? <div className="space-y-1">{rows.map((r: any, i: number) => <div key={i} className="grid grid-cols-[1fr_1.5fr] gap-2 border-b border-gray-200 pb-1"><span>{r[0]}</span><span>{r[1]}</span></div>)}</div> : <p>{empty}</p> }
+function Signature({ title, name, subtitle }: any) { return <div><p>{title}</p><div className="h-16" /><p className="font-semibold underline">{name}</p>{subtitle && <p>{subtitle}</p>}</div> }
