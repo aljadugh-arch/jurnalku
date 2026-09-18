@@ -27,6 +27,49 @@ function cacheKey(tenantId, voiceName, text) {
   return crypto.createHash('sha256').update(`${tenantId}|${voiceName}|${text}`).digest('hex')
 }
 
+// Minimal WAV berisi header 44 byte. File yang lebih kecil/kosong dianggap
+// korup agar status prewarm tidak terlihat siap ketika audio gagal dibuat.
+function isUsableCacheFile(filePath) {
+  try {
+    return fs.existsSync(filePath) && fs.statSync(filePath).size > 44
+  } catch {
+    return false
+  }
+}
+
+const ttsJobs = new Map()
+
+function createTtsJob(total) {
+  const id = crypto.randomUUID()
+  const now = Date.now()
+  const job = { id, status: 'running', total, done: 0, failed: 0, startedAt: now, updatedAt: now }
+  ttsJobs.set(id, job)
+  for (const [jobId, value] of ttsJobs) {
+    if (now - value.updatedAt > 30 * 60 * 1000) ttsJobs.delete(jobId)
+  }
+  return job
+}
+
+function getTtsJobStatus(id) {
+  return ttsJobs.get(id) || null
+}
+
+async function runTtsQueue(items, worker, { concurrency = 3, onProgress } = {}) {
+  let nextIndex = 0
+  const runners = Array.from({ length: Math.min(concurrency, items.length) }, async () => {
+    while (nextIndex < items.length) {
+      const index = nextIndex++
+      try {
+        await worker(items[index], index)
+        onProgress?.(null)
+      } catch (error) {
+        onProgress?.(error)
+      }
+    }
+  })
+  await Promise.all(runners)
+}
+
 // Gemini TTS mengembalikan PCM 16-bit mono mentah (audio/L16, biasanya 24kHz)
 // tanpa header — tidak bisa langsung diputar oleh <audio>/Audio(). Bungkus
 // jadi file WAV valid dengan menambahkan header 44-byte standar.
@@ -67,7 +110,7 @@ async function generateTtsAudio({ apiKey, text, voiceName, uploadDir, tenantId }
   const key = cacheKey(tenantId, voice, text)
   const filePath = path.join(dir, `${key}.wav`)
   const publicUrl = `/uploads/tts_cache/${key}.wav`
-  if (fs.existsSync(filePath)) return { audioUrl: publicUrl, cached: true }
+  if (isUsableCacheFile(filePath)) return { audioUrl: publicUrl, cached: true }
 
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_TTS_MODEL}:generateContent?key=${apiKey}`
   const body = {
@@ -108,7 +151,7 @@ function checkTtsCache({ text, voiceName, uploadDir, tenantId }) {
   const key = cacheKey(tenantId, voice, text)
   const filePath = path.join(dir, `${key}.wav`)
   const publicUrl = `/uploads/tts_cache/${key}.wav`
-  return fs.existsSync(filePath) ? { audioUrl: publicUrl, cached: true } : null
+  return isUsableCacheFile(filePath) ? { audioUrl: publicUrl, cached: true } : null
 }
 
 // Set in-memory kecil supaya request duplikat (mis. dua scan hampir bersamaan
@@ -132,6 +175,9 @@ module.exports = {
   generateTtsAudio,
   generateTtsAudioBackground,
   checkTtsCache,
+  createTtsJob,
+  getTtsJobStatus,
+  runTtsQueue,
   DEFAULT_VOICE,
   GEMINI_TTS_MODEL,
 }

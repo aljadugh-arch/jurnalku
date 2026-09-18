@@ -224,9 +224,9 @@ async function speakViaGeminiOrFallback(text: string) {
     }
   }
   try {
-    // Timeout pendek: server hanya cek cache di disk (operasi instan), tidak
-    // pernah menunggu Gemini generate — timeout ini murni jaga-jaga network.
-    const res = await api.post('/tts/announce', { text }, { timeout: 2500 })
+    // Jalur scan harus terasa instan. Server hanya cek cache di disk; jika
+    // network lambat, fallback browser langsung mengambil alih tanpa jeda lama.
+    const res = await api.post('/tts/announce', { text }, { timeout: 800 })
     const audioUrl = res.data?.audioUrl
     if (!audioUrl) throw new Error('no audio url')
     const audio = new Audio(audioUrl)

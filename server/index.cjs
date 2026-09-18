@@ -5435,7 +5435,9 @@ app.post('/api/tts/prewarm', ADMIN, async (req, res) => {
   if (!cfg || cfg.provider !== 'gemini' || !cfg.apiKey) {
     return res.status(404).json({ error: 'TTS Gemini belum dikonfigurasi untuk lembaga ini' })
   }
-  const { generateTtsAudio, checkTtsCache, DEFAULT_VOICE } = require('./gemini-tts.cjs')
+  const {
+    generateTtsAudio, checkTtsCache, createTtsJob, runTtsQueue, DEFAULT_VOICE,
+  } = require('./gemini-tts.cjs')
   const siswaRows = db.prepare("SELECT nama, nama_panggilan FROM siswa WHERE tenant_id=? AND COALESCE(status,'aktif')='aktif'").all(req.tenantId)
   const gtkRows = db.prepare('SELECT nama FROM gtk WHERE tenant_id=?').all(req.tenantId)
   const firstWord = (s) => String(s || '').trim().split(/\s+/)[0] || ''
@@ -5447,25 +5449,48 @@ app.post('/api/tts/prewarm', ADMIN, async (req, res) => {
   for (const n of names) { phrases.push(`${n} masuk`); phrases.push(`${n} pulang`) }
   const todo = phrases.filter(p => !checkTtsCache({ text: p, voiceName: DEFAULT_VOICE, uploadDir: UPLOAD_DIR, tenantId: req.tenantId }))
 
-  res.json({ total: phrases.length, alreadyCached: phrases.length - todo.length, queued: todo.length })
+  if (todo.length === 0) {
+    return res.json({ total: phrases.length, alreadyCached: phrases.length, queued: 0 })
+  }
 
-  // Proses berurutan (bukan paralel) di background setelah respons dikirim,
-  // supaya tidak membanjiri kuota Gemini API dengan burst request sekaligus.
-  ;(async () => {
-    for (const text of todo) {
-      try {
-        await generateTtsAudio({ apiKey: cfg.apiKey, text, voiceName: DEFAULT_VOICE, uploadDir: UPLOAD_DIR, tenantId: req.tenantId })
-      } catch (err) {
-        console.error('[tts/prewarm]', text, err.message)
-      }
-    }
-    console.log(`[tts/prewarm] selesai untuk tenant ${req.tenantId}: ${todo.length} frasa`)
-  })()
+  const tenantId = req.tenantId
+  const job = createTtsJob(todo.length)
+  res.json({
+    total: phrases.length,
+    alreadyCached: phrases.length - todo.length,
+    queued: todo.length,
+    jobId: job.id,
+  })
+
+  // Tiga worker memangkas waktu prewarm sekitar 3x namun tetap membatasi burst
+  // agar VPS dan kuota Gemini tidak dibanjiri semua nama sekaligus.
+  setImmediate(async () => {
+    await runTtsQueue(todo, text => generateTtsAudio({
+      apiKey: cfg.apiKey, text, voiceName: DEFAULT_VOICE, uploadDir: UPLOAD_DIR, tenantId,
+    }), {
+      concurrency: 3,
+      onProgress: (error) => {
+        if (error) job.failed++
+        else job.done++
+        job.updatedAt = Date.now()
+        if (error) console.error('[tts/prewarm]', error.message)
+      },
+    })
+    job.status = job.failed === job.total ? 'failed' : 'completed'
+    job.updatedAt = Date.now()
+    console.log(`[tts/prewarm] tenant ${tenantId}: selesai ${job.done}/${job.total}, gagal ${job.failed}`)
+  })
 })
 
-// Status pre-warm: berapa dari total frasa nama+sesi yang sudah ter-cache,
-// dipakai UI Pengaturan untuk menampilkan progress tanpa perlu polling berat.
+// Status pre-warm: jobId baru memberi progress nyata termasuk kegagalan API;
+// tanpa jobId tetap kompatibel dengan client lama yang menghitung cache.
 app.get('/api/tts/prewarm/status', ADMIN, (req, res) => {
+  if (req.query.jobId) {
+    const { getTtsJobStatus } = require('./gemini-tts.cjs')
+    const job = getTtsJobStatus(String(req.query.jobId))
+    if (!job) return res.status(404).json({ error: 'Job TTS tidak ditemukan atau sudah kedaluwarsa' })
+    return res.json(job)
+  }
   const cfg = resolveAiConfig(db, req.tenantId, req.user?.id)
   if (!cfg || cfg.provider !== 'gemini' || !cfg.apiKey) {
     return res.status(404).json({ error: 'TTS Gemini belum dikonfigurasi untuk lembaga ini' })

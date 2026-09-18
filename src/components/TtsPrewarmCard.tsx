@@ -21,16 +21,34 @@ export default function TtsPrewarmCard() {
   const [loading, setLoading] = useState(false)
   const [running, setRunning] = useState(false)
   const [available, setAvailable] = useState(true)
+  const [jobId, setJobId] = useState<string | null>(null)
 
   const loadStatus = useCallback(async () => {
     try {
-      const res = await api.get('/tts/prewarm/status')
-      setStatus(res.data)
+      if (jobId) {
+        const res = await api.get('/tts/prewarm/status', { params: { jobId } })
+        const job = res.data as { status: string; total: number; done: number; failed: number }
+        setStatus({ total: job.total, cached: job.done })
+        if (job.status !== 'running') {
+          setRunning(false)
+          setJobId(null)
+          if (job.failed > 0) toast.error(`${job.failed} audio gagal dibuat. Silakan coba lagi.`)
+          else toast.success('Semua audio TTS pria selesai dibuat')
+        }
+      } else {
+        const res = await api.get('/tts/prewarm/status')
+        setStatus(res.data)
+      }
       setAvailable(true)
     } catch (err: any) {
       if (err?.response?.status === 404) setAvailable(false)
+      if (jobId) {
+        setRunning(false)
+        setJobId(null)
+        toast.error('Status proses TTS tidak tersedia. Silakan mulai ulang.')
+      }
     }
-  }, [])
+  }, [jobId])
 
   useEffect(() => { loadStatus() }, [loadStatus])
 
@@ -38,12 +56,14 @@ export default function TtsPrewarmCard() {
     setLoading(true)
     try {
       const res = await api.post('/tts/prewarm')
-      const { total, alreadyCached, queued } = res.data
+      const { total, alreadyCached, queued, jobId: newJobId } = res.data
       if (queued === 0) {
         toast.success(`Semua ${total} nama sudah tersimpan di cache suara pria`)
       } else {
-        toast.success(`Memproses ${queued} nama baru di background (${alreadyCached} sudah ada). Estimasi ${Math.ceil(queued * 6 / 60)} menit — cek status di sini secara berkala.`)
+        setStatus({ total: queued, cached: 0 })
+        setJobId(newJobId || null)
         setRunning(true)
+        toast.success(`Memproses ${queued} audio dengan 3 proses paralel (${alreadyCached} sudah ada)`)
       }
     } catch (err: any) {
       if (err?.response?.status === 404) {
@@ -57,19 +77,12 @@ export default function TtsPrewarmCard() {
     }
   }
 
-  // Poll status setiap 5 detik selagi proses background berjalan, berhenti
-  // otomatis begitu semua sudah ter-cache.
+  // Poll job nyata; status failed/completed selalu menghentikan loading.
   useEffect(() => {
-    if (!running) return
-    const interval = setInterval(async () => {
-      const res = await api.get('/tts/prewarm/status').catch(() => null)
-      if (res) {
-        setStatus(res.data)
-        if (res.data.cached >= res.data.total) setRunning(false)
-      }
-    }, 5000)
+    if (!running || !jobId) return
+    const interval = setInterval(loadStatus, 2000)
     return () => clearInterval(interval)
-  }, [running])
+  }, [running, jobId, loadStatus])
 
   if (!available) return null
 
