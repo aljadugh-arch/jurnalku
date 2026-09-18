@@ -65,6 +65,8 @@ export default function DataSiswaPage() {
   const [bulkDeleteConfirmation, setBulkDeleteConfirmation] = useState('')
   const [bulkDeleting, setBulkDeleting] = useState(false)
   const [syncingAccounts, setSyncingAccounts] = useState(false)
+  const [generatingKTS, setGeneratingKTS] = useState(false)
+  const [selectedForKTS, setSelectedForKTS] = useState<Set<string>>(new Set())
   const isLocalTenant = !foundationTenantId
 
   // Detail panel
@@ -238,6 +240,24 @@ export default function DataSiswaPage() {
     toast.success('Export berhasil')
   }
 
+  const handleGenerateKTS = async () => {
+    const selected = Array.from(selectedForKTS)
+    if (selected.length === 0) {
+      toast.error('Pilih minimal satu siswa untuk generate KTS')
+      return
+    }
+    setGeneratingKTS(true)
+    try {
+      const response = await api.post('/siswa/generate-kts', { siswa_ids: selected })
+      toast.success(`KTS siap untuk ${response.data.count} siswa`)
+      setSelectedForKTS(new Set())
+    } catch (error: any) {
+      toast.error(error.response?.data?.error || 'Generate KTS gagal')
+    } finally {
+      setGeneratingKTS(false)
+    }
+  }
+
   const statusBadge = (status: string) => {
     if (status === 'aktif') return 'bg-green-100 text-green-700'
     if (status === 'lulus') return 'bg-blue-100 text-blue-700'
@@ -258,6 +278,9 @@ export default function DataSiswaPage() {
           </button>}
           {isLocalTenant && <button disabled={syncingAccounts} onClick={handleSyncStudentAccounts} className="flex items-center gap-2 px-4 py-2 bg-amber-600 text-white rounded-lg text-sm hover:bg-amber-700 disabled:opacity-60">
             <KeyRound size={16} /> {syncingAccounts ? 'Memproses...' : 'Reset Password ke NIS'}
+          </button>}
+          {isLocalTenant && <button disabled={generatingKTS || selectedForKTS.size === 0} onClick={handleGenerateKTS} className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg text-sm hover:bg-purple-700 disabled:opacity-60">
+            <Download size={16} /> {generatingKTS ? 'Memproses...' : `Generate KTS (${selectedForKTS.size})`}
           </button>}
           <button onClick={handleExport} className="flex items-center gap-2 px-4 py-2 bg-gray-600 text-white rounded-lg text-sm hover:bg-gray-700">
             <Download size={16} /> Export
@@ -334,13 +357,33 @@ export default function DataSiswaPage() {
           <p className="text-gray-400 col-span-4 text-center py-12">Memuat...</p>
         ) : data.length === 0 ? (
           <p className="text-gray-400 col-span-4 text-center py-12">Belum ada data siswa</p>
-        ) : data.map((s) => (
-          <div
-            key={s.id}
-            onClick={() => setSelectedSiswa(s)}
-            className={`bg-white rounded-xl p-4 shadow-sm border cursor-pointer transition-all hover:shadow-md hover:border-primary/40 ${selectedSiswa?.id === s.id ? 'border-primary ring-2 ring-primary/20' : 'border-gray-100'}`}
-          >
-            {/* Avatar + nama */}
+        ) : data.map((s) => {
+          const isKTSSelected = selectedForKTS.has(s.id)
+          return (
+            <div
+              key={s.id}
+              onClick={() => setSelectedSiswa(s)}
+              className={`relative bg-white rounded-xl p-4 shadow-sm border cursor-pointer transition-all hover:shadow-md hover:border-primary/40 ${selectedSiswa?.id === s.id ? 'border-primary ring-2 ring-primary/20' : 'border-gray-100'}`}
+            >
+              {/* KTS checkbox di top-right */}
+              {isLocalTenant && (
+                <div className="absolute top-2 right-2">
+                  <input
+                    type="checkbox"
+                    checked={isKTSSelected}
+                    onChange={(e) => {
+                      e.stopPropagation()
+                      const newSet = new Set(selectedForKTS)
+                      if (isKTSSelected) newSet.delete(s.id)
+                      else newSet.add(s.id)
+                      setSelectedForKTS(newSet)
+                    }}
+                    className="w-4 h-4 cursor-pointer"
+                    title="Pilih untuk Generate KTS"
+                  />
+                </div>
+              )}
+              {/* Avatar + nama */}
             <div className="flex items-center gap-3">
               <div className="relative flex-shrink-0">
                 <SiswaPhoto foto={s.foto} nama={s.nama} />
@@ -375,7 +418,7 @@ export default function DataSiswaPage() {
               </span>
             </div>
           </div>
-        ))}
+        )})}
       </div>
 
       {/* Detail popup */}
