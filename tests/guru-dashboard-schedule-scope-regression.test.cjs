@@ -73,7 +73,9 @@ test('manajemen pengguna memakai kontrol penuh-lebar dan kartu responsif sampai 
   assert.match(users, /lg:hidden/)
   assert.match(users, /hidden lg:block overflow-x-auto/)
   assert.match(users, /w-full min-w-0 h-11/)
-  assert.match(users, /min-h-\[/)
+  // Dropdown hasil pencarian GTK/Siswa memakai overlay absolute (tidak mendorong layout),
+  // bukan lagi min-height statis yang menyisakan ruang kosong saat idle.
+  assert.match(users, /absolute z-10 mt-1 w-full max-h-48 overflow-y-auto/)
 })
 
 test('dashboard menampilkan sapaan Pak atau Ibu dari jenis kelamin GTK', () => {

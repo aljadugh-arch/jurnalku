@@ -103,21 +103,29 @@ export default function UserManagementPage() {
       <div className="min-w-0 bg-white rounded-xl p-3 sm:p-4 shadow-sm border border-gray-100">
         <h2 className="font-semibold text-gray-700 mb-4 flex items-center gap-2"><UserPlus size={18} /> Tambah Pengguna</h2>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4 p-3 bg-gray-50 rounded-xl">
-          <div className="min-w-0 min-h-[104px]">
+          <div className="min-w-0">
             <label className="block text-xs font-medium text-gray-500 mb-1">Cari & pilih GTK</label>
             <div className="relative">
               <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
               <input value={gtkSearch} onChange={e => setGtkSearch(e.target.value)} placeholder="Nama atau NIP guru..." className="w-full min-w-0 h-11 pl-8 pr-3 py-2 border rounded-lg text-sm" />
+              {gtkSearch && filteredGtk.length > 0 && (
+                <div className="absolute z-10 mt-1 w-full max-h-48 overflow-y-auto rounded-lg border bg-white shadow-lg">
+                  {filteredGtk.map(g => <button key={g.id} type="button" onClick={() => pickGtk(g)} className="block w-full text-left px-3 py-1.5 text-xs hover:bg-blue-50">{g.nama} {g.nip ? '('+g.nip+')' : ''}</button>)}
+                </div>
+              )}
             </div>
-            {gtkSearch && filteredGtk.map(g => <button key={g.id} type="button" onClick={() => pickGtk(g)} className="block w-full text-left px-3 py-1.5 text-xs bg-white border-b hover:bg-blue-50 rounded">{g.nama} {g.nip ? '('+g.nip+')' : ''}</button>)}
           </div>
-          <div className="min-w-0 min-h-[104px]">
+          <div className="min-w-0">
             <label className="block text-xs font-medium text-gray-500 mb-1">Cari & pilih Siswa</label>
             <div className="relative">
               <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
               <input value={siswaSearch} onChange={e => setSiswaSearch(e.target.value)} placeholder="Nama atau NIS siswa..." className="w-full min-w-0 h-11 pl-8 pr-3 py-2 border rounded-lg text-sm" />
+              {siswaSearch && filteredSiswa.length > 0 && (
+                <div className="absolute z-10 mt-1 w-full max-h-48 overflow-y-auto rounded-lg border bg-white shadow-lg">
+                  {filteredSiswa.map(sw => <button key={sw.id} type="button" onClick={() => pickSiswa(sw)} className="block w-full text-left px-3 py-1.5 text-xs hover:bg-blue-50">{sw.nama} ({sw.nis})</button>)}
+                </div>
+              )}
             </div>
-            {siswaSearch && filteredSiswa.map(sw => <button key={sw.id} type="button" onClick={() => pickSiswa(sw)} className="block w-full text-left px-3 py-1.5 text-xs bg-white border-b hover:bg-blue-50 rounded">{sw.nama} ({sw.nis})</button>)}
           </div>
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
