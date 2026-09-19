@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react'
-import { Plus, Trash2, X, ClipboardCheck } from 'lucide-react'
+import { Plus, Trash2, X, ClipboardCheck, Upload } from 'lucide-react'
 import toast from 'react-hot-toast'
 import api from '../../services/api'
 import { PageHeader, Card, Button, Badge } from '../../components/ui'
+import ImportExcel from '../../components/ImportExcel'
 
 interface JadwalUjian {
   id: string; template_id: string; mapel_id: string | null; rombel_id: string; gtk_id: string | null
@@ -22,6 +23,7 @@ export default function JadwalUjianPage() {
   const [gtks, setGtks] = useState<any[]>([])
   const [jadwal, setJadwal] = useState<JadwalUjian[]>([])
   const [showModal, setShowModal] = useState(false)
+  const [showImport, setShowImport] = useState(false)
   const [form, setForm] = useState({ mapel_id: '', gtk_id: '', hari: 'senin', jam_mulai: '07:30', jam_selesai: '08:15', ruangan: '' })
   const [saving, setSaving] = useState(false)
 
@@ -94,7 +96,10 @@ export default function JadwalUjianPage() {
         title="Jadwal Ujian"
         subtitle='Jadwal khusus mode ujian, terpisah dari Jadwal Pelajaran reguler dan tidak dicek bentrok terhadapnya. Saat Kalender KBM suatu tanggal diset jenis "ujian", jadwal hari itu otomatis memakai data dari sini.'
         actions={templates.length > 0 && (
-          <Button variant="primary" icon={<Plus size={16} />} onClick={() => openModal('senin')}>Tambah Slot</Button>
+          <>
+            <Button variant="secondary" icon={<Upload size={16} />} onClick={() => setShowImport(true)}>Import Excel</Button>
+            <Button variant="primary" icon={<Plus size={16} />} onClick={() => openModal('senin')}>Tambah Slot</Button>
+          </>
         )}
       />
 
@@ -221,6 +226,58 @@ export default function JadwalUjianPage() {
             </div>
           </div>
         </div>
+      )}
+
+      {showImport && (
+        <ImportExcel
+          title="Import Jadwal Ujian"
+          templateName="template-jadwal-ujian.xlsx"
+          headerRow={0}
+          columnMap={{
+            'Hari': 'hari',
+            'Jam Mulai (HH:MM)': 'jam_mulai',
+            'Jam Selesai (HH:MM)': 'jam_selesai',
+            'Rombel': 'rombel',
+            'Mata Pelajaran': 'mapel',
+            'Guru Pengawas': 'guru',
+            'Ruangan': 'ruangan',
+          }}
+          sampleRows={[
+            { hari: 'senin', jam_mulai: '07:30', jam_selesai: '08:15', rombel: rombels[0]?.nama || 'VII-A', mapel: mapels[0]?.nama || 'Matematika', guru: gtks[0]?.nama || 'Nama Guru Pengawas', ruangan: 'Ruang I' },
+          ]}
+          onImport={async (rows) => {
+            if (!selectedTemplate) { toast.error('Pilih template ujian dulu'); return }
+            let ok = 0, skip = 0
+            const errors: string[] = []
+            for (const row of rows) {
+              try {
+                const hari = String(row.hari || '').trim().toLowerCase()
+                const jamMulai = String(row.jam_mulai || '').trim().padStart(5, '0')
+                const jamSelesai = String(row.jam_selesai || '').trim().padStart(5, '0')
+                const rombel = rombels.find(r => r.nama?.toLowerCase() === String(row.rombel || '').trim().toLowerCase())
+                if (!SEMUA_HARI.includes(hari as any)) { skip++; errors.push(`Hari "${row.hari}" tidak dikenal`); continue }
+                if (!rombel) { skip++; errors.push(`Rombel "${row.rombel}" tidak ditemukan`); continue }
+                const mapelNama = String(row.mapel || '').trim()
+                const mapel = mapelNama ? mapels.find(m => m.nama?.toLowerCase() === mapelNama.toLowerCase()) : null
+                const guruNama = String(row.guru || '').trim()
+                const guru = guruNama ? gtks.find(g => g.nama?.toLowerCase() === guruNama.toLowerCase()) : null
+                await api.post('/jadwal-ujian', {
+                  template_id: selectedTemplate, rombel_id: rombel.id,
+                  mapel_id: mapel?.id || null, gtk_id: guru?.id || null,
+                  hari, jam_mulai: jamMulai, jam_selesai: jamSelesai, ruangan: String(row.ruangan || '').trim(),
+                })
+                ok++
+              } catch (err: any) {
+                skip++
+                errors.push(err.response?.data?.error || 'Baris gagal disimpan')
+              }
+            }
+            loadJadwal()
+            if (skip > 0) toast.error(`${ok} baris berhasil, ${skip} baris gagal: ${errors.slice(0, 3).join('; ')}`)
+            else toast.success(`${ok} baris jadwal ujian berhasil diimpor`)
+          }}
+          onClose={() => setShowImport(false)}
+        />
       )}
     </div>
   )
