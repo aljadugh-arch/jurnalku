@@ -23,6 +23,7 @@ export default function KalenderKBMPage() {
   const [selectedDate, setSelectedDate] = useState(today)
   const [schedules, setSchedules] = useState<Schedule[]>([])
   const [scheduleLoading, setScheduleLoading] = useState(false)
+  const [modeUjian, setModeUjian] = useState(false)
   const [showModal, setShowModal] = useState(false)
   const [form, setForm] = useState({ judul: '', jenis: 'kbm_aktif', keterangan: '', warna: '#3b82f6' })
 
@@ -32,8 +33,12 @@ export default function KalenderKBMPage() {
   }
   const loadSchedules = async (tanggal: string) => {
     setScheduleLoading(true)
-    try { const res = await api.get('/jadwal/tanggal', { params: { tanggal } }); setSchedules(res.data?.rows || []) }
-    catch { setSchedules([]) }
+    try {
+      const res = await api.get('/jadwal/tanggal', { params: { tanggal } })
+      setSchedules(res.data?.rows || [])
+      setModeUjian(!!res.data?.mode_ujian)
+    }
+    catch { setSchedules([]); setModeUjian(false) }
     finally { setScheduleLoading(false) }
   }
   useEffect(() => { loadEvents() }, [currentDate])
@@ -80,7 +85,7 @@ export default function KalenderKBMPage() {
     </section>
 
     <section className="rounded-3xl bg-white p-4 shadow-sm dark:bg-gray-900" data-selected-date={selectedDate}>
-      <div className="mb-3 flex items-center justify-between"><div><h2 className="text-sm font-bold text-slate-900 dark:text-white">Jadwal Hari Ini</h2><p className="text-[11px] text-slate-500">{new Date(`${selectedDate}T12:00:00`).toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</p></div><Calendar size={20} className="text-primary" /></div>
+      <div className="mb-3 flex items-center justify-between"><div><h2 className="text-sm font-bold text-slate-900 dark:text-white">Jadwal Hari Ini{modeUjian && <span className="ml-2 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold text-amber-800 align-middle">Mode Ujian</span>}</h2><p className="text-[11px] text-slate-500">{new Date(`${selectedDate}T12:00:00`).toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}{modeUjian && ' · memakai jadwal Template Ujian'}</p></div><Calendar size={20} className="text-primary" /></div>
       {scheduleLoading ? <p className="py-5 text-center text-xs text-slate-400">Memuat jadwal...</p> : schedules.length === 0 ? <p className="rounded-2xl bg-slate-50 px-4 py-6 text-center text-xs text-slate-500 dark:bg-gray-800">Tidak ada jadwal mengajar pada tanggal ini.</p> : <div className="space-y-2">{schedules.map(s => <div key={s.id} className="flex items-start gap-3 rounded-2xl bg-slate-50 p-3 dark:bg-gray-800"><span className="mt-0.5 rounded-xl bg-primary/10 p-2 text-primary"><Clock3 size={17} /></span><div className="min-w-0"><p className="text-xs font-bold text-slate-900 dark:text-white">{s.mapel_nama || s.nama_kegiatan || 'Kegiatan Pembelajaran'}</p><p className="mt-0.5 text-[11px] text-slate-500">{s.jam_mulai || '--:--'}–{s.jam_selesai || '--:--'} · {s.guru_nama || 'Guru'}</p><p className="mt-1 flex items-center gap-1 text-[10px] text-slate-400"><MapPin size={11} /> {s.rombel_nama || '-'}</p></div></div>)}</div>}
       {selectedEvents.length > 0 && <div className="mt-4 border-t border-slate-100 pt-3 dark:border-gray-800"><p className="mb-2 text-xs font-bold text-slate-700 dark:text-gray-200">Agenda Akademik</p>{selectedEvents.map(ev => <div key={ev.id} className="mb-2 flex items-center justify-between rounded-xl bg-slate-50 p-2 dark:bg-gray-800"><span className="flex min-w-0 items-center gap-2 text-xs"><i className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: ev.warna }} />{ev.judul}</span><button onClick={() => handleDelete(ev.id)} className="text-[10px] text-red-500">Hapus</button></div>)}</div>}
     </section>

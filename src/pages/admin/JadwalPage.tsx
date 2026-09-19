@@ -40,7 +40,7 @@ export default function JadwalPage() {
   const [bulkGtkId, setBulkGtkId] = useState('')
   const [conflicts, setConflicts] = useState<any[]>([])
   const [todayRows, setTodayRows] = useState<Jadwal[]>([])
-  const [todayInfo, setTodayInfo] = useState({ hari: '', tanggal: '' })
+  const [todayInfo, setTodayInfo] = useState({ hari: '', tanggal: '', mode_ujian: false })
   const [showToday, setShowToday] = useState(false)
   const [showForm, setShowForm] = useState(false)
   const [showTemplateModal, setShowTemplateModal] = useState(false)
@@ -190,11 +190,18 @@ export default function JadwalPage() {
   }, [pengajar, gtks, rombels, form.mapel_id, selectedRombel, isGuruKelasJenjang])
 
   // Saat pilih guru: auto-isi mapel bila guru punya tepat 1 mapel di rombel ini
+  const templateIsUjian = (templateId: string) => templates.find(t => t.id === templateId)?.jenis === 'ujian'
   const onGuruChange = (gtkId: string) => {
     const cocok = pengajar.filter(p => p.gtk_id === gtkId && p.rombel_id === selectedRombel)
     const guruKelas = isGuruKelasJenjang && rombels.find(r => r.id === selectedRombel)?.wali_kelas_id === gtkId
     setForm(f => ({ ...f, gtk_id: gtkId, mapel_id: pilihGuru(pengajar, selectedRombel, gtkId, f.mapel_id, guruKelas) }))
-    if (cocok.length === 0 && gtkId && !guruKelas) toast('Guru ini belum terdaftar mengajar di rombel terpilih (menu Pengajar).', { icon: 'ℹ️' })
+    // Saat template aktif berjenis ujian, guru penjaga/pengawas boleh berbeda dari
+    // guru mapel reguler yang terdaftar di menu Pengajar (mis. silang rombel supaya
+    // guru tidak mengawasi mapel yang sama dengan yang diajarnya) — jangan tampilkan
+    // peringatan "belum terdaftar" untuk kasus ini.
+    if (cocok.length === 0 && gtkId && !guruKelas && !templateIsUjian(form.template_id)) {
+      toast('Guru ini belum terdaftar mengajar di rombel terpilih (menu Pengajar).', { icon: 'ℹ️' })
+    }
   }
 
   const onMapelChange = (mapelId: string) => {
@@ -269,7 +276,7 @@ export default function JadwalPage() {
     try {
       const res = await api.get('/jadwal/hari-ini')
       setTodayRows(res.data.rows || [])
-      setTodayInfo({ hari: res.data.hari || '', tanggal: res.data.tanggal || '' })
+      setTodayInfo({ hari: res.data.hari || '', tanggal: res.data.tanggal || '', mode_ujian: !!res.data.mode_ujian })
       setShowToday(true)
     } catch (err: any) { toast.error(err.response?.data?.error || 'Gagal memuat jadwal hari ini') }
   }
@@ -571,7 +578,7 @@ export default function JadwalPage() {
       {showToday && (
         <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
           <div className="flex items-center justify-between gap-3 mb-3">
-            <div><h2 className="font-semibold text-blue-900">Jadwal Hari Ini Semua Rombel</h2><p className="text-xs text-blue-700 capitalize">{todayInfo.hari} · {todayInfo.tanggal} · {todayRows.length} jadwal</p></div>
+            <div><h2 className="font-semibold text-blue-900">Jadwal Hari Ini Semua Rombel{todayInfo.mode_ujian && <span className="ml-2 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold text-amber-800 align-middle">Mode Ujian</span>}</h2><p className="text-xs text-blue-700 capitalize">{todayInfo.hari} · {todayInfo.tanggal} · {todayRows.length} jadwal{todayInfo.mode_ujian && ' · memakai Template Ujian'}</p></div>
             <button onClick={() => setShowToday(false)} className="p-1 text-blue-700 hover:bg-blue-100 rounded-lg"><X size={18} /></button>
           </div>
           {todayRows.length === 0 ? <p className="text-sm text-blue-800">Tidak ada jadwal untuk hari ini.</p> : (

@@ -13,7 +13,7 @@ const main = read('src/main.tsx')
 test('dashboard guru memakai jadwal hari Jakarta tanpa fallback hari lain', () => {
   const route = server.match(/app\.get\('\/api\/guru\/dashboard'[\s\S]*?\n}\)\n/)?.[0] || ''
   const helper = server.slice(server.indexOf('function teacherScheduleForDay'), server.indexOf("app.get('/api/guru/dashboard'"))
-  assert.match(route, /teacherScheduleForDay\(gtkId, req\.tenantId, today, todayDate\)/)
+  assert.match(route, /teacherScheduleForDay\(gtkId, req\.tenantId, today, todayDate/)
   assert.match(helper, /lower\(j\.hari\)=\?/)
   assert.match(helper, /j\.jenis_kegiatan='mapel'/)
   assert.match(helper, /FROM ekskul e/)

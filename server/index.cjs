@@ -1127,16 +1127,18 @@ function migrateUniquePerTenant(db) {
     const idx = db.prepare("PRAGMA index_list(gtk)").all()
     const hasGlobalUnique = idx.some(i => i.unique && i.origin === 'u' && !i.name.includes('tenant'))
     if (hasGlobalUnique) {
+      const gtkCols = db.prepare('PRAGMA table_info(gtk)').all().map(c => c.name)
+      const nikSelect = gtkCols.includes('nik') ? 'nik' : 'NULL'
       db.exec(`
         DROP TABLE IF EXISTS gtk_new;
         CREATE TABLE gtk_new (
-          id TEXT PRIMARY KEY, nip TEXT, nuptk TEXT, nama TEXT NOT NULL, jenis_kelamin TEXT NOT NULL,
+          id TEXT PRIMARY KEY, nik TEXT, nip TEXT, nuptk TEXT, nama TEXT NOT NULL, jenis_kelamin TEXT NOT NULL,
           tempat_lahir TEXT, tanggal_lahir TEXT, alamat TEXT, no_hp TEXT, email TEXT,
           jabatan TEXT DEFAULT 'guru', status_kepegawaian TEXT DEFAULT 'honorer', bidang_studi TEXT,
           foto TEXT, status TEXT DEFAULT 'aktif', created_at TEXT DEFAULT (datetime('now')),
           tenant_id TEXT DEFAULT 'default', kode_guru TEXT DEFAULT ''
         );
-        INSERT INTO gtk_new SELECT id, NULLIF(nip,''), nuptk, nama, jenis_kelamin, tempat_lahir, tanggal_lahir, alamat, no_hp, email, jabatan, status_kepegawaian, bidang_studi, foto, status, created_at, tenant_id, kode_guru FROM gtk;
+        INSERT INTO gtk_new SELECT id, ${nikSelect}, NULLIF(nip,''), nuptk, nama, jenis_kelamin, tempat_lahir, tanggal_lahir, alamat, no_hp, email, jabatan, status_kepegawaian, bidang_studi, foto, status, created_at, tenant_id, kode_guru FROM gtk;
         DROP TABLE gtk;
         ALTER TABLE gtk_new RENAME TO gtk;
         CREATE UNIQUE INDEX IF NOT EXISTS idx_gtk_nip_tenant ON gtk(nip, tenant_id) WHERE nip IS NOT NULL;
@@ -1150,15 +1152,18 @@ function migrateUniquePerTenant(db) {
     const idx = db.prepare("PRAGMA index_list(siswa)").all()
     const hasGlobalUnique = idx.some(i => i.unique && i.origin === 'u')
     if (hasGlobalUnique) {
+      const siswaCols = db.prepare('PRAGMA table_info(siswa)').all().map(c => c.name)
+      const nikSelect = siswaCols.includes('nik') ? 'nik' : 'NULL'
+      const panggilanSelect = siswaCols.includes('nama_panggilan') ? 'nama_panggilan' : 'NULL'
       db.exec(`
         DROP TABLE IF EXISTS siswa_new;
         CREATE TABLE siswa_new (
-          id TEXT PRIMARY KEY, nis TEXT NOT NULL, nisn TEXT, nama TEXT NOT NULL, jenis_kelamin TEXT NOT NULL,
-          tempat_lahir TEXT, tanggal_lahir TEXT, alamat TEXT, no_hp TEXT, nama_ortu TEXT,
+          id TEXT PRIMARY KEY, nik TEXT, nis TEXT NOT NULL, nisn TEXT, nama TEXT NOT NULL, jenis_kelamin TEXT NOT NULL,
+          tempat_lahir TEXT, tanggal_lahir TEXT, alamat TEXT, no_hp TEXT, nama_ortu TEXT, nama_panggilan TEXT,
           rombel_id TEXT, foto TEXT, status TEXT DEFAULT 'aktif', created_at TEXT DEFAULT (datetime('now')),
           tenant_id TEXT DEFAULT 'default'
         );
-        INSERT INTO siswa_new SELECT id, nis, nisn, nama, jenis_kelamin, tempat_lahir, tanggal_lahir, alamat, no_hp, nama_ortu, rombel_id, foto, status, created_at, tenant_id FROM siswa;
+        INSERT INTO siswa_new SELECT id, ${nikSelect}, nis, nisn, nama, jenis_kelamin, tempat_lahir, tanggal_lahir, alamat, no_hp, nama_ortu, ${panggilanSelect}, rombel_id, foto, status, created_at, tenant_id FROM siswa;
         DROP TABLE siswa;
         ALTER TABLE siswa_new RENAME TO siswa;
         CREATE UNIQUE INDEX IF NOT EXISTS idx_siswa_nis_tenant ON siswa(nis, tenant_id);
@@ -1210,6 +1215,8 @@ for (const col of [
   ['jadwal', 'template_id', 'TEXT'],
   ['jadwal', 'jenis_kegiatan', "TEXT DEFAULT 'mapel'"],
   ['jadwal', 'nama_kegiatan', "TEXT DEFAULT ''"],
+  ['absensi_kegiatan', 'tenant_id', "TEXT DEFAULT 'default'"],
+  ['absensi_ekskul', 'tenant_id', "TEXT DEFAULT 'default'"],
   ['users', 'tenant_id', "TEXT DEFAULT 'default'"],
   ['users', 'gtk_id', 'TEXT'],
   ['users', 'kode_guru', "TEXT DEFAULT ''"],
@@ -3423,13 +3430,15 @@ app.post('/api/absensi-ekskul/bulk', STAFF, (req, res) => {
 // ==================== KEGIATAN KHUSUS ====================
 db.exec(`CREATE TABLE IF NOT EXISTS kegiatan_khusus (
   id TEXT PRIMARY KEY, nama TEXT NOT NULL, jenis TEXT DEFAULT 'kokurikuler',
-  tanggal TEXT, deskripsi TEXT, created_at TEXT DEFAULT (datetime('now'))
+  tanggal TEXT, deskripsi TEXT, created_at TEXT DEFAULT (datetime('now')), tenant_id TEXT DEFAULT 'default'
 )`)
+try { db.prepare("ALTER TABLE kegiatan_khusus ADD COLUMN tenant_id TEXT DEFAULT 'default'").run() } catch {}
 db.exec(`CREATE TABLE IF NOT EXISTS absensi_kegiatan (
   id TEXT PRIMARY KEY, siswa_id TEXT NOT NULL, kegiatan_id TEXT NOT NULL,
-  tanggal TEXT NOT NULL, status TEXT NOT NULL, keterangan TEXT,
+  tanggal TEXT NOT NULL, status TEXT NOT NULL, keterangan TEXT, tenant_id TEXT DEFAULT 'default',
   FOREIGN KEY (siswa_id) REFERENCES siswa(id), FOREIGN KEY (kegiatan_id) REFERENCES kegiatan_khusus(id)
 )`)
+try { db.prepare("ALTER TABLE absensi_kegiatan ADD COLUMN tenant_id TEXT DEFAULT 'default'").run() } catch {}
 
 app.get('/api/kegiatan-khusus', authMiddleware, (req, res) => {
   const { jenis } = req.query
@@ -3524,6 +3533,21 @@ function tenantIsHoliday(tenantId, tanggal) {
   const settings = getTenantSettings(db, tenantId, 'hari_libur')
   const events = db.prepare("SELECT jenis FROM kalender_kbm WHERE tenant_id=? AND tanggal=?").all(tenantId, tanggal)
   return isHoliday({ date: tanggal, holidayDays: settings?.hari_libur || [], calendarEvents: events })
+}
+
+// Jika tanggal ditandai 'ujian' di Kalender KBM DAN tenant punya template_jadwal
+// jenis 'ujian' yang benar-benar dipakai di jadwal (template_id terpasang di
+// minimal satu baris jadwal), maka jadwal hari itu memakai baris template ujian
+// tsb, bukan jadwal reguler mingguan. Kembalikan null bila tidak dalam mode ujian
+// (fallback normal: jadwal reguler seperti biasa, tidak ada perubahan perilaku).
+function examModeForDate(tenantId, tanggal) {
+  const event = db.prepare("SELECT id FROM kalender_kbm WHERE tenant_id=? AND tanggal=? AND jenis='ujian' LIMIT 1").get(tenantId, tanggal)
+  if (!event) return null
+  const tpl = db.prepare(`SELECT t.id FROM template_jadwal t
+    WHERE t.tenant_id=? AND t.jenis='ujian'
+      AND EXISTS (SELECT 1 FROM jadwal j WHERE j.template_id=t.id AND j.tenant_id=t.tenant_id)
+    ORDER BY t.created_at DESC LIMIT 1`).get(tenantId)
+  return tpl ? tpl.id : null
 }
 
 function pengajarAsJadwal(gtkId, tenantId) {
@@ -3624,14 +3648,16 @@ function requireRombelDepartureConfigJenjang(req) {
   return { allowed: false, status: 403, error: 'Jam pulang per rombel hanya tersedia untuk jenjang RA/TK dan MI/SD' }
 }
 
-function teacherScheduleForDay(gtkId, tenantId, day, date) {
+function teacherScheduleForDay(gtkId, tenantId, day, date, examTemplateId = null) {
+  const templateFilter = examTemplateId ? 'AND j.template_id=?' : "AND (j.template_id IS NULL OR j.template_id NOT IN (SELECT id FROM template_jadwal WHERE tenant_id=j.tenant_id AND jenis='ujian'))"
+  const templateParams = examTemplateId ? [examTemplateId] : []
   const academic = db.prepare(`SELECT j.*,m.nama mapel_nama,r.nama rombel_nama,
     sk.status sesi_status,sk.waktu_masuk sesi_waktu_masuk,sk.waktu_selesai sesi_waktu_selesai
     FROM jadwal j JOIN mapel m ON m.id=j.mapel_id AND m.tenant_id=j.tenant_id
     LEFT JOIN rombel r ON r.id=j.rombel_id AND r.tenant_id=j.tenant_id
     LEFT JOIN sesi_kelas_guru sk ON sk.jadwal_id=j.id AND sk.guru_id=? AND sk.tanggal=? AND sk.tenant_id=j.tenant_id
-    WHERE j.gtk_id=? AND lower(j.hari)=? AND j.tenant_id=? AND j.jenis_kegiatan='mapel'`).all(gtkId, date, gtkId, day, tenantId)
-  const extracurricular = db.prepare(`SELECT e.id,NULL mapel_id,NULL rombel_id,e.hari,e.jam_mulai,e.jam_selesai,'' ruangan,
+    WHERE j.gtk_id=? AND lower(j.hari)=? AND j.tenant_id=? AND j.jenis_kegiatan='mapel' ${templateFilter}`).all(gtkId, date, gtkId, day, tenantId, ...templateParams)
+  const extracurricular = examTemplateId ? [] : db.prepare(`SELECT e.id,NULL mapel_id,NULL rombel_id,e.hari,e.jam_mulai,e.jam_selesai,'' ruangan,
     e.nama mapel_nama,e.nama rombel_nama,'ekskul' jenis_kegiatan,NULL sesi_status
     FROM ekskul e WHERE e.pembina_id=? AND e.tenant_id=? AND lower(e.hari)=?`).all(gtkId, tenantId, day)
   return [...academic.map(row => ({ ...row, jenis_kegiatan: 'mapel' })), ...extracurricular]
@@ -3646,7 +3672,8 @@ app.get('/api/guru/dashboard', authMiddleware, (req, res) => {
   const today = require('./attendance-rules.cjs').hariJakarta()
   const todayDate = todayJakarta()
   const holidayToday = tenantIsHoliday(req.tenantId, todayDate)
-  const jadwal = holidayToday ? [] : teacherScheduleForDay(gtkId, req.tenantId, today, todayDate)
+  const examTemplateId = holidayToday ? null : examModeForDate(req.tenantId, todayDate)
+  const jadwal = holidayToday ? [] : teacherScheduleForDay(gtkId, req.tenantId, today, todayDate, examTemplateId)
 
   const totalJurnal = db.prepare("SELECT COUNT(*) as c FROM jurnal_mengajar WHERE guru_id=? AND tenant_id=?").get(gtkId, req.tenantId).c
   const rombelCount = db.prepare("SELECT COUNT(DISTINCT rombel_id) as c FROM pengajar WHERE gtk_id=? AND tenant_id=?").get(gtkId, req.tenantId).c
@@ -4496,9 +4523,16 @@ app.get('/api/siswa/dashboard', authMiddleware, enforceTenantAccess, (req, res) 
   
   // Get jadwal hari ini
   let jadwal = []
+  let examTemplateId = null
   if (siswa.rombel_id) {
     const today = require('./attendance-rules.cjs').hariJakarta()
-    jadwal = db.prepare(`SELECT j.*, m.nama as mapel_nama, g.nama as guru_nama FROM jadwal j LEFT JOIN mapel m ON j.mapel_id = m.id AND m.tenant_id=j.tenant_id LEFT JOIN gtk g ON j.gtk_id = g.id AND g.tenant_id=j.tenant_id WHERE j.tenant_id=? AND j.rombel_id = ? AND lower(trim(coalesce(j.hari, ''))) = ? ORDER BY j.jam_mulai`).all(req.tenantId, siswa.rombel_id, today) || []
+    const todayDate = todayJakarta()
+    examTemplateId = examModeForDate(req.tenantId, todayDate)
+    const templateFilter = examTemplateId
+      ? 'AND j.template_id=?'
+      : "AND (j.template_id IS NULL OR j.template_id NOT IN (SELECT id FROM template_jadwal WHERE tenant_id=j.tenant_id AND jenis='ujian'))"
+    const templateParams = examTemplateId ? [examTemplateId] : []
+    jadwal = db.prepare(`SELECT j.*, m.nama as mapel_nama, g.nama as guru_nama FROM jadwal j LEFT JOIN mapel m ON j.mapel_id = m.id AND m.tenant_id=j.tenant_id LEFT JOIN gtk g ON j.gtk_id = g.id AND g.tenant_id=j.tenant_id WHERE j.tenant_id=? AND j.rombel_id = ? AND lower(trim(coalesce(j.hari, ''))) = ? ${templateFilter} ORDER BY j.jam_mulai`).all(req.tenantId, siswa.rombel_id, today, ...templateParams) || []
   }
   
   const bulan = todayJakarta().slice(0, 7) + '%'
@@ -4526,7 +4560,7 @@ app.get('/api/siswa/dashboard', authMiddleware, enforceTenantAccess, (req, res) 
     try { kokurikuler_detail = db.prepare(`SELECT a.tanggal,a.status,a.keterangan,k.nama kegiatan_nama,k.jenis FROM absensi_kegiatan a LEFT JOIN kegiatan_khusus k ON k.id=a.kegiatan_id AND k.tenant_id=a.tenant_id WHERE a.siswa_id=? AND a.tenant_id=? AND k.jenis='kokurikuler' ORDER BY a.tanggal DESC LIMIT 20`).all(siswa.id, req.tenantId) } catch { kokurikuler_detail = [] }
     try { kegiatan_lain_detail = db.prepare(`SELECT a.tanggal,a.status,a.keterangan,k.nama kegiatan_nama,k.jenis FROM absensi_kegiatan a LEFT JOIN kegiatan_khusus k ON k.id=a.kegiatan_id AND k.tenant_id=a.tenant_id WHERE a.siswa_id=? AND a.tenant_id=? AND (k.jenis IS NULL OR k.jenis NOT IN ('kokurikuler')) ORDER BY a.tanggal DESC LIMIT 20`).all(siswa.id, req.tenantId) } catch { kegiatan_lain_detail = [] }
   }
-  res.json({ children, siswa, jadwal_hari_ini: jadwal, tugas, rekap: { hadir, sakit, izin, alpha }, ...attendance, rekap_lengkap: { kbm: rekapKategori(absensi_detail), kegiatan: rekapKategori(kegiatan_detail), jamaah: rekapKategori(jamaah_detail), ekskul: rekapKategori(ekskul_detail), kokurikuler: rekapKategori(kokurikuler_detail), kegiatan_lain: rekapKategori(kegiatan_lain_detail) }, absensi_detail, kegiatan_detail, jamaah_detail, ekskul_detail: attendance.ekskul_detail, kokurikuler_detail: attendance.kokurikuler_detail, kegiatan_lain_detail: attendance.kegiatan_lain_detail, tagihan_detail, nilai_detail: nilaiAll, tabungan_detail, tagihan, tabungan, catatan_kepribadian })
+  res.json({ children, siswa, jadwal_hari_ini: jadwal, mode_ujian: !!examTemplateId, tugas, rekap: { hadir, sakit, izin, alpha }, ...attendance, rekap_lengkap: { kbm: rekapKategori(absensi_detail), kegiatan: rekapKategori(kegiatan_detail), jamaah: rekapKategori(jamaah_detail), ekskul: rekapKategori(ekskul_detail), kokurikuler: rekapKategori(kokurikuler_detail), kegiatan_lain: rekapKategori(kegiatan_lain_detail) }, absensi_detail, kegiatan_detail, jamaah_detail, ekskul_detail: attendance.ekskul_detail, kokurikuler_detail: attendance.kokurikuler_detail, kegiatan_lain_detail: attendance.kegiatan_lain_detail, tagihan_detail, nilai_detail: nilaiAll, tabungan_detail, tagihan, tabungan, catatan_kepribadian })
 })
 
 // ==================== SISWA JADWAL ====================
@@ -4879,6 +4913,12 @@ function ensurePengajarFromJadwal({ gtk_id, mapel_id, rombel_id, tenant_id }) {
 // ==================== JADWAL ====================
 app.get('/api/jadwal/hari-ini', DASHBOARD_ROLES, (req, res) => {
   const hari = require('./attendance-rules.cjs').hariJakarta()
+  const tanggal = todayJakarta()
+  const examTemplateId = examModeForDate(req.tenantId, tanggal)
+  const templateFilter = examTemplateId
+    ? 'AND j.template_id=?'
+    : "AND (j.template_id IS NULL OR j.template_id NOT IN (SELECT id FROM template_jadwal WHERE tenant_id=j.tenant_id AND jenis='ujian'))"
+  const templateParams = examTemplateId ? [examTemplateId] : []
   const rows = db.prepare(`SELECT j.*, m.nama AS mapel_nama, m.kode AS mapel_kode,
     r.nama AS rombel_nama, g.nama AS gtk_nama, g.nama AS guru_nama,
     CASE WHEN g.id IS NULL THEN 0 ELSE 1 END AS guru_valid
@@ -4886,20 +4926,25 @@ app.get('/api/jadwal/hari-ini', DASHBOARD_ROLES, (req, res) => {
     LEFT JOIN mapel m ON j.mapel_id=m.id AND m.tenant_id=j.tenant_id
     LEFT JOIN rombel r ON j.rombel_id=r.id AND r.tenant_id=j.tenant_id
     LEFT JOIN gtk g ON j.gtk_id=g.id AND g.tenant_id=j.tenant_id
-    WHERE j.tenant_id=? AND lower(j.hari)=?
-    ORDER BY j.jam_mulai, r.nama, m.nama, j.nama_kegiatan`).all(req.tenantId, hari)
-  res.json({ hari, tanggal: todayJakarta(), rows })
+    WHERE j.tenant_id=? AND lower(j.hari)=? ${templateFilter}
+    ORDER BY j.jam_mulai, r.nama, m.nama, j.nama_kegiatan`).all(req.tenantId, hari, ...templateParams)
+  res.json({ hari, tanggal, rows, mode_ujian: !!examTemplateId })
 })
 
 app.get('/api/jadwal/tanggal', DASHBOARD_ROLES, (req, res) => {
   const tanggal = /^\d{4}-\d{2}-\d{2}$/.test(String(req.query.tanggal || '')) ? String(req.query.tanggal) : todayJakarta()
   const hari = HARI_ID[new Date(`${tanggal}T12:00:00+07:00`).getUTCDay()]
+  const examTemplateId = examModeForDate(req.tenantId, tanggal)
+  const templateFilter = examTemplateId
+    ? 'AND j.template_id=?'
+    : "AND (j.template_id IS NULL OR j.template_id NOT IN (SELECT id FROM template_jadwal WHERE tenant_id=j.tenant_id AND jenis='ujian'))"
+  const templateParams = examTemplateId ? [examTemplateId] : []
   const rows = tenantIsHoliday(req.tenantId, tanggal) ? [] : db.prepare(`SELECT j.*,m.nama AS mapel_nama,r.nama AS rombel_nama,g.nama AS guru_nama
     FROM jadwal j LEFT JOIN mapel m ON m.id=j.mapel_id AND m.tenant_id=j.tenant_id
     LEFT JOIN rombel r ON r.id=j.rombel_id AND r.tenant_id=j.tenant_id
     LEFT JOIN gtk g ON g.id=j.gtk_id AND g.tenant_id=j.tenant_id
-    WHERE j.tenant_id=? AND lower(j.hari)=? ORDER BY j.jam_mulai,r.nama,m.nama`).all(req.tenantId, hari)
-  res.json({ tanggal, hari, rows })
+    WHERE j.tenant_id=? AND lower(j.hari)=? ${templateFilter} ORDER BY j.jam_mulai,r.nama,m.nama`).all(req.tenantId, hari, ...templateParams)
+  res.json({ tanggal, hari, rows, mode_ujian: !!examTemplateId })
 })
 
 app.get('/api/jadwal', authMiddleware, (req, res) => {
@@ -6128,14 +6173,19 @@ app.get('/api/jurnal/jadwal-hari-ini', authMiddleware, (req, res) => {
   if (tenantIsHoliday(req.tenantId, tgl)) {
     return res.json({ gtk_id: gtk.id, tanggal: tgl, hari, hari_libur: true, jadwal: [] })
   }
+  const examTemplateId = examModeForDate(req.tenantId, tgl)
+  const templateFilter = examTemplateId
+    ? 'AND j.template_id=?'
+    : "AND (j.template_id IS NULL OR j.template_id NOT IN (SELECT id FROM template_jadwal WHERE tenant_id=j.tenant_id AND jenis='ujian'))"
+  const templateParams = examTemplateId ? [examTemplateId] : []
   const rows = db.prepare(`SELECT j.id as jadwal_id, j.mapel_id, j.rombel_id, j.jam_mulai, j.jam_selesai, j.ruangan,
     m.nama as mapel_nama, m.kode as mapel_kode, r.nama as rombel_nama
     FROM jadwal j
     JOIN mapel m ON j.mapel_id = m.id AND m.tenant_id = j.tenant_id
     LEFT JOIN rombel r ON j.rombel_id = r.id AND r.tenant_id = j.tenant_id
-    WHERE j.gtk_id = ? AND lower(j.hari) = ? AND j.tenant_id = ? AND j.jenis_kegiatan = 'mapel'
-    ORDER BY j.jam_mulai`).all(gtk.id, hari, req.tenantId)
-  res.json({ gtk_id: gtk.id, tanggal: tgl, hari, jadwal: rows })
+    WHERE j.gtk_id = ? AND lower(j.hari) = ? AND j.tenant_id = ? AND j.jenis_kegiatan = 'mapel' ${templateFilter}
+    ORDER BY j.jam_mulai`).all(gtk.id, hari, req.tenantId, ...templateParams)
+  res.json({ gtk_id: gtk.id, tanggal: tgl, hari, mode_ujian: !!examTemplateId, jadwal: rows })
 })
 
 app.get('/api/jurnal/me', authMiddleware, (req, res) => {
