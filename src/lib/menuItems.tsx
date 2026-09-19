@@ -27,6 +27,7 @@ export const adminMenuItems: MenuItem[] = [
     label: 'Jadwal Pelajaran', icon: <Calendar size={20} />,
     children: [
       { label: 'Kelola Jadwal', path: '/admin/jadwal' },
+      { label: 'Jadwal Ujian', path: '/admin/jadwal-ujian' },
       { label: 'Pengajar', path: '/admin/pengajar' },
     ]
   },

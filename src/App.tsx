@@ -21,6 +21,7 @@ const DataGTKPage = lazy(() => import('./pages/admin/DataGTKPage'))
 const MapelPage = lazy(() => import('./pages/admin/MapelPage'))
 const RombelPage = lazy(() => import('./pages/admin/RombelPage'))
 const JadwalPage = lazy(() => import('./pages/admin/JadwalPage'))
+const JadwalUjianPage = lazy(() => import('./pages/admin/JadwalUjianPage'))
 const PengajarPage = lazy(() => import('./pages/admin/PengajarPage'))
 const WaliKelasPage = lazy(() => import('./pages/admin/WaliKelasPage'))
 const JurnalPage = lazy(() => import('./pages/admin/JurnalPage'))
@@ -188,6 +189,7 @@ export default function App() {
           <Route path="mapel" element={<MapelPage />} />
           <Route path="rombel" element={<RombelPage />} />
           <Route path="jadwal" element={<JadwalPage />} />
+          <Route path="jadwal-ujian" element={<JadwalUjianPage />} />
           <Route path="pengajar" element={<PengajarPage />} />
           <Route path="wali-kelas" element={<WaliKelasPage />} />
           <Route path="jurnal" element={<JurnalPage />} />
