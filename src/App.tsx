@@ -136,9 +136,12 @@ function RootRoute() {
   useEffect(() => {
     api.get('/tenant/info').then(({ data }) => setRegisteredHost(Boolean(data.registered_host))).catch(() => setRegisteredHost(false))
   }, [])
-  if (!authReady || (isAuthenticated && !user)) return <div className="flex items-center justify-center py-20 text-sm text-gray-400">Memuat sesi...</div>
+  // Tentukan jenis host lebih dulu. Base domain publik harus tetap menampilkan
+  // landing page walau pemeriksaan sesi belum selesai; hanya host tenant terdaftar
+  // yang perlu menunggu sesi lalu diarahkan ke login/dashboard.
   if (registeredHost === null) return null
   if (!registeredHost) return <LandingPage />
+  if (!authReady || (isAuthenticated && !user)) return <div className="flex items-center justify-center py-20 text-sm text-gray-400">Memuat sesi...</div>
   if (!isAuthenticated) return <Navigate to="/login" replace />
   const role = user?.role || ''
   const destination = ['admin', 'super_admin', 'kepala', 'bendahara', 'operator', 'tata_usaha', 'tu'].includes(role) ? '/admin' : ['guru', 'wali_kelas'].includes(role) ? '/guru' : role === 'proktor' ? '/proktor' : '/siswa'
