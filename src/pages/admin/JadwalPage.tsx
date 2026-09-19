@@ -45,7 +45,9 @@ export default function JadwalPage() {
   const [showForm, setShowForm] = useState(false)
   const [showTemplateModal, setShowTemplateModal] = useState(false)
   const [editId, setEditId] = useState<string | null>(null)
-  const [templateForm, setTemplateForm] = useState({ nama: '', jenis: 'reguler', maks_jtm: 15, keterangan: '' })
+  const [editingTemplate, setEditingTemplate] = useState<string | null>(null)
+  const [templateForm, setTemplateForm] = useState({ nama: '', jenis: 'reguler', maks_jtm: 15, durasi_menit: 40, keterangan: '' })
+  const [durasiOverride, setDurasiOverride] = useState<number | ''>('')
   const settings = useSettingsStore(s => s.settings)
   const jenjang = (settings.jenjang as string) || ''
   const isGuruKelasJenjang = ['mi', 'sd'].includes(jenjang.toLowerCase())
@@ -53,7 +55,7 @@ export default function JadwalPage() {
     try { return JSON.parse((settings as any).hari_libur || '[]') } catch { return [] }
   }, [settings])
   const hari = useMemo(() => SEMUA_HARI.filter(h => !hariLibur.includes(h)), [hariLibur])
-  const jamPelajaran = useMemo(() => generateJamPelajaran(jenjang, 10), [jenjang])
+  const jamPelajaran = useMemo(() => generateJamPelajaran(jenjang, 10, '07:00', [4, 6], durasiOverride || undefined), [jenjang, durasiOverride])
   const [form, setForm] = useState({ mapel_id: '', rombel_id: '', gtk_id: '', hari: 'senin', jam_mulai: '07:00', jam_selesai: '07:45', ruangan: '', template_id: '', jenis_kegiatan: 'mapel', nama_kegiatan: '' })
   const mapelReguler = useMemo(() => mapels.filter(m => m.kelompok !== 'kegiatan'), [mapels])
   const mapelKegiatan = useMemo(() => mapels.filter(m => m.kelompok === 'kegiatan'), [mapels])
@@ -228,12 +230,28 @@ export default function JadwalPage() {
   const handleSaveTemplate = async () => {
     if (!templateForm.nama) { toast.error('Nama template wajib diisi'); return }
     try {
-      await api.post('/template-jadwal', templateForm)
-      toast.success('Template disimpan')
+      if (editingTemplate) {
+        await api.put('/template-jadwal/' + editingTemplate, templateForm)
+        toast.success('Template diperbarui')
+      } else {
+        await api.post('/template-jadwal', templateForm)
+        toast.success('Template disimpan')
+      }
       const t = await api.get('/template-jadwal')
       setTemplates(t.data)
-      setTemplateForm({ nama: '', jenis: 'reguler', maks_jtm: 15, keterangan: '' })
+      setTemplateForm({ nama: '', jenis: 'reguler', maks_jtm: 15, durasi_menit: 40, keterangan: '' })
+      setEditingTemplate(null)
     } catch (err: any) { toast.error(err.response?.data?.error || 'Gagal simpan template') }
+  }
+
+  const handleEditTemplate = (t: any) => {
+    setEditingTemplate(t.id)
+    setTemplateForm({ nama: t.nama, jenis: t.jenis || 'reguler', maks_jtm: t.maks_jtm, durasi_menit: t.durasi_menit || 40, keterangan: t.keterangan || '' })
+  }
+
+  const handleCancelEditTemplate = () => {
+    setEditingTemplate(null)
+    setTemplateForm({ nama: '', jenis: 'reguler', maks_jtm: 15, durasi_menit: 40, keterangan: '' })
   }
 
   const handleDeleteTemplate = async (id: string) => {
@@ -243,6 +261,7 @@ export default function JadwalPage() {
       toast.success('Template dihapus')
       const t = await api.get('/template-jadwal')
       setTemplates(t.data)
+      if (editingTemplate === id) handleCancelEditTemplate()
     } catch (err: any) { toast.error(err.response?.data?.error || 'Gagal hapus template') }
   }
 
@@ -605,7 +624,21 @@ export default function JadwalPage() {
           <option value="" disabled>{rombels.length === 0 ? 'Memuat rombel...' : 'Pilih rombel'}</option>
           {rombels.map(r => <option key={r.id} value={r.id}>{r.nama}</option>)}
         </select>
+        <label className="text-sm font-medium text-gray-700 shrink-0 sm:ml-4">Durasi 1 Jam Pelajaran (menit):</label>
+        <input
+          type="number" min={10} max={120}
+          placeholder={`${jtmMenit(jenjang)} (bawaan)`}
+          value={durasiOverride}
+          onChange={e => setDurasiOverride(e.target.value === '' ? '' : Math.max(10, Math.min(120, Number(e.target.value))))}
+          className="w-full sm:w-40 px-4 py-2.5 border border-gray-300 rounded-lg text-sm bg-white"
+        />
+        {durasiOverride !== '' && (
+          <button onClick={() => setDurasiOverride('')} className="text-xs text-gray-500 underline shrink-0">Reset ke bawaan</button>
+        )}
       </div>
+      <p className="text-xs text-gray-500 -mt-3">
+        Durasi bawaan mengikuti jenjang ({jenjang || 'default'}: {jtmMenit(jenjang)} menit, KMA 736/2026). Isi kolom di atas untuk memakai durasi kustom (mis. 30, 35, 40 menit) — berlaku untuk seluruh slot jam pelajaran yang dibuat/ditambah di menu ini.
+      </p>
 
       <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100 space-y-3">
         <div className="flex flex-wrap gap-2 items-center">
@@ -830,14 +863,17 @@ export default function JadwalPage() {
                 <div key={t.id} className="flex items-center justify-between border rounded-lg px-3 py-2">
                   <div>
                     <p className="text-sm font-medium text-gray-800">{t.nama} <span className="text-xs text-gray-400">({t.jenis})</span></p>
-                    <p className="text-xs text-gray-500">Maks {t.maks_jtm} JTM/minggu{t.keterangan ? ' • ' + t.keterangan : ''}</p>
+                    <p className="text-xs text-gray-500">Maks {t.maks_jtm} JTM/minggu · Durasi 1 JTM: {t.durasi_menit || 40} menit{t.keterangan ? ' • ' + t.keterangan : ''}</p>
                   </div>
-                  <button onClick={() => handleDeleteTemplate(t.id)} className="p-1 text-red-500 hover:bg-red-50 rounded"><Trash2 size={14} /></button>
+                  <div className="flex items-center gap-1 shrink-0">
+                    <button onClick={() => handleEditTemplate(t)} className="p-1 text-blue-600 hover:bg-blue-50 rounded"><Pencil size={14} /></button>
+                    <button onClick={() => handleDeleteTemplate(t.id)} className="p-1 text-red-500 hover:bg-red-50 rounded"><Trash2 size={14} /></button>
+                  </div>
                 </div>
               ))}
             </div>
             <div className="border-t pt-3 space-y-2">
-              <p className="text-xs font-medium text-gray-600">Tambah Template Baru</p>
+              <p className="text-xs font-medium text-gray-600">{editingTemplate ? 'Edit Template' : 'Tambah Template Baru'}</p>
               <input value={templateForm.nama} onChange={e => setTemplateForm({...templateForm, nama: e.target.value})} placeholder="Nama, mis. Reguler Semester Ganjil" className="w-full px-3 py-2 border rounded-lg text-sm" />
               <div className="grid grid-cols-2 gap-2">
                 <select value={templateForm.jenis} onChange={e => setTemplateForm({...templateForm, jenis: e.target.value})} className="px-3 py-2 border rounded-lg text-sm">
@@ -845,10 +881,17 @@ export default function JadwalPage() {
                   <option value="ujian">Ujian</option>
                   <option value="ramadhan">Ramadhan</option>
                 </select>
-                <input type="number" min={1} max={40} value={templateForm.maks_jtm} onChange={e => setTemplateForm({...templateForm, maks_jtm: Number(e.target.value)})} placeholder="Maks JTM" className="px-3 py-2 border rounded-lg text-sm" />
+                <input type="number" min={1} max={40} value={templateForm.maks_jtm} onChange={e => setTemplateForm({...templateForm, maks_jtm: Number(e.target.value)})} placeholder="Maks JTM/minggu" className="px-3 py-2 border rounded-lg text-sm" />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Durasi 1 Jam Pelajaran (menit)</label>
+                <input type="number" min={10} max={120} value={templateForm.durasi_menit} onChange={e => setTemplateForm({...templateForm, durasi_menit: Number(e.target.value)})} placeholder="mis. 30, 35, 40, 45" className="w-full px-3 py-2 border rounded-lg text-sm" />
               </div>
               <input value={templateForm.keterangan} onChange={e => setTemplateForm({...templateForm, keterangan: e.target.value})} placeholder="Keterangan (opsional)" className="w-full px-3 py-2 border rounded-lg text-sm" />
-              <button onClick={handleSaveTemplate} className="w-full px-4 py-2 bg-primary text-white rounded-lg text-sm">Simpan Template</button>
+              <div className="flex gap-2">
+                {editingTemplate && <button onClick={handleCancelEditTemplate} className="flex-1 px-4 py-2 border rounded-lg text-sm">Batal Edit</button>}
+                <button onClick={handleSaveTemplate} className="flex-1 px-4 py-2 bg-primary text-white rounded-lg text-sm">{editingTemplate ? 'Simpan Perubahan' : 'Simpan Template'}</button>
+              </div>
             </div>
           </div>
         </div>

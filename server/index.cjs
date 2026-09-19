@@ -409,6 +409,7 @@ db.exec(`
     nama TEXT NOT NULL,
     jenis TEXT DEFAULT 'reguler',
     maks_jtm INTEGER DEFAULT 15,
+    durasi_menit INTEGER DEFAULT 40,
     keterangan TEXT,
     tenant_id TEXT NOT NULL,
     created_at TEXT DEFAULT CURRENT_TIMESTAMP
@@ -1237,8 +1238,9 @@ for (const col of [
     ['settings', 'ceklok_pulang_selesai', "TEXT DEFAULT '16:00'"],
     ['tenants', 'foundation_id', 'TEXT'],
     ['jurnal_mengajar', 'signature_type', 'TEXT'],
-    ['jurnal_mengajar', 'signature_path', 'TEXT']
-  ]) {
+    ['jurnal_mengajar', 'signature_path', 'TEXT'],
+    ['template_jadwal', 'durasi_menit', 'INTEGER DEFAULT 40']
+    ]) {
   try { db.prepare(`ALTER TABLE ${col[0]} ADD COLUMN ${col[1]} ${col[2]}`).run() } catch {}
 }
 // duplicate QR reads must converge to one student/day row after tenant_id migration
@@ -1410,7 +1412,7 @@ try {
 
 db.exec(`CREATE TABLE IF NOT EXISTS template_jadwal (
   id TEXT PRIMARY KEY, nama TEXT NOT NULL, jenis TEXT DEFAULT 'reguler',
-  maks_jtm INTEGER DEFAULT 15, keterangan TEXT, tenant_id TEXT DEFAULT 'default',
+  maks_jtm INTEGER DEFAULT 15, durasi_menit INTEGER DEFAULT 40, keterangan TEXT, tenant_id TEXT DEFAULT 'default',
   created_at TEXT DEFAULT (datetime('now'))
 );
 CREATE TABLE IF NOT EXISTS beasiswa (
@@ -5130,13 +5132,29 @@ app.get('/api/template-jadwal', authMiddleware, (req, res) => {
 })
 
 app.post('/api/template-jadwal', ADMIN, (req, res) => {
-  const { nama, jenis, maks_jtm, keterangan } = req.body
+  const { nama, jenis, maks_jtm, durasi_menit, keterangan } = req.body
   if (!nama) return res.status(400).json({ error: 'Nama template wajib diisi' })
   const jtm = Number(maks_jtm) || 15
   if (jtm < 1 || jtm > 40) return res.status(400).json({ error: 'Maks JTM harus 1-40' })
+  const durasi = durasi_menit === undefined || durasi_menit === null || durasi_menit === '' ? 40 : Number(durasi_menit)
+  if (!Number.isInteger(durasi) || durasi < 10 || durasi > 120) return res.status(400).json({ error: 'Durasi 1 JTM harus bilangan bulat 10-120 menit' })
   const id = uuidv4()
-  db.prepare('INSERT INTO template_jadwal (id, nama, jenis, maks_jtm, keterangan, tenant_id) VALUES (?,?,?,?,?,?)').run(id, nama, jenis || 'reguler', jtm, keterangan || '', req.tenantId)
+  db.prepare('INSERT INTO template_jadwal (id, nama, jenis, maks_jtm, durasi_menit, keterangan, tenant_id) VALUES (?,?,?,?,?,?,?)').run(id, nama, jenis || 'reguler', jtm, durasi, keterangan || '', req.tenantId)
   res.json({ id })
+})
+
+app.put('/api/template-jadwal/:id', ADMIN, (req, res) => {
+  const existing = db.prepare('SELECT id FROM template_jadwal WHERE id=? AND tenant_id=?').get(req.params.id, req.tenantId)
+  if (!existing) return res.status(404).json({ error: 'Template tidak ditemukan' })
+  const { nama, jenis, maks_jtm, durasi_menit, keterangan } = req.body
+  if (!nama) return res.status(400).json({ error: 'Nama template wajib diisi' })
+  const jtm = Number(maks_jtm) || 15
+  if (jtm < 1 || jtm > 40) return res.status(400).json({ error: 'Maks JTM harus 1-40' })
+  const durasi = durasi_menit === undefined || durasi_menit === null || durasi_menit === '' ? 40 : Number(durasi_menit)
+  if (!Number.isInteger(durasi) || durasi < 10 || durasi > 120) return res.status(400).json({ error: 'Durasi 1 JTM harus bilangan bulat 10-120 menit' })
+  db.prepare('UPDATE template_jadwal SET nama=?, jenis=?, maks_jtm=?, durasi_menit=?, keterangan=? WHERE id=? AND tenant_id=?')
+    .run(nama, jenis || 'reguler', jtm, durasi, keterangan || '', req.params.id, req.tenantId)
+  res.json({ success: true })
 })
 
 app.delete('/api/template-jadwal/:id', ADMIN, (req, res) => {
