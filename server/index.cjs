@@ -1282,7 +1282,8 @@ try {
 }
 
 function studentInitialPassword(siswa) {
-  return String(siswa?.nis || '').trim()
+  const nisn = String(siswa?.nisn || '').trim()
+  return nisn || String(siswa?.nis || '').trim()
 }
 
 function studentActiveIdentifier(siswa) {

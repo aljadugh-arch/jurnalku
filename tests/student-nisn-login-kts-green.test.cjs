@@ -43,17 +43,15 @@ test('RED->GREEN: generate KTS menggabungkan template + QR + data siswa', () => 
   assert.ok(hasJoin || true, 'Bisa gabung data untuk KTS')
 })
 
-test('RED->GREEN: password siswa awal tetap NIS, bukan NISN', () => {
-  // Verifikasi studentInitialPassword masih gunakan NIS
+test('RED->GREEN: password siswa awal memprioritaskan NISN lalu NIS', () => {
   const studentInitialMatch = serverCode.match(/function studentInitialPassword[\s\S]*?^}/m)
-  if (studentInitialMatch) {
-    assert.match(studentInitialMatch[0], /nis/, 'Password awal masih pakai NIS')
-    // Pastikan bukan NISN yang diprioritaskan
-    assert.ok(
-      !studentInitialMatch[0].includes('nisn') || studentInitialMatch[0].lastIndexOf('nis') > studentInitialMatch[0].lastIndexOf('nisn'),
-      'NIS diprioritaskan, bukan NISN untuk password awal'
-    )
-  }
+  assert.ok(studentInitialMatch, 'Helper password awal tersedia')
+  assert.match(studentInitialMatch[0], /nisn/, 'Password awal menerima NISN')
+  assert.match(studentInitialMatch[0], /nis/, 'Password awal memiliki fallback NIS')
+  assert.ok(
+    studentInitialMatch[0].indexOf('nisn') < studentInitialMatch[0].lastIndexOf('nis'),
+    'NISN diprioritaskan sebelum fallback NIS'
+  )
 })
 
 test('GREEN: kode sudah siap untuk multi-login (NIS + NISN)', () => {

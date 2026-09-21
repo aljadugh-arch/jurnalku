@@ -213,12 +213,12 @@ export default function DataSiswaPage() {
   }
 
   const handleSyncStudentAccounts = async () => {
-    if (!window.confirm('Buat akun yang belum tersedia dan reset password seluruh siswa aktif menjadi NIS masing-masing?')) return
+    if (!window.confirm('Buat akun yang belum tersedia dan reset password seluruh siswa aktif menjadi NISN masing-masing, atau NIS jika NISN belum tersedia?')) return
     setSyncingAccounts(true)
     try {
       const { data: result } = await api.post('/siswa/generate-akun', { reset_password: true })
       const failed = Array.isArray(result.gagal) ? result.gagal.length : 0
-      toast.success(`${result.dibuat} akun dibuat, ${result.sinkron} akun direset ke NIS${failed ? `, ${failed} gagal` : ''}`)
+      toast.success(`${result.dibuat} akun dibuat, ${result.sinkron} akun direset ke NISN/NIS${failed ? `, ${failed} gagal` : ''}`)
     } catch (error: any) {
       toast.error(error.response?.data?.error || 'Gagal menyinkronkan akun siswa')
     } finally {
@@ -277,7 +277,7 @@ export default function DataSiswaPage() {
             <Upload size={16} /> Import Excel
           </button>}
           {isLocalTenant && <button disabled={syncingAccounts} onClick={handleSyncStudentAccounts} className="flex items-center gap-2 px-4 py-2 bg-amber-600 text-white rounded-lg text-sm hover:bg-amber-700 disabled:opacity-60">
-            <KeyRound size={16} /> {syncingAccounts ? 'Memproses...' : 'Reset Password ke NIS'}
+            <KeyRound size={16} /> {syncingAccounts ? 'Memproses...' : 'Reset Password ke NISN/NIS'}
           </button>}
           {isLocalTenant && <button disabled={generatingKTS || selectedForKTS.size === 0} onClick={handleGenerateKTS} className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg text-sm hover:bg-purple-700 disabled:opacity-60">
             <Download size={16} /> {generatingKTS ? 'Memproses...' : `Generate KTS (${selectedForKTS.size})`}
