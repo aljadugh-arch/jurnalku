@@ -4836,7 +4836,7 @@ function isHolidayDate(tanggal, tenantId) {
 }
 function assertKbmActive(req, tanggal) {
   if (isHolidayDate(tanggal, req.tenantId)) throw new Error('Hari libur: absensi nonaktif')
-  const row = db.prepare("SELECT id FROM kalender_kbm WHERE tenant_id=? AND tanggal=? AND jenis='kbm_aktif' LIMIT 1").get(req.tenantId, tanggal)
+  const row = db.prepare("SELECT id FROM kalender_kbm WHERE tenant_id=? AND tanggal=? AND jenis IN ('kbm_aktif','ujian','kegiatan_lain') LIMIT 1").get(req.tenantId, tanggal)
   if (!row) throw new Error('KBM belum diaktifkan di Kalender KBM untuk tanggal ini')
 }
 const { dateRange, writeDailyAttendanceSession } = require('./attendance-rules.cjs')
@@ -4854,7 +4854,7 @@ app.get('/api/kalender-kbm', authMiddleware, (req, res) => {
 
 app.get('/api/kalender-kbm/status', authMiddleware, (req, res) => {
   const tanggal = req.query.tanggal || todayJakarta()
-  const aktif = !!db.prepare("SELECT id FROM kalender_kbm WHERE tenant_id=? AND tanggal=? AND jenis='kbm_aktif' LIMIT 1").get(req.tenantId, tanggal)
+  const aktif = !!db.prepare("SELECT id FROM kalender_kbm WHERE tenant_id=? AND tanggal=? AND jenis IN ('kbm_aktif','ujian','kegiatan_lain') LIMIT 1").get(req.tenantId, tanggal)
   res.json({ tanggal, aktif: !isHolidayDate(tanggal, req.tenantId) && aktif, libur: isHolidayDate(tanggal, req.tenantId) })
 })
 
@@ -5745,12 +5745,7 @@ app.post('/api/tts/prewarm', ADMIN, async (req, res) => {
   const {
     generateTtsAudio, checkTtsCache, createTtsJob, runTtsQueue, DEFAULT_VOICE,
   } = require('./gemini-tts.cjs')
-  const siswaRows = db.prepare("SELECT nama, nama_panggilan FROM siswa WHERE tenant_id=? AND COALESCE(status,'aktif')='aktif'").all(req.tenantId)
-  const gtkRows = db.prepare('SELECT nama FROM gtk WHERE tenant_id=?').all(req.tenantId)
-  const firstWord = (s) => String(s || '').trim().split(/\s+/)[0] || ''
-  const names = new Set()
-  for (const s of siswaRows) { const n = firstWord(s.nama_panggilan) || firstWord(s.nama); if (n) names.add(n) }
-  for (const g of gtkRows) { const n = firstWord(g.nama); if (n) names.add(n) }
+  const names = collectTtsAnnouncementNames(db, req.tenantId)
 
   const phrases = []
   for (const n of names) { phrases.push(`${n} masuk`); phrases.push(`${n} pulang`) }
@@ -6152,6 +6147,31 @@ function uniqueStudentNickname(db, siswa, tenantId) {
     if ((suffixCounts.get(suffix.toLowerCase()) || 0) === 1) return suffix
   }
   return parts.join(' ')
+}
+
+// Koleksi nama TTS untuk prewarm/status — harus gunakan SAMA logic seperti runtime.
+// Runtime announceStudentScanSuccess → firstName() mana mengambil firstName().
+// Prewarm dan status harus gunakan uniqueStudentNickname() untuk nama siswa
+// (fallback dari nama_panggilan atau nama unik otomatis) dan firstName() untuk GTK.
+function collectTtsAnnouncementNames(db, tenantId) {
+  const siswaRows = db.prepare("SELECT nama, nama_panggilan FROM siswa WHERE tenant_id=? AND COALESCE(status,'aktif')='aktif'").all(tenantId)
+  const gtkRows = db.prepare('SELECT nama FROM gtk WHERE tenant_id=?').all(tenantId)
+  const names = new Set()
+  
+  // Siswa: prioritas nama_panggilan manual, lalu nama_panggilan_unik otomatis
+  for (const siswa of siswaRows) {
+    const nickname = siswa.nama_panggilan || uniqueStudentNickname(db, siswa, tenantId)
+    const firstWord = String(nickname || '').trim().split(/\s+/)[0] || ''
+    if (firstWord) names.add(firstWord)
+  }
+  
+  // GTK: ambil nama pertama dari nama lengkap
+  for (const gtk of gtkRows) {
+    const firstWord = String(gtk.nama || '').trim().split(/\s+/)[0] || ''
+    if (firstWord) names.add(firstWord)
+  }
+  
+  return names
 }
 
 function qrSiswaPayload(db, siswa, tenantId) {
@@ -6963,12 +6983,22 @@ app.put('/api/rapor/pelengkap', STAFF, (req, res) => {
 })
 
 // POST /api/rapor/asesmen — input nilai asesmen STS atau SAS oleh guru mapel
-// body: { jenis: 'sts'|'sas', tahun_ajaran, semester, items: [{ siswa_id, mapel_id, nilai }] }
+// body: { jenis: 'sts'|'sas', tahun_ajaran, semester, rombel_id, items: [{ siswa_id, mapel_id, nilai }] }
 app.post('/api/rapor/asesmen', STAFF, (req, res) => {
-  const { jenis, tahun_ajaran, semester, items } = req.body
+  const { jenis, tahun_ajaran, semester, rombel_id, items } = req.body
+  
+  // Validate required fields
   if (!['sts', 'sas'].includes(jenis)) return res.status(400).json({ error: "jenis harus 'sts' atau 'sas'" })
   if (!isStr(tahun_ajaran) || !semester || !Array.isArray(items) || !items.length)
     return res.status(400).json({ error: 'tahun_ajaran, semester, dan items wajib diisi' })
+  
+  // Validate rombel_id (required, must be string/number, and exist in DB)
+  if (!rombel_id) return res.status(400).json({ error: 'rombel_id wajib diisi' })
+  const rombelIdStr = String(rombel_id).trim()
+  if (!rombelIdStr) return res.status(400).json({ error: 'rombel_id tidak boleh kosong' })
+  const rombelExists = db.prepare('SELECT 1 FROM rombel WHERE id=? AND tenant_id=?').get(rombelIdStr, req.tenantId)
+  if (!rombelExists) return res.status(404).json({ error: 'Rombel tidak ditemukan' })
+  
   if (isTeacherContext(req)) {
     const gtk = resolveGtkForUser(req.user.id, req.tenantId)
     if (!gtk) return res.status(403).json({ error: 'Guru tidak ditemukan' })
@@ -6980,23 +7010,46 @@ app.post('/api/rapor/asesmen', STAFF, (req, res) => {
       if (!isAssigned) return res.status(403).json({ error: `Anda tidak mengajar mapel ini: ${mapelId}` })
     }
   }
+  
   const upsert = db.prepare(`INSERT INTO rapor (id, siswa_id, mapel_id, tahun_ajaran, semester, jenis, nilai_sts, kkm, tenant_id, created_at, updated_at)
     VALUES (?,?,?,?,?,?,?,70,?,datetime('now'),datetime('now'))
     ON CONFLICT(tenant_id, siswa_id, mapel_id, tahun_ajaran, semester, jenis) DO UPDATE SET
       nilai_sts=excluded.nilai_sts, updated_at=datetime('now')`)
+  
   const trx = db.transaction(() => {
     let count = 0
+    const processedSiswaMapel = new Set()
+    
     for (const item of items.slice(0, 500)) {
       const siswa_id = String(item.siswa_id || '').trim()
       const mapel_id = String(item.mapel_id || '').trim()
-      if (!db.prepare('SELECT 1 FROM siswa WHERE id=? AND tenant_id=?').get(siswa_id, req.tenantId)) continue
-      if (!db.prepare('SELECT 1 FROM mapel WHERE id=? AND tenant_id=?').get(mapel_id, req.tenantId)) continue
-      const nilai = Math.max(0, Math.min(100, Number(item.nilai) || 0))
+      
+      // Validate siswa_id and mapel_id exist
+      if (!siswa_id) continue
+      if (!mapel_id) continue
+      
+      const siswaExists = db.prepare('SELECT 1 FROM siswa WHERE id=? AND tenant_id=? AND rombel_id=?').get(siswa_id, req.tenantId, rombelIdStr)
+      if (!siswaExists) continue
+      
+      const mapelExists = db.prepare('SELECT 1 FROM mapel WHERE id=? AND tenant_id=?').get(mapel_id, req.tenantId)
+      if (!mapelExists) continue
+      
+      // Check for duplicates within this batch
+      const key = `${siswa_id}:${mapel_id}`
+      if (processedSiswaMapel.has(key)) continue
+      processedSiswaMapel.add(key)
+      
+      // Validate nilai: must be numeric, 0-100
+      let nilai = Number(item.nilai)
+      if (isNaN(nilai)) continue // Skip if not numeric
+      nilai = Math.max(0, Math.min(100, nilai)) // Clamp to 0-100
+      
       upsert.run(uuidv4(), siswa_id, mapel_id, tahun_ajaran, semester, jenis, nilai, req.tenantId)
       count++
     }
     return count
   })
+  
   const count = trx()
   res.json({ success: true, count, message: `${count} nilai asesmen ${jenis.toUpperCase()} berhasil disimpan` })
 })

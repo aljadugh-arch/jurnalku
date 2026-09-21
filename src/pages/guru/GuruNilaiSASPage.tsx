@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import api from '../../services/api'
 import { ScrollText, Save, Users, GraduationCap } from 'lucide-react'
+import ImportNilaiAsesmenExcel from '../../components/ImportNilaiAsesmenExcel'
 
 type Opt = { id: string; nama: string }
 type SiswaRow = { id: string; nama: string; nis: string }
@@ -127,6 +128,20 @@ export default function GuruNilaiSASPage() {
           </div>
         </div>
       </div>
+
+      {selectedMapel && selectedRombel && (
+        <div className="bg-white dark:bg-gray-900 rounded-xl shadow-sm border border-gray-100 dark:border-gray-800 p-4 sm:p-6">
+          <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-4">Impor dari Excel/CSV</h3>
+          <ImportNilaiAsesmenExcel
+            jenis="sas"
+            rombel_id={selectedRombel}
+            selectedMapel={selectedMapel}
+            tahunAjaran={tahunAjaran}
+            semester={semester}
+            onSuccess={() => loadSiswaDanNilai()}
+          />
+        </div>
+      )}
 
       {loading && <div className="text-center py-12 text-gray-400">Memuat...</div>}
 
