@@ -15,9 +15,19 @@ test('TTS prewarm uses uniqueStudentNickname() logic, not just firstWord()', () 
     serverIndex.indexOf("app.get('/api/tts/prewarm/status'")
   )
   
-  // Must call the actual uniqueStudentNickname function
-  assert.match(prewarmRoute, /uniqueStudentNickname/, 
-    'prewarm should call uniqueStudentNickname() to match runtime logic')
+  // Must use collectTtsAnnouncementNames which internally calls uniqueStudentNickname
+  assert.match(prewarmRoute, /collectTtsAnnouncementNames/, 
+    'prewarm should use collectTtsAnnouncementNames which uses uniqueStudentNickname() logic')
+  
+  // Verify the helper function exists and calls uniqueStudentNickname
+  assert.match(serverIndex, /function collectTtsAnnouncementNames/, 
+    'collectTtsAnnouncementNames helper should exist')
+  const helperFn = serverIndex.slice(
+    serverIndex.indexOf('function collectTtsAnnouncementNames'),
+    serverIndex.indexOf('function qrSiswaPayload')
+  )
+  assert.match(helperFn, /uniqueStudentNickname/, 
+    'collectTtsAnnouncementNames should call uniqueStudentNickname() internally')
 })
 
 test('TTS runtime firstName() processes name with toNaturalCase for accent normalization', () => {
@@ -81,7 +91,7 @@ test('TTS prewarm status endpoint uses same name extraction as prewarm generatio
     serverIndex.indexOf("// ===== Google OAuth")
   )
   
-  // Both prewarm endpoints must use the same logic
-  assert.match(prewarmStatusRoute, /uniqueStudentNickname/, 
-    'prewarm/status should also use uniqueStudentNickname() for consistency')
+  // Must use the same collectTtsAnnouncementNames helper
+  assert.match(prewarmStatusRoute, /collectTtsAnnouncementNames/, 
+    'prewarm/status should also use collectTtsAnnouncementNames() for consistency')
 })

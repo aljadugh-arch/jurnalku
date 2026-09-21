@@ -7,18 +7,17 @@ const root = path.join(__dirname, '..')
 const server = fs.readFileSync(path.join(root, 'server/index.cjs'), 'utf8')
 
 test('RED: guru/dashboard harus tampil jadwal saat ujian mode (bukan kosong array)', () => {
-  // Bug: const jadwal = holidayToday ? [] : teacherScheduleForDay(...)
-  // Saat ujian, holidayToday salah menghitung karena confuse ujian dengan libur.
-  // Jadwal harus tampil bahkan saat ujian.
+  // BUG FIXED: const jadwal = isActualHoliday ? [] : teacherScheduleForDay(...)
+  // Saat ujian, jadwal harus tampil (examTemplateId ada)
   
   assert.match(server, /\/api\/guru\/dashboard/, 'Ada endpoint /api/guru/dashboard')
   assert.match(server, /examModeForDate/, 'guru/dashboard harus check exam mode')
   
-  // Cek apakah logic benar:
-  // - Seharusnya: jika ujian (examTemplateId ada), tetap tampil jadwal 
-  // - Jangan menggunakan holidayToday untuk mengontrol jadwal display saat ujian
-  const hasWrongLogic = /const\s+jadwal\s*=\s*holidayToday\s*\?\s*\[\]\s*:/.test(server)
-  assert.ok(hasWrongLogic, 'Ada logic yang seharusnya diperbaiki: jadwal kosong saat holiday')
+  // Cek bahwa fix sudah diterapkan:
+  const hasCorrectLogic = /const\s+isActualHoliday\s*=\s*holidayToday\s*&&\s*!examTemplateId/.test(server)
+  const hasCorrectJadwalLogic = /const\s+jadwal\s*=\s*isActualHoliday\s*\?\s*\[\]\s*:/.test(server)
+  
+  assert.ok(hasCorrectLogic && hasCorrectJadwalLogic, 'guru/dashboard sudah di-fix untuk tampil jadwal saat ujian')
 })
 
 test('RED: siswa/dashboard sudah benar tampil jadwal saat ujian (jadwalUntukRombelHari)', () => {

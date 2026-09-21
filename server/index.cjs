@@ -3739,14 +3739,15 @@ app.get('/api/guru/dashboard', authMiddleware, (req, res) => {
   const today = require('./attendance-rules.cjs').hariJakarta()
   const todayDate = todayJakarta()
   const holidayToday = tenantIsHoliday(req.tenantId, todayDate)
-  const examTemplateId = holidayToday ? null : examModeForDate(req.tenantId, todayDate)
-  const jadwal = holidayToday ? [] : teacherScheduleForDay(gtkId, req.tenantId, today, todayDate, examTemplateId)
+  const examTemplateId = examModeForDate(req.tenantId, todayDate)
+  const isActualHoliday = holidayToday && !examTemplateId
+  const jadwal = isActualHoliday ? [] : teacherScheduleForDay(gtkId, req.tenantId, today, todayDate, examTemplateId)
 
   const totalJurnal = db.prepare("SELECT COUNT(*) as c FROM jurnal_mengajar WHERE guru_id=? AND tenant_id=?").get(gtkId, req.tenantId).c
   const rombelCount = db.prepare("SELECT COUNT(DISTINCT rombel_id) as c FROM pengajar WHERE gtk_id=? AND tenant_id=?").get(gtkId, req.tenantId).c
-  const absensiHariIni = holidayToday ? 0 : db.prepare(`SELECT COUNT(DISTINCT a.siswa_id) c FROM absensi_siswa a WHERE a.tenant_id=? AND a.tanggal=? AND a.rombel_id IN (SELECT DISTINCT rombel_id FROM jadwal WHERE gtk_id=? AND tenant_id=? AND lower(hari)=? AND jenis_kegiatan='mapel')`).get(req.tenantId, todayDate, gtkId, req.tenantId, today).c
-  const catatanCount = holidayToday ? 0 : db.prepare(`SELECT COUNT(*) c FROM catatan_kepribadian c JOIN siswa s ON s.id=c.siswa_id AND s.tenant_id=c.tenant_id WHERE c.tenant_id=? AND s.rombel_id IN (SELECT DISTINCT rombel_id FROM jadwal WHERE gtk_id=? AND tenant_id=? AND lower(hari)=? AND jenis_kegiatan='mapel')`).get(req.tenantId, gtkId, req.tenantId, today).c
-  const siswaRombelCount = holidayToday ? 0 : db.prepare(`SELECT COUNT(*) c FROM siswa s WHERE s.tenant_id=? AND COALESCE(s.status,'aktif')='aktif' AND s.rombel_id IN (SELECT DISTINCT rombel_id FROM jadwal WHERE gtk_id=? AND tenant_id=? AND lower(hari)=? AND jenis_kegiatan='mapel')`).get(req.tenantId, gtkId, req.tenantId, today).c
+  const absensiHariIni = isActualHoliday ? 0 : db.prepare(`SELECT COUNT(DISTINCT a.siswa_id) c FROM absensi_siswa a WHERE a.tenant_id=? AND a.tanggal=? AND a.rombel_id IN (SELECT DISTINCT rombel_id FROM jadwal WHERE gtk_id=? AND tenant_id=? AND lower(hari)=? AND jenis_kegiatan='mapel')`).get(req.tenantId, todayDate, gtkId, req.tenantId, today).c
+  const catatanCount = isActualHoliday ? 0 : db.prepare(`SELECT COUNT(*) c FROM catatan_kepribadian c JOIN siswa s ON s.id=c.siswa_id AND s.tenant_id=c.tenant_id WHERE c.tenant_id=? AND s.rombel_id IN (SELECT DISTINCT rombel_id FROM jadwal WHERE gtk_id=? AND tenant_id=? AND lower(hari)=? AND jenis_kegiatan='mapel')`).get(req.tenantId, gtkId, req.tenantId, today).c
+  const siswaRombelCount = isActualHoliday ? 0 : db.prepare(`SELECT COUNT(*) c FROM siswa s WHERE s.tenant_id=? AND COALESCE(s.status,'aktif')='aktif' AND s.rombel_id IN (SELECT DISTINCT rombel_id FROM jadwal WHERE gtk_id=? AND tenant_id=? AND lower(hari)=? AND jenis_kegiatan='mapel')`).get(req.tenantId, gtkId, req.tenantId, today).c
   const waliRombel = db.prepare(`SELECT r.*, (SELECT COUNT(*) FROM siswa s WHERE s.rombel_id=r.id AND s.tenant_id=?) as jumlah_siswa FROM rombel r WHERE r.wali_kelas_id=? AND r.tenant_id=? ORDER BY r.tingkat, r.nama`).all(req.tenantId, gtkId, req.tenantId)
   const mapelDiampu = db.prepare(`SELECT DISTINCT m.id, m.nama, m.kode, m.kelompok FROM pengajar p JOIN mapel m ON m.id=p.mapel_id AND m.tenant_id=p.tenant_id WHERE p.gtk_id=? AND p.tenant_id=? ORDER BY m.kelompok, m.nama`).all(gtkId, req.tenantId)
   const ekskulDiampu = db.prepare('SELECT id,nama,hari,jam_mulai,jam_selesai FROM ekskul WHERE pembina_id=? AND tenant_id=? ORDER BY nama').all(gtkId, req.tenantId)
@@ -5809,12 +5810,7 @@ app.get('/api/tts/prewarm/status', ADMIN, (req, res) => {
     return res.status(404).json({ error: 'TTS Gemini belum dikonfigurasi untuk lembaga ini' })
   }
   const { checkTtsCache, DEFAULT_VOICE } = require('./gemini-tts.cjs')
-  const siswaRows = db.prepare("SELECT nama, nama_panggilan FROM siswa WHERE tenant_id=? AND COALESCE(status,'aktif')='aktif'").all(req.tenantId)
-  const gtkRows = db.prepare('SELECT nama FROM gtk WHERE tenant_id=?').all(req.tenantId)
-  const firstWord = (s) => String(s || '').trim().split(/\s+/)[0] || ''
-  const names = new Set()
-  for (const s of siswaRows) { const n = firstWord(s.nama_panggilan) || firstWord(s.nama); if (n) names.add(n) }
-  for (const g of gtkRows) { const n = firstWord(g.nama); if (n) names.add(n) }
+  const names = collectTtsAnnouncementNames(db, req.tenantId)
   const phrases = []
   for (const n of names) { phrases.push(`${n} masuk`); phrases.push(`${n} pulang`) }
   const cachedCount = phrases.filter(p => checkTtsCache({ text: p, voiceName: DEFAULT_VOICE, uploadDir: UPLOAD_DIR, tenantId: req.tenantId })).length
