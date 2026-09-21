@@ -1,5 +1,5 @@
 import { useState, useRef } from 'react'
-import api from '../../services/api'
+import api from '../services/api'
 import { Upload, Download, AlertCircle, CheckCircle } from 'lucide-react'
 import Papa from 'papaparse'
 import type { ParseResult } from 'papaparse'

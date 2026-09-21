@@ -3672,7 +3672,7 @@ function requireRombelDepartureConfigJenjang(req) {
 
 function teacherScheduleForDay(gtkId, tenantId, day, date, examTemplateId = null) {
   if (examTemplateId) {
-    const exam = db.prepare(`SELECT j.*, j.jenis_kegiatan, m.nama mapel_nama, r.nama rombel_nama,
+    const exam = db.prepare(`SELECT j.*, m.nama mapel_nama, r.nama rombel_nama,
       sk.status sesi_status, sk.waktu_masuk sesi_waktu_masuk, sk.waktu_selesai sesi_waktu_selesai
       FROM jadwal_ujian j LEFT JOIN mapel m ON m.id=j.mapel_id AND m.tenant_id=j.tenant_id
       LEFT JOIN rombel r ON r.id=j.rombel_id AND r.tenant_id=j.tenant_id
