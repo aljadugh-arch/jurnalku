@@ -2,6 +2,7 @@ import { useState, useRef } from 'react'
 import api from '../../services/api'
 import { Upload, Download, AlertCircle, CheckCircle } from 'lucide-react'
 import Papa from 'papaparse'
+import type { ParseResult } from 'papaparse'
 
 interface ImportNilaiAsesmenExcelProps {
   jenis: 'sts' | 'sas'
@@ -49,10 +50,10 @@ export default function ImportNilaiAsesmenExcel({
       Papa.parse(file, {
         header: true,
         skipEmptyLines: true,
-        complete: (results) => {
+        complete: (results: ParseResult<any>) => {
           resolve(results.data)
         },
-        error: (error) => {
+        error: (error: Error) => {
           reject(error)
         }
       })

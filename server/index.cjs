@@ -6116,6 +6116,24 @@ function normalizeNameParts(name) {
   return String(name || '').replace(/[^\p{L}\p{N}\s'-]/gu, ' ').replace(/\s+/g, ' ').trim().split(' ').filter(Boolean)
 }
 
+// Ensure natural case: Ázám → Ázám, ÁZÁM → Ázám, ázám → Ázám.
+// Matches client-side toNaturalCase() in feedbackSound.ts.
+function toNaturalCase(word) {
+  const clean = String(word || '').replace(/[_-]+/g, ' ').replace(/\s+/g, ' ').trim()
+  return clean.split(' ').filter(Boolean).map(part => {
+    const lower = part.toLocaleLowerCase('id-ID')
+    return lower.charAt(0).toLocaleUpperCase('id-ID') + lower.slice(1)
+  }).join(' ')
+}
+
+// Extract first word and apply natural case normalization.
+// Matches client-side firstName() in feedbackSound.ts.
+function firstName(name) {
+  const clean = toNaturalCase(String(name || ''))
+  if (!clean) return ''
+  return clean.split(' ')[0]
+}
+
 function uniqueStudentNickname(db, siswa, tenantId) {
   const parts = normalizeNameParts(siswa?.nama)
   if (!parts.length) return siswa?.nama || ''
@@ -6145,26 +6163,28 @@ function uniqueStudentNickname(db, siswa, tenantId) {
   return parts.join(' ')
 }
 
-// Koleksi nama TTS untuk prewarm/status — harus gunakan SAMA logic seperti runtime.
-// Runtime announceStudentScanSuccess → firstName() mana mengambil firstName().
-// Prewarm dan status harus gunakan uniqueStudentNickname() untuk nama siswa
-// (fallback dari nama_panggilan atau nama unik otomatis) dan firstName() untuk GTK.
+// Koleksi nama TTS untuk prewarm/status — HARUS gunakan SAMA logic seperti runtime.
+// Runtime: announceStudentScanSuccess(siswa.nama_panggilan_unik) → firstName(name)
+//          yang applies toNaturalCase() + splits first word.
+// Prewarm: Harus gunakan uniqueStudentNickname() untuk siswa dan firstName() untuk semua.
+// Ini menghasilkan cache key yang SAMA saat dibunyikan di client.
 function collectTtsAnnouncementNames(db, tenantId) {
   const siswaRows = db.prepare("SELECT nama, nama_panggilan FROM siswa WHERE tenant_id=? AND COALESCE(status,'aktif')='aktif'").all(tenantId)
   const gtkRows = db.prepare('SELECT nama FROM gtk WHERE tenant_id=?').all(tenantId)
   const names = new Set()
   
   // Siswa: prioritas nama_panggilan manual, lalu nama_panggilan_unik otomatis
+  // Terapkan firstName() (toNaturalCase + split) untuk matching dengan runtime.
   for (const siswa of siswaRows) {
     const nickname = siswa.nama_panggilan || uniqueStudentNickname(db, siswa, tenantId)
-    const firstWord = String(nickname || '').trim().split(/\s+/)[0] || ''
-    if (firstWord) names.add(firstWord)
+    const normalized = firstName(nickname)
+    if (normalized) names.add(normalized)
   }
   
-  // GTK: ambil nama pertama dari nama lengkap
+  // GTK: ambil nama pertama dari nama lengkap, terapkan toNaturalCase
   for (const gtk of gtkRows) {
-    const firstWord = String(gtk.nama || '').trim().split(/\s+/)[0] || ''
-    if (firstWord) names.add(firstWord)
+    const normalized = firstName(gtk.nama)
+    if (normalized) names.add(normalized)
   }
   
   return names
