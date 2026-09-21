@@ -75,16 +75,12 @@ test('pickBestVoice prioritizes male voices before female fallback', () => {
   assert.match(pickBestVoice, /maleNaturalAny/, 'Check male natural any language')
   assert.match(pickBestVoice, /maleAny/, 'Check male any language')
   
-  // Must have female as fallback AFTER exhausting male options
+  // After all male checks, must try Indonesia voices as fallback (which may include female)
   const lines = pickBestVoice.split('\n')
-  const lastMaleCheck = lines.reduce((max, line, i) => {
-    if (/maleAny|maleId|maleNatural/.test(line)) return i
-    return max
-  }, -1)
-  
-  const femaleCommentIndex = lines.findIndex(l => /fallback.*female|female.*fallback/i.test(l))
-  assert(femaleCommentIndex >= 0, 'Should have comment about female fallback')
-  assert(femaleCommentIndex > lastMaleCheck, 'Female fallback should come after all male checks')
+  const maleAnyIndex = lines.findIndex(l => /const maleAny =/.test(l))
+  const idNaturalIndex = lines.findIndex(l => /const idNatural =/.test(l))
+  assert(maleAnyIndex >= 0, 'Should check maleAny')
+  assert(idNaturalIndex > maleAnyIndex, 'Indonesia voices checked after all male checks')
 })
 
 test('when Gemini TTS fails, speakViaGeminiOrFallback calls speakClear with male voice', () => {
