@@ -63,8 +63,15 @@ test('endpoint prewarm & prewarm/status ada untuk generate cache semua nama sebe
   assert.match(serverIndex, /app\.get\('\/api\/tts\/prewarm\/status'/, 'endpoint status prewarm harus ada')
   const prewarmRoute = serverIndex.slice(serverIndex.indexOf("app.post('/api/tts/prewarm'"), serverIndex.indexOf("app.get('/api/tts/prewarm/status'"))
   assert.match(prewarmRoute, /ADMIN/, 'prewarm harus dibatasi role admin (bukan sembarang user)')
-  assert.match(prewarmRoute, /FROM siswa WHERE tenant_id=\?/, 'harus ambil nama dari semua siswa aktif tenant ini')
-  assert.match(prewarmRoute, /FROM gtk WHERE tenant_id=\?/, 'harus ambil nama dari GTK/guru tenant ini juga (dipakai di ceklok)')
+  assert.match(prewarmRoute, /collectTtsAnnouncementNames/, 'harus gunakan helper yang ambil nama dari siswa dan GTK')
+  
+  // Verify the helper function queries both siswa and gtk
+  const helperFn = serverIndex.slice(
+    serverIndex.indexOf('function collectTtsAnnouncementNames'),
+    serverIndex.indexOf('function qrSiswaPayload')
+  )
+  assert.match(helperFn, /FROM siswa WHERE tenant_id=\?/, 'helper harus ambil nama dari semua siswa aktif tenant ini')
+  assert.match(helperFn, /FROM gtk WHERE tenant_id=\?/, 'helper harus ambil nama dari GTK/guru tenant ini juga (dipakai di ceklok)')
 })
 
 test('TtsPrewarmCard.tsx ada di UI Pengaturan untuk memicu prewarm manual', () => {

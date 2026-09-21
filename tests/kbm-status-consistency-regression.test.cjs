@@ -17,7 +17,10 @@ function routeBody(start, end) {
 // ========================================================================
 
 test('FIXED: assertKbmActive() terima ujian dan kegiatan_lain, hanya tolak libur', () => {
-  const fn = routeBody('function assertKbmActive', 'function')
+  const from = server.indexOf('function assertKbmActive')
+  assert.notEqual(from, -1, 'assertKbmActive function tidak ditemukan')
+  const to = server.indexOf('function', from + 10) // next function after this one
+  const fn = to === -1 ? server.slice(from) : server.slice(from, to)
   assert.match(fn, /assertKbmActive\(req, tanggal\)/)
   assert.match(fn, /isHolidayDate\(tanggal/)
   // FIXED: sekarang gunakan IN ('kbm_aktif', 'ujian', 'kegiatan_lain')
