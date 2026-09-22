@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
 import api from '../../services/api'
-import { FileText, Printer, Save, Zap } from 'lucide-react'
+import { Download, FileText, Printer, Save, Zap } from 'lucide-react'
 import FoundationTenantPicker from '../../components/FoundationTenantPicker'
+import { QRCodeSVG } from 'qrcode.react'
+import { thumbUrl } from '../../lib/thumbUrl'
 
 const emptyPelengkap = {
   tinggi_badan: '', berat_badan: '', kondisi_kesehatan: '', prestasi: [] as Array<{ jenis: string; keterangan: string }>,
@@ -88,6 +90,26 @@ export default function RaporPage() {
     } catch (e: any) { setMsg(`✗ ${e.response?.data?.error || 'Gagal menyimpan pelengkap rapor'}`) }
     finally { setSaving(false) }
   }
+  const exportPdf = async () => {
+    if (!selectedSiswa || rapor.length === 0) { setMsg('✗ Tidak ada data untuk diekspor'); return }
+    if (foundationTenantId) return setMsg('✗ Export PDF hanya untuk data lembaga sendiri')
+    try {
+      const response = await api.get('/rapor/export/pdf', {
+        params: { siswa_id: selectedSiswa, tahun_ajaran: tahunAjaran, semester, jenis },
+        responseType: 'blob',
+      })
+      const url = window.URL.createObjectURL(new Blob([response.data]))
+      const link = document.createElement('a')
+      link.href = url
+      link.setAttribute('download', `Rapor-${siswa?.nama || selectedSiswa}-${tahunAjaran}-${semester}.pdf`)
+      document.body.appendChild(link)
+      link.click()
+      link.parentNode?.removeChild(link)
+      window.URL.revokeObjectURL(url)
+    } catch (e: any) {
+      setMsg(`✗ ${e.response?.data?.error || 'Gagal download PDF'}`)
+    }
+  }
 
   const siswa = ringkasan?.siswa || siswaList.find(s => s.id === selectedSiswa)
   const rombel = rombelList.find(r => r.id === selectedRombel)
@@ -102,19 +124,35 @@ export default function RaporPage() {
   const personality = ringkasan?.kepribadian || {}
   const prestasi = Array.isArray(pelengkap.prestasi) ? pelengkap.prestasi : []
   const identityRows = useMemo(() => [
-    ['Nama Peserta Didik', siswa?.nama], ['NIS / NISN', [siswa?.nis, siswa?.nisn].filter(Boolean).join(' / ')],
+    ['Nama Lengkap', siswa?.nama],
+    ['NIS / NISN', [siswa?.nis, siswa?.nisn].filter(Boolean).join(' / ')],
     ['Tempat, Tanggal Lahir', [siswa?.tempat_lahir, siswa?.tanggal_lahir].filter(Boolean).join(', ')],
-    ['Jenis Kelamin', siswa?.jenis_kelamin], ['Kelas', siswa?.rombel_nama || rombel?.nama],
-    ['Nama Orang Tua/Wali', siswa?.nama_ortu], ['Alamat', siswa?.alamat], ['Nomor Telepon', siswa?.no_hp],
+    ['Jenis Kelamin', siswa?.jenis_kelamin === 'L' ? 'Laki-laki' : siswa?.jenis_kelamin === 'P' ? 'Perempuan' : siswa?.jenis_kelamin],
+    ['Agama', siswa?.agama],
+    ['Status dalam Keluarga', siswa?.status_keluarga],
+    ['Anak Ke', siswa?.anak_ke],
+    ['Alamat Peserta Didik', siswa?.alamat],
+    ['Nomor Telepon', siswa?.no_hp],
+    ['Sekolah Asal (SD/MI)', siswa?.asal_sekolah],
+    ['Kelas', siswa?.rombel_nama || rombel?.nama],
+    ['Nama Ayah', siswa?.nama_ayah],
+    ['Nama Ibu', siswa?.nama_ibu],
+    ['Alamat Orang Tua', siswa?.alamat_ortu],
+    ['Pekerjaan Ayah', siswa?.kerja_ayah],
+    ['Pekerjaan Ibu', siswa?.kerja_ibu],
+    ['Nama Wali', siswa?.nama_wali],
+    ['Pekerjaan Wali', siswa?.kerja_wali],
   ], [siswa, rombel])
+  const verificationText = `Rapor - ${siswa?.nama || '-'} - Kepsek: ${settings.kepala_sekolah || '-'} - Diverifikasi digital`
 
   return (
     <div className="space-y-6">
-      <style>{`@media print { @page { size: A4 portrait; margin: 12mm; } body { print-color-adjust: exact; -webkit-print-color-adjust: exact; } .report-page { width: 100%; min-height: 270mm; box-shadow: none !important; border: 0 !important; } }`}</style>
+      <style>{`@media print { @page { size: A4 portrait; margin: 0; } body { print-color-adjust: exact; -webkit-print-color-adjust: exact; } #rapor-print { margin: 0 !important; } .report-page { box-sizing: border-box; width: 210mm; height: 297mm; min-height: 297mm; margin: 0 !important; padding: 14mm !important; overflow: hidden; box-shadow: none !important; border: 0 !important; border-radius: 0 !important; break-after: page; page-break-after: always; } .report-page:last-child { break-after: auto; page-break-after: auto; } }`}</style>
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between print:hidden">
         <div><h1 className="text-2xl font-display font-bold text-gray-800">Rapor Siswa</h1><p className="text-sm text-gray-500 mt-1">Rapor akademik dan perkembangan peserta didik</p></div>
         <div className="flex gap-2">
           {selectedSiswa && !foundationTenantId && <button onClick={savePelengkap} disabled={saving} className="btn-secondary flex items-center gap-2"><Save className="w-4 h-4" />{saving ? 'Menyimpan...' : 'Simpan Pelengkap'}</button>}
+          {selectedSiswa && rapor.length > 0 && !foundationTenantId && <button onClick={exportPdf} className="btn-secondary flex items-center gap-2"><Download className="w-4 h-4" />Download PDF (Siap Cetak)</button>}
           {selectedSiswa && rapor.length > 0 && <button onClick={() => window.print()} className="btn-primary flex items-center gap-2"><Printer className="w-4 h-4" />Cetak / PDF</button>}
         </div>
       </div>
@@ -157,11 +195,34 @@ export default function RaporPage() {
       {selectedSiswa && !loading && rapor.length === 0 && <div className="card py-12 text-center print:hidden"><p className="text-gray-500">Nilai rapor belum tersedia. Klik Generate setelah nilai harian dan asesmen diisi.</p></div>}
 
       {selectedSiswa && rapor.length > 0 && <div id="rapor-print" className="space-y-6 print:space-y-0">
-        <section className="report-page bg-white rounded-xl shadow-sm border p-6 sm:p-10 print:p-0 print:break-after-page">
-          <ReportHeader settings={settings} title={`RAPOR ${jenisLabel}`} />
-          <h3 className="text-center font-bold text-lg mt-10 mb-6">IDENTITAS PESERTA DIDIK</h3>
-          <table className="w-full text-sm"><tbody>{identityRows.map(([label, value]) => <tr key={label} className="align-top"><td className="py-2 w-52 font-medium">{label}</td><td className="py-2 w-5">:</td><td className="py-2 border-b border-dotted border-gray-300">{value || '—'}</td></tr>)}</tbody></table>
-          <div className="mt-12 grid grid-cols-2 gap-8 text-sm"><div><p>Tahun Ajaran</p><p className="font-semibold mt-1">{tahunAjaran}</p></div><div><p>Semester</p><p className="font-semibold mt-1 capitalize">{semester}</p></div></div>
+        <section className="report-page relative bg-white rounded-xl shadow-sm border-2 border-black p-6 sm:p-12 text-center flex flex-col items-center justify-center print:p-0">
+          <div className="absolute inset-2 border border-black pointer-events-none" />
+          {settings.logo && <img src={settings.logo} alt="Logo lembaga" className="w-28 h-28 object-contain mb-8" onError={e => { (e.target as HTMLImageElement).style.display = 'none' }} />}
+          <h2 className="text-3xl font-bold tracking-wide">RAPOR PESERTA DIDIK</h2>
+          <p className="mt-2 text-xl font-bold uppercase">{settings.jenjang || 'Satuan Pendidikan'}</p>
+          <p className="mt-4 bg-black text-white px-5 py-2 font-bold">{jenisLabel}</p>
+          <div className="mt-20 border border-black rounded-lg p-8 w-full max-w-lg text-left">
+            <p className="text-sm">Nama Peserta Didik</p><p className="text-xl font-bold mt-1">{siswa?.nama || '—'}</p>
+            <p className="text-sm mt-5">NIS / NISN</p><p className="font-semibold">{[siswa?.nis, siswa?.nisn].filter(Boolean).join(' / ') || '—'}</p>
+          </div>
+          <h3 className="mt-20 text-2xl font-bold uppercase">{settings.nama_lembaga || 'Nama Lembaga'}</h3>
+          <p className="mt-3 font-semibold">Tahun Ajaran {tahunAjaran} · Semester <span className="capitalize">{semester}</span></p>
+        </section>
+
+        <section className="report-page bg-white rounded-xl shadow-sm border p-6 sm:p-10 print:p-0">
+          <ReportHeader settings={settings} title="BIODATA PESERTA DIDIK" compact />
+          <h3 className="text-center font-bold text-lg mt-6 mb-4">IDENTITAS PESERTA DIDIK</h3>
+          <div className="grid grid-cols-[1fr_110px] gap-6 items-start">
+            <table className="w-full text-xs"><tbody>{identityRows.map(([label, value], index) => <tr key={label} className="align-top"><td className="py-1 w-6">{index + 1}.</td><td className="py-1 w-44 font-medium">{label}</td><td className="py-1 w-4">:</td><td className="py-1 border-b border-dotted border-gray-300">{value || '—'}</td></tr>)}</tbody></table>
+            <div className="border border-black w-[95px] h-[125px] flex items-center justify-center overflow-hidden text-[10px] text-center">
+              {siswa?.foto ? <img src={thumbUrl(siswa.foto, 300)} alt={`Foto ${siswa.nama}`} className="w-full h-full object-cover" /> : <span>PAS FOTO<br />3 × 4</span>}
+            </div>
+          </div>
+          <div className="mt-6 ml-auto w-64 text-center text-xs break-inside-avoid">
+            <p>{tanggalCetak}</p><p>Kepala Sekolah</p>
+            <QRCodeSVG value={verificationText} size={70} className="mx-auto my-2" />
+            <p className="font-bold underline">{settings.kepala_sekolah || '( .................................... )'}</p>
+          </div>
         </section>
 
         <section className="report-page bg-white rounded-xl shadow-sm border p-6 sm:p-8 print:p-0">

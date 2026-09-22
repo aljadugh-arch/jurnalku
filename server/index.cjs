@@ -34,6 +34,7 @@ const {
 } = require('./nilai-rekap-service.cjs')
 const { getAttendanceOverview, studentAttendance } = require('./attendance-summary.cjs')
 const { monitorStatus, sanitizeExamForMonitor } = require('./exam-proctor.cjs')
+const { createRaporSiswaPdf } = require('./rapor-siswa-pdf-service.cjs')
 const { getCategoryRecap } = require('./attendance-recap.cjs')
 const { buildRekapRange, getPeriodicAttendanceRecap, deduplicateAttendance } = require('./attendance-periodic-recap.cjs')
 const { isDriveFolderUrl } = require('./library-config.cjs')
@@ -1153,6 +1154,22 @@ try {
   const siswaCols = db.prepare('PRAGMA table_info(siswa)').all()
   if (!siswaCols.some(col => col.name === 'nama_panggilan')) db.exec('ALTER TABLE siswa ADD COLUMN nama_panggilan TEXT')
 } catch (e) { console.error('[migrate] siswa nama_panggilan failed', e.message) }
+
+// Migrasi siswa: field biodata tambahan untuk identitas rapor siap-cetak
+// (agama, status keluarga, anak-ke, sekolah asal, nama+pekerjaan ayah/ibu/wali
+// terpisah dari nama_ortu lama yang tetap dipertahankan untuk kompatibilitas).
+try {
+  const raporBiodataCols = db.prepare('PRAGMA table_info(siswa)').all().map(c => c.name)
+  const addBiodata = [
+    ['agama', "TEXT DEFAULT 'Islam'"], ['status_keluarga', "TEXT DEFAULT 'Anak Kandung'"], ['anak_ke', 'INTEGER'],
+    ['asal_sekolah', 'TEXT'], ['nama_ayah', 'TEXT'], ['nama_ibu', 'TEXT'], ['alamat_ortu', 'TEXT'],
+    ['kerja_ayah', 'TEXT'], ['kerja_ibu', 'TEXT'], ['nama_wali', 'TEXT'], ['kerja_wali', 'TEXT'],
+  ]
+  for (const [col, type] of addBiodata) {
+    if (!raporBiodataCols.includes(col)) db.exec(`ALTER TABLE siswa ADD COLUMN ${col} ${type}`)
+  }
+} catch (e) { console.error('[migrate] siswa biodata rapor failed', e.message) }
+
 
 // Migrasi: kolom UNIQUE global (nip/nis/kode) peninggalan pra-multi-tenant bikin
 // import/edit gagal begitu ada NIP/NIS kosong kedua atau kode sama antar-sekolah.
@@ -2923,15 +2940,24 @@ app.post('/api/siswa/bulk-delete', ADMIN, (req, res) => {
 
 app.post('/api/siswa', ADMIN, (req, res) => {
   const id = uuidv4()
-  const { nik, nis, nisn, nama, jenis_kelamin, tempat_lahir, tanggal_lahir, alamat, no_hp, nama_ortu, nama_panggilan, rombel_id } = req.body
+  const {
+    nik, nis, nisn, nama, jenis_kelamin, tempat_lahir, tanggal_lahir, alamat, no_hp, nama_ortu, nama_panggilan, rombel_id,
+    agama, status_keluarga, anak_ke, asal_sekolah, nama_ayah, nama_ibu, alamat_ortu, kerja_ayah, kerja_ibu, nama_wali, kerja_wali,
+  } = req.body
   if (nik && !/^\d{16}$/.test(String(nik))) return res.status(400).json({ error: 'NIK harus berupa 16 digit angka.' })
   if (rombel_id) {
     const rombel = db.prepare('SELECT id FROM rombel WHERE id=? AND tenant_id=?').get(rombel_id, req.tenantId)
     if (!rombel) return res.status(400).json({ error: 'Rombel tidak ditemukan pada lembaga ini.' })
   }
   try {
-    db.prepare('INSERT INTO siswa (id, nik, nis, nisn, nama, jenis_kelamin, tempat_lahir, tanggal_lahir, alamat, no_hp, nama_ortu, nama_panggilan, rombel_id, tenant_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
-      .run(id, nik || null, nis, nisn, nama, jenis_kelamin, tempat_lahir, tanggal_lahir, alamat, no_hp, nama_ortu, (nama_panggilan || '').trim() || null, rombel_id || null, req.tenantId)
+    db.prepare(`INSERT INTO siswa (
+      id, nik, nis, nisn, nama, jenis_kelamin, tempat_lahir, tanggal_lahir, alamat, no_hp, nama_ortu, nama_panggilan, rombel_id, tenant_id,
+      agama, status_keluarga, anak_ke, asal_sekolah, nama_ayah, nama_ibu, alamat_ortu, kerja_ayah, kerja_ibu, nama_wali, kerja_wali
+    ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
+      .run(
+        id, nik || null, nis, nisn, nama, jenis_kelamin, tempat_lahir, tanggal_lahir, alamat, no_hp, nama_ortu, (nama_panggilan || '').trim() || null, rombel_id || null, req.tenantId,
+        agama || 'Islam', status_keluarga || 'Anak Kandung', anak_ke || null, asal_sekolah || null, nama_ayah || null, nama_ibu || null, alamat_ortu || null, kerja_ayah || null, kerja_ibu || null, nama_wali || null, kerja_wali || null,
+      )
     const siswa = db.prepare('SELECT * FROM siswa WHERE id = ? AND tenant_id = ?').get(id, req.tenantId)
     rememberStudentQrIdentifiers(siswa, req.tenantId)
     ensureStudentUser(siswa, req.tenantId)
@@ -2946,7 +2972,10 @@ app.put('/api/siswa/:id', ADMIN, (req, res) => {
   const current = db.prepare('SELECT * FROM siswa WHERE id=? AND tenant_id=?').get(req.params.id, req.tenantId)
   if (!current) return res.status(404).json({ error: 'Siswa tidak ditemukan' })
   const body = req.body || {}
-  const fields = ['nik', 'nis', 'nisn', 'nama', 'jenis_kelamin', 'tempat_lahir', 'tanggal_lahir', 'alamat', 'no_hp', 'nama_ortu', 'nama_panggilan', 'rombel_id', 'status']
+  const fields = [
+    'nik', 'nis', 'nisn', 'nama', 'jenis_kelamin', 'tempat_lahir', 'tanggal_lahir', 'alamat', 'no_hp', 'nama_ortu', 'nama_panggilan', 'rombel_id', 'status',
+    'agama', 'status_keluarga', 'anak_ke', 'asal_sekolah', 'nama_ayah', 'nama_ibu', 'alamat_ortu', 'kerja_ayah', 'kerja_ibu', 'nama_wali', 'kerja_wali',
+  ]
   const updates = fields.filter(field => Object.prototype.hasOwnProperty.call(body, field))
   if (updates.length === 0) return res.status(400).json({ error: 'Tidak ada data yang diubah' })
   const values = { ...current }
@@ -6992,6 +7021,28 @@ app.get('/api/rapor/ringkasan', authMiddleware, (req, res) => {
     .map(row => ({ ...row, nilai: row.total_pertemuan ? Math.round((row.hadir / row.total_pertemuan) * 100) : null }))
 
   res.json({ siswa, kehadiran, kepribadian, ekstrakurikuler, pelengkap })
+})
+
+// Rapor siswa siap-cetak (PDF server-side, sampul + identitas + capaian hasil belajar).
+// Reuse validasi & scope akses persis /api/rapor/ringkasan di atas.
+app.get('/api/rapor/export/pdf', authMiddleware, async (req, res) => {
+  const { siswa_id, tahun_ajaran, semester, jenis = 'rapor_sts' } = req.query
+  if (!siswa_id || !tahun_ajaran || !semester) return res.status(400).json({ error: 'siswa_id, tahun_ajaran, semester wajib' })
+  const validationError = validateRaporPeriod(tahun_ajaran, semester, jenis)
+  if (validationError) return res.status(400).json({ error: validationError })
+  if (isTeacherContext(req) && !teacherCanAccessStudent(req, siswa_id)) return res.status(404).json({ error: 'Siswa tidak ditemukan' })
+  try {
+    const doc = await createRaporSiswaPdf(db, { tenantId: req.tenantId, siswaId: siswa_id, tahunAjaran: tahun_ajaran, semester, jenis, uploadDir: UPLOAD_DIR })
+    if (!doc) return res.status(404).json({ error: 'Siswa tidak ditemukan' })
+    if (doc.error === 'RAPOR_NOT_GENERATED') return res.status(409).json({ error: 'Rapor belum digenerate. Klik Generate terlebih dahulu.' })
+    res.setHeader('Content-Type', 'application/pdf')
+    res.setHeader('Content-Disposition', `attachment; filename="rapor-${siswa_id}-${semester}.pdf"`)
+    doc.pipe(res)
+    doc.end()
+  } catch (e) {
+    console.error('[rapor/export/pdf]', e)
+    res.status(500).json({ error: 'Gagal membuat PDF rapor' })
+  }
 })
 
 app.put('/api/rapor/pelengkap', STAFF, (req, res) => {

@@ -24,12 +24,25 @@ interface Siswa {
   rombel_nama?: string
   status: string
   foto?: string
+  agama?: string
+  status_keluarga?: string
+  anak_ke?: string
+  asal_sekolah?: string
+  nama_ayah?: string
+  nama_ibu?: string
+  alamat_ortu?: string
+  kerja_ayah?: string
+  kerja_ibu?: string
+  nama_wali?: string
+  kerja_wali?: string
 }
 
 const emptyForm: Omit<Siswa, 'id'> = {
   nik: '', nis: '', nisn: '', nama: '', nama_panggilan: '', jenis_kelamin: 'L', tempat_lahir: '',
   tanggal_lahir: '', alamat: '', no_hp: '', nama_ortu: '', rombel_id: '',
-  rombel_nama: '', status: 'aktif'
+  rombel_nama: '', status: 'aktif',
+  agama: 'Islam', status_keluarga: 'Anak Kandung', anak_ke: '', asal_sekolah: '',
+  nama_ayah: '', nama_ibu: '', alamat_ortu: '', kerja_ayah: '', kerja_ibu: '', nama_wali: '', kerja_wali: '',
 }
 
 function getInitials(nama: string): string {
@@ -133,7 +146,12 @@ export default function DataSiswaPage() {
       tanggal_lahir: siswa.tanggal_lahir, alamat: siswa.alamat,
       no_hp: siswa.no_hp, nama_ortu: siswa.nama_ortu,
       rombel_id: siswa.rombel_id || '', rombel_nama: siswa.rombel_nama || '',
-      status: siswa.status
+      status: siswa.status,
+      agama: siswa.agama || 'Islam', status_keluarga: siswa.status_keluarga || 'Anak Kandung',
+      anak_ke: siswa.anak_ke || '', asal_sekolah: siswa.asal_sekolah || '',
+      nama_ayah: siswa.nama_ayah || '', nama_ibu: siswa.nama_ibu || '', alamat_ortu: siswa.alamat_ortu || '',
+      kerja_ayah: siswa.kerja_ayah || '', kerja_ibu: siswa.kerja_ibu || '',
+      nama_wali: siswa.nama_wali || '', kerja_wali: siswa.kerja_wali || '',
     })
     setEditId(siswa.id)
     setShowModal(true)
@@ -472,6 +490,9 @@ export default function DataSiswaPage() {
             <DetailRow label="Alamat" value={selectedSiswa.alamat || '-'} />
             <DetailRow label="No HP" value={selectedSiswa.no_hp || '-'} />
             <DetailRow label="Nama Orang Tua" value={selectedSiswa.nama_ortu || '-'} />
+            <DetailRow label="Agama" value={selectedSiswa.agama || '-'} />
+            <DetailRow label="Nama Ayah / Ibu" value={[selectedSiswa.nama_ayah, selectedSiswa.nama_ibu].filter(Boolean).join(' / ') || '-'} />
+            <DetailRow label="Sekolah Asal" value={selectedSiswa.asal_sekolah || '-'} />
             <DetailRow label="Rombel" value={selectedSiswa.rombel_nama || 'Belum ada rombel'} />
             <div>
               <p className="text-xs text-gray-400 mb-1">Status</p>
@@ -490,7 +511,7 @@ export default function DataSiswaPage() {
           open={showModal}
           onClose={() => setShowModal(false)}
           title={editId ? 'Edit Siswa' : 'Tambah Siswa'}
-          maxWidth="md:max-w-lg"
+          maxWidth="md:max-w-2xl"
           footer={
             <div className="flex gap-3">
               <button onClick={() => setShowModal(false)} className="flex-1 px-4 py-2 border rounded-lg text-sm hover:bg-gray-50">Batal</button>
@@ -561,6 +582,65 @@ export default function DataSiswaPage() {
                   <input value={form.nama_ortu} onChange={(e) => setForm({...form, nama_ortu: e.target.value})} className="w-full px-3 py-2 border rounded-lg text-sm" />
                 </div>
               </div>
+
+              <div className="pt-2 border-t">
+                <p className="text-xs font-semibold text-gray-500 mb-2 uppercase tracking-wide">Biodata untuk Rapor</p>
+                <div className="grid grid-cols-3 gap-3">
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">Agama</label>
+                    <select value={form.agama || 'Islam'} onChange={(e) => setForm({...form, agama: e.target.value})} className="w-full px-3 py-2 border rounded-lg text-sm">
+                      {['Islam', 'Kristen', 'Katolik', 'Hindu', 'Buddha', 'Konghucu'].map(a => <option key={a} value={a}>{a}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">Status Keluarga</label>
+                    <select value={form.status_keluarga || 'Anak Kandung'} onChange={(e) => setForm({...form, status_keluarga: e.target.value})} className="w-full px-3 py-2 border rounded-lg text-sm">
+                      {['Anak Kandung', 'Anak Angkat', 'Anak Tiri'].map(a => <option key={a} value={a}>{a}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">Anak Ke</label>
+                    <input type="number" min={1} value={form.anak_ke || ''} onChange={(e) => setForm({...form, anak_ke: e.target.value})} className="w-full px-3 py-2 border rounded-lg text-sm" />
+                  </div>
+                </div>
+                <div className="mt-3">
+                  <label className="block text-xs font-medium text-gray-600 mb-1">Sekolah Asal (SD/MI)</label>
+                  <input value={form.asal_sekolah || ''} onChange={(e) => setForm({...form, asal_sekolah: e.target.value})} className="w-full px-3 py-2 border rounded-lg text-sm" />
+                </div>
+                <div className="grid grid-cols-2 gap-3 mt-3">
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">Nama Ayah</label>
+                    <input value={form.nama_ayah || ''} onChange={(e) => setForm({...form, nama_ayah: e.target.value})} className="w-full px-3 py-2 border rounded-lg text-sm" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">Pekerjaan Ayah</label>
+                    <input value={form.kerja_ayah || ''} onChange={(e) => setForm({...form, kerja_ayah: e.target.value})} className="w-full px-3 py-2 border rounded-lg text-sm" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">Nama Ibu</label>
+                    <input value={form.nama_ibu || ''} onChange={(e) => setForm({...form, nama_ibu: e.target.value})} className="w-full px-3 py-2 border rounded-lg text-sm" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">Pekerjaan Ibu</label>
+                    <input value={form.kerja_ibu || ''} onChange={(e) => setForm({...form, kerja_ibu: e.target.value})} className="w-full px-3 py-2 border rounded-lg text-sm" />
+                  </div>
+                </div>
+                <div className="mt-3">
+                  <label className="block text-xs font-medium text-gray-600 mb-1">Alamat Orang Tua <span className="text-gray-400 font-normal">(kosongkan bila sama dengan alamat siswa)</span></label>
+                  <input value={form.alamat_ortu || ''} onChange={(e) => setForm({...form, alamat_ortu: e.target.value})} className="w-full px-3 py-2 border rounded-lg text-sm" />
+                </div>
+                <div className="grid grid-cols-2 gap-3 mt-3">
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">Nama Wali <span className="text-gray-400 font-normal">(bila ada)</span></label>
+                    <input value={form.nama_wali || ''} onChange={(e) => setForm({...form, nama_wali: e.target.value})} className="w-full px-3 py-2 border rounded-lg text-sm" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">Pekerjaan Wali</label>
+                    <input value={form.kerja_wali || ''} onChange={(e) => setForm({...form, kerja_wali: e.target.value})} className="w-full px-3 py-2 border rounded-lg text-sm" />
+                  </div>
+                </div>
+              </div>
+
               {editId && (
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-1">Status</label>

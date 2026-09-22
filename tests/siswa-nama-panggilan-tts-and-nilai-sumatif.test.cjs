@@ -21,7 +21,8 @@ test('migrasi menambah kolom nama_panggilan opsional pada tabel siswa secara adi
 test('backend menerima dan menyimpan nama_panggilan pada create dan update siswa', () => {
   const createRoute = serverIndex.slice(serverIndex.indexOf("app.post('/api/siswa'"), serverIndex.indexOf("app.put('/api/siswa/:id'"))
   assert.match(createRoute, /nama_panggilan/)
-  assert.match(createRoute, /INSERT INTO siswa \(id, nik, nis, nisn, nama, jenis_kelamin, tempat_lahir, tanggal_lahir, alamat, no_hp, nama_ortu, nama_panggilan, rombel_id, tenant_id\)/)
+  assert.match(createRoute, /INSERT INTO siswa \(/)
+  assert.match(createRoute, /nik, nis, nisn, nama, jenis_kelamin, tempat_lahir, tanggal_lahir, alamat, no_hp, nama_ortu, nama_panggilan, rombel_id, tenant_id/)
 
   const updateRoute = serverIndex.slice(serverIndex.indexOf("app.put('/api/siswa/:id'"), serverIndex.indexOf("app.post('/api/siswa/generate-akun'"))
   assert.match(updateRoute, /'nama_ortu', 'nama_panggilan', 'rombel_id', 'status'/)

@@ -38,7 +38,7 @@ test('UI rapor memuat dan menyimpan data rapor lengkap', () => {
 
 test('hasil cetak rapor memiliki halaman identitas dan isi A4', () => {
   assert.match(page, /IDENTITAS PESERTA DIDIK/i)
-  assert.match(page, /print:break-after-page/)
+  assert.match(page, /page-break-after: always/)
   assert.match(page, /@page/)
   assert.match(page, /NISN/)
   assert.match(page, /Orang Tua/)
