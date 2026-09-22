@@ -27,7 +27,7 @@ const waQueue = require('./wa-queue.cjs')
 const notificationMonitor = require('./notification-monitor.cjs')
 const ExcelJS = require('exceljs')
 const { generateRaporForRombel } = require('./rapor-grade-service.cjs')
-const { getAuthorizedLedgerRombels, getLedgerRows, createLedgerWorkbook } = require('./ledger-service.cjs')
+const { getAuthorizedLedgerRombels, getLedgerRows, createLedgerWorkbook, createLedgerPdf } = require('./ledger-service.cjs')
 const {
   getTeacherMapelRombelContext, getGuruWithAssignments, isTeacherAssignedToPair,
   getRekapNilaiRows, createRekapWorkbook, createRekapPdf,
@@ -7274,6 +7274,33 @@ app.get('/api/rapor/ledger/export', LEDGER, async (req, res) => {
     res.end()
   } catch (e) {
     if (!res.headersSent) res.status(500).json({ error: 'Gagal export Excel' })
+  }
+})
+
+app.get('/api/rapor/ledger/export/pdf', LEDGER, async (req, res) => {
+  const input = ledgerRequest(req, res)
+  if (!input) return
+  try {
+    const rows = getLedgerRows(db, {
+      tenantId: req.tenantId,
+      rombelId: input.rombel.id,
+      tahunAjaran: input.tahun_ajaran,
+      semester: input.semester,
+      jenis: input.jenis,
+      from: input.from,
+      to: input.to,
+    })
+    const doc = createLedgerPdf(rows, {
+      rombelNama: input.rombel.nama,
+      tahunAjaran: input.tahun_ajaran,
+      semester: input.semester,
+    })
+    res.setHeader('Content-Type', 'application/pdf')
+    res.setHeader('Content-Disposition', `attachment; filename="Ledger-${input.rombel.id}-${input.tahun_ajaran}-${input.semester}.pdf"`)
+    doc.pipe(res)
+    doc.end()
+  } catch (e) {
+    if (!res.headersSent) res.status(500).json({ error: 'Gagal export PDF' })
   }
 })
 

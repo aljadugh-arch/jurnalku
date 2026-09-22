@@ -1,4 +1,5 @@
 const ExcelJS = require('exceljs')
+const PDFDocument = require('pdfkit')
 
 function normalizeLedgerJenis(jenis) {
   return ['rapor_sts', 'rapor_sas', 'semua'].includes(jenis) ? jenis : 'semua'
@@ -107,4 +108,74 @@ function createLedgerWorkbook(rows, details) {
   return workbook
 }
 
-module.exports = { normalizeLedgerJenis, getAuthorizedLedgerRombels, getLedgerRows, createLedgerWorkbook }
+function createLedgerPdf(rows, details) {
+  const doc = new PDFDocument({ size: 'A4', margin: 30, layout: 'landscape' })
+
+  doc.fontSize(14).font('Helvetica-Bold')
+    .text(`Ledger Nilai - ${details.rombelNama}`, { align: 'center' })
+  doc.fontSize(10).font('Helvetica')
+    .text(`${details.tahunAjaran} - Semester ${details.semester === 'ganjil' ? 'Ganjil' : 'Genap'}`, { align: 'center' })
+  doc.moveDown(1)
+
+  const pageWidth = doc.page.width - doc.page.margins.left - doc.page.margins.right
+  const colWidths = {
+    no: pageWidth * 0.04,
+    siswa_nis: pageWidth * 0.09,
+    siswa_nama: pageWidth * 0.22,
+    mapel_nama: pageWidth * 0.15,
+    nilai_harian: pageWidth * 0.1,
+    nilai_sts: pageWidth * 0.1,
+    nilai_sas: pageWidth * 0.1,
+    nilai_akhir_sts: pageWidth * 0.1,
+    nilai_akhir_sas: pageWidth * 0.1,
+  }
+  const headerLabel = {
+    no: 'No', siswa_nis: 'NIS', siswa_nama: 'Nama Siswa', mapel_nama: 'Mapel',
+    nilai_harian: 'Harian', nilai_sts: 'STS', nilai_sas: 'SAS',
+    nilai_akhir_sts: 'Akhir STS', nilai_akhir_sas: 'Akhir SAS',
+  }
+  const allCols = ['no', 'siswa_nis', 'siswa_nama', 'mapel_nama', 'nilai_harian', 'nilai_sts', 'nilai_sas', 'nilai_akhir_sts', 'nilai_akhir_sas']
+
+  const rowHeight = 18
+  const startX = doc.page.margins.left
+  let y = doc.y
+
+  function drawRow(cells, isHeader) {
+    let x = startX
+    doc.font(isHeader ? 'Helvetica-Bold' : 'Helvetica').fontSize(8)
+    if (isHeader) {
+      doc.rect(startX, y, pageWidth, rowHeight).fill('#D3D3D3').fillColor('black')
+    }
+    for (const key of allCols) {
+      const w = colWidths[key]
+      doc.fillColor('black').text(String(cells[key] ?? ''), x + 2, y + 4, { width: w - 4, align: (key === 'siswa_nama' || key === 'mapel_nama') ? 'left' : 'center' })
+      x += w
+    }
+    doc.rect(startX, y, pageWidth, rowHeight).stroke()
+    y += rowHeight
+  }
+
+  drawRow(headerLabel, true)
+  rows.forEach((row, index) => {
+    if (y + rowHeight > doc.page.height - doc.page.margins.bottom) {
+      doc.addPage({ size: 'A4', margin: 30, layout: 'landscape' })
+      y = doc.page.margins.top
+      drawRow(headerLabel, true)
+    }
+    drawRow({
+      no: index + 1,
+      siswa_nis: row.siswa_nis,
+      siswa_nama: row.siswa_nama,
+      mapel_nama: row.mapel_nama,
+      nilai_harian: row.nilai_harian == null ? '-' : row.nilai_harian,
+      nilai_sts: row.nilai_sts == null ? '-' : row.nilai_sts,
+      nilai_sas: row.nilai_sas == null ? '-' : row.nilai_sas,
+      nilai_akhir_sts: row.nilai_akhir_sts == null ? '-' : row.nilai_akhir_sts,
+      nilai_akhir_sas: row.nilai_akhir_sas == null ? '-' : row.nilai_akhir_sas,
+    }, false)
+  })
+
+  return doc
+}
+
+module.exports = { normalizeLedgerJenis, getAuthorizedLedgerRombels, getLedgerRows, createLedgerWorkbook, createLedgerPdf }

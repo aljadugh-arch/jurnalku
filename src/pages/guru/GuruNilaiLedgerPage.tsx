@@ -77,6 +77,28 @@ export default function GuruNilaiLedgerPage() {
     }
   }
 
+  const exportPdf = async () => {
+    if (ledger.length === 0) { setMsg('✗ Tidak ada data untuk diekspor'); return }
+
+    try {
+      const response = await api.get('/rapor/ledger/export/pdf', {
+        params: { rombel_id: selectedRombel, tahun_ajaran: tahunAjaran, semester, jenis },
+        responseType: 'blob'
+      })
+
+      const url = window.URL.createObjectURL(new Blob([response.data]))
+      const link = document.createElement('a')
+      link.href = url
+      link.setAttribute('download', `Ledger-${selectedRombel}-${tahunAjaran}-${semester}.pdf`)
+      document.body.appendChild(link)
+      link.click()
+      link.parentNode?.removeChild(link)
+      window.URL.revokeObjectURL(url)
+    } catch (e: any) {
+      setMsg(`✗ ${e.response?.data?.error || 'Gagal download PDF'}`)
+    }
+  }
+
   return (
     <div className="space-y-6">
       <div>
@@ -93,7 +115,7 @@ export default function GuruNilaiLedgerPage() {
       )}
 
       <div className="bg-white dark:bg-gray-900 rounded-xl shadow-sm border border-gray-100 dark:border-gray-800 p-4 sm:p-6">
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Kelas</label>
             <select value={selectedRombel} onChange={e => setSelectedRombel(e.target.value)}
@@ -127,7 +149,13 @@ export default function GuruNilaiLedgerPage() {
           <div className="flex items-end">
             <button onClick={exportExcel} disabled={loading || !selectedRombel || ledger.length === 0}
               className="w-full px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2">
-              <Download size={18} /> {loading ? 'Memuat...' : 'Download Excel'}
+              <Download size={18} /> {loading ? 'Memuat...' : 'Excel'}
+            </button>
+          </div>
+          <div className="flex items-end">
+            <button onClick={exportPdf} disabled={loading || !selectedRombel || ledger.length === 0}
+              className="w-full px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2">
+              <Download size={18} /> {loading ? 'Memuat...' : 'PDF'}
             </button>
           </div>
         </div>
