@@ -28,6 +28,10 @@ const notificationMonitor = require('./notification-monitor.cjs')
 const ExcelJS = require('exceljs')
 const { generateRaporForRombel } = require('./rapor-grade-service.cjs')
 const { getAuthorizedLedgerRombels, getLedgerRows, createLedgerWorkbook } = require('./ledger-service.cjs')
+const {
+  getTeacherMapelRombelContext, getGuruWithAssignments, isTeacherAssignedToPair,
+  getRekapNilaiRows, createRekapWorkbook, createRekapPdf,
+} = require('./nilai-rekap-service.cjs')
 const { getAttendanceOverview, studentAttendance } = require('./attendance-summary.cjs')
 const { monitorStatus, sanitizeExamForMonitor } = require('./exam-proctor.cjs')
 const { getCategoryRecap } = require('./attendance-recap.cjs')
@@ -7270,6 +7274,122 @@ app.get('/api/rapor/ledger/export', LEDGER, async (req, res) => {
     res.end()
   } catch (e) {
     if (!res.headersSent) res.status(500).json({ error: 'Gagal export Excel' })
+  }
+})
+
+// ==================== REKAP NILAI PER GURU MAPEL ====================
+const REKAP_NILAI = requireRole('admin', 'super_admin', 'guru', 'wali_kelas', 'kepala')
+
+// Guru: konteks mapel+rombel yang diajar sendiri. Admin: pilih guru manapun via ?gtk_id=.
+app.get('/api/rapor/rekap-guru/context', REKAP_NILAI, (req, res) => {
+  if (isTeacherContext(req)) {
+    const gtk = resolveGtkForUser(req.user.id, req.tenantId)
+    if (!gtk) return res.json({ guru: null, daftar_guru: [], konteks: [] })
+    return res.json({
+      guru: { id: gtk.id, nama: gtk.nama },
+      daftar_guru: [],
+      konteks: getTeacherMapelRombelContext(db, { tenantId: req.tenantId, gtkId: gtk.id }),
+    })
+  }
+  const daftarGuru = getGuruWithAssignments(db, req.tenantId)
+  const gtkId = req.query.gtk_id ? String(req.query.gtk_id) : (daftarGuru[0]?.id || null)
+  const konteks = gtkId ? getTeacherMapelRombelContext(db, { tenantId: req.tenantId, gtkId }) : []
+  res.json({
+    guru: gtkId ? (daftarGuru.find(g => g.id === gtkId) || db.prepare('SELECT id, nama FROM gtk WHERE id=? AND tenant_id=?').get(gtkId, req.tenantId)) : null,
+    daftar_guru: daftarGuru,
+    konteks,
+  })
+})
+
+function rekapNilaiRequest(req, res) {
+  const { rombel_id, mapel_id, tahun_ajaran, semester, jenis = 'semua' } = req.query
+  const gtkIdParam = req.query.gtk_id ? String(req.query.gtk_id) : null
+  if (!rombel_id || !mapel_id || !tahun_ajaran || !semester) {
+    res.status(400).json({ error: 'rombel_id, mapel_id, tahun_ajaran, semester wajib' })
+    return null
+  }
+  if (!['ganjil', 'genap'].includes(semester) || !['harian', 'sts', 'sas', 'semua'].includes(jenis)) {
+    res.status(400).json({ error: 'Semester atau jenis nilai tidak valid' })
+    return null
+  }
+  let gtk
+  if (isTeacherContext(req)) {
+    gtk = resolveGtkForUser(req.user.id, req.tenantId)
+    if (!gtk) { res.status(403).json({ error: 'Guru tidak ditemukan' }); return null }
+  } else {
+    if (!gtkIdParam) { res.status(400).json({ error: 'gtk_id wajib diisi untuk admin' }); return null }
+    gtk = db.prepare('SELECT id, nama FROM gtk WHERE id=? AND tenant_id=?').get(gtkIdParam, req.tenantId)
+    if (!gtk) { res.status(404).json({ error: 'Guru tidak ditemukan' }); return null }
+  }
+  const assigned = isTeacherAssignedToPair(db, {
+    tenantId: req.tenantId, gtkId: gtk.id, mapelId: String(mapel_id), rombelId: String(rombel_id),
+  })
+  if (!assigned) { res.status(404).json({ error: 'Penugasan mapel/kelas tidak ditemukan' }); return null }
+  const rombel = db.prepare('SELECT id, nama, tahun_ajaran FROM rombel WHERE id=? AND tenant_id=?').get(String(rombel_id), req.tenantId)
+  const mapel = db.prepare('SELECT id, nama FROM mapel WHERE id=? AND tenant_id=?').get(String(mapel_id), req.tenantId)
+  if (!rombel || !mapel || rombel.tahun_ajaran !== tahun_ajaran) {
+    res.status(404).json({ error: 'Rombel atau mapel tidak ditemukan' })
+    return null
+  }
+  const { from, to } = semesterRange(tahun_ajaran, semester)
+  return { rombel, mapel, guru: gtk, tahun_ajaran, semester, jenis, from, to }
+}
+
+app.get('/api/rapor/rekap-guru', REKAP_NILAI, (req, res) => {
+  const input = rekapNilaiRequest(req, res)
+  if (!input) return
+  const rows = getRekapNilaiRows(db, {
+    tenantId: req.tenantId,
+    rombelId: input.rombel.id,
+    mapelId: input.mapel.id,
+    tahunAjaran: input.tahun_ajaran,
+    semester: input.semester,
+    jenis: input.jenis,
+    from: input.from,
+    to: input.to,
+  })
+  res.json(rows)
+})
+
+app.get('/api/rapor/rekap-guru/export', REKAP_NILAI, async (req, res) => {
+  const input = rekapNilaiRequest(req, res)
+  if (!input) return
+  try {
+    const rows = getRekapNilaiRows(db, {
+      tenantId: req.tenantId,
+      rombelId: input.rombel.id,
+      mapelId: input.mapel.id,
+      tahunAjaran: input.tahun_ajaran,
+      semester: input.semester,
+      jenis: input.jenis,
+      from: input.from,
+      to: input.to,
+    })
+    const details = {
+      rombelNama: input.rombel.nama,
+      mapelNama: input.mapel.nama,
+      guruNama: input.guru.nama,
+      tahunAjaran: input.tahun_ajaran,
+      semester: input.semester,
+      jenis: input.jenis,
+    }
+    const format = req.query.format === 'pdf' ? 'pdf' : 'xlsx'
+    const filenameBase = `Rekap-${input.mapel.nama}-${input.rombel.nama}-${input.tahun_ajaran}-${input.semester}`.replace(/[^a-zA-Z0-9-]/g, '_')
+    if (format === 'pdf') {
+      res.setHeader('Content-Type', 'application/pdf')
+      res.setHeader('Content-Disposition', `attachment; filename="${filenameBase}.pdf"`)
+      const doc = createRekapPdf(rows, details)
+      doc.pipe(res)
+      doc.end()
+    } else {
+      const workbook = createRekapWorkbook(rows, details)
+      res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+      res.setHeader('Content-Disposition', `attachment; filename="${filenameBase}.xlsx"`)
+      await workbook.xlsx.write(res)
+      res.end()
+    }
+  } catch (e) {
+    if (!res.headersSent) res.status(500).json({ error: 'Gagal export rekap nilai' })
   }
 })
 

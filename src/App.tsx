@@ -67,6 +67,7 @@ const GuruPenilaianHarianPage = lazy(() => import('./pages/guru/GuruPenilaianHar
 const GuruNilaiSTSPage = lazy(() => import('./pages/guru/GuruNilaiSTSPage'))
 const GuruNilaiSASPage = lazy(() => import('./pages/guru/GuruNilaiSASPage'))
 const GuruNilaiLedgerPage = lazy(() => import('./pages/guru/GuruNilaiLedgerPage'))
+const GuruRekapNilaiPage = lazy(() => import('./pages/guru/GuruRekapNilaiPage'))
 const GuruKoreksiJawabanPage = lazy(() => import('./pages/guru/GuruKoreksiJawabanPage'))
 const GuruPostingPage = lazy(() => import('./pages/guru/GuruPostingPage'))
 const GuruCatatanKepribadianPage = lazy(() => import('./pages/guru/GuruCatatanKepribadianPage'))
@@ -230,6 +231,9 @@ export default function App() {
           <Route path="nilai-ledger" element={
             <ProtectedRoute allowedRoles={['admin', 'super_admin']}><GuruNilaiLedgerPage /></ProtectedRoute>
           } />
+          <Route path="rekap-nilai" element={
+            <ProtectedRoute allowedRoles={['admin', 'super_admin']}><GuruRekapNilaiPage /></ProtectedRoute>
+          } />
           <Route path="change-password" element={<ChangePasswordPage />} />
           <Route path="profile" element={<ProfilePage />} />
           <Route path="users" element={
@@ -304,6 +308,7 @@ export default function App() {
           <Route path="nilai-ledger" element={
             <ProtectedRoute allowedRoles={['wali_kelas']} exactRoles><GuruNilaiLedgerPage /></ProtectedRoute>
           } />
+          <Route path="rekap-nilai" element={<GuruRekapNilaiPage />} />
           <Route path="koreksi-jawaban" element={<GuruKoreksiJawabanPage />} />
           <Route path="bank-soal" element={<BankSoalPage />} />
           <Route path="kisi-kisi" element={<KisiKisiPage />} />

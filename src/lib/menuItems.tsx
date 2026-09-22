@@ -50,6 +50,7 @@ export const adminMenuItems: MenuItem[] = [
   { label: 'Jurnal Mengajar', icon: <ClipboardList size={20} />, path: '/admin/jurnal' },
   { label: 'Rapor Siswa', icon: <FileText size={20} />, path: '/admin/rapor' },
   { label: 'Ledger Nilai', icon: <ClipboardCheck size={20} />, path: '/admin/nilai-ledger' },
+  { label: 'Rekap Nilai per Mapel', icon: <ClipboardCheck size={20} />, path: '/admin/rekap-nilai' },
   {
     label: 'Ujian & Bank Soal', icon: <FileQuestion size={20} />,
     children: [
@@ -102,6 +103,7 @@ export const guruMenuItems: MenuItem[] = [
   { label: 'Penilaian Harian', icon: <BookOpen size={20} />, path: '/guru/penilaian-harian' },
   { label: 'Nilai STS', icon: <ClipboardCheck size={20} />, path: '/guru/nilai-sts' },
   { label: 'Nilai SAS', icon: <ClipboardCheck size={20} />, path: '/guru/nilai-sas' },
+  { label: 'Rekap Nilai per Mapel', icon: <ClipboardCheck size={20} />, path: '/guru/rekap-nilai' },
   { label: 'Koreksi Jawaban (AI+OCR)', icon: <ScanText size={20} />, path: '/guru/koreksi-jawaban' },
   {
     label: 'Ujian & Bank Soal', icon: <FileQuestion size={20} />,
@@ -184,7 +186,7 @@ export const kepalaMenuItems: MenuItem[] = [
 // Pilih daftar menu sesuai role.
 const restrictedAdminPaths = new Set([
   '/admin/developer-api', '/admin/users', '/admin/settings', '/admin/backup-restore',
-  '/admin/wa-gateway', '/admin/notif-settings', '/admin/tenants', '/admin/nilai-ledger',
+  '/admin/wa-gateway', '/admin/notif-settings', '/admin/tenants', '/admin/nilai-ledger', '/admin/rekap-nilai',
 ])
 
 function filterRoleItems(items: MenuItem[], role?: string): MenuItem[] {
