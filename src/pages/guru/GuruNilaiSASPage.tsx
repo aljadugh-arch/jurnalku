@@ -62,11 +62,21 @@ export default function GuruNilaiSASPage() {
     if (!selectedMapel || !selectedRombel) { setMsg('✗ Pilih mata pelajaran dan kelas terlebih dahulu'); return }
     setSaving(true); setMsg('')
     try {
-      const items = siswaList.map(s => ({
-        siswa_id: s.id,
-        mapel_id: selectedMapel,
-        nilai: nilai[s.id] === '' ? 0 : Number(nilai[s.id] || 0)
-      }))
+      // Filter: hanya kirim siswa yang punya nilai > 0 (tidak kosong)
+      const items = siswaList
+        .filter(s => {
+          const v = nilai[s.id]
+          const numVal = typeof v === 'string' ? Number(v) : v
+          return v !== '' && v !== undefined && numVal > 0
+        })
+        .map(s => ({
+          siswa_id: s.id,
+          mapel_id: selectedMapel,
+          nilai: typeof nilai[s.id] === 'string' ? Number(nilai[s.id]) : (nilai[s.id] || 0)
+        }))
+      
+      if (items.length === 0) { setMsg('✗ Masukkan nilai untuk minimal 1 siswa'); return }
+      
       const { data } = await api.post('/rapor/asesmen', { jenis: 'sas', tahun_ajaran: tahunAjaran, semester, rombel_id: selectedRombel, items })
       setMsg(`✓ ${data.message}`)
     } catch (e: any) {
