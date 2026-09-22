@@ -67,7 +67,7 @@ export default function GuruNilaiSASPage() {
         mapel_id: selectedMapel,
         nilai: nilai[s.id] === '' ? 0 : Number(nilai[s.id] || 0)
       }))
-      const { data } = await api.post('/rapor/asesmen', { jenis: 'sas', tahun_ajaran: tahunAjaran, semester, items })
+      const { data } = await api.post('/rapor/asesmen', { jenis: 'sas', tahun_ajaran: tahunAjaran, semester, rombel_id: selectedRombel, items })
       setMsg(`✓ ${data.message}`)
     } catch (e: any) {
       setMsg(`✗ ${e.response?.data?.error || 'Gagal menyimpan nilai SAS'}`)
