@@ -105,8 +105,9 @@ function PageLoader() {
   return <div className="flex items-center justify-center py-20"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" /></div>
 }
 
-function canAccessRole(user: User, allowedRoles?: string[]) {
+function canAccessRole(user: User, allowedRoles?: string[], exactRoles = false) {
   if (!allowedRoles || allowedRoles.includes(user.role)) return true
+  if (exactRoles) return false
   return user.role === 'kepala' && !!user.can_teach && allowedRoles.some(role => role === 'guru' || role === 'wali_kelas')
 }
 
@@ -117,13 +118,13 @@ function AdminIndexRoute() {
   return <AdminDashboard />
 }
 
-function ProtectedRoute({ children, allowedRoles }: { children: ReactNode, allowedRoles?: string[] }) {
+function ProtectedRoute({ children, allowedRoles, exactRoles = false }: { children: ReactNode, allowedRoles?: string[], exactRoles?: boolean }) {
   const { isAuthenticated, user, authReady } = useAuthStore()
   // Tunggu hidrasi /auth/me selesai supaya refresh tidak melempar ke /login
   // dan halaman tidak memanggil API sebelum peran diketahui.
   if (!authReady || (isAuthenticated && !user)) return <div className="flex items-center justify-center py-20 text-sm text-gray-400">Memuat sesi...</div>
   if (!isAuthenticated) return <Navigate to="/login" replace />
-  if (allowedRoles && user && !canAccessRole(user, allowedRoles)) {
+  if (allowedRoles && user && !canAccessRole(user, allowedRoles, exactRoles)) {
     const path = user.role === 'admin' || user.role === 'super_admin' || user.role === 'kepala' || user.role === 'bendahara' || user.role === 'operator' || user.role === 'tata_usaha' || user.role === 'tu' ? '/admin' :
                  user.role === 'guru' || user.role === 'wali_kelas' ? '/guru' : user.role === 'proktor' ? '/proktor' : '/siswa'
     return <Navigate to={path} replace />
@@ -226,6 +227,9 @@ export default function App() {
             <ProtectedRoute allowedRoles={['super_admin']}><TenantManagementPage /></ProtectedRoute>
           } />
           <Route path="rapor" element={<RaporPage />} />
+          <Route path="nilai-ledger" element={
+            <ProtectedRoute allowedRoles={['admin', 'super_admin']}><GuruNilaiLedgerPage /></ProtectedRoute>
+          } />
           <Route path="change-password" element={<ChangePasswordPage />} />
           <Route path="profile" element={<ProfilePage />} />
           <Route path="users" element={
@@ -297,7 +301,9 @@ export default function App() {
           <Route path="penilaian-harian" element={<GuruPenilaianHarianPage />} />
           <Route path="nilai-sts" element={<GuruNilaiSTSPage />} />
           <Route path="nilai-sas" element={<GuruNilaiSASPage />} />
-          <Route path="nilai-ledger" element={<GuruNilaiLedgerPage />} />
+          <Route path="nilai-ledger" element={
+            <ProtectedRoute allowedRoles={['wali_kelas']} exactRoles><GuruNilaiLedgerPage /></ProtectedRoute>
+          } />
           <Route path="koreksi-jawaban" element={<GuruKoreksiJawabanPage />} />
           <Route path="bank-soal" element={<BankSoalPage />} />
           <Route path="kisi-kisi" element={<KisiKisiPage />} />

@@ -49,6 +49,7 @@ export const adminMenuItems: MenuItem[] = [
   { label: 'Absensi Saya', icon: <UserCheck size={20} />, path: '/admin/absensi-saya' },
   { label: 'Jurnal Mengajar', icon: <ClipboardList size={20} />, path: '/admin/jurnal' },
   { label: 'Rapor Siswa', icon: <FileText size={20} />, path: '/admin/rapor' },
+  { label: 'Ledger Nilai', icon: <ClipboardCheck size={20} />, path: '/admin/nilai-ledger' },
   {
     label: 'Ujian & Bank Soal', icon: <FileQuestion size={20} />,
     children: [
@@ -183,7 +184,7 @@ export const kepalaMenuItems: MenuItem[] = [
 // Pilih daftar menu sesuai role.
 const restrictedAdminPaths = new Set([
   '/admin/developer-api', '/admin/users', '/admin/settings', '/admin/backup-restore',
-  '/admin/wa-gateway', '/admin/notif-settings', '/admin/tenants',
+  '/admin/wa-gateway', '/admin/notif-settings', '/admin/tenants', '/admin/nilai-ledger',
 ])
 
 function filterRoleItems(items: MenuItem[], role?: string): MenuItem[] {
@@ -218,7 +219,11 @@ export function menuForRole(role?: string): MenuItem[] {
     : siswaMenuItems
   const visible = filterRoleItems(items, role)
   return role === 'wali_kelas'
-    ? [...visible, { label: 'Kelas Wali Saya', icon: <Layers size={20} />, path: '/guru/rombel' }]
+    ? [
+        ...visible,
+        { label: 'Ledger Nilai', icon: <ClipboardCheck size={20} />, path: '/guru/nilai-ledger' },
+        { label: 'Kelas Wali Saya', icon: <Layers size={20} />, path: '/guru/rombel' },
+      ]
     : visible
 }
 

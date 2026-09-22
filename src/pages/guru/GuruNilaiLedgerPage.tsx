@@ -9,9 +9,10 @@ type NilaiRow = {
   mapel_id: string
   mapel_nama: string
   nilai_harian: number
-  nilai_sts: number
-  nilai_sas: number
-  nilai_akhir: number
+  nilai_sts: number | null
+  nilai_sas: number | null
+  nilai_akhir_sts: number | null
+  nilai_akhir_sas: number | null
 }
 
 export default function GuruNilaiLedgerPage() {
@@ -29,10 +30,16 @@ export default function GuruNilaiLedgerPage() {
 
   const loadRombel = async () => {
     try {
-      const { data } = await api.get('/guru/pengajar-saya')
-      setRombelList(data.rombel || [])
-      if (data.rombel?.[0]) setSelectedRombel(data.rombel[0].id)
-    } catch (e) { console.error(e); setMsg('✗ Gagal memuat daftar kelas') }
+      const { data } = await api.get('/rapor/ledger/rombel')
+      const rows = Array.isArray(data) ? data : []
+      setRombelList(rows)
+      if (rows[0]) {
+        setSelectedRombel(rows[0].id)
+        if (rows[0].tahun_ajaran) setTahunAjaran(rows[0].tahun_ajaran)
+      }
+    } catch {
+      setMsg('✗ Gagal memuat daftar kelas')
+    }
   }
 
   const loadLedger = async () => {
@@ -141,7 +148,8 @@ export default function GuruNilaiLedgerPage() {
                   <th className="px-4 py-3 text-center font-medium text-gray-600 dark:text-gray-300">Nilai Harian</th>
                   <th className="px-4 py-3 text-center font-medium text-gray-600 dark:text-gray-300">Nilai STS</th>
                   <th className="px-4 py-3 text-center font-medium text-gray-600 dark:text-gray-300">Nilai SAS</th>
-                  <th className="px-4 py-3 text-center font-medium text-gray-600 dark:text-gray-300">Nilai Akhir</th>
+                  {(jenis === 'rapor_sts' || jenis === 'semua') && <th className="px-4 py-3 text-center font-medium text-gray-600 dark:text-gray-300">Nilai Akhir STS</th>}
+                  {(jenis === 'rapor_sas' || jenis === 'semua') && <th className="px-4 py-3 text-center font-medium text-gray-600 dark:text-gray-300">Nilai Akhir SAS</th>}
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
@@ -151,10 +159,11 @@ export default function GuruNilaiLedgerPage() {
                     <td className="px-4 py-3 text-gray-600 dark:text-gray-400 font-mono">{row.siswa_nis}</td>
                     <td className="px-4 py-3 font-medium text-gray-900 dark:text-white">{row.siswa_nama}</td>
                     <td className="px-4 py-3 text-gray-700 dark:text-gray-300">{row.mapel_nama}</td>
-                    <td className="px-4 py-3 text-center text-gray-900 dark:text-white">{Math.round(row.nilai_harian || 0)}</td>
-                    <td className="px-4 py-3 text-center text-gray-900 dark:text-white">{Math.round(row.nilai_sts || 0)}</td>
-                    <td className="px-4 py-3 text-center text-gray-900 dark:text-white">{Math.round(row.nilai_sas || 0)}</td>
-                    <td className="px-4 py-3 text-center font-semibold text-blue-700 dark:text-blue-400">{Math.round(row.nilai_akhir || 0)}</td>
+                    <td className="px-4 py-3 text-center text-gray-900 dark:text-white">{Math.round(row.nilai_harian)}</td>
+                    <td className="px-4 py-3 text-center text-gray-900 dark:text-white">{row.nilai_sts == null ? '—' : Math.round(row.nilai_sts)}</td>
+                    <td className="px-4 py-3 text-center text-gray-900 dark:text-white">{row.nilai_sas == null ? '—' : Math.round(row.nilai_sas)}</td>
+                    {(jenis === 'rapor_sts' || jenis === 'semua') && <td className="px-4 py-3 text-center font-semibold text-blue-700 dark:text-blue-400">{row.nilai_akhir_sts == null ? '—' : Math.round(row.nilai_akhir_sts)}</td>}
+                    {(jenis === 'rapor_sas' || jenis === 'semua') && <td className="px-4 py-3 text-center font-semibold text-blue-700 dark:text-blue-400">{row.nilai_akhir_sas == null ? '—' : Math.round(row.nilai_akhir_sas)}</td>}
                   </tr>
                 ))}
               </tbody>

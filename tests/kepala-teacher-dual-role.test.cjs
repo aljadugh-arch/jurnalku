@@ -35,8 +35,9 @@ test('token dan respons auth memuat capability mengajar akun yang sama', () => {
 })
 
 test('kepala yang mengajar dapat membuka dashboard guru dan berpindah konteks', () => {
-  assert.match(app, /canAccessRole\(user, allowedRoles\)/)
+  assert.match(app, /canAccessRole\(user, allowedRoles, exactRoles\)/)
   assert.match(app, /allowedRoles=\{\['guru', 'wali_kelas'\]\}/)
+  assert.match(app, /exactRoles\)/)
   assert.match(sidebar, /Mode Guru/)
   assert.match(sidebar, /Mode Manajemen/)
   assert.match(header, /Mode Guru/)

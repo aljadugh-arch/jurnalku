@@ -4,7 +4,10 @@ const Database = require('better-sqlite3')
 const fs = require('node:fs')
 const path = require('node:path')
 
-const indexSource = fs.readFileSync(path.join(__dirname, '..', 'server', 'index.cjs'), 'utf8')
+const indexSource = [
+  fs.readFileSync(path.join(__dirname, '..', 'server', 'index.cjs'), 'utf8'),
+  fs.readFileSync(path.join(__dirname, '..', 'server', 'rapor-grade-service.cjs'), 'utf8'),
+].join('\n')
 const recapSource = fs.readFileSync(path.join(__dirname, '..', 'server', 'attendance-periodic-recap.cjs'), 'utf8')
 const ekskulPage = fs.readFileSync(path.join(__dirname, '..', 'src', 'pages', 'admin', 'EkskulPage.tsx'), 'utf8')
 const rekapPage = fs.readFileSync(path.join(__dirname, '..', 'src', 'pages', 'admin', 'RekapAbsensiPage.tsx'), 'utf8')

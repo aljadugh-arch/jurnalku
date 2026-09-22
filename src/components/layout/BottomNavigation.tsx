@@ -63,7 +63,10 @@ function roleItems(role?: string, hideStaffCeklok?: boolean): NavItem[] {
       { label: 'Modul', path: '/guru/modul-ajar', icon: <FileText size={iconSize} /> },
     ]
     return role === 'wali_kelas'
-      ? teacherItems.concat({ label: 'Rombel', path: '/guru/rombel', icon: <GraduationCap size={iconSize} /> })
+      ? teacherItems.concat(
+          { label: 'Ledger', path: '/guru/nilai-ledger', icon: <ClipboardCheck size={iconSize} /> },
+          { label: 'Rombel', path: '/guru/rombel', icon: <GraduationCap size={iconSize} /> },
+        )
       : teacherItems
   }
 

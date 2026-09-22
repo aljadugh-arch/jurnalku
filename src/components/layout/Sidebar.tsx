@@ -13,7 +13,7 @@ import { clsx } from 'clsx'
 import { roleLabel } from '../../lib/roles'
 import { useSubscriptionStore } from '../../stores/subscriptionStore'
 import { pathEnabled } from '../../lib/featureAccess'
-import { guruMenuItems as sharedGuruMenuItems, menuForRole } from '../../lib/menuItems'
+import { menuForRole } from '../../lib/menuItems'
 
 interface MenuItem {
   label: string
@@ -95,16 +95,16 @@ export default function Sidebar() {
     user?.role === 'bendahara'
       ? bendaharaMenuItems
       : user?.role === 'kepala'
-        ? teacherMode ? sharedGuruMenuItems : kepalaMenuItems
+        ? teacherMode ? menuForRole('guru') : kepalaMenuItems
         : user?.role === 'admin' || user?.role === 'super_admin' || user?.role === 'operator' || user?.role === 'tata_usaha' || user?.role === 'tu'
           ? menuForRole(user?.role)
           : user?.role === 'guru' || user?.role === 'wali_kelas'
-            ? sharedGuruMenuItems
+            ? menuForRole(user?.role)
             : user?.role === 'proktor'
               ? menuForRole(user.role)
               : siswaMenuItems
   )
-    .concat(user?.role === 'wali_kelas' ? [{ label: 'Kelas Wali Saya', icon: <Layers size={20} />, path: '/guru/rombel' }] : [])
+    // menuForRole membatasi /guru/rombel hanya ketika user?.role === 'wali_kelas'.
     .map(item => ({ ...item, children: item.children?.filter(child => pathEnabled(child.path, features)) }))
     .filter(item => item.path ? pathEnabled(item.path, features) : !!item.children?.length)
 

@@ -63,17 +63,16 @@ export default function GuruNilaiSTSPage() {
     if (!selectedMapel || !selectedRombel) { setMsg('✗ Pilih mata pelajaran dan kelas terlebih dahulu'); return }
     setSaving(true); setMsg('')
     try {
-      // Filter: hanya kirim siswa yang punya nilai > 0 (tidak kosong)
+      // Hanya buang input kosong; angka 0 adalah nilai sah.
       const items = siswaList
         .filter(s => {
           const v = nilai[s.id]
-          const numVal = typeof v === 'string' ? Number(v) : v
-          return v !== '' && v !== undefined && numVal > 0
+          return v !== '' && v !== null && v !== undefined
         })
         .map(s => ({
           siswa_id: s.id,
           mapel_id: selectedMapel,
-          nilai: typeof nilai[s.id] === 'string' ? Number(nilai[s.id]) : (nilai[s.id] || 0)
+          nilai: Number(nilai[s.id])
         }))
       
       if (items.length === 0) { setMsg('✗ Masukkan nilai untuk minimal 1 siswa'); return }

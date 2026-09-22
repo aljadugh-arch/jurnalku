@@ -79,7 +79,7 @@ test('admin QR/manual attendance is writable for all jenjang, including RA and M
 test('operator and TU menus and direct routes omit destinations restricted to admin roles', () => {
   assert.match(ROLE_MENUS, /restrictedAdminPaths/)
   assert.match(ROLE_MENUS, /role === 'operator' \|\| role === 'tata_usaha' \|\| role === 'tu'/)
-  for (const path of ['/admin/developer-api', '/admin/users', '/admin/settings', '/admin/backup-restore', '/admin/wa-gateway', '/admin/notif-settings']) {
+  for (const path of ['/admin/developer-api', '/admin/users', '/admin/settings', '/admin/backup-restore', '/admin/wa-gateway', '/admin/notif-settings', '/admin/nilai-ledger']) {
     assert.match(ROLE_MENUS, new RegExp(path.replaceAll('/', '\\/')))
   }
   for (const route of ['settings', 'backup-restore', 'wa-gateway', 'notif-settings']) {
