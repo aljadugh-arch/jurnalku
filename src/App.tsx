@@ -66,6 +66,7 @@ const GuruRombelPage = lazy(() => import('./pages/guru/GuruRombelPage'))
 const GuruPenilaianHarianPage = lazy(() => import('./pages/guru/GuruPenilaianHarianPage'))
 const GuruNilaiSTSPage = lazy(() => import('./pages/guru/GuruNilaiSTSPage'))
 const GuruNilaiSASPage = lazy(() => import('./pages/guru/GuruNilaiSASPage'))
+const GuruNilaiLedgerPage = lazy(() => import('./pages/guru/GuruNilaiLedgerPage'))
 const GuruKoreksiJawabanPage = lazy(() => import('./pages/guru/GuruKoreksiJawabanPage'))
 const GuruPostingPage = lazy(() => import('./pages/guru/GuruPostingPage'))
 const GuruCatatanKepribadianPage = lazy(() => import('./pages/guru/GuruCatatanKepribadianPage'))
@@ -296,6 +297,7 @@ export default function App() {
           <Route path="penilaian-harian" element={<GuruPenilaianHarianPage />} />
           <Route path="nilai-sts" element={<GuruNilaiSTSPage />} />
           <Route path="nilai-sas" element={<GuruNilaiSASPage />} />
+          <Route path="nilai-ledger" element={<GuruNilaiLedgerPage />} />
           <Route path="koreksi-jawaban" element={<GuruKoreksiJawabanPage />} />
           <Route path="bank-soal" element={<BankSoalPage />} />
           <Route path="kisi-kisi" element={<KisiKisiPage />} />

@@ -25,6 +25,7 @@ const { importJadwalRows } = require('./jadwal-import.cjs')
 const { setupPortalCashless, registerPortalRoutes, registerKantinRoutes, selectPenilaianStudentId, normalizeStoredImageDataUrl } = require('./portal-cashless.cjs')
 const waQueue = require('./wa-queue.cjs')
 const notificationMonitor = require('./notification-monitor.cjs')
+const ExcelJS = require('exceljs')
 const { getAttendanceOverview, studentAttendance } = require('./attendance-summary.cjs')
 const { monitorStatus, sanitizeExamForMonitor } = require('./exam-proctor.cjs')
 const { getCategoryRecap } = require('./attendance-recap.cjs')
@@ -7211,6 +7212,126 @@ app.post('/api/rapor/nilai-sumatif', STAFF, (req, res) => {
   })
   const count = trx()
   res.json({ success: true, count, message: `${count} nilai sumatif berhasil disimpan` })
+})
+
+// ==================== LEDGER NILAI ====================
+// GET /api/rapor/ledger — query nilai siswa per mapel untuk ledger
+app.get('/api/rapor/ledger', STAFF, (req, res) => {
+  const { rombel_id, tahun_ajaran, semester, jenis } = req.query
+  if (!rombel_id || !tahun_ajaran || !semester) return res.status(400).json({ error: 'rombel_id, tahun_ajaran, semester wajib' })
+  
+  const jenisFilter = jenis === 'semua' ? ['rapor_sts', 'rapor_sas'] : [jenis || 'rapor_sts']
+  
+  const sql = `
+    SELECT DISTINCT
+      s.id as siswa_id,
+      s.nama as siswa_nama,
+      s.nis as siswa_nis,
+      m.id as mapel_id,
+      m.nama as mapel_nama,
+      COALESCE(AVG(CASE WHEN ph.jenis='pengetahuan' THEN ph.nilai ELSE NULL END), 0) as nilai_harian,
+      MAX(CASE WHEN r.jenis='sts' THEN r.nilai_sts ELSE NULL END) as nilai_sts,
+      MAX(CASE WHEN r.jenis='sas' THEN r.nilai_sts ELSE NULL END) as nilai_sas,
+      MAX(CASE WHEN r.jenis IN ('rapor_sts', 'rapor_sas') THEN r.nilai_akhir ELSE NULL END) as nilai_akhir
+    FROM siswa s
+    CROSS JOIN mapel m
+    LEFT JOIN penilaian_harian ph ON s.id=ph.siswa_id AND m.id=ph.mapel_id AND ph.tenant_id=?
+    LEFT JOIN rapor r ON s.id=r.siswa_id AND m.id=r.mapel_id AND r.tahun_ajaran=? AND r.semester=? AND r.tenant_id=?
+    WHERE s.rombel_id=? AND s.tenant_id=? AND m.tenant_id=?
+    GROUP BY s.id, m.id
+    ORDER BY s.nama, m.nama
+  `
+  
+  try {
+    const rows = db.prepare(sql).all(req.tenantId, tahun_ajaran, semester, req.tenantId, rombel_id, req.tenantId, req.tenantId)
+    res.json(rows)
+  } catch (e) {
+    res.status(400).json({ error: 'Gagal query ledger: ' + e.message })
+  }
+})
+
+// GET /api/rapor/ledger/export — export ledger to Excel
+app.get('/api/rapor/ledger/export', STAFF, async (req, res) => {
+  const { rombel_id, tahun_ajaran, semester } = req.query
+  if (!rombel_id || !tahun_ajaran || !semester) return res.status(400).json({ error: 'rombel_id, tahun_ajaran, semester wajib' })
+  
+  try {
+    // Query data
+    const sql = `
+      SELECT DISTINCT
+        s.id as siswa_id,
+        s.nama as siswa_nama,
+        s.nis as siswa_nis,
+        m.id as mapel_id,
+        m.nama as mapel_nama,
+        COALESCE(AVG(CASE WHEN ph.jenis='pengetahuan' THEN ph.nilai ELSE NULL END), 0) as nilai_harian,
+        MAX(CASE WHEN r.jenis='sts' THEN r.nilai_sts ELSE NULL END) as nilai_sts,
+        MAX(CASE WHEN r.jenis='sas' THEN r.nilai_sts ELSE NULL END) as nilai_sas,
+        MAX(CASE WHEN r.jenis IN ('rapor_sts', 'rapor_sas') THEN r.nilai_akhir ELSE NULL END) as nilai_akhir
+      FROM siswa s
+      CROSS JOIN mapel m
+      LEFT JOIN penilaian_harian ph ON s.id=ph.siswa_id AND m.id=ph.mapel_id AND ph.tenant_id=?
+      LEFT JOIN rapor r ON s.id=r.siswa_id AND m.id=r.mapel_id AND r.tahun_ajaran=? AND r.semester=? AND r.tenant_id=?
+      WHERE s.rombel_id=? AND s.tenant_id=? AND m.tenant_id=?
+      GROUP BY s.id, m.id
+      ORDER BY s.nama, m.nama
+    `
+    
+    const rows = db.prepare(sql).all(req.tenantId, tahun_ajaran, semester, req.tenantId, rombel_id, req.tenantId, req.tenantId)
+    const rombel = db.prepare('SELECT nama FROM rombel WHERE id=? AND tenant_id=?').get(rombel_id, req.tenantId)
+    
+    // Create workbook
+    const workbook = new ExcelJS.Workbook()
+    const worksheet = workbook.addWorksheet('Ledger')
+    
+    // Header
+    worksheet.columns = [
+      { header: 'No', key: 'no', width: 5 },
+      { header: 'NIS', key: 'siswa_nis', width: 12 },
+      { header: 'Nama Siswa', key: 'siswa_nama', width: 25 },
+      { header: 'Mapel', key: 'mapel_nama', width: 20 },
+      { header: 'Nilai Harian', key: 'nilai_harian', width: 12 },
+      { header: 'Nilai STS', key: 'nilai_sts', width: 12 },
+      { header: 'Nilai SAS', key: 'nilai_sas', width: 12 },
+      { header: 'Nilai Akhir', key: 'nilai_akhir', width: 12 }
+    ]
+    
+    // Title row
+    const titleRow = worksheet.insertRow(1, [])
+    titleRow.getCell(1).value = `Ledger Nilai - ${rombel?.nama || rombel_id} - ${tahun_ajaran} ${semester}`
+    titleRow.font = { bold: true, size: 14 }
+    worksheet.mergeCells(1, 1, 1, 8)
+    worksheet.insertRow(2, [])
+    
+    // Data rows
+    let no = 1
+    rows.forEach(row => {
+      worksheet.addRow({
+        no,
+        siswa_nis: row.siswa_nis,
+        siswa_nama: row.siswa_nama,
+        mapel_nama: row.mapel_nama,
+        nilai_harian: Math.round(row.nilai_harian || 0),
+        nilai_sts: Math.round(row.nilai_sts || 0),
+        nilai_sas: Math.round(row.nilai_sas || 0),
+        nilai_akhir: Math.round(row.nilai_akhir || 0)
+      })
+      no++
+    })
+    
+    // Format
+    const headerRow = worksheet.getRow(3)
+    headerRow.font = { bold: true }
+    headerRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFD3D3D3' } }
+    
+    // Send file
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    res.setHeader('Content-Disposition', `attachment; filename="Ledger-${rombel_id}-${tahun_ajaran}.xlsx"`)
+    
+    await workbook.xlsx.write(res)
+  } catch (e) {
+    res.status(400).json({ error: 'Gagal export Excel: ' + e.message })
+  }
 })
 
 // ==================== BANK SOAL & UJIAN ====================
