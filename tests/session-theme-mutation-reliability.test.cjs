@@ -76,6 +76,7 @@ test('tombol Masuk mengikuti jendela backend dan memakai tanggal route yang terd
   assert.match(dashboard, /!isFinished\(j\)/)
   assert.match(server, /nowMinutes > endMinutes \+ 60/)
   const startRoute = server.slice(server.indexOf("app.post('/api/guru/sesi-kelas/masuk'"), server.indexOf("app.post('/api/guru/sesi-kelas/selesai'"))
-  assert.match(startRoute, /\.get\(gtk\.id, today, req\.tenantId/)
+  assert.match(startRoute, /gtk\.id, today, req\.tenantId/)
+  assert.match(startRoute, /jadwalId, gtk\.id, req\.tenantId, day, examTemplateId/)
   assert.doesNotMatch(startRoute, /todayDate/)
 })

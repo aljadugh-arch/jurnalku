@@ -39,6 +39,7 @@ const { DOCUMENT_TYPES, buildPrompt, validateGenerateInput, createTemplateConten
 const { encryptSecret, decryptSecret, maskKey, PROVIDER_ENDPOINTS, setupAiConfigTables, resolveAiConfig } = require('./ai-config.cjs')
 const { setupEkskulMembership } = require('./extracurricular-membership.cjs')
 const { countStudents, deleteStudents } = require('./student-data-delete.cjs')
+const { migrateClassSessionScheduleSource } = require('./class-session-schema.cjs')
 
 const app = express()
 const PORT = process.env.PORT || 3001
@@ -469,7 +470,7 @@ db.exec(`
     tenant_id TEXT NOT NULL,
     created_at TEXT DEFAULT (datetime('now')),
     updated_at TEXT,
-    FOREIGN KEY (jadwal_id) REFERENCES jadwal(id),
+    jadwal_source TEXT DEFAULT 'reguler',
     FOREIGN KEY (guru_id) REFERENCES gtk(id),
     FOREIGN KEY (mapel_id) REFERENCES mapel(id),
     FOREIGN KEY (rombel_id) REFERENCES rombel(id)
@@ -1089,6 +1090,12 @@ setupSubscriptionTables(db)
 setupAiConfigTables(db)
 migrateTenantSettings(db)
 
+// Sesi kelas lama memiliki FK ke tabel jadwal reguler, sedangkan jadwal ujian
+// memakai tabel terpisah. Rebuild satu kali agar keduanya dapat direferensikan
+// melalui jadwal_source tanpa mengubah data sesi yang sudah ada.
+try { migrateClassSessionScheduleSource(db) }
+catch (e) { console.error('[migrate] sesi_kelas_guru jadwal_source failed', e.message) }
+
 // Migrasi ekskul: tambahkan kolom jenis_kegiatan (wajib/pilihan) dan scope_rombel
 // untuk database lama. CREATE TABLE IF NOT EXISTS tidak mengubah tabel yang sudah ada.
 try {
@@ -1267,6 +1274,7 @@ for (const col of [
     ['tenants', 'foundation_id', 'TEXT'],
     ['jurnal_mengajar', 'signature_type', 'TEXT'],
     ['jurnal_mengajar', 'signature_path', 'TEXT'],
+    ['sesi_kelas_guru', 'jadwal_source', "TEXT DEFAULT 'reguler'"],
     ['template_jadwal', 'durasi_menit', 'INTEGER DEFAULT 40']
     ]) {
   try { db.prepare(`ALTER TABLE ${col[0]} ADD COLUMN ${col[1]} ${col[2]}`).run() } catch {}
@@ -3753,13 +3761,7 @@ app.get('/api/guru/dashboard', authMiddleware, (req, res) => {
   const ekskulDiampu = db.prepare('SELECT id,nama,hari,jam_mulai,jam_selesai FROM ekskul WHERE pembina_id=? AND tenant_id=? ORDER BY nama').all(gtkId, req.tenantId)
 
   const tugas = db.prepare(`SELECT t.*, m.nama mapel_nama, r.nama rombel_nama FROM tugas_siswa t LEFT JOIN mapel m ON m.id=t.mapel_id AND m.tenant_id=t.tenant_id LEFT JOIN rombel r ON r.id=t.rombel_id AND r.tenant_id=t.tenant_id WHERE t.guru_id=? AND t.tenant_id=? ORDER BY t.created_at DESC LIMIT 20`).all(gtkId, req.tenantId)
-  const sesiKelasAktif = db.prepare(`SELECT sk.*,m.nama AS mapel_nama,r.nama AS rombel_nama,j.jam_mulai,j.jam_selesai,j.ruangan
-    FROM sesi_kelas_guru sk
-    JOIN mapel m ON m.id=sk.mapel_id AND m.tenant_id=sk.tenant_id
-    JOIN rombel r ON r.id=sk.rombel_id AND r.tenant_id=sk.tenant_id
-    JOIN jadwal j ON j.id=sk.jadwal_id AND j.tenant_id=sk.tenant_id
-    WHERE sk.tenant_id=? AND sk.guru_id=? AND sk.tanggal=? AND sk.status='aktif'
-    ORDER BY sk.waktu_masuk DESC LIMIT 1`).get(req.tenantId, gtkId, todayDate) || null
+  const sesiKelasAktif = currentTeacherClassSession(req.tenantId, gtkId, todayDate)
   if (sesiKelasAktif && timeJakarta() > sesiKelasAktif.jam_selesai) {
     db.prepare("UPDATE sesi_kelas_guru SET status='selesai',waktu_selesai=COALESCE(waktu_selesai,?),updated_at=datetime('now') WHERE id=? AND tenant_id=?")
       .run(sesiKelasAktif.jam_selesai, sesiKelasAktif.id, req.tenantId)
@@ -3774,12 +3776,17 @@ function clockToMinutes(value) {
 }
 
 function currentTeacherClassSession(tenantId, gtkId, tanggal) {
-  return db.prepare(`SELECT sk.*,m.nama AS mapel_nama,r.nama AS rombel_nama,j.jam_mulai,j.jam_selesai,j.ruangan
+  return db.prepare(`SELECT sk.*,m.nama AS mapel_nama,r.nama AS rombel_nama,
+      COALESCE(j.jam_mulai,ju.jam_mulai) AS jam_mulai,
+      COALESCE(j.jam_selesai,ju.jam_selesai) AS jam_selesai,
+      COALESCE(j.ruangan,ju.ruangan) AS ruangan
     FROM sesi_kelas_guru sk
     JOIN mapel m ON m.id=sk.mapel_id AND m.tenant_id=sk.tenant_id
     JOIN rombel r ON r.id=sk.rombel_id AND r.tenant_id=sk.tenant_id
-    JOIN jadwal j ON j.id=sk.jadwal_id AND j.tenant_id=sk.tenant_id
+    LEFT JOIN jadwal j ON j.id=sk.jadwal_id AND j.tenant_id=sk.tenant_id AND COALESCE(sk.jadwal_source,'reguler')='reguler'
+    LEFT JOIN jadwal_ujian ju ON ju.id=sk.jadwal_id AND ju.tenant_id=sk.tenant_id AND sk.jadwal_source='ujian'
     WHERE sk.tenant_id=? AND sk.guru_id=? AND sk.tanggal=? AND sk.status='aktif'
+      AND (j.id IS NOT NULL OR ju.id IS NOT NULL)
     ORDER BY sk.waktu_masuk DESC LIMIT 1`).get(tenantId, gtkId, tanggal) || null
 }
 
@@ -3791,11 +3798,23 @@ app.post('/api/guru/sesi-kelas/masuk', TEACHER, (req, res) => {
   const today = todayJakarta()
   if (tenantIsHoliday(req.tenantId, today)) return res.status(400).json({ error: 'Hari ini hari libur, tidak ada sesi kelas' })
   const day = require('./attendance-rules.cjs').hariJakarta()
-  const jadwal = db.prepare(`SELECT jadwal.*, sk.status AS sesi_status, sk.waktu_masuk AS sesi_waktu_masuk, sk.waktu_selesai AS sesi_waktu_selesai
-    FROM jadwal
-    LEFT JOIN sesi_kelas_guru sk ON sk.jadwal_id=jadwal.id AND sk.guru_id=? AND sk.tanggal=? AND sk.tenant_id=?
-    WHERE jadwal.id=? AND jadwal.gtk_id=? AND jadwal.tenant_id=? AND lower(jadwal.hari)=? AND jadwal.jenis_kegiatan='mapel'`)
-    .get(gtk.id, today, req.tenantId, jadwalId, gtk.id, req.tenantId, day)
+  const examTemplateId = examModeForDate(req.tenantId, today)
+  const jadwal = db.prepare(`SELECT candidate.*, sk.status AS sesi_status, sk.waktu_masuk AS sesi_waktu_masuk, sk.waktu_selesai AS sesi_waktu_selesai
+    FROM (
+      SELECT id,mapel_id,rombel_id,gtk_id,hari,jam_mulai,jam_selesai,ruangan,tenant_id,'reguler' AS jadwal_source
+      FROM jadwal
+      WHERE id=? AND gtk_id=? AND tenant_id=? AND lower(hari)=? AND jenis_kegiatan='mapel'
+      UNION ALL
+      SELECT id,mapel_id,rombel_id,gtk_id,hari,jam_mulai,jam_selesai,ruangan,tenant_id,'ujian' AS jadwal_source
+      FROM jadwal_ujian
+      WHERE id=? AND gtk_id=? AND tenant_id=? AND lower(hari)=? AND template_id=?
+    ) candidate
+    LEFT JOIN sesi_kelas_guru sk ON sk.jadwal_id=candidate.id AND sk.guru_id=? AND sk.tanggal=? AND sk.tenant_id=?`)
+    .get(
+      jadwalId, gtk.id, req.tenantId, day,
+      jadwalId, gtk.id, req.tenantId, day, examTemplateId,
+      gtk.id, today, req.tenantId
+    )
   if (!jadwal) return res.status(403).json({ error: 'Jadwal bukan jadwal mengajar Anda hari ini' })
   if (jadwal.sesi_status === 'selesai') return res.status(409).json({ error: 'Kelas ini sudah diselesaikan hari ini', status: 'selesai' })
   const active = currentTeacherClassSession(req.tenantId, gtk.id, today)
@@ -3811,13 +3830,13 @@ app.post('/api/guru/sesi-kelas/masuk', TEACHER, (req, res) => {
   const graceMinutes = 10
   const menitTerlambat = Math.max(0, nowMinutes - startMinutes - graceMinutes)
   const id = uuidv4()
-  db.prepare(`INSERT INTO sesi_kelas_guru (id,jadwal_id,guru_id,mapel_id,rombel_id,tanggal,waktu_masuk,waktu_selesai,status,menit_terlambat,tenant_id,updated_at)
-    VALUES (?,?,?,?,?,?,?,?,?,?,?,datetime('now'))
+  db.prepare(`INSERT INTO sesi_kelas_guru (id,jadwal_id,guru_id,mapel_id,rombel_id,tanggal,waktu_masuk,waktu_selesai,status,menit_terlambat,tenant_id,updated_at,jadwal_source)
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,datetime('now'),?)
     ON CONFLICT(tenant_id,jadwal_id,tanggal) DO UPDATE SET
       guru_id=excluded.guru_id,mapel_id=excluded.mapel_id,rombel_id=excluded.rombel_id,
       waktu_masuk=excluded.waktu_masuk,waktu_selesai=NULL,status='aktif',
-      menit_terlambat=excluded.menit_terlambat,updated_at=datetime('now')`)
-    .run(id, jadwal.id, gtk.id, jadwal.mapel_id, jadwal.rombel_id, today, now, null, 'aktif', menitTerlambat, req.tenantId)
+      menit_terlambat=excluded.menit_terlambat,jadwal_source=excluded.jadwal_source,updated_at=datetime('now')`)
+    .run(id, jadwal.id, gtk.id, jadwal.mapel_id, jadwal.rombel_id, today, now, null, 'aktif', menitTerlambat, req.tenantId, jadwal.jadwal_source)
   try { notificationMonitor.logActivity(db, { tenantId: req.tenantId, eventType: 'class_session_started', actorId: gtk.id, entityId: id, metadata: { jadwal_id: jadwal.id, rombel_id: jadwal.rombel_id } }) } catch {}
   res.json(currentTeacherClassSession(req.tenantId, gtk.id, today))
 })
@@ -3840,16 +3859,29 @@ app.post('/api/guru/sesi-kelas/selesai', TEACHER, (req, res) => {
 
 app.get('/api/admin/sesi-kelas/hari-ini', DASHBOARD_ROLES, (req, res) => {
   const tanggal = /^\d{4}-\d{2}-\d{2}$/.test(String(req.query.tanggal || '')) ? String(req.query.tanggal) : todayJakarta()
-  if (tanggal === todayJakarta()) db.prepare("UPDATE sesi_kelas_guru SET status='selesai',waktu_selesai=COALESCE(waktu_selesai,(SELECT jam_selesai FROM jadwal WHERE jadwal.id=sesi_kelas_guru.jadwal_id AND jadwal.tenant_id=sesi_kelas_guru.tenant_id)),updated_at=datetime('now') WHERE tenant_id=? AND tanggal=? AND status='aktif' AND EXISTS (SELECT 1 FROM jadwal WHERE jadwal.id=sesi_kelas_guru.jadwal_id AND jadwal.tenant_id=sesi_kelas_guru.tenant_id AND jadwal.jam_selesai<?)")
+  if (tanggal === todayJakarta()) db.prepare(`UPDATE sesi_kelas_guru
+    SET status='selesai',waktu_selesai=COALESCE(waktu_selesai,
+      CASE WHEN jadwal_source='ujian'
+        THEN (SELECT jam_selesai FROM jadwal_ujian WHERE jadwal_ujian.id=sesi_kelas_guru.jadwal_id AND jadwal_ujian.tenant_id=sesi_kelas_guru.tenant_id)
+        ELSE (SELECT jam_selesai FROM jadwal WHERE jadwal.id=sesi_kelas_guru.jadwal_id AND jadwal.tenant_id=sesi_kelas_guru.tenant_id)
+      END),updated_at=datetime('now')
+    WHERE tenant_id=? AND tanggal=? AND status='aktif' AND COALESCE(
+      CASE WHEN jadwal_source='ujian'
+        THEN (SELECT jam_selesai FROM jadwal_ujian WHERE jadwal_ujian.id=sesi_kelas_guru.jadwal_id AND jadwal_ujian.tenant_id=sesi_kelas_guru.tenant_id)
+        ELSE (SELECT jam_selesai FROM jadwal WHERE jadwal.id=sesi_kelas_guru.jadwal_id AND jadwal.tenant_id=sesi_kelas_guru.tenant_id)
+      END,'99:99')<?`)
     .run(req.tenantId, tanggal, timeJakarta())
   const sessions = db.prepare(`SELECT sk.*,g.nama AS guru_nama,m.nama AS mapel_nama,r.nama AS rombel_nama,
-    j.jam_mulai,j.jam_selesai,j.ruangan
+    COALESCE(j.jam_mulai,ju.jam_mulai) AS jam_mulai,
+    COALESCE(j.jam_selesai,ju.jam_selesai) AS jam_selesai,
+    COALESCE(j.ruangan,ju.ruangan) AS ruangan
     FROM sesi_kelas_guru sk
     JOIN gtk g ON g.id=sk.guru_id AND g.tenant_id=sk.tenant_id
     JOIN mapel m ON m.id=sk.mapel_id AND m.tenant_id=sk.tenant_id
     JOIN rombel r ON r.id=sk.rombel_id AND r.tenant_id=sk.tenant_id
-    JOIN jadwal j ON j.id=sk.jadwal_id AND j.tenant_id=sk.tenant_id
-    WHERE sk.tenant_id=? AND sk.tanggal=?
+    LEFT JOIN jadwal j ON j.id=sk.jadwal_id AND j.tenant_id=sk.tenant_id AND COALESCE(sk.jadwal_source,'reguler')='reguler'
+    LEFT JOIN jadwal_ujian ju ON ju.id=sk.jadwal_id AND ju.tenant_id=sk.tenant_id AND sk.jadwal_source='ujian'
+    WHERE sk.tenant_id=? AND sk.tanggal=? AND (j.id IS NOT NULL OR ju.id IS NOT NULL)
     ORDER BY CASE sk.status WHEN 'aktif' THEN 0 ELSE 1 END,sk.waktu_masuk DESC`).all(req.tenantId, tanggal)
   res.json({ tanggal, sessions, summary: {
     aktif: sessions.filter(row => row.status === 'aktif').length,
@@ -5813,8 +5845,13 @@ app.get('/api/tts/prewarm/status', ADMIN, (req, res) => {
   const names = collectTtsAnnouncementNames(db, req.tenantId)
   const phrases = []
   for (const n of names) { phrases.push(`${n} masuk`); phrases.push(`${n} pulang`) }
-  const cachedCount = phrases.filter(p => checkTtsCache({ text: p, voiceName: DEFAULT_VOICE, uploadDir: UPLOAD_DIR, tenantId: req.tenantId })).length
-  res.json({ total: phrases.length, cached: cachedCount })
+  const cached = []
+  const missing = []
+  for (const phrase of phrases) {
+    if (checkTtsCache({ text: phrase, voiceName: DEFAULT_VOICE, uploadDir: UPLOAD_DIR, tenantId: req.tenantId })) cached.push(phrase)
+    else missing.push(phrase)
+  }
+  res.json({ total: phrases.length, cached: cached.length, ready: missing.length === 0, phrases, missing })
 })
 
 // ===== Google OAuth (login akun Google berlangganan Gemini Pro, dipakai sbg kredensial AI personal guru) =====
@@ -6312,10 +6349,10 @@ app.get('/api/jurnal/jadwal-hari-ini', authMiddleware, (req, res) => {
   const hari = validTanggal
     ? HARI_ID[new Date(`${tgl}T12:00:00+07:00`).getUTCDay()]
     : require('./attendance-rules.cjs').hariJakarta()
-  if (tenantIsHoliday(req.tenantId, tgl)) {
+  const examTemplateId = examModeForDate(req.tenantId, tgl)
+  if (tenantIsHoliday(req.tenantId, tgl) && !examTemplateId) {
     return res.json({ gtk_id: gtk.id, tanggal: tgl, hari, hari_libur: true, jadwal: [] })
   }
-  const examTemplateId = examModeForDate(req.tenantId, tgl)
   const rows = examTemplateId
     ? db.prepare(`SELECT j.id as jadwal_id, j.mapel_id, j.rombel_id, j.jam_mulai, j.jam_selesai, j.ruangan,
         m.nama as mapel_nama, m.kode as mapel_kode, r.nama as rombel_nama

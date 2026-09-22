@@ -233,15 +233,15 @@ async function speakViaGeminiOrFallback(text: string) {
     geminiAudioCache.set(text, audio)
     await audio.play()
   } catch (err: any) {
-    // Bedakan dua kasus 404 yang beda arti:
-    // - generating:true  → cache-miss biasa, server sedang generate di
-    //   background untuk scan berikutnya. JANGAN tandai unavailable —
-    //   coba lagi di scan berikutnya (kemungkinan sudah ter-cache).
-    // - 404 tanpa generating → tenant memang belum konfigurasi API key
-    //   Gemini sama sekali. Tandai unavailable agar tidak retry percuma.
-    if (err?.response?.status === 404 && !err.response?.data?.generating) {
-      geminiTtsUnavailable = true
-    }
+    // Cache miss berarti audio pria sedang dibuat di server. Jangan menggantinya
+    // dengan Web Speech Bahasa Indonesia yang pada Chrome/Android umumnya female;
+    // beep sukses tetap sudah dimainkan oleh alur scan dan scan berikutnya akan
+    // memakai cache pria yang selesai dibuat.
+    if (err?.response?.status === 404 && err.response?.data?.generating) return
+
+    // Untuk tenant tanpa konfigurasi Gemini atau kegagalan jaringan/audio lain,
+    // pertahankan fallback best-effort agar notifikasi tetap terdengar.
+    if (err?.response?.status === 404) geminiTtsUnavailable = true
     speakClear(text)
   }
 }

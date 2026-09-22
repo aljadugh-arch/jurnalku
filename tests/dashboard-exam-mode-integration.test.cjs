@@ -31,6 +31,16 @@ test('INTEGRATION: guru dashboard menampilkan jadwal saat ujian', () => {
     'siswa rombol diperhitungkan saat ujian')
 })
 
+test('INTEGRATION: endpoint jurnal guru tidak mengosongkan jadwal ujian karena kalender libur', () => {
+  const routeStart = server.indexOf("app.get('/api/jurnal/jadwal-hari-ini'")
+  const routeEnd = server.indexOf("app.get('/api/jurnal/me'", routeStart)
+  const route = server.slice(routeStart, routeEnd)
+  assert.ok(route.indexOf('examModeForDate') < route.indexOf('tenantIsHoliday'),
+    'mode ujian harus diketahui sebelum keputusan hari libur')
+  assert.match(route, /tenantIsHoliday\(req\.tenantId, tgl\)\s*&&\s*!examTemplateId/,
+    'hari ujian aktif tidak boleh dikosongkan oleh flag libur')
+})
+
 test('INTEGRATION: siswa dashboard tetap menampilkan jadwal saat ujian', () => {
   // Scenario: sama dengan guru, tapi untuk siswa
   // Expected: jadwal tampil, mode_ujian flag set
