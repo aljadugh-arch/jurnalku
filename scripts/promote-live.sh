@@ -35,31 +35,34 @@ rollback() {
   if [[ "$ACTIVATED" == "1" && -d "$BACKUP" ]]; then
     rm -rf "$LIVE/dist"
     mv "$BACKUP/dist" "$LIVE/dist"
-    cp -a "$BACKUP/index.cjs" "$LIVE/server/index.cjs"
-    cp -a "$BACKUP/tenant.cjs" "$LIVE/server/tenant.cjs"
+    rm -f "$LIVE"/server/*.cjs
+    cp -a "$BACKUP/server/." "$LIVE/server/"
     pm2 restart "$PM2_APP" --update-env >/dev/null 2>&1 || true
   fi
   exit "$status"
 }
 trap rollback ERR
 
-mkdir -p "$BACKUP"
+# Backup seluruh dist + seluruh modul server *.cjs (bukan cuma index/tenant),
+# supaya rollback benar-benar memulihkan semua dependency yang mungkin berubah.
+mkdir -p "$BACKUP/server"
 cp -a "$LIVE/dist" "$BACKUP/dist"
-cp -a "$LIVE/server/index.cjs" "$BACKUP/index.cjs"
-cp -a "$LIVE/server/tenant.cjs" "$BACKUP/tenant.cjs"
+cp -a "$LIVE"/server/*.cjs "$BACKUP/server/"
 mkdir -p /root/backups/jurnalku
 sqlite3 "$LIVE/server/jurnalku.db" ".backup /root/backups/jurnalku/jurnalku.db.pre-deploy-$TS"
 
 test -s "$STG/dist/index.html"
-node -c "$STG/server/index.cjs"
-node -c "$STG/server/tenant.cjs"
+for f in "$STG"/server/*.cjs; do
+  node -c "$f"
+done
 ACTIVATED=1
 rm -rf "$LIVE/dist.next"
 cp -a "$STG/dist" "$LIVE/dist.next"
 rm -rf "$LIVE/dist"
 mv "$LIVE/dist.next" "$LIVE/dist"
-install -m 0644 "$STG/server/index.cjs" "$LIVE/server/index.cjs"
-install -m 0644 "$STG/server/tenant.cjs" "$LIVE/server/tenant.cjs"
+for f in "$STG"/server/*.cjs; do
+  install -m 0644 "$f" "$LIVE/server/$(basename "$f")"
+done
 pm2 restart "$PM2_APP" --update-env
 for attempt in {1..10}; do
   curl --fail --silent --show-error --max-time 15 "$HEALTH_URL" >/dev/null && break
