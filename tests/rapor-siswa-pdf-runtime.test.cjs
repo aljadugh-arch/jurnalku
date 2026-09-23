@@ -60,17 +60,16 @@ test('layout sampul memberi ruang aman untuk logo dan teks panjang', () => {
     pageWidth: 595.28,
     contentWidth: 495.28,
     institutionName: 'Madrasah Tsanawiyah Swasta Plus Sunan Drajat 7',
-    address: 'Jl. Raya Rembes-Pakah KM01 RT.01 RW.01 Dusun Gemulung Ds. Gesikharjo',
-    logoWidth: 90,
-    logoHeight: 88,
+    nsmNpsn: 'NSM: 121235230111  NPSN: 70059369',
+    cityStamp: 'Bondowoso',
   })
 
-  assert.ok(layout.logoBottom + 24 <= layout.titleY, 'judul tidak boleh menabrak logo')
-  assert.ok(layout.badgeBottom + 44 <= layout.studentBoxY, 'kotak siswa harus terpisah dari badge')
-  assert.ok(layout.studentBoxBottom + 44 <= layout.institutionY, 'nama lembaga harus terpisah dari kotak siswa')
-  assert.ok(layout.addressBottom <= 780, 'alamat harus berada di area aman sampul')
-  assert.ok(layout.institutionLines <= 2, 'nama lembaga maksimal dua baris')
-  assert.ok(layout.addressLines <= 2, 'alamat maksimal dua baris')
+  // Halaman 1: RAPOR (header), kementerian, judul, NSM/NPSN, placeholder nama siswa, kota/tanda tangan
+  assert.ok(layout.headerY >= 50, 'header harus di atas halaman')
+  assert.ok(layout.titleY > layout.headerY + layout.headerHeight, 'judul harus terpisah dari header')
+  assert.ok(layout.identifierY > layout.titleY + layout.titleHeight, 'NSM/NPSN harus terpisah dari judul')
+  assert.ok(layout.placeholderNameY > layout.identifierY + layout.identifierHeight, 'placeholder nama harus terpisah dari NSM/NPSN')
+  assert.ok(layout.footerY < 750, 'kota/tanda tangan harus berada di bagian bawah')
 })
 
 test('createRaporSiswaPdf menghasilkan dokumen PDF valid untuk siswa dengan data lengkap', async () => {

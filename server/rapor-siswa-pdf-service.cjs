@@ -42,34 +42,32 @@ function estimateWrappedLines(text, fontSize, width, weightFactor = 0.53) {
   }, 0)
 }
 
-function coverLayout({ pageWidth, contentWidth, institutionName, address, logoWidth = 90, logoHeight = 90 }) {
-  const logoY = 82
-  const logoDisplayHeight = Math.min(104, Math.max(72, logoHeight * (logoWidth / Math.max(1, logoWidth))))
-  const logoBottom = logoY + logoDisplayHeight
-  const titleY = logoBottom + 28
-  const titleBottom = titleY + 27
-  const levelY = titleBottom + 9
-  const levelBottom = levelY + 18
-  const badgeY = levelBottom + 18
-  const badgeHeight = 34
-  const badgeBottom = badgeY + badgeHeight
-  const studentBoxY = badgeBottom + 48
-  const studentBoxHeight = 122
-  const studentBoxBottom = studentBoxY + studentBoxHeight
-  const institutionY = studentBoxBottom + 48
-  const institutionWidth = contentWidth - 60
-  const institutionLines = estimateWrappedLines(institutionName, 15, institutionWidth, 0.56)
-  const institutionHeight = institutionLines * 18
-  const addressY = institutionY + institutionHeight + 10
-  const addressWidth = contentWidth - 80
-  const addressLines = estimateWrappedLines(address, 9, addressWidth, 0.5)
-  const addressHeight = addressLines * 12
-  const addressBottom = addressY + addressHeight
+function coverLayout({ pageWidth, contentWidth, institutionName, nsmNpsn, cityStamp }) {
   return {
-    pageWidth, logoY, logoDisplayHeight, logoBottom, titleY, titleBottom, levelY, levelBottom,
-    badgeY, badgeHeight, badgeBottom, studentBoxY, studentBoxHeight, studentBoxBottom,
-    institutionY, institutionWidth, institutionLines, institutionHeight,
-    addressY, addressWidth, addressLines, addressHeight, addressBottom,
+    headerY: 60,
+    headerHeight: 50,
+    titleY: 120,
+    titleHeight: 60,
+    identifierY: 190,
+    identifierHeight: 30,
+    placeholderNameY: 260,
+    placeholderNameHeight: 80,
+    footerY: 650,
+  }
+}
+
+function identitasLayout({ pageWidth, contentWidth }) {
+  return {
+    headerY: 30,
+    headerHeight: 60,
+    titleY: 100,
+    titleHeight: 25,
+    contentStartY: 135,
+    col1X: 60,
+    col2X: pageWidth / 2 + 30,
+    colWidth: pageWidth / 2 - 50,
+    rowHeight: 22,
+    sectionSpacing: 30,
   }
 }
 
@@ -124,6 +122,8 @@ async function createRaporSiswaPdf(db, options) {
   let prestasi = []
   try { prestasi = JSON.parse(pelengkap.prestasi || '[]') } catch { prestasi = [] }
 
+  const tanggalRapor = safeText(pelengkap.tanggal_pembagian, new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' }))
+
   const ekstrakurikuler = db.prepare(`SELECT e.id,e.nama,e.jenis_kegiatan,
       COUNT(a.id) AS total_pertemuan,
       SUM(CASE WHEN lower(a.status)='hadir' THEN 1 ELSE 0 END) AS hadir
@@ -146,145 +146,195 @@ async function createRaporSiswaPdf(db, options) {
   const doc = new PDFDocument({ size: 'A4', margin: 50, bufferPages: true })
   const pageWidth = doc.page.width - doc.page.margins.left - doc.page.margins.right
 
-  // ---------- Halaman 1: Sampul ----------
+  // ---------- Halaman 1: Sampul (Cover) ----------
+  // Border halaman
   doc.rect(30, 30, doc.page.width - 60, doc.page.height - 60).lineWidth(2).stroke()
   doc.rect(36, 36, doc.page.width - 72, doc.page.height - 72).lineWidth(0.5).stroke()
 
-  const institutionName = safeText(settings.nama_lembaga, 'Nama Lembaga').toUpperCase()
-  const cover = coverLayout({
-    pageWidth: doc.page.width,
-    contentWidth: pageWidth,
-    institutionName,
-    address: settings.alamat || '',
-    logoWidth: 90,
-    logoHeight: 90,
-  })
+  const cover = coverLayout({ pageWidth, contentWidth: pageWidth, institutionName: settings.nama_lembaga })
 
-  if (hasLogo) {
-    try {
-      doc.image(settingsLogoPath, doc.page.width / 2 - 45, cover.logoY, {
-        fit: [90, cover.logoDisplayHeight],
-        align: 'center',
-        valign: 'center',
-      })
-    } catch {}
-  }
-  doc.font('Helvetica-Bold').fontSize(22).fillColor('black').text('RAPOR PESERTA DIDIK', doc.page.margins.left, cover.titleY, {
-    width: pageWidth,
-    align: 'center',
-    lineBreak: false,
-  })
-  doc.font('Helvetica-Bold').fontSize(14).text(String(settings.jenjang || '').toUpperCase() || 'SATUAN PENDIDIKAN', doc.page.margins.left, cover.levelY, {
+  // Header: RAPOR (kecil, di atas)
+  doc.font('Helvetica-Bold').fontSize(12).text('RAPOR', doc.page.margins.left, cover.headerY, {
     width: pageWidth,
     align: 'center',
     lineBreak: false,
   })
 
-  doc.font('Helvetica-Bold').fontSize(11)
-  const badgeText = jenisLabel
-  const badgeWidth = Math.max(210, Math.min(pageWidth - 80, doc.widthOfString(badgeText) + 40))
-  const badgeX = (doc.page.width - badgeWidth) / 2
-  doc.rect(badgeX, cover.badgeY, badgeWidth, cover.badgeHeight).fill('black')
-  doc.fillColor('white').text(badgeText, badgeX + 12, cover.badgeY + 10, {
+  // Kementerian / Yayasan header
+  const headerText = safeText(settings.yayasan_nama || 'KEMENTERIAN AGAMA REPUBLIK INDONESIA', 'INSTITUSI')
+  doc.font('Helvetica-Bold').fontSize(10).text(headerText, doc.page.margins.left, cover.headerY + 12, {
+    width: pageWidth,
     align: 'center',
-    width: badgeWidth - 24,
     lineBreak: false,
   })
-  doc.fillColor('black')
 
-  const boxY = cover.studentBoxY
-  const boxWidth = pageWidth * 0.8
-  const boxX = doc.page.margins.left + (pageWidth - boxWidth) / 2
-  doc.rect(boxX, boxY, boxWidth, cover.studentBoxHeight).lineWidth(1).stroke()
-  doc.font('Helvetica').fontSize(11).text('Nama Peserta Didik :', boxX + 12, boxY + 15, { width: boxWidth - 24, align: 'center', lineBreak: false })
-  doc.font('Helvetica-Bold').fontSize(18).text(safeText(siswa.nama).toUpperCase(), boxX + 16, boxY + 34, { width: boxWidth - 32, align: 'center', height: 42, ellipsis: true })
-  doc.font('Helvetica').fontSize(11).text('NIS / NISN :', boxX + 12, boxY + 76, { width: boxWidth - 24, align: 'center', lineBreak: false })
-  doc.font('Helvetica-Bold').fontSize(13).text(`${safeText(siswa.nis)} / ${safeText(siswa.nisn)}`, boxX + 12, boxY + 94, { width: boxWidth - 24, align: 'center', lineBreak: false })
-
-  const institutionX = (doc.page.width - cover.institutionWidth) / 2
-  doc.font('Helvetica-Bold').fontSize(15).text(institutionName, institutionX, cover.institutionY, {
-    width: cover.institutionWidth,
+  // Nama madrasah besar
+  doc.font('Helvetica-Bold').fontSize(18).text(safeText(settings.nama_lembaga, 'Nama Lembaga').toUpperCase(), doc.page.margins.left, cover.titleY, {
+    width: pageWidth,
     align: 'center',
-    height: cover.institutionHeight,
-    lineGap: 1,
+    height: cover.titleHeight,
+    lineGap: 2,
+  })
+
+  // NSM dan NPSN
+  const identifiers = []
+  if (settings.nsm) identifiers.push(`NSM: ${settings.nsm}`)
+  if (settings.npsn) identifiers.push(`NPSN: ${settings.npsn}`)
+  const identifierText = identifiers.join('     ')
+  doc.font('Helvetica').fontSize(9).text(identifierText || '-', doc.page.margins.left, cover.identifierY, {
+    width: pageWidth,
+    align: 'center',
+    lineBreak: false,
+  })
+
+  // Placeholder untuk nama siswa
+  doc.font('Helvetica').fontSize(10).text('NAMA PESERTA DIDIK', doc.page.margins.left, cover.placeholderNameY, {
+    width: pageWidth,
+    align: 'center',
+    lineBreak: false,
+  })
+  doc.font('Helvetica-Bold').fontSize(14).text(safeText(siswa.nama).toUpperCase(), doc.page.margins.left, cover.placeholderNameY + 18, {
+    width: pageWidth,
+    align: 'center',
+    height: 32,
     ellipsis: true,
   })
-  if (settings.alamat) {
-    const addressX = (doc.page.width - cover.addressWidth) / 2
-    doc.font('Helvetica').fontSize(9).text(settings.alamat, addressX, cover.addressY, {
-      width: cover.addressWidth,
-      align: 'center',
-      height: cover.addressHeight,
-      lineGap: 1,
-      ellipsis: true,
-    })
-  }
+
+  // NIS / NISN
+  doc.font('Helvetica').fontSize(10).text('NIS/NISN', doc.page.margins.left, cover.placeholderNameY + 55, {
+    width: pageWidth,
+    align: 'center',
+    lineBreak: false,
+  })
+  doc.font('Helvetica-Bold').fontSize(11).text(`${safeText(siswa.nis)} / ${safeText(siswa.nisn)}`, doc.page.margins.left, cover.placeholderNameY + 68, {
+    width: pageWidth,
+    align: 'center',
+    lineBreak: false,
+  })
+
+  // Footer dengan kota/tanda tangan
+  const footerKota = safeText(settings.kota_cetak, 'Bondowoso')
+  doc.font('Helvetica').fontSize(9).text(`${footerKota}, ${new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}`, doc.page.margins.left, cover.footerY, {
+    width: pageWidth,
+    align: 'center',
+    lineBreak: false,
+  })
 
   // ---------- Halaman 2: Identitas Peserta Didik ----------
   doc.addPage({ size: 'A4', margin: 50 })
-  drawReportHeader(doc, settings, hasLogo ? settingsLogoPath : null, pageWidth)
-  doc.moveDown(1)
-  doc.font('Helvetica-Bold').fontSize(14).text('IDENTITAS PESERTA DIDIK', { align: 'center', underline: true })
-  doc.moveDown(1.2)
+  const idLayout = identitasLayout({ pageWidth, contentWidth: pageWidth })
 
-  const identityRows = [
-    ['1.', 'Nama Lengkap', safeText(siswa.nama)],
-    ['2.', 'NIS / NISN', `${safeText(siswa.nis)} / ${safeText(siswa.nisn)}`],
-    ['3.', 'Tempat, Tanggal Lahir', `${safeText(siswa.tempat_lahir)}, ${safeText(siswa.tanggal_lahir)}`],
-    ['4.', 'Jenis Kelamin', siswa.jenis_kelamin === 'P' ? 'Perempuan' : 'Laki-laki'],
-    ['5.', 'Agama', safeText(siswa.agama, 'Islam')],
-    ['6.', 'Status dalam Keluarga', safeText(siswa.status_keluarga, 'Anak Kandung')],
-    ['7.', 'Anak Ke', safeText(siswa.anak_ke, '1')],
-    ['8.', 'Alamat Peserta Didik', safeText(siswa.alamat)],
-    ['9.', 'Nomor Telepon', safeText(siswa.no_hp)],
-    ['10.', 'Sekolah Asal (SD/MI)', safeText(siswa.asal_sekolah)],
-    ['11.', 'Kelas', safeText(siswa.rombel_nama)],
-    ['12.', 'Nama Ayah', safeText(siswa.nama_ayah || siswa.nama_ortu)],
-    ['13.', 'Nama Ibu', safeText(siswa.nama_ibu)],
-    ['14.', 'Pekerjaan Ayah', safeText(siswa.kerja_ayah)],
-    ['15.', 'Pekerjaan Ibu', safeText(siswa.kerja_ibu)],
-    ['16.', 'Nama Wali', safeText(siswa.nama_wali)],
-    ['17.', 'Pekerjaan Wali', safeText(siswa.kerja_wali)],
+  // Header halaman 2 dengan logo dan nama lembaga
+  if (hasLogo) {
+    try {
+      doc.image(settingsLogoPath, doc.page.margins.left, idLayout.headerY, {
+        fit: [50, 50],
+        align: 'center',
+      })
+    } catch {}
+  }
+  const logoOffset = hasLogo ? 60 : 0
+  doc.font('Helvetica-Bold').fontSize(11).text(safeText(settings.nama_lembaga).toUpperCase(), doc.page.margins.left + logoOffset, idLayout.headerY + 5, {
+    width: pageWidth - logoOffset - 20,
+    align: 'center',
+  })
+  if (settings.alamat) {
+    doc.font('Helvetica').fontSize(8).text(settings.alamat, doc.page.margins.left + logoOffset, idLayout.headerY + 25, {
+      width: pageWidth - logoOffset - 20,
+      align: 'center',
+    })
+  }
+
+  // Judul IDENTITAS PESERTA DIDIK
+  doc.font('Helvetica-Bold').fontSize(12).text('IDENTITAS PESERTA DIDIK', doc.page.margins.left, idLayout.titleY, {
+    width: pageWidth,
+    align: 'center',
+    underline: false,
+  })
+
+  // Bagian A: Data Diri Peserta Didik
+  let yPos = idLayout.contentStartY
+  doc.font('Helvetica-Bold').fontSize(10).text('A.  DATA DIRI PESERTA DIDIK', doc.page.margins.left, yPos)
+  yPos += idLayout.rowHeight + 5
+
+  const dataDiri = [
+    ['1', 'Nama Lengkap', safeText(siswa.nama).toUpperCase()],
+    ['2', 'NIS / NISN', `${safeText(siswa.nis)} / ${safeText(siswa.nisn)}`],
+    ['3', 'Tempat, Tanggal Lahir', `${safeText(siswa.tempat_lahir, '-')}, ${safeText(siswa.tanggal_lahir, '-')}`],
+    ['4', 'Jenis Kelamin', safeText(siswa.jenis_kelamin, '-')],
+    ['5', 'Agama', safeText(siswa.agama, '-')],
+    ['6', 'Status dalam Keluarga', safeText(siswa.status_keluarga, '-')],
+    ['7', 'Anak Ke', safeText(siswa.anak_ke, '-')],
+    ['8', 'Alamat Peserta Didik', safeText(siswa.alamat, '-')],
+    ['9', 'Nomor Telepon', safeText(siswa.nomor_hp, '-')],
+    ['10', 'Sekolah Asal (SD/MI)', safeText(siswa.sekolah_asal, '-')],
   ]
 
-  const labelX = doc.page.margins.left + 20
-  const colonX = labelX + 170
-  const valueX = colonX + 12
-  const valueWidth = pageWidth - (valueX - doc.page.margins.left) - 10
-  let rowY = doc.y
-  for (const [no, label, value] of identityRows) {
-    doc.font('Helvetica').fontSize(10)
-    const textHeight = doc.heightOfString(value, { width: valueWidth })
-    const rowHeight = Math.max(16, textHeight + 4)
-    if (rowY + rowHeight > doc.page.height - doc.page.margins.bottom - 150) {
-      doc.addPage({ size: 'A4', margin: 50 })
-      drawReportHeader(doc, settings, hasLogo ? settingsLogoPath : null, pageWidth)
-      rowY = doc.y + 10
-    }
-    doc.font('Helvetica').fontSize(10).text(no, doc.page.margins.left, rowY, { width: 18 })
-    doc.font('Helvetica-Bold').fontSize(10).text(label, labelX, rowY, { width: 150 })
-    doc.font('Helvetica').fontSize(10).text(':', colonX, rowY)
-    doc.font('Helvetica').fontSize(10).text(value, valueX, rowY, { width: valueWidth })
-    rowY += rowHeight
+  doc.font('Helvetica').fontSize(9)
+  for (const row of dataDiri) {
+    const num = row[0]
+    const label = row[1]
+    const val = row[2]
+    doc.text(num, idLayout.col1X, yPos, { width: 20 })
+    doc.text(label, idLayout.col1X + 25, yPos, { width: 80 })
+    doc.text(':', idLayout.col1X + 115, yPos, { width: 5 })
+    doc.text(val, idLayout.col1X + 125, yPos, { width: idLayout.colWidth - 125 })
+    yPos += idLayout.rowHeight
   }
-  doc.y = rowY + 20
 
-  // Foto + tanda tangan kepala sekolah
-  if (doc.y + 130 > doc.page.height - doc.page.margins.bottom) {
-    doc.addPage({ size: 'A4', margin: 50 })
-    drawReportHeader(doc, settings, hasLogo ? settingsLogoPath : null, pageWidth)
-    doc.moveDown(1)
+  // Bagian B: Data Orang Tua
+  yPos += idLayout.sectionSpacing
+  doc.font('Helvetica-Bold').fontSize(10).text('B.  DATA ORANG TUA', doc.page.margins.left, yPos)
+  yPos += idLayout.rowHeight + 5
+
+  const dataOrangTua = [
+    ['1', 'Nama Ayah', safeText(siswa.nama_ayah, '-')],
+    ['2', 'Pekerjaan Ayah', safeText(siswa.pekerjaan_ayah, '-')],
+    ['3', 'Nama Ibu', safeText(siswa.nama_ibu, '-')],
+    ['4', 'Pekerjaan Ibu', safeText(siswa.pekerjaan_ibu, '-')],
+    ['5', 'Alamat Orang Tua', safeText(siswa.alamat_ortu, '-')],
+    ['6', 'Nomor Telepon Orang Tua', safeText(siswa.nomor_hp_ortu, '-')],
+  ]
+
+  for (const row of dataOrangTua) {
+    const num = row[0]
+    const label = row[1]
+    const val = row[2]
+    doc.text(num, idLayout.col1X, yPos, { width: 20 })
+    doc.text(label, idLayout.col1X + 25, yPos, { width: 80 })
+    doc.text(':', idLayout.col1X + 115, yPos, { width: 5 })
+    doc.text(val, idLayout.col1X + 125, yPos, { width: idLayout.colWidth - 125 })
+    yPos += idLayout.rowHeight
   }
-  const sigBlockY = doc.y
-  if (fotoPath) { try { doc.image(fotoPath, doc.page.margins.left + 20, sigBlockY, { width: 85, height: 113, fit: [85, 113] }); doc.rect(doc.page.margins.left + 20, sigBlockY, 85, 113).stroke() } catch {} }
-  else { doc.rect(doc.page.margins.left + 20, sigBlockY, 85, 113).stroke(); doc.fontSize(8).text('PAS FOTO\n3 X 4', doc.page.margins.left + 20, sigBlockY + 45, { width: 85, align: 'center' }) }
 
-  const sigX = doc.page.margins.left + pageWidth / 2
-  const tanggalRapor = safeText(pelengkap.tanggal_pembagian, new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' }))
-  doc.font('Helvetica').fontSize(10).text(`${safeText(settings.kota_cetak, 'Bondowoso')}, ${tanggalRapor}`, sigX, sigBlockY, { width: pageWidth / 2 - 20, align: 'center' })
-  doc.text('Kepala Sekolah', sigX, sigBlockY + 14, { width: pageWidth / 2 - 20, align: 'center' })
-  try { doc.image(qrBuffer, sigX + (pageWidth / 2 - 20) / 2 - 25, sigBlockY + 30, { width: 50 }) } catch {}
-  doc.font('Helvetica-Bold').fontSize(10).text(safeText(settings.kepala_sekolah, '( .................................... )'), sigX, sigBlockY + 85, { width: pageWidth / 2 - 20, align: 'center', underline: true })
+  // Foto + Tanda tangan kepala sekolah di bawah
+  yPos += idLayout.sectionSpacing
+  const photoX = doc.page.margins.left
+  const photoY = yPos
+  const photoSize = 90
+  doc.rect(photoX, photoY, photoSize, photoSize).stroke()
+  doc.font('Helvetica').fontSize(8).text('PAS FOTO\n3 x 4', photoX, photoY + 35, {
+    width: photoSize,
+    align: 'center',
+  })
+
+  if (fotoPath) {
+    try {
+      doc.image(fotoPath, photoX, photoY, { width: photoSize, height: photoSize, fit: [photoSize, photoSize] })
+    } catch {}
+  }
+
+  const sigX = photoX + photoSize + 80
+  const sigY = photoY + 20
+  doc.font('Helvetica').fontSize(9).text('Kepala Sekolah / Madrasah', sigX, sigY, {
+    width: pageWidth - sigX - 50,
+    align: 'center',
+  })
+  doc.font('Helvetica-Bold').fontSize(9).text(`(${safeText(settings.kepala_sekolah, '............................')})`, sigX, sigY + 50, {
+    width: pageWidth - sigX - 50,
+    align: 'center',
+    underline: true,
+  })
 
   // ---------- Halaman 3: Capaian Hasil Belajar ----------
   doc.addPage({ size: 'A4', margin: 50 })
@@ -401,18 +451,18 @@ async function createRaporSiswaPdf(db, options) {
     doc.moveDown(1)
   }
   doc.moveDown(1)
-  const sigY = doc.y
+  const sigY2 = doc.y
   const thirdW = pageWidth / 3
   doc.font('Helvetica').fontSize(9)
-  doc.text('Orang Tua / Wali', startX, sigY, { width: thirdW, align: 'center' })
-  doc.font('Helvetica-Bold').text('( .................................... )', startX, sigY + 60, { width: thirdW, align: 'center' })
+  doc.text('Orang Tua / Wali', startX, sigY2, { width: thirdW, align: 'center' })
+  doc.font('Helvetica-Bold').text('( .................................... )', startX, sigY2 + 60, { width: thirdW, align: 'center' })
 
-  doc.font('Helvetica').text('Kepala Sekolah', startX + thirdW, sigY, { width: thirdW, align: 'center' })
-  try { doc.image(qrBuffer, startX + thirdW + thirdW / 2 - 22, sigY + 14, { width: 44 }) } catch {}
-  doc.font('Helvetica-Bold').text(safeText(settings.kepala_sekolah, '( .................................... )'), startX + thirdW, sigY + 60, { width: thirdW, align: 'center', underline: true })
+  doc.font('Helvetica').text('Kepala Sekolah', startX + thirdW, sigY2, { width: thirdW, align: 'center' })
+  try { doc.image(qrBuffer, startX + thirdW + thirdW / 2 - 22, sigY2 + 14, { width: 44 }) } catch {}
+  doc.font('Helvetica-Bold').text(safeText(settings.kepala_sekolah, '( .................................... )'), startX + thirdW, sigY2 + 60, { width: thirdW, align: 'center', underline: true })
 
-  doc.font('Helvetica').text(`${safeText(settings.kota_cetak, 'Bondowoso')}, ${tanggalRapor}\nWali Kelas ${safeText(siswa.rombel_nama)}`, startX + thirdW * 2, sigY, { width: thirdW, align: 'center' })
-  doc.font('Helvetica-Bold').text(safeText(siswa.wali_kelas_nama, '( .................................... )'), startX + thirdW * 2, sigY + 60, { width: thirdW, align: 'center', underline: true })
+  doc.font('Helvetica').text(`${safeText(settings.kota_cetak, 'Bondowoso')}, ${tanggalRapor}\nWali Kelas ${safeText(siswa.rombel_nama)}`, startX + thirdW * 2, sigY2, { width: thirdW, align: 'center' })
+  doc.font('Helvetica-Bold').text(safeText(siswa.wali_kelas_nama, '( .................................... )'), startX + thirdW * 2, sigY2 + 60, { width: thirdW, align: 'center', underline: true })
 
   return doc
 }
