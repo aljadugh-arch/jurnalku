@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import api from '../../services/api'
-import { Download, FileText, Printer, Save, Zap } from 'lucide-react'
+import { Download, FileText, Save, Zap } from 'lucide-react'
 import FoundationTenantPicker from '../../components/FoundationTenantPicker'
 import { QRCodeSVG } from 'qrcode.react'
 import { thumbUrl } from '../../lib/thumbUrl'
@@ -152,8 +152,7 @@ export default function RaporPage() {
         <div><h1 className="text-2xl font-display font-bold text-gray-800">Rapor Siswa</h1><p className="text-sm text-gray-500 mt-1">Rapor akademik dan perkembangan peserta didik</p></div>
         <div className="flex gap-2">
           {selectedSiswa && !foundationTenantId && <button onClick={savePelengkap} disabled={saving} className="btn-secondary flex items-center gap-2"><Save className="w-4 h-4" />{saving ? 'Menyimpan...' : 'Simpan Pelengkap'}</button>}
-          {selectedSiswa && rapor.length > 0 && !foundationTenantId && <button onClick={exportPdf} className="btn-secondary flex items-center gap-2"><Download className="w-4 h-4" />Download PDF (Siap Cetak)</button>}
-          {selectedSiswa && rapor.length > 0 && <button onClick={() => window.print()} className="btn-primary flex items-center gap-2"><Printer className="w-4 h-4" />Cetak / PDF</button>}
+          {selectedSiswa && rapor.length > 0 && !foundationTenantId && <button onClick={exportPdf} className="btn-primary flex items-center gap-2"><Download className="w-4 h-4" />Download PDF (Siap Cetak)</button>}
         </div>
       </div>
 

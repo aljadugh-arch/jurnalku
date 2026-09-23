@@ -45,6 +45,12 @@ test('hasil cetak rapor memiliki halaman identitas dan isi A4', () => {
   assert.match(page, /Wali Kelas/)
 })
 
+test('aksi siap cetak memakai PDF server agar layout sampul konsisten', () => {
+  assert.match(page, /Download PDF \(Siap Cetak\)/)
+  assert.doesNotMatch(page, /window\.print\(\)/)
+  assert.doesNotMatch(page, /Cetak \/ PDF/)
+})
+
 test('endpoint rapor memvalidasi periode, jenis, dan akses siswa', () => {
   assert.match(server, /function validateRaporPeriod/)
   assert.match(server, /function canManageRaporStudent/)

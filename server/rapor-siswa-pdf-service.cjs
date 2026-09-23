@@ -22,6 +22,57 @@ function resolveUploadPath(uploadDir, url) {
   return fs.existsSync(resolved) ? resolved : null
 }
 
+function estimateWrappedLines(text, fontSize, width, weightFactor = 0.53) {
+  const charsPerLine = Math.max(1, Math.floor(width / (fontSize * weightFactor)))
+  return String(text || '').split(/\r?\n/).reduce((total, paragraph) => {
+    const words = paragraph.trim().split(/\s+/).filter(Boolean)
+    if (!words.length) return total + 1
+    let lines = 1
+    let used = 0
+    for (const word of words) {
+      const size = word.length + (used ? 1 : 0)
+      if (used && used + size > charsPerLine) {
+        lines++
+        used = word.length
+      } else {
+        used += size
+      }
+    }
+    return total + lines
+  }, 0)
+}
+
+function coverLayout({ pageWidth, contentWidth, institutionName, address, logoWidth = 90, logoHeight = 90 }) {
+  const logoY = 82
+  const logoDisplayHeight = Math.min(104, Math.max(72, logoHeight * (logoWidth / Math.max(1, logoWidth))))
+  const logoBottom = logoY + logoDisplayHeight
+  const titleY = logoBottom + 28
+  const titleBottom = titleY + 27
+  const levelY = titleBottom + 9
+  const levelBottom = levelY + 18
+  const badgeY = levelBottom + 18
+  const badgeHeight = 34
+  const badgeBottom = badgeY + badgeHeight
+  const studentBoxY = badgeBottom + 48
+  const studentBoxHeight = 122
+  const studentBoxBottom = studentBoxY + studentBoxHeight
+  const institutionY = studentBoxBottom + 48
+  const institutionWidth = contentWidth - 60
+  const institutionLines = estimateWrappedLines(institutionName, 15, institutionWidth, 0.56)
+  const institutionHeight = institutionLines * 18
+  const addressY = institutionY + institutionHeight + 10
+  const addressWidth = contentWidth - 80
+  const addressLines = estimateWrappedLines(address, 9, addressWidth, 0.5)
+  const addressHeight = addressLines * 12
+  const addressBottom = addressY + addressHeight
+  return {
+    pageWidth, logoY, logoDisplayHeight, logoBottom, titleY, titleBottom, levelY, levelBottom,
+    badgeY, badgeHeight, badgeBottom, studentBoxY, studentBoxHeight, studentBoxBottom,
+    institutionY, institutionWidth, institutionLines, institutionHeight,
+    addressY, addressWidth, addressLines, addressHeight, addressBottom,
+  }
+}
+
 // Rentang tanggal semester — duplikat kecil dari index.cjs (fungsi lokal, bukan exported)
 // supaya service ini tidak circular-require index.cjs.
 function semesterRange(tahunAjaran, semester) {
@@ -99,36 +150,75 @@ async function createRaporSiswaPdf(db, options) {
   doc.rect(30, 30, doc.page.width - 60, doc.page.height - 60).lineWidth(2).stroke()
   doc.rect(36, 36, doc.page.width - 72, doc.page.height - 72).lineWidth(0.5).stroke()
 
-  doc.moveDown(4)
-  if (hasLogo) { try { doc.image(settingsLogoPath, doc.page.width / 2 - 45, doc.y, { width: 90 }); doc.moveDown(6) } catch {} }
-  doc.font('Helvetica-Bold').fontSize(22).text('RAPOR PESERTA DIDIK', { align: 'center' })
-  doc.moveDown(0.3)
-  doc.font('Helvetica-Bold').fontSize(14).text(String(settings.jenjang || '').toUpperCase() || 'SATUAN PENDIDIKAN', { align: 'center' })
-  doc.moveDown(0.6)
-  doc.font('Helvetica-Bold').fontSize(11).fillColor('white')
-  const badgeText = `  ${jenisLabel}  `
-  const badgeWidth = doc.widthOfString(badgeText) + 10
-  const badgeX = (doc.page.width - badgeWidth) / 2
-  const badgeY = doc.y
-  doc.rect(badgeX, badgeY, badgeWidth, 22).fill('black')
-  doc.fillColor('white').text(badgeText, badgeX + 5, badgeY + 5, { align: 'center', width: badgeWidth - 10 })
-  doc.fillColor('black')
-  doc.y = badgeY + 32
-  doc.moveDown(3)
+  const institutionName = safeText(settings.nama_lembaga, 'Nama Lembaga').toUpperCase()
+  const cover = coverLayout({
+    pageWidth: doc.page.width,
+    contentWidth: pageWidth,
+    institutionName,
+    address: settings.alamat || '',
+    logoWidth: 90,
+    logoHeight: 90,
+  })
 
-  const boxY = doc.y
+  if (hasLogo) {
+    try {
+      doc.image(settingsLogoPath, doc.page.width / 2 - 45, cover.logoY, {
+        fit: [90, cover.logoDisplayHeight],
+        align: 'center',
+        valign: 'center',
+      })
+    } catch {}
+  }
+  doc.font('Helvetica-Bold').fontSize(22).fillColor('black').text('RAPOR PESERTA DIDIK', doc.page.margins.left, cover.titleY, {
+    width: pageWidth,
+    align: 'center',
+    lineBreak: false,
+  })
+  doc.font('Helvetica-Bold').fontSize(14).text(String(settings.jenjang || '').toUpperCase() || 'SATUAN PENDIDIKAN', doc.page.margins.left, cover.levelY, {
+    width: pageWidth,
+    align: 'center',
+    lineBreak: false,
+  })
+
+  doc.font('Helvetica-Bold').fontSize(11)
+  const badgeText = jenisLabel
+  const badgeWidth = Math.max(210, Math.min(pageWidth - 80, doc.widthOfString(badgeText) + 40))
+  const badgeX = (doc.page.width - badgeWidth) / 2
+  doc.rect(badgeX, cover.badgeY, badgeWidth, cover.badgeHeight).fill('black')
+  doc.fillColor('white').text(badgeText, badgeX + 12, cover.badgeY + 10, {
+    align: 'center',
+    width: badgeWidth - 24,
+    lineBreak: false,
+  })
+  doc.fillColor('black')
+
+  const boxY = cover.studentBoxY
   const boxWidth = pageWidth * 0.8
   const boxX = doc.page.margins.left + (pageWidth - boxWidth) / 2
-  doc.rect(boxX, boxY, boxWidth, 120).lineWidth(1).stroke()
-  doc.font('Helvetica').fontSize(11).text('Nama Peserta Didik :', boxX, boxY + 15, { width: boxWidth, align: 'center' })
-  doc.font('Helvetica-Bold').fontSize(18).text(safeText(siswa.nama).toUpperCase(), boxX, boxY + 32, { width: boxWidth, align: 'center' })
-  doc.font('Helvetica').fontSize(11).text('NIS / NISN :', boxX, boxY + 65, { width: boxWidth, align: 'center' })
-  doc.font('Helvetica-Bold').fontSize(13).text(`${safeText(siswa.nis)} / ${safeText(siswa.nisn)}`, boxX, boxY + 82, { width: boxWidth, align: 'center' })
-  doc.y = boxY + 140
-  doc.moveDown(2)
+  doc.rect(boxX, boxY, boxWidth, cover.studentBoxHeight).lineWidth(1).stroke()
+  doc.font('Helvetica').fontSize(11).text('Nama Peserta Didik :', boxX + 12, boxY + 15, { width: boxWidth - 24, align: 'center', lineBreak: false })
+  doc.font('Helvetica-Bold').fontSize(18).text(safeText(siswa.nama).toUpperCase(), boxX + 16, boxY + 34, { width: boxWidth - 32, align: 'center', height: 42, ellipsis: true })
+  doc.font('Helvetica').fontSize(11).text('NIS / NISN :', boxX + 12, boxY + 76, { width: boxWidth - 24, align: 'center', lineBreak: false })
+  doc.font('Helvetica-Bold').fontSize(13).text(`${safeText(siswa.nis)} / ${safeText(siswa.nisn)}`, boxX + 12, boxY + 94, { width: boxWidth - 24, align: 'center', lineBreak: false })
 
-  doc.font('Helvetica-Bold').fontSize(15).text(safeText(settings.nama_lembaga, 'Nama Lembaga').toUpperCase(), { align: 'center' })
-  if (settings.alamat) doc.font('Helvetica').fontSize(10).text(settings.alamat, { align: 'center' })
+  const institutionX = (doc.page.width - cover.institutionWidth) / 2
+  doc.font('Helvetica-Bold').fontSize(15).text(institutionName, institutionX, cover.institutionY, {
+    width: cover.institutionWidth,
+    align: 'center',
+    height: cover.institutionHeight,
+    lineGap: 1,
+    ellipsis: true,
+  })
+  if (settings.alamat) {
+    const addressX = (doc.page.width - cover.addressWidth) / 2
+    doc.font('Helvetica').fontSize(9).text(settings.alamat, addressX, cover.addressY, {
+      width: cover.addressWidth,
+      align: 'center',
+      height: cover.addressHeight,
+      lineGap: 1,
+      ellipsis: true,
+    })
+  }
 
   // ---------- Halaman 2: Identitas Peserta Didik ----------
   doc.addPage({ size: 'A4', margin: 50 })
@@ -339,4 +429,4 @@ function drawReportHeader(doc, settings, logoPath, pageWidth) {
   doc.moveDown(0.5)
 }
 
-module.exports = { createRaporSiswaPdf }
+module.exports = { createRaporSiswaPdf, coverLayout }

@@ -1,7 +1,7 @@
 const test = require('node:test')
 const assert = require('node:assert/strict')
 const Database = require('better-sqlite3')
-const { createRaporSiswaPdf } = require('../server/rapor-siswa-pdf-service.cjs')
+const { createRaporSiswaPdf, coverLayout } = require('../server/rapor-siswa-pdf-service.cjs')
 
 // Bangun DB in-memory minimal yang meniru skema produksi (kolom yang dipakai
 // createRaporSiswaPdf saja) agar test tidak bergantung pada file DB nyata.
@@ -54,6 +54,24 @@ function buildTestDb() {
 
   return db
 }
+
+test('layout sampul memberi ruang aman untuk logo dan teks panjang', () => {
+  const layout = coverLayout({
+    pageWidth: 595.28,
+    contentWidth: 495.28,
+    institutionName: 'Madrasah Tsanawiyah Swasta Plus Sunan Drajat 7',
+    address: 'Jl. Raya Rembes-Pakah KM01 RT.01 RW.01 Dusun Gemulung Ds. Gesikharjo',
+    logoWidth: 90,
+    logoHeight: 88,
+  })
+
+  assert.ok(layout.logoBottom + 24 <= layout.titleY, 'judul tidak boleh menabrak logo')
+  assert.ok(layout.badgeBottom + 44 <= layout.studentBoxY, 'kotak siswa harus terpisah dari badge')
+  assert.ok(layout.studentBoxBottom + 44 <= layout.institutionY, 'nama lembaga harus terpisah dari kotak siswa')
+  assert.ok(layout.addressBottom <= 780, 'alamat harus berada di area aman sampul')
+  assert.ok(layout.institutionLines <= 2, 'nama lembaga maksimal dua baris')
+  assert.ok(layout.addressLines <= 2, 'alamat maksimal dua baris')
+})
 
 test('createRaporSiswaPdf menghasilkan dokumen PDF valid untuk siswa dengan data lengkap', async () => {
   const db = buildTestDb()
