@@ -1,5 +1,6 @@
 const PDFDocument = require('pdfkit')
 const QRCode = require('qrcode')
+const { getTenantSettings } = require('./tenant-settings.cjs')
 const path = require('path')
 const fs = require('fs')
 
@@ -42,7 +43,7 @@ async function createRaporSiswaPdf(db, options) {
   `).get(siswaId, tenantId)
   if (!siswa) return null
 
-  const settings = db.prepare('SELECT * FROM settings WHERE tenant_id=?').get(tenantId) || {}
+  const settings = getTenantSettings(db, tenantId) || {}
 
   const rapor = db.prepare(`
     SELECT r.*, m.nama AS mapel_nama
