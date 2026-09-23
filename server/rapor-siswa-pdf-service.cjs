@@ -42,17 +42,24 @@ function estimateWrappedLines(text, fontSize, width, weightFactor = 0.53) {
   }, 0)
 }
 
-function coverLayout({ pageWidth, contentWidth, institutionName, nsmNpsn, cityStamp }) {
+function coverLayout({ pageWidth, contentWidth, tahunAjaran }) {
+  const tahun = String(tahunAjaran).split('/')[0]
   return {
-    headerY: 60,
-    headerHeight: 50,
-    titleY: 120,
-    titleHeight: 60,
-    identifierY: 190,
-    identifierHeight: 30,
-    placeholderNameY: 260,
-    placeholderNameHeight: 80,
-    footerY: 650,
+    kemenagLogoY: 40,
+    kemenagLogoSize: 50,
+    raporTitleY: 100,
+    laporanSubtitleY: 125,
+    jenjangY: 155,
+    namaLembagaY: 180,
+    nsmNpsnY: 215,
+    lembagaLogoY: 250,
+    lembagaLogoSize: 80,
+    siswaBoxY: 360,
+    siswaBoxHeight: 100,
+    kemenagFooterY: 520,
+    yayasanFooterY: 545,
+    tahunFooterY: 570,
+    tahun,
   }
 }
 
@@ -151,29 +158,44 @@ async function createRaporSiswaPdf(db, options) {
   doc.rect(30, 30, doc.page.width - 60, doc.page.height - 60).lineWidth(2).stroke()
   doc.rect(36, 36, doc.page.width - 72, doc.page.height - 72).lineWidth(0.5).stroke()
 
-  const cover = coverLayout({ pageWidth, contentWidth: pageWidth, institutionName: settings.nama_lembaga })
+  const cover = coverLayout({ pageWidth, contentWidth: pageWidth, tahunAjaran })
 
-  // Header: RAPOR (kecil, di atas)
-  doc.font('Helvetica-Bold').fontSize(12).text('RAPOR', doc.page.margins.left, cover.headerY, {
+  // Logo Kemenag (placeholder - bisa diganti dengan asset jika ada)
+  // Untuk saat ini gunakan teks placeholder
+  doc.font('Helvetica-Bold').fontSize(8).text('KEMENAG', doc.page.margins.left + pageWidth / 2 - 25, cover.kemenagLogoY, {
+    width: 50,
+    align: 'center',
+  })
+
+  // Judul RAPOR
+  doc.font('Helvetica-Bold').fontSize(20).text('RAPOR', doc.page.margins.left, cover.raporTitleY, {
     width: pageWidth,
     align: 'center',
     lineBreak: false,
   })
 
-  // Kementerian / Yayasan header
-  const headerText = safeText(settings.yayasan_nama || 'KEMENTERIAN AGAMA REPUBLIK INDONESIA', 'INSTITUSI')
-  doc.font('Helvetica-Bold').fontSize(10).text(headerText, doc.page.margins.left, cover.headerY + 12, {
+  // Subjudul Laporan Hasil Belajar Siswa
+  doc.font('Helvetica-Bold').fontSize(12).text('LAPORAN HASIL BELAJAR SISWA', doc.page.margins.left, cover.laporanSubtitleY, {
     width: pageWidth,
     align: 'center',
     lineBreak: false,
   })
 
-  // Nama madrasah besar
-  doc.font('Helvetica-Bold').fontSize(18).text(safeText(settings.nama_lembaga, 'Nama Lembaga').toUpperCase(), doc.page.margins.left, cover.titleY, {
+  // Jenjang (dari settings.jenjang)
+  const jenjangText = safeText(settings.jenjang, 'MADRASAH TSANAWIYAH')
+  doc.font('Helvetica-Bold').fontSize(12).text(jenjangText.toUpperCase(), doc.page.margins.left, cover.jenjangY, {
     width: pageWidth,
     align: 'center',
-    height: cover.titleHeight,
-    lineGap: 2,
+    lineBreak: false,
+  })
+
+  // Nama Lembaga
+  const namaLembagaText = safeText(settings.nama_lembaga, 'Nama Lembaga')
+  doc.font('Helvetica-Bold').fontSize(13).text(namaLembagaText.toUpperCase(), doc.page.margins.left, cover.namaLembagaY, {
+    width: pageWidth,
+    align: 'center',
+    height: 20,
+    lineGap: 1,
   })
 
   // NSM dan NPSN
@@ -181,40 +203,65 @@ async function createRaporSiswaPdf(db, options) {
   if (settings.nsm) identifiers.push(`NSM: ${settings.nsm}`)
   if (settings.npsn) identifiers.push(`NPSN: ${settings.npsn}`)
   const identifierText = identifiers.join('     ')
-  doc.font('Helvetica').fontSize(9).text(identifierText || '-', doc.page.margins.left, cover.identifierY, {
+  doc.font('Helvetica').fontSize(9).text(identifierText || '', doc.page.margins.left, cover.nsmNpsnY, {
     width: pageWidth,
     align: 'center',
     lineBreak: false,
   })
 
-  // Placeholder untuk nama siswa
-  doc.font('Helvetica').fontSize(10).text('NAMA PESERTA DIDIK', doc.page.margins.left, cover.placeholderNameY, {
-    width: pageWidth,
+  // Logo Lembaga (di tengah, lebih besar)
+  if (hasLogo) {
+    try {
+      doc.image(settingsLogoPath, doc.page.margins.left + pageWidth / 2 - cover.lembagaLogoSize / 2, cover.lembagaLogoY, {
+        fit: [cover.lembagaLogoSize, cover.lembagaLogoSize],
+        align: 'center',
+      })
+    } catch {}
+  } else {
+    // Placeholder jika tidak ada logo
+    doc.rect(doc.page.margins.left + pageWidth / 2 - cover.lembagaLogoSize / 2, cover.lembagaLogoY, cover.lembagaLogoSize, cover.lembagaLogoSize).stroke()
+    doc.font('Helvetica').fontSize(8).text('LOGO', doc.page.margins.left + pageWidth / 2 - cover.lembagaLogoSize / 2, cover.lembagaLogoY + 35, {
+      width: cover.lembagaLogoSize,
+      align: 'center',
+    })
+  }
+
+  // Kotak nama siswa dan NIS/NISN
+  const boxY = cover.siswaBoxY
+  const boxWidth = pageWidth * 0.85
+  const boxX = doc.page.margins.left + (pageWidth - boxWidth) / 2
+  doc.rect(boxX, boxY, boxWidth, cover.siswaBoxHeight).lineWidth(1.5).stroke()
+
+  doc.font('Helvetica').fontSize(9).text('NAMA PESERTA DIDIK', boxX + 15, boxY + 15, { width: boxWidth - 30, align: 'center', lineBreak: false })
+  doc.font('Helvetica-Bold').fontSize(16).text(safeText(siswa.nama).toUpperCase(), boxX + 15, boxY + 28, {
+    width: boxWidth - 30,
     align: 'center',
-    lineBreak: false,
-  })
-  doc.font('Helvetica-Bold').fontSize(14).text(safeText(siswa.nama).toUpperCase(), doc.page.margins.left, cover.placeholderNameY + 18, {
-    width: pageWidth,
-    align: 'center',
-    height: 32,
+    height: 30,
     ellipsis: true,
   })
 
-  // NIS / NISN
-  doc.font('Helvetica').fontSize(10).text('NIS/NISN', doc.page.margins.left, cover.placeholderNameY + 55, {
-    width: pageWidth,
+  doc.font('Helvetica').fontSize(9).text('NIS / NISN', boxX + 15, boxY + 62, { width: boxWidth - 30, align: 'center', lineBreak: false })
+  doc.font('Helvetica-Bold').fontSize(11).text(`${safeText(siswa.nis)} / ${safeText(siswa.nisn)}`, boxX + 15, boxY + 74, {
+    width: boxWidth - 30,
     align: 'center',
     lineBreak: false,
   })
-  doc.font('Helvetica-Bold').fontSize(11).text(`${safeText(siswa.nis)} / ${safeText(siswa.nisn)}`, doc.page.margins.left, cover.placeholderNameY + 68, {
+
+  // Footer: Kementerian, Yayasan, Tahun
+  doc.font('Helvetica').fontSize(9).text('KEMENTERIAN AGAMA REPUBLIK INDONESIA', doc.page.margins.left, cover.kemenagFooterY, {
     width: pageWidth,
     align: 'center',
     lineBreak: false,
   })
 
-  // Footer dengan kota/tanda tangan
-  const footerKota = safeText(settings.kota_cetak, 'Bondowoso')
-  doc.font('Helvetica').fontSize(9).text(`${footerKota}, ${new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}`, doc.page.margins.left, cover.footerY, {
+  const yayasanText = safeText(settings.yayasan_nama, 'Yayasan')
+  doc.font('Helvetica').fontSize(9).text(yayasanText.toUpperCase(), doc.page.margins.left, cover.yayasanFooterY, {
+    width: pageWidth,
+    align: 'center',
+    lineBreak: false,
+  })
+
+  doc.font('Helvetica-Bold').fontSize(11).text(`TAHUN ${cover.tahun}`, doc.page.margins.left, cover.tahunFooterY, {
     width: pageWidth,
     align: 'center',
     lineBreak: false,

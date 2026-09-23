@@ -55,21 +55,19 @@ function buildTestDb() {
   return db
 }
 
-test('layout sampul memberi ruang aman untuk logo dan teks panjang', () => {
+test('layout sampul memberi ruang aman untuk semua elemen', () => {
   const layout = coverLayout({
     pageWidth: 595.28,
     contentWidth: 495.28,
-    institutionName: 'Madrasah Tsanawiyah Swasta Plus Sunan Drajat 7',
-    nsmNpsn: 'NSM: 121235230111  NPSN: 70059369',
-    cityStamp: 'Bondowoso',
+    tahunAjaran: '2026/2027',
   })
 
-  // Halaman 1: RAPOR (header), kementerian, judul, NSM/NPSN, placeholder nama siswa, kota/tanda tangan
-  assert.ok(layout.headerY >= 50, 'header harus di atas halaman')
-  assert.ok(layout.titleY > layout.headerY + layout.headerHeight, 'judul harus terpisah dari header')
-  assert.ok(layout.identifierY > layout.titleY + layout.titleHeight, 'NSM/NPSN harus terpisah dari judul')
-  assert.ok(layout.placeholderNameY > layout.identifierY + layout.identifierHeight, 'placeholder nama harus terpisah dari NSM/NPSN')
-  assert.ok(layout.footerY < 750, 'kota/tanda tangan harus berada di bagian bawah')
+  assert.ok(layout.kemenagLogoY >= 30, 'logo kemenag di atas')
+  assert.ok(layout.raporTitleY > layout.kemenagLogoY + 40, 'judul rapor terpisah dari logo kemenag')
+  assert.ok(layout.lembagaLogoY > layout.namaLembagaY + 20, 'logo lembaga terpisah dari nama')
+  assert.ok(layout.siswaBoxY > layout.lembagaLogoY + 80, 'kotak siswa terpisah dari logo lembaga')
+  assert.ok(layout.kemenagFooterY > layout.siswaBoxY + 100, 'footer terpisah dari kotak siswa')
+  assert.equal(layout.tahun, '2026', 'tahun ajaran diekstrak dengan benar')
 })
 
 test('createRaporSiswaPdf menghasilkan dokumen PDF valid untuk siswa dengan data lengkap', async () => {
