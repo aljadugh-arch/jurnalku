@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <!-- Circle background -->
+  <circle cx="50" cy="50" r="45" fill="#1e40af" opacity="0.1" stroke="#1e40af" stroke-width="2"/>
+  
+  <!-- Star (5-pointed) in center - symbol of Kemenag -->
+  <g transform="translate(50, 50)">
+    <!-- Outer star -->
+    <path d="M 0,-20 L 6,-6 L 20,-6 L 10,2 L 14,18 L 0,10 L -14,18 L -10,2 L -20,-6 L -6,-6 Z" fill="#1e40af"/>
+  </g>
+  
+  <!-- Text -->
+  <text x="50" y="80" font-family="Arial, sans-serif" font-size="10" font-weight="bold" text-anchor="middle" fill="#1e40af">KEMENAG</text>
+</svg>

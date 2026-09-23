@@ -149,6 +149,8 @@ async function createRaporSiswaPdf(db, options) {
   const fotoPath = resolveUploadPath(uploadDir, siswa.foto)
   const settingsLogoPath = resolveUploadPath(uploadDir, settings.logo)
   const hasLogo = !!settingsLogoPath
+  const kemenagLogoPath = path.join(__dirname, 'assets', 'kemenag-logo.svg')
+  const hasKemenagLogo = fs.existsSync(kemenagLogoPath)
 
   const doc = new PDFDocument({ size: 'A4', margin: 50, bufferPages: true })
   const pageWidth = doc.page.width - doc.page.margins.left - doc.page.margins.right
@@ -160,12 +162,26 @@ async function createRaporSiswaPdf(db, options) {
 
   const cover = coverLayout({ pageWidth, contentWidth: pageWidth, tahunAjaran })
 
-  // Logo Kemenag (placeholder - bisa diganti dengan asset jika ada)
-  // Untuk saat ini gunakan teks placeholder
-  doc.font('Helvetica-Bold').fontSize(8).text('KEMENAG', doc.page.margins.left + pageWidth / 2 - 25, cover.kemenagLogoY, {
-    width: 50,
-    align: 'center',
-  })
+  // Logo Kemenag (asset SVG)
+  if (hasKemenagLogo) {
+    try {
+      doc.image(kemenagLogoPath, doc.page.margins.left + pageWidth / 2 - 20, cover.kemenagLogoY, {
+        fit: [40, 40],
+        align: 'center',
+      })
+    } catch {
+      // Fallback ke teks
+      doc.font('Helvetica-Bold').fontSize(8).text('KEMENAG', doc.page.margins.left + pageWidth / 2 - 25, cover.kemenagLogoY + 15, {
+        width: 50,
+        align: 'center',
+      })
+    }
+  } else {
+    doc.font('Helvetica-Bold').fontSize(8).text('KEMENAG', doc.page.margins.left + pageWidth / 2 - 25, cover.kemenagLogoY + 15, {
+      width: 50,
+      align: 'center',
+    })
+  }
 
   // Judul RAPOR
   doc.font('Helvetica-Bold').fontSize(20).text('RAPOR', doc.page.margins.left, cover.raporTitleY, {
