@@ -120,15 +120,16 @@ export default function Sidebar() {
 
   const isActive = (path?: string) => path === location.pathname
 
-  // Grouping configuration untuk admin desktop view
-  const adminMenuGroups = [
-    { name: 'DASHBOARD', startIdx: 0, count: 1 },
-    { name: 'MASTER DATA', startIdx: 1, count: 5 },
-    { name: 'AKADEMIK', startIdx: 6, count: 12 },
-    { name: 'LAYANAN', startIdx: 18, count: 3 },
-    { name: 'KEUANGAN & OPERASIONAL', startIdx: 21, count: 2 },
-    { name: 'KOMUNIKASI', startIdx: 23, count: 1 },
-    { name: 'MANAJEMEN LEMBAGA', startIdx: 24, count: 6 },
+  // Grouping configuration untuk admin desktop view (sesuai struktur yang diminta user)
+  const adminMenuGroups: Array<{ name: string; indices: number[] }> = [
+    { name: 'DASHBOARD', indices: [0] },
+    { name: 'MASTER DATA', indices: [2, 3, 4, 6, 35] }, // Data Siswa, GTK, Mapel, Rombel, Tahun Ajaran (Pengajar adalah subitem Jadwal)
+    { name: 'AKADEMIK', indices: [7, 8, 12, 22, 23, 24] }, // Kalender KBM, Jadwal Pelajaran, Absensi, Ceklok, Absensi Saya, Jurnal Mengajar
+    { name: 'PENILAIAN & EVALUASI', indices: [28, 26, 27, 25, 32] }, // Ujian & Bank Soal, Ledger Nilai, Rekap Nilai, Rapor Siswa, Catatan Kepribadian
+    { name: 'LAYANAN', indices: [34, 33] }, // Perpustakaan Digital, Generator AI Guru
+    { name: 'KEUANGAN & OPERASIONAL', indices: [36, 49] }, // Keuangan (dengan sub), E-Kantin & Cashless (dengan sub)
+    { name: 'KOMUNIKASI', indices: [39] }, // WhatsApp (dengan sub)
+    { name: 'MANAJEMEN LEMBAGA', indices: [43, 45, 47, 48, 44] }, // Pengaturan, Manajemen Pengguna, Backup & Restore, Kelola Website, REST API Developer
   ]
 
   const isAdminRole = ['admin', 'super_admin', 'operator', 'tata_usaha', 'tu'].includes(user?.role || '')
@@ -173,7 +174,7 @@ export default function Sidebar() {
             // Admin grouping view (expanded sidebar only)
             <div className="space-y-6">
               {adminMenuGroups.map(group => {
-                const groupItems = menuItems.slice(group.startIdx, group.startIdx + group.count)
+                const groupItems = group.indices.map(idx => menuItems[idx]).filter(Boolean)
                 return (
                   <div key={group.name}>
                     <p className="px-3 mb-2 text-[11px] font-semibold text-white/50 uppercase tracking-wider">
