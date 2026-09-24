@@ -5799,18 +5799,22 @@ app.delete('/api/ai-config/me', authMiddleware, (req, res) => {
 app.post('/api/tts/announce', authMiddleware, async (req, res) => {
   const text = String(req.body?.text || '').trim().slice(0, 200)
   if (!text) return res.status(400).json({ error: 'Teks kosong' })
-  const cfg = resolveAiConfig(db, req.tenantId, req.user?.id)
-  if (!cfg || cfg.provider !== 'gemini' || !cfg.apiKey) {
-    return res.status(404).json({ error: 'TTS Gemini belum dikonfigurasi untuk lembaga ini' })
-  }
-  const { checkTtsCache, generateTtsAudioBackground, DEFAULT_VOICE } = require('./gemini-tts.cjs')
-  const cached = checkTtsCache({ text, voiceName: DEFAULT_VOICE, uploadDir: UPLOAD_DIR, tenantId: req.tenantId })
+  
+  const { checkTtsCache, generateTtsAudioLocal } = require('./tts-local.cjs')
+  
+  // Cek cache dulu
+  const cached = checkTtsCache(text, UPLOAD_DIR, req.tenantId)
   if (cached) return res.json(cached)
-  // Tidak ada di cache: balas 404 SEKARANG (instan, tanpa nunggu Gemini) agar
-  // frontend langsung fallback ke Web Speech API untuk scan ini, sambil
-  // generate berjalan di background untuk scan berikutnya dengan nama sama.
-  generateTtsAudioBackground({ apiKey: cfg.apiKey, text, voiceName: DEFAULT_VOICE, uploadDir: UPLOAD_DIR, tenantId: req.tenantId })
-  res.status(404).json({ error: 'Audio belum tersedia di cache, sedang dibuat di background', generating: true })
+  
+  // Tidak ada di cache: generate lokal (instan, synchronous)
+  try {
+    const result = await generateTtsAudioLocal(text, UPLOAD_DIR, req.tenantId)
+    res.json(result)
+  } catch (err) {
+    console.error('[TTS Local] generate error:', err.message)
+    // Fallback: client pakai Web Speech API
+    res.status(404).json({ error: 'TTS generation failed, fallback to browser speech', generating: false })
+  }
 })
 
 // Pre-warm cache TTS untuk semua nama panggilan siswa aktif + GTK di tenant
