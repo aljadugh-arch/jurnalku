@@ -120,6 +120,20 @@ export default function Sidebar() {
 
   const isActive = (path?: string) => path === location.pathname
 
+  // Grouping configuration untuk admin desktop view
+  const adminMenuGroups = [
+    { name: 'DASHBOARD', startIdx: 0, count: 1 },
+    { name: 'MASTER DATA', startIdx: 1, count: 5 },
+    { name: 'AKADEMIK', startIdx: 6, count: 12 },
+    { name: 'LAYANAN', startIdx: 18, count: 3 },
+    { name: 'KEUANGAN & OPERASIONAL', startIdx: 21, count: 2 },
+    { name: 'KOMUNIKASI', startIdx: 23, count: 1 },
+    { name: 'MANAJEMEN LEMBAGA', startIdx: 24, count: 6 },
+  ]
+
+  const isAdminRole = ['admin', 'super_admin', 'operator', 'tata_usaha', 'tu'].includes(user?.role || '')
+  const showGrouping = isAdminRole && isOpen
+
   return (
     <>
       {/* Sidebar */}
@@ -155,91 +169,193 @@ export default function Sidebar() {
           </div>
         )}
         <nav className="flex-1 overflow-y-auto py-3 px-2 space-y-0.5">
-          {menuItems.map((item) => (
-            <div key={item.label} className="mb-1">
-              {item.children ? (
-                <>
-                  <button
-                    onClick={() => toggleSubmenu(item.label)}
-                    className={clsx(
-                      'w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors',
-                      'text-white/70 hover:text-white hover:bg-white/10'
-                    )}
-                  >
-                    <span className="flex-shrink-0">{item.icon}</span>
-                    {isOpen && (
-                      <>
-                        <span className="flex-1 text-left">{item.label}</span>
-                        {expandedMenus.includes(item.label)
-                          ? <ChevronDown size={16} />
-                          : <ChevronRight size={16} />}
-                      </>
-                    )}
-                  </button>
-                  {isOpen && expandedMenus.includes(item.label) && (
-                    <div className="ml-4 mt-0.5 space-y-0.5 border-l border-white/10 pl-3">
-                      {item.children.map(child => (
-                        child.external ? (
-                          <a
-                            key={child.path}
-                            href={child.external}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            onClick={handleNav}
-                            className="block px-3 py-1.5 rounded-lg text-xs transition-colors text-white/60 hover:text-white hover:bg-white/10"
-                          >
-                            {child.label} ↗
-                          </a>
-                        ) : (
-                          <Link
-                            key={child.path}
-                            to={child.path}
-                            onClick={handleNav}
-                            className={clsx(
-                              'block px-3 py-1.5 rounded-lg text-xs transition-colors',
-                              isActive(child.path)
-                                ? 'bg-white/20 text-white font-medium'
-                                : 'text-white/60 hover:text-white hover:bg-white/10'
-                            )}
-                          >
-                            {child.label}
-                          </Link>
-                        )
+          {showGrouping ? (
+            // Admin grouping view (expanded sidebar only)
+            <div className="space-y-6">
+              {adminMenuGroups.map(group => {
+                const groupItems = menuItems.slice(group.startIdx, group.startIdx + group.count)
+                return (
+                  <div key={group.name}>
+                    <p className="px-3 mb-2 text-[11px] font-semibold text-white/50 uppercase tracking-wider">
+                      {group.name}
+                    </p>
+                    <div className="space-y-0.5">
+                      {groupItems.map((item) => (
+                        <div key={item.label} className="mb-1">
+                          {item.children ? (
+                            <>
+                              <button
+                                onClick={() => toggleSubmenu(item.label)}
+                                className={clsx(
+                                  'w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors',
+                                  'text-white/70 hover:text-white hover:bg-white/10'
+                                )}
+                              >
+                                <span className="flex-shrink-0">{item.icon}</span>
+                                <span className="flex-1 text-left">{item.label}</span>
+                                {expandedMenus.includes(item.label)
+                                  ? <ChevronDown size={16} />
+                                  : <ChevronRight size={16} />}
+                              </button>
+                              {expandedMenus.includes(item.label) && (
+                                <div className="ml-4 mt-0.5 space-y-0.5 border-l border-white/10 pl-3">
+                                  {item.children.map(child => (
+                                    child.external ? (
+                                      <a
+                                        key={child.path}
+                                        href={child.external}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        onClick={handleNav}
+                                        className="block px-3 py-1.5 rounded-lg text-xs transition-colors text-white/60 hover:text-white hover:bg-white/10"
+                                      >
+                                        {child.label} ↗
+                                      </a>
+                                    ) : (
+                                      <Link
+                                        key={child.path}
+                                        to={child.path}
+                                        onClick={handleNav}
+                                        className={clsx(
+                                          'block px-3 py-1.5 rounded-lg text-xs transition-colors',
+                                          isActive(child.path)
+                                            ? 'bg-white/20 text-white font-medium'
+                                            : 'text-white/60 hover:text-white hover:bg-white/10'
+                                        )}
+                                      >
+                                        {child.label}
+                                      </Link>
+                                    )
+                                  ))}
+                                </div>
+                              )}
+                            </>
+                          ) : item.external ? (
+                            <a
+                              href={item.external}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              onClick={handleNav}
+                              className={clsx(
+                                'flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors',
+                                'text-white/70 hover:text-white hover:bg-white/10'
+                              )}
+                            >
+                              <span className="flex-shrink-0">{item.icon}</span>
+                              <span>{item.label} ↗</span>
+                            </a>
+                          ) : (
+                            <Link
+                              to={item.path!}
+                              onClick={handleNav}
+                              className={clsx(
+                                'flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors',
+                                isActive(item.path)
+                                  ? 'bg-white/20 text-white font-medium'
+                                  : 'text-white/70 hover:text-white hover:bg-white/10'
+                              )}
+                            >
+                              <span className="flex-shrink-0">{item.icon}</span>
+                              <span>{item.label}</span>
+                            </Link>
+                          )}
+                        </div>
                       ))}
                     </div>
-                  )}
-                </>
-              ) : item.external ? (
-                <a
-                  href={item.external}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  onClick={handleNav}
-                  className={clsx(
-                    'flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors',
-                    isOpen ? 'text-white/70 hover:text-white hover:bg-white/10' : 'w-10 mx-auto text-white/70 hover:text-white hover:bg-white/10'
-                  )}
-                >
-                  <span className="flex-shrink-0">{item.icon}</span>
-                  {isOpen && <span>{item.label} ↗</span>}
-                </a>
-              ) : (
-                <Link
-                  to={item.path!}
-                  onClick={handleNav}
-                  className={clsx(
-                    'flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors',
-                    isActive(item.path)
-                      ? 'bg-white/20 text-white font-medium'
-                      : 'text-white/70 hover:text-white hover:bg-white/10'
-                  )}
-                >
-                  <span className="flex-shrink-0">{item.icon}</span>
-                  {isOpen && <span>{item.label}</span>}
-                </Link>
-              )}
+                  </div>
+                )
+              })}
             </div>
-          ))}
+          ) : (
+            // Original non-grouped view (untuk non-admin atau collapsed sidebar)
+            <>
+              {menuItems.map((item) => (
+                <div key={item.label} className="mb-1">
+                  {item.children ? (
+                    <>
+                      <button
+                        onClick={() => toggleSubmenu(item.label)}
+                        className={clsx(
+                          'w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors',
+                          'text-white/70 hover:text-white hover:bg-white/10'
+                        )}
+                      >
+                        <span className="flex-shrink-0">{item.icon}</span>
+                        {isOpen && (
+                          <>
+                            <span className="flex-1 text-left">{item.label}</span>
+                            {expandedMenus.includes(item.label)
+                              ? <ChevronDown size={16} />
+                              : <ChevronRight size={16} />}
+                          </>
+                        )}
+                      </button>
+                      {isOpen && expandedMenus.includes(item.label) && (
+                        <div className="ml-4 mt-0.5 space-y-0.5 border-l border-white/10 pl-3">
+                          {item.children.map(child => (
+                            child.external ? (
+                              <a
+                                key={child.path}
+                                href={child.external}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                onClick={handleNav}
+                                className="block px-3 py-1.5 rounded-lg text-xs transition-colors text-white/60 hover:text-white hover:bg-white/10"
+                              >
+                                {child.label} ↗
+                              </a>
+                            ) : (
+                              <Link
+                                key={child.path}
+                                to={child.path}
+                                onClick={handleNav}
+                                className={clsx(
+                                  'block px-3 py-1.5 rounded-lg text-xs transition-colors',
+                                  isActive(child.path)
+                                    ? 'bg-white/20 text-white font-medium'
+                                    : 'text-white/60 hover:text-white hover:bg-white/10'
+                                )}
+                              >
+                                {child.label}
+                              </Link>
+                            )
+                          ))}
+                        </div>
+                      )}
+                    </>
+                  ) : item.external ? (
+                    <a
+                      href={item.external}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      onClick={handleNav}
+                      className={clsx(
+                        'flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors',
+                        isOpen ? 'text-white/70 hover:text-white hover:bg-white/10' : 'w-10 mx-auto text-white/70 hover:text-white hover:bg-white/10'
+                      )}
+                    >
+                      <span className="flex-shrink-0">{item.icon}</span>
+                      {isOpen && <span>{item.label} ↗</span>}
+                    </a>
+                  ) : (
+                    <Link
+                      to={item.path!}
+                      onClick={handleNav}
+                      className={clsx(
+                        'flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors',
+                        isActive(item.path)
+                          ? 'bg-white/20 text-white font-medium'
+                          : 'text-white/70 hover:text-white hover:bg-white/10'
+                      )}
+                    >
+                      <span className="flex-shrink-0">{item.icon}</span>
+                      {isOpen && <span>{item.label}</span>}
+                    </Link>
+                  )}
+                </div>
+              ))}
+            </>
+          )}
         </nav>
 
         {/* User profile */}
