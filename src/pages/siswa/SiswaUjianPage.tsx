@@ -125,8 +125,12 @@ export default function SiswaUjianPage() {
   }, [viewMode, session, currentUjianId, currentIdx])
 
   // Timer
+  const notifiedTimesRef = useRef<Set<number>>(new Set())
   useEffect(() => {
-    if (viewMode !== 'ujian' || !session) return
+    if (viewMode !== 'ujian' || !session) {
+      notifiedTimesRef.current.clear()
+      return
+    }
     timerRef.current = setInterval(() => {
       setTimeLeft(prev => {
         if (prev <= 1) {
@@ -134,6 +138,26 @@ export default function SiswaUjianPage() {
           handleSubmit(true)
           return 0
         }
+
+        // Auto-notify pada milestone tertentu (5 menit, 1 menit, 30 detik)
+        const milestones = [300, 60, 30] // 5 min, 1 min, 30 sec
+        milestones.forEach(threshold => {
+          if (prev === threshold && !notifiedTimesRef.current.has(threshold)) {
+            notifiedTimesRef.current.add(threshold)
+            if (threshold === 300) toast('⏰ 5 menit tersisa', { icon: '⏰' })
+            else if (threshold === 60) toast.error('⚠️ 1 menit tersisa! Segera selesaikan ujian', { icon: '🚨' })
+            else if (threshold === 30) toast.error('🔴 30 DETIK! Ujian akan otomatis diselesaikan', { icon: '💥' })
+
+            // Browser notification jika support
+            if ('Notification' in window && Notification.permission === 'granted') {
+              new Notification('Ujian Berlangsung', {
+                body: `${threshold === 300 ? '5 menit' : threshold === 60 ? '1 menit' : '30 detik'} tersisa!`,
+                icon: '/logo-jurnalku-256.png'
+              })
+            }
+          }
+        })
+
         return prev - 1
       })
     }, 1000)
@@ -190,6 +214,11 @@ export default function SiswaUjianPage() {
       setPasswordInput('')
       setShowTokenInput(false)
       setTokenInput('')
+      
+      // Request browser notification permission
+      if ('Notification' in window && Notification.permission === 'default') {
+        Notification.requestPermission().catch(() => {})
+      }
     } catch (err: any) {
       // CBT: jika backend minta token
       if (err.response?.data?.requires_token) {
@@ -314,7 +343,7 @@ export default function SiswaUjianPage() {
               <h2 className="font-bold text-gray-800 text-sm truncate">{session.nama}</h2>
               <p className="text-xs text-gray-400">{session.mapel}</p>
             </div>
-            <div className={`flex items-center gap-2 px-4 py-2 rounded-full font-mono text-sm font-bold ${timeLeft <= 300 ? 'bg-red-100 text-red-600 animate-pulse' : timeLeft <= 600 ? 'bg-yellow-100 text-yellow-700' : 'bg-gray-100 text-gray-700'}`}>
+            <div className={`flex items-center gap-2 px-4 py-2 rounded-full font-mono text-sm font-bold transition-all ${timeLeft <= 30 ? 'bg-red-600 text-white animate-pulse scale-110' : timeLeft <= 60 ? 'bg-red-500 text-white animate-pulse' : timeLeft <= 300 ? 'bg-orange-100 text-orange-700' : timeLeft <= 600 ? 'bg-yellow-100 text-yellow-700' : 'bg-gray-100 text-gray-700'}`}>
               <Clock size={16} /> {formatTime(timeLeft)}
             </div>
             <div className="flex items-center gap-2 ml-3">
