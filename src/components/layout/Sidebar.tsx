@@ -122,8 +122,8 @@ export default function Sidebar() {
 
   // Grouping configuration untuk admin desktop view (sesuai struktur yang diminta user)
   const adminMenuGroups: Array<{ name: string; indices: number[] }> = [
-    { name: 'DASHBOARD', indices: [0] },
-    { name: 'MASTER DATA', indices: [2, 3, 4, 5, 19] }, // Data Siswa, GTK, Mapel, Rombel, Tahun Ajaran (Pengajar di subitem Jadwal)
+    { name: 'DASHBOARD', indices: [0, 1] }, // Dashboard, Posting
+    { name: 'MASTER DATA', indices: [2, 3, 4, 5, 19] }, // Data Siswa, GTK, Mapel, Rombel, Tahun Ajaran
     { name: 'AKADEMIK', indices: [6, 7, 8, 9, 10, 11] }, // Kalender KBM, Jadwal Pelajaran, Absensi, Ceklok, Absensi Saya, Jurnal Mengajar
     { name: 'PENILAIAN & EVALUASI', indices: [15, 13, 14, 12, 16] }, // Ujian & Bank Soal, Ledger Nilai, Rekap Nilai, Rapor Siswa, Catatan Kepribadian
     { name: 'LAYANAN', indices: [18, 17] }, // Perpustakaan Digital, Generator AI Guru
