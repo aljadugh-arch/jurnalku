@@ -123,13 +123,13 @@ export default function Sidebar() {
   // Grouping configuration untuk admin desktop view (sesuai struktur yang diminta user)
   const adminMenuGroups: Array<{ name: string; indices: number[] }> = [
     { name: 'DASHBOARD', indices: [0] },
-    { name: 'MASTER DATA', indices: [2, 3, 4, 6, 35] }, // Data Siswa, GTK, Mapel, Rombel, Tahun Ajaran (Pengajar adalah subitem Jadwal)
-    { name: 'AKADEMIK', indices: [7, 8, 12, 22, 23, 24] }, // Kalender KBM, Jadwal Pelajaran, Absensi, Ceklok, Absensi Saya, Jurnal Mengajar
-    { name: 'PENILAIAN & EVALUASI', indices: [28, 26, 27, 25, 32] }, // Ujian & Bank Soal, Ledger Nilai, Rekap Nilai, Rapor Siswa, Catatan Kepribadian
-    { name: 'LAYANAN', indices: [34, 33] }, // Perpustakaan Digital, Generator AI Guru
-    { name: 'KEUANGAN & OPERASIONAL', indices: [36, 49] }, // Keuangan (dengan sub), E-Kantin & Cashless (dengan sub)
-    { name: 'KOMUNIKASI', indices: [39] }, // WhatsApp (dengan sub)
-    { name: 'MANAJEMEN LEMBAGA', indices: [43, 45, 47, 48, 44] }, // Pengaturan, Manajemen Pengguna, Backup & Restore, Kelola Website, REST API Developer
+    { name: 'MASTER DATA', indices: [2, 3, 4, 5, 19] }, // Data Siswa, GTK, Mapel, Rombel, Tahun Ajaran (Pengajar di subitem Jadwal)
+    { name: 'AKADEMIK', indices: [6, 7, 8, 9, 10, 11] }, // Kalender KBM, Jadwal Pelajaran, Absensi, Ceklok, Absensi Saya, Jurnal Mengajar
+    { name: 'PENILAIAN & EVALUASI', indices: [15, 13, 14, 12, 16] }, // Ujian & Bank Soal, Ledger Nilai, Rekap Nilai, Rapor Siswa, Catatan Kepribadian
+    { name: 'LAYANAN', indices: [18, 17] }, // Perpustakaan Digital, Generator AI Guru
+    { name: 'KEUANGAN & OPERASIONAL', indices: [20, 28] }, // Keuangan (Tagihan, Tabungan), E-Kantin & Cashless
+    { name: 'KOMUNIKASI', indices: [21] }, // WhatsApp
+    { name: 'MANAJEMEN LEMBAGA', indices: [22, 24, 26, 27, 23] }, // Pengaturan, Manajemen Pengguna, Backup & Restore, Kelola Website, REST API Developer
   ]
 
   const isAdminRole = ['admin', 'super_admin', 'operator', 'tata_usaha', 'tu'].includes(user?.role || '')
