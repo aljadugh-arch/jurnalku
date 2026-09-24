@@ -2,6 +2,7 @@ import { Outlet } from 'react-router-dom'
 import Sidebar from './Sidebar'
 import Header from './Header'
 import BottomNavigation from './BottomNavigation'
+import AdminSidebar from '../AdminSidebar'
 import { useSidebarStore } from '../../stores/sidebarStore'
 import { useAuthStore } from '../../stores/authStore'
 import { isReadOnly } from '../../lib/roles'
@@ -11,13 +12,14 @@ import { clsx } from 'clsx'
 export default function DashboardLayout() {
   const { isOpen } = useSidebarStore()
   const role = useAuthStore(s => s.user?.role)
+  const isAdminRole = ['admin', 'super_admin', 'operator', 'tata_usaha', 'tu'].includes(role || '')
 
   return (
     <div className="h-screen overflow-hidden bg-gray-50 dark:bg-gray-950">
-      <Sidebar />
+      {isAdminRole ? <AdminSidebar /> : <Sidebar />}
       <div className={clsx(
         'flex h-full flex-col transition-all duration-300',
-        isOpen ? 'lg:ml-64' : 'lg:ml-20'
+        isAdminRole ? 'lg:ml-80' : isOpen ? 'lg:ml-64' : 'lg:ml-20'
       )}>
         <div className="hidden lg:block">
           <Header />
