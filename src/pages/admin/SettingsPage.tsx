@@ -25,7 +25,7 @@ export default function SettingsPage() {
   const isSuperadmin = user?.role === 'super_admin'
   const [form, setForm] = useState({
     nama_lembaga: '', alamat: '', telepon: '', email: '',
-    kepala_sekolah: '', npsn: '', nsm: '', kota_cetak: '',
+    kepala_sekolah: '', npsn: '', nsm: '', kota_cetak: '', yayasan_nama: '',
     theme: 'light', primary_color: '#1e40af', accent_color: '#059669', sidebar_color: '#1e293b',
     geo_latitude: '', geo_longitude: '', geo_radius: '200', jenjang: '', hari_libur: [] as string[],
     bg_size: 'cover', bg_position: 'center', bg_repeat: 'no-repeat', bg_blur: 0,
@@ -38,6 +38,7 @@ export default function SettingsPage() {
   const [resetting, setResetting] = useState(false)
   const [logo, setLogo] = useState('')
   const [background, setBackground] = useState('')
+  const [kemenagLogo, setKemenagLogo] = useState('')
   const [kts, setKts] = useState({ depan: '', belakang: '' })
   const [jam, setJam] = useState({
     sesi_masuk_mulai: '06:00', sesi_masuk_selesai: '07:30',
@@ -70,10 +71,11 @@ export default function SettingsPage() {
       const s = res.data || {}
       setLogo(s.logo || '')
       setBackground(s.background || '')
+      setKemenagLogo(s.logo_kemenag || '')
       setKts({ depan: s.kts_depan || '', belakang: s.kts_belakang || '' })
       setForm({
         nama_lembaga: s.nama_lembaga || '', alamat: s.alamat || '', telepon: s.telepon || '', email: s.email || '',
-        kepala_sekolah: s.kepala_sekolah || '', npsn: s.npsn || '', nsm: s.nsm || '', kota_cetak: s.kota_cetak || '',
+        kepala_sekolah: s.kepala_sekolah || '', npsn: s.npsn || '', nsm: s.nsm || '', kota_cetak: s.kota_cetak || '', yayasan_nama: s.yayasan_nama || '',
         theme: s.theme || 'light', primary_color: s.primary_color || '#1e40af', accent_color: s.accent_color || '#059669', sidebar_color: s.sidebar_color || '#1e293b',
         geo_latitude: s.geo_latitude || '', geo_longitude: s.geo_longitude || '', geo_radius: s.geo_radius || '200', jenjang: s.jenjang || '',
         hari_libur: (() => { try { return JSON.parse(s.hari_libur || '[]') } catch { return [] } })(),
@@ -158,6 +160,20 @@ export default function SettingsPage() {
       setSettings({ logo: url })
       toast.success('Logo berhasil diunggah')
     } catch { toast.error('Gagal mengunggah logo') }
+  }
+
+  const handleKemenagLogoChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    const fd = new FormData()
+    fd.append('logo_kemenag', file)
+    try {
+      const res = await api.post('/settings/logo-kemenag', fd, { headers: { 'Content-Type': 'multipart/form-data' } })
+      const url = res.data.logo_kemenag
+      setKemenagLogo(url)
+      setSettings({ logo_kemenag: url })
+      toast.success('Logo Kemenag berhasil diunggah')
+    } catch { toast.error('Gagal mengunggah logo Kemenag') }
   }
 
   const handleBackgroundChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -323,6 +339,25 @@ export default function SettingsPage() {
               </div>
             </div>
           </div>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-600 mb-1">Nama Yayasan</label>
+            <input value={form.yayasan_nama} onChange={e => setForm({...form, yayasan_nama: e.target.value})} placeholder="Nama yayasan (untuk kop rapor)" className="w-full px-4 py-2 border rounded-lg text-sm" />
+            <p className="text-xs text-gray-400 mt-1">Ditampilkan di footer halaman sampul rapor</p>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-600 mb-1">Logo Kemenag (untuk sampul rapor)</label>
+            <div className="flex items-start gap-4">
+              <img src={kemenagLogo || '/logo-kemenag-default.png'} onError={e => { e.currentTarget.src = 'data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22%3E%3Ccircle cx=%2250%22 cy=%2250%22 r=%2245%22 fill=%22%231e40af%22 opacity=%220.1%22/%3E%3Ctext x=%2250%22 y=%2280%22 text-anchor=%22middle%22 fill=%22%231e40af%22 font-size=%2210%22 font-weight=%22bold%22%3EKEMENAG%3C/text%3E%3C/svg%3E' }} alt="Logo Kemenag" className="w-16 h-16 rounded-lg object-contain border bg-gray-50 shrink-0" />
+              <div className="flex flex-col gap-2 min-w-0">
+                <label className="inline-flex items-center gap-2 px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-600 hover:bg-gray-50 cursor-pointer transition w-fit">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                  Pilih Logo
+                  <input type="file" accept="image/*" onChange={handleKemenagLogoChange} className="hidden" />
+                </label>
+                <p className="text-xs text-gray-400">Format: JPG, PNG, SVG. Maks 2MB. Kosongkan untuk menggunakan default.</p>
+              </div>
+            </div>
           <div>
             <label className="block text-sm font-medium text-gray-600 mb-1">Background Dashboard & Sidebar</label>
             <p className="text-xs text-gray-400 mb-3">Gambar latar untuk area dashboard dan sidebar. Kosongkan untuk warna polos.</p>

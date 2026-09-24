@@ -2759,6 +2759,18 @@ app.post('/api/settings/logo', ADMIN, imageUpload.single('logo'), compressUpload
   res.json({ logo: logoPath })
 })
 
+app.post('/api/settings/logo-kemenag', ADMIN, imageUpload.single('logo_kemenag'), compressUploadedImages(['logo_kemenag']), (req, res) => {
+  if (!req.file) return res.status(400).json({ error: 'No file' })
+  const logoKemenagPath = `/uploads/${req.file.filename}`
+  const id = canonicalSettingsId(req.tenantId)
+  const current = db.prepare('SELECT logo_kemenag FROM settings WHERE id=? AND tenant_id=?').get(id, req.tenantId) || {}
+  try { db.prepare(`INSERT INTO settings (id, tenant_id, logo_kemenag, updated_at) VALUES (?,?,?,datetime('now'))
+    ON CONFLICT(id) DO UPDATE SET tenant_id=excluded.tenant_id, logo_kemenag=excluded.logo_kemenag, updated_at=datetime('now')`).run(id, req.tenantId, logoKemenagPath) }
+  catch (error) { removeManagedUpload(logoKemenagPath); throw error }
+  removeManagedUpload(current.logo_kemenag)
+  res.json({ logo_kemenag: logoKemenagPath })
+})
+
 const removeTenantUpload = (url) => {
   if (!url || !url.startsWith('/uploads/kts-')) return
   const file = path.resolve(UPLOAD_DIR, path.basename(url))

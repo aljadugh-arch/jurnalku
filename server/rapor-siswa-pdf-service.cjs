@@ -149,8 +149,9 @@ async function createRaporSiswaPdf(db, options) {
   const fotoPath = resolveUploadPath(uploadDir, siswa.foto)
   const settingsLogoPath = resolveUploadPath(uploadDir, settings.logo)
   const hasLogo = !!settingsLogoPath
-  const kemenagLogoPath = path.join(__dirname, 'assets', 'kemenag-logo.svg')
-  const hasKemenagLogo = fs.existsSync(kemenagLogoPath)
+  const kemenagLogoUploadPath = resolveUploadPath(uploadDir, settings.logo_kemenag)
+  const kemenagLogoPath = kemenagLogoUploadPath || path.join(__dirname, 'assets', 'kemenag-logo.svg')
+  const hasKemenagLogo = kemenagLogoUploadPath ? fs.existsSync(kemenagLogoUploadPath) : fs.existsSync(kemenagLogoPath)
 
   const doc = new PDFDocument({ size: 'A4', margin: 50, bufferPages: true })
   const pageWidth = doc.page.width - doc.page.margins.left - doc.page.margins.right
