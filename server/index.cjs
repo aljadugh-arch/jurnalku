@@ -522,6 +522,19 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_posting_shares_posting ON posting_shares(posting_id);
   CREATE INDEX IF NOT EXISTS idx_posting_shares_user ON posting_shares(user_id);
 
+  CREATE TABLE IF NOT EXISTS posting_comments (
+    id TEXT PRIMARY KEY,
+    posting_id TEXT NOT NULL,
+    user_id TEXT NOT NULL,
+    user_name TEXT NOT NULL,
+    user_role TEXT NOT NULL,
+    isi TEXT NOT NULL,
+    created_at TEXT DEFAULT (datetime('now')),
+    FOREIGN KEY (posting_id) REFERENCES posting(id)
+  );
+  CREATE INDEX IF NOT EXISTS idx_posting_comments_posting ON posting_comments(posting_id);
+  CREATE INDEX IF NOT EXISTS idx_posting_comments_user ON posting_comments(user_id);
+
   CREATE TABLE IF NOT EXISTS tugas_siswa (
     id TEXT PRIMARY KEY,
     guru_id TEXT NOT NULL,
@@ -6707,6 +6720,42 @@ app.post('/api/posting/:id/share', authMiddleware, (req, res) => {
   if (!row) return res.status(404).json({ error: 'Posting tidak ditemukan.' })
   db.prepare('INSERT INTO posting_shares (id, posting_id, user_id, created_at) VALUES (?,?,?,datetime(\'now\'))').run(uuidv4(), req.params.id, req.user.id)
   db.prepare('UPDATE posting SET shares_count = shares_count + 1 WHERE id=? AND tenant_id=?').run(req.params.id, req.tenantId)
+  res.json({ success: true })
+})
+
+// Posting Comments
+app.get('/api/posting/:id/comments', authMiddleware, (req, res) => {
+  const comments = db.prepare('SELECT id, user_id, user_name, user_role, isi, created_at FROM posting_comments WHERE posting_id=? ORDER BY created_at DESC').all(req.params.id)
+  res.json(comments)
+})
+
+app.post('/api/posting/:id/comments', authMiddleware, (req, res) => {
+  const { isi } = req.body
+  if (!isi || !isi.trim()) return res.status(400).json({ error: 'Komentar tidak boleh kosong' })
+  
+  const posting = db.prepare('SELECT id FROM posting WHERE id=? AND tenant_id=?').get(req.params.id, req.tenantId)
+  if (!posting) return res.status(404).json({ error: 'Posting tidak ditemukan' })
+  
+  const commentId = uuidv4()
+  db.prepare(`INSERT INTO posting_comments (id, posting_id, user_id, user_name, user_role, isi, created_at) VALUES (?,?,?,?,?,?,datetime('now'))`).run(
+    commentId, req.params.id, req.user.id, req.user.nama, req.user.role, isi.trim()
+  )
+  db.prepare('UPDATE posting SET comments_count = comments_count + 1 WHERE id=? AND tenant_id=?').run(req.params.id, req.tenantId)
+  
+  res.json({ id: commentId, user_id: req.user.id, user_name: req.user.nama, user_role: req.user.role, isi: isi.trim(), created_at: new Date().toISOString() })
+})
+
+app.delete('/api/posting/:id/comments/:commentId', authMiddleware, (req, res) => {
+  const comment = db.prepare('SELECT user_id FROM posting_comments WHERE id=? AND posting_id=?').get(req.params.commentId, req.params.id)
+  if (!comment) return res.status(404).json({ error: 'Komentar tidak ditemukan' })
+  
+  if (comment.user_id !== req.user.id && !['admin', 'super_admin'].includes(req.user.role)) {
+    return res.status(403).json({ error: 'Tidak bisa menghapus komentar orang lain' })
+  }
+  
+  db.prepare('DELETE FROM posting_comments WHERE id=?').run(req.params.commentId)
+  db.prepare('UPDATE posting SET comments_count = comments_count - 1 WHERE id=? AND tenant_id=?').run(req.params.id, req.tenantId)
+  
   res.json({ success: true })
 })
 

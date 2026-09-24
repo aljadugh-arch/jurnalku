@@ -4,6 +4,7 @@ import toast from 'react-hot-toast'
 import api from '../../services/api'
 import { useAuthStore } from '../../stores/authStore'
 import RichEditor from '../../components/RichEditor'
+import PostingComments from '../../components/PostingComments'
 
 interface Post {
   id: string
@@ -280,9 +281,10 @@ export default function PostingPage() {
                 <button onClick={() => handleShare(post)} className="flex items-center gap-1 text-gray-500 hover:text-primary">
                   <Share2 size={16} /> {post.shares_count}
                 </button>
-                <span className="flex items-center gap-1 text-gray-500"><MessageCircle size={16} /> {post.comments_count}</span>
               </div>
             </footer>
+
+            <PostingComments postId={post.id} commentsCount={post.comments_count} onCommentAdded={() => fetchPosts()} />
           </article>
         ))}
         {!posts.length && (
