@@ -1,8 +1,15 @@
 import { useState } from 'react'
-import { ScanText, Sparkles, Loader2, CheckCircle2, ClipboardCheck } from 'lucide-react'
+import { ScanText, Sparkles, Loader2, CheckCircle2, ClipboardCheck, Upload, FileText, Trash2 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import api from '../../services/api'
 import { handleOcrFile } from '../../lib/ocr'
+
+interface BulkScanResult {
+  file: string
+  text: string
+  status: 'success' | 'processing' | 'error'
+  error?: string
+}
 
 export default function GuruKoreksiJawabanPage() {
   const [soal, setSoal] = useState('')
@@ -14,6 +21,11 @@ export default function GuruKoreksiJawabanPage() {
   const [scanningJawaban, setScanningJawaban] = useState(false)
   const [koreksi, setKoreksi] = useState<{ skor: number; alasan: string; saran: string } | null>(null)
   const [loading, setLoading] = useState(false)
+  
+  // Bulk upload state
+  const [bulkScanResults, setBulkScanResults] = useState<BulkScanResult[]>([])
+  const [bulkScanning, setBulkScanning] = useState(false)
+  const [showBulkTab, setShowBulkTab] = useState(false)
 
   const nilai = async () => {
     if (!jawabanSiswa.trim()) return toast.error('Jawaban siswa wajib diisi (ketik atau scan foto)')
@@ -39,13 +51,169 @@ export default function GuruKoreksiJawabanPage() {
     </label>
   )
 
+  const handleBulkUpload = async (files: FileList | null) => {
+    if (!files || files.length === 0) return
+    
+    const results: BulkScanResult[] = Array.from(files).map(f => ({
+      file: f.name,
+      text: '',
+      status: 'processing' as const
+    }))
+    setBulkScanResults(results)
+    setBulkScanning(true)
+
+    try {
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i]
+        try {
+          const formData = new FormData()
+          formData.append('image', file)
+          const { data } = await api.post('/ocr/scan', formData, { 
+            headers: { 'Content-Type': 'multipart/form-data' } 
+          })
+          
+          results[i] = {
+            file: file.name,
+            text: data.text || '',
+            status: data.text ? 'success' : 'error',
+            error: data.text ? undefined : 'Tidak ada teks yang terdeteksi'
+          }
+        } catch (error: any) {
+          results[i] = {
+            file: file.name,
+            text: '',
+            status: 'error',
+            error: error.response?.data?.error || 'Gagal memproses OCR'
+          }
+        }
+        setBulkScanResults([...results])
+      }
+      
+      const successCount = results.filter(r => r.status === 'success').length
+      toast.success(`${successCount}/${files.length} file berhasil di-scan`)
+    } finally {
+      setBulkScanning(false)
+    }
+  }
+
+  const downloadBulkResults = () => {
+    const csv = ['File,Status,Teks\n', ...bulkScanResults.map(r => 
+      `"${r.file}","${r.status}","${r.text.replace(/"/g, '""')}"`
+    )].join('\n')
+    
+    const blob = new Blob([csv], { type: 'text/csv' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `ljk-scan-${new Date().toISOString().slice(0, 10)}.csv`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
+  const clearBulkResults = () => {
+    setBulkScanResults([])
+  }
+
   return <div className="space-y-6">
     <div>
       <h1 className="text-2xl font-bold text-gray-800 dark:text-slate-100">Koreksi Jawaban Otomatis (AI + OCR)</h1>
       <p className="mt-1 text-sm text-gray-500 dark:text-slate-400">Scan foto lembar jawaban siswa (tulisan tangan/cetak) atau ketik manual, lalu biarkan AI menilai berdasarkan soal dan kunci jawaban.</p>
     </div>
 
-    <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
+    {/* Tabs */}
+    <div className="flex gap-2 border-b border-gray-200 dark:border-slate-700">
+      <button
+        onClick={() => setShowBulkTab(false)}
+        className={`px-4 py-2 font-semibold text-sm transition-colors ${!showBulkTab ? 'border-b-2 border-primary text-primary' : 'text-gray-500 hover:text-gray-700 dark:text-slate-400'}`}
+      >
+        Koreksi Manual
+      </button>
+      <button
+        onClick={() => setShowBulkTab(true)}
+        className={`px-4 py-2 font-semibold text-sm transition-colors flex items-center gap-2 ${showBulkTab ? 'border-b-2 border-primary text-primary' : 'text-gray-500 hover:text-gray-700 dark:text-slate-400'}`}
+      >
+        <Upload size={16} /> Bulk Scan LJK ({bulkScanResults.length})
+      </button>
+    </div>
+
+    {showBulkTab ? (
+      /* Bulk Upload Tab */
+      <div className="space-y-4">
+        <section className="rounded-2xl border border-gray-100 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+          <h2 className="mb-4 flex items-center gap-2 font-semibold text-gray-800 dark:text-slate-100">
+            <Upload size={20} className="text-primary" /> Upload Banyak File LJK
+          </h2>
+          <p className="mb-4 text-sm text-gray-600 dark:text-slate-300">Upload multiple file gambar LJK sekaligus, sistem akan otomatis scan semua file dan ekstrak teks menggunakan OCR.</p>
+          
+          <label className="flex cursor-pointer items-center justify-center gap-3 rounded-xl border-2 border-dashed border-gray-300 bg-gray-50 p-8 transition-colors hover:border-primary hover:bg-primary/5 dark:border-slate-700 dark:bg-slate-800/50">
+            <div className="text-center">
+              <Upload size={32} className="mx-auto mb-2 text-primary" />
+              <p className="font-semibold text-gray-700 dark:text-slate-100">Klik atau drag gambar di sini</p>
+              <p className="text-xs text-gray-500 dark:text-slate-400">Dukung PNG, JPG, WebP (max 10 file sekaligus)</p>
+            </div>
+            <input 
+              type="file" 
+              multiple 
+              accept="image/*" 
+              className="hidden" 
+              disabled={bulkScanning}
+              onChange={e => handleBulkUpload(e.target.files)}
+            />
+          </label>
+
+          {bulkScanResults.length > 0 && (
+            <div className="mt-6 space-y-3">
+              <div className="flex items-center justify-between">
+                <h3 className="font-semibold text-gray-800 dark:text-slate-100">
+                  Hasil Scan ({bulkScanResults.filter(r => r.status === 'success').length}/{bulkScanResults.length})
+                </h3>
+                <div className="flex gap-2">
+                  {bulkScanResults.some(r => r.status === 'success') && (
+                    <button
+                      onClick={downloadBulkResults}
+                      className="flex items-center gap-2 rounded-lg bg-emerald-100 px-3 py-1.5 text-xs font-semibold text-emerald-700 hover:bg-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-300"
+                    >
+                      <FileText size={14} /> Download CSV
+                    </button>
+                  )}
+                  <button
+                    onClick={clearBulkResults}
+                    className="flex items-center gap-2 rounded-lg bg-red-100 px-3 py-1.5 text-xs font-semibold text-red-700 hover:bg-red-200 dark:bg-red-900/30 dark:text-red-300"
+                  >
+                    <Trash2 size={14} /> Hapus
+                  </button>
+                </div>
+              </div>
+
+              <div className="max-h-96 overflow-y-auto space-y-2">
+                {bulkScanResults.map((result, idx) => (
+                  <div key={idx} className="rounded-lg border border-gray-200 bg-gray-50 p-3 dark:border-slate-700 dark:bg-slate-800/50">
+                    <div className="flex items-start gap-3">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className="truncate font-medium text-sm text-gray-800 dark:text-slate-100">{result.file}</span>
+                          {result.status === 'success' && <CheckCircle2 size={16} className="text-emerald-600 flex-shrink-0" />}
+                          {result.status === 'error' && <span className="text-xs px-2 py-0.5 bg-red-100 text-red-700 rounded dark:bg-red-900/30 dark:text-red-300">Error</span>}
+                          {result.status === 'processing' && <Loader2 size={16} className="text-blue-600 animate-spin flex-shrink-0" />}
+                        </div>
+                        {result.text && (
+                          <p className="text-xs text-gray-600 dark:text-slate-400 line-clamp-2">{result.text}</p>
+                        )}
+                        {result.error && (
+                          <p className="text-xs text-red-600 dark:text-red-400">{result.error}</p>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </section>
+      </div>
+    ) : (
+      /* Manual Correction Tab */
+      <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
       <div className="space-y-5">
         <section className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900 sm:p-6 space-y-5">
           <div>
@@ -84,14 +252,8 @@ export default function GuruKoreksiJawabanPage() {
       </div>
 
       <aside className="h-fit rounded-2xl border border-gray-100 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900 xl:sticky xl:top-4">
-        <h2 className="mb-3 flex items-center gap-2 font-semibold text-gray-800 dark:text-slate-100"><ClipboardCheck size={18} className="text-primary" /> Cara Pakai</h2>
-        <ol className="list-decimal space-y-2 pl-4 text-sm text-gray-600 dark:text-slate-300">
-          <li>Isi soal dan/atau kunci jawaban (ketik langsung atau scan foto).</li>
-          <li>Foto atau ketik jawaban siswa — mendukung tulisan tangan.</li>
-          <li>Klik "Nilai Jawaban dengan AI" untuk mendapat skor otomatis.</li>
-          <li>Hasil bisa jadi acuan nilai harian/STS/SAS; tetap boleh disesuaikan manual jika perlu.</li>
-        </ol>
       </aside>
     </div>
+    )}
   </div>
 }
