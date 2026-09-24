@@ -121,19 +121,29 @@ export default function Sidebar() {
   const isActive = (path?: string) => path === location.pathname
 
   // Grouping configuration untuk admin desktop view (sesuai struktur yang diminta user)
-  const adminMenuGroups: Array<{ name: string; indices: number[] }> = [
-    { name: 'DASHBOARD', indices: [0, 1] }, // Dashboard, Posting
-    { name: 'MASTER DATA', indices: [2, 3, 4, 5, 19] }, // Data Siswa, GTK, Mapel, Rombel, Tahun Ajaran
-    { name: 'AKADEMIK', indices: [6, 7, 8, 9, 10, 11] }, // Kalender KBM, Jadwal Pelajaran, Absensi, Ceklok, Absensi Saya, Jurnal Mengajar
-    { name: 'PENILAIAN & EVALUASI', indices: [15, 13, 14, 12, 16] }, // Ujian & Bank Soal, Ledger Nilai, Rekap Nilai, Rapor Siswa, Catatan Kepribadian
-    { name: 'LAYANAN', indices: [18, 17] }, // Perpustakaan Digital, Generator AI Guru
-    { name: 'KEUANGAN & OPERASIONAL', indices: [20, 28] }, // Keuangan (Tagihan, Tabungan), E-Kantin & Cashless
-    { name: 'KOMUNIKASI', indices: [21] }, // WhatsApp
-    { name: 'MANAJEMEN LEMBAGA', indices: [22, 24, 26, 27, 23] }, // Pengaturan, Manajemen Pengguna, Backup & Restore, Kelola Website, REST API Developer
+  // Menggunakan label matching karena menuItems sudah di-filter oleh pathEnabled()
+  const adminMenuGroups: Array<{ name: string; labels: string[] }> = [
+    { name: 'DASHBOARD', labels: ['Dashboard', 'Posting'] },
+    { name: 'MASTER DATA', labels: ['Data Siswa', 'Data GTK', 'Mata Pelajaran', 'Rombongan Belajar', 'Tahun Ajaran'] },
+    { name: 'AKADEMIK', labels: ['Kalender KBM', 'Jadwal Pelajaran', 'Absensi', 'Ceklok & Rekap', 'Absensi Saya', 'Jurnal Mengajar'] },
+    { name: 'PENILAIAN & EVALUASI', labels: ['Ujian & Bank Soal', 'Ledger Nilai', 'Rekap Nilai per Mapel', 'Rapor Siswa', 'Catatan Kepribadian'] },
+    { name: 'LAYANAN', labels: ['Perpustakaan Digital', 'Generator AI Guru'] },
+    { name: 'KEUANGAN & OPERASIONAL', labels: ['Keuangan', 'E-Kantin & Cashless'] },
+    { name: 'KOMUNIKASI', labels: ['WhatsApp'] },
+    { name: 'MANAJEMEN LEMBAGA', labels: ['Pengaturan', 'Manajemen Pengguna', 'Backup & Restore', 'Kelola Website', 'REST API Developer'] },
   ]
+
+  const getGroupedMenus = (groups: typeof adminMenuGroups) => {
+    const groupedMenus: { [key: string]: typeof menuItems } = {}
+    groups.forEach(group => {
+      groupedMenus[group.name] = menuItems.filter(item => group.labels.includes(item.label))
+    })
+    return groupedMenus
+  }
 
   const isAdminRole = ['admin', 'super_admin', 'operator', 'tata_usaha', 'tu'].includes(user?.role || '')
   const showGrouping = isAdminRole && isOpen
+  const groupedMenus = showGrouping ? getGroupedMenus(adminMenuGroups) : null
 
   return (
     <>
@@ -174,14 +184,14 @@ export default function Sidebar() {
             // Admin grouping view (expanded sidebar only)
             <div className="space-y-6">
               {adminMenuGroups.map(group => {
-                const groupItems = group.indices.map(idx => menuItems[idx]).filter(Boolean)
+                const groupItems = groupedMenus?.[group.name] || []
                 return (
                   <div key={group.name}>
                     <p className="px-3 mb-2 text-[11px] font-semibold text-white/50 uppercase tracking-wider">
                       {group.name}
                     </p>
                     <div className="space-y-0.5">
-                      {groupItems.map((item) => (
+                      {groupItems.map((item: typeof menuItems[0]) => (
                         <div key={item.label} className="mb-1">
                           {item.children ? (
                             <>
