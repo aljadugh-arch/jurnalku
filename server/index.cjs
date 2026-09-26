@@ -2972,6 +2972,25 @@ app.post('/api/siswa/bulk-import', ADMIN, (req, res) => {
   // Get all rombels untuk mapping
   const allRombels = db.prepare('SELECT id, nama FROM rombel WHERE tenant_id=?').all(req.tenantId)
   const rombelMap = new Map(allRombels.map(r => [r.nama.trim().toLowerCase(), r.id]))
+  
+  // Helper function untuk convert format rombel (e.g., 7A -> VII-A)
+  const normalizeRombelName = (name) => {
+    if (!name) return null
+    const n = String(name).trim()
+    
+    // Convert format: 7A -> VII-A, 8B -> VIII-B, 9C -> IX-C
+    const match = n.match(/^(\d+)([A-Z]?)$/)
+    if (match) {
+      const num = parseInt(match[1])
+      const letter = match[2] || ''
+      const romanMap = { 1: 'I', 2: 'II', 3: 'III', 4: 'IV', 5: 'V', 6: 'VI', 7: 'VII', 8: 'VIII', 9: 'IX' }
+      if (romanMap[num]) {
+        return `${romanMap[num]}-${letter}`.trim()
+      }
+    }
+    
+    return n
+  }
 
   let success = 0
   let failed = 0
@@ -3000,14 +3019,24 @@ app.post('/api/siswa/bulk-import', ADMIN, (req, res) => {
           continue
         }
 
-        // Auto-map rombel by name
+        // Auto-map rombel by name (with format conversion)
         let rombelId = null
         if (row.rombel_nama) {
-          const rombelKey = String(row.rombel_nama).trim().toLowerCase()
-          rombelId = rombelMap.get(rombelKey)
+          let rombelKey = String(row.rombel_nama).trim().toLowerCase()
+          
+          // Try direct match first
+          let mapped = rombelMap.get(rombelKey)
+          
+          // If not found, try normalized format
+          if (!mapped) {
+            const normalized = normalizeRombelName(rombelKey)
+            mapped = rombelMap.get(normalized.toLowerCase())
+          }
+          
+          rombelId = mapped
           if (!rombelId) {
             failed++
-            errors.push({ nis, nama, error: `Rombel "${row.rombel_nama}" tidak ditemukan` })
+            errors.push({ nis, nama, error: `Rombel "${row.rombel_nama}" tidak ditemukan (coba: ${normalizeRombelName(rombelKey)})` })
             continue
           }
         }
