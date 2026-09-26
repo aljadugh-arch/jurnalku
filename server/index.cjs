@@ -5947,54 +5947,54 @@ app.delete('/api/ai-config/me', authMiddleware, (req, res) => {
 })
 
 // ===== TTS pengumuman absensi (Gemini TTS, voice pria natural) =====
-// Fallback: kalau tenant belum konfigurasi API key Gemini (di ai_config),
-// frontend otomatis pakai Web Speech API browser (lihat feedbackSound.ts) —
+// Voice lokal: Microsoft Edge TTS neural (id-ID-GadisNeural, FEMALE) dengan
+// fallback espeak offline — lihat server/tts-local.cjs. Frontend otomatis
+// pakai Web Speech API browser bila keduanya gagal (lihat feedbackSound.ts),
 // jadi fitur ini murni peningkatan opsional, absensi tidak pernah terhambat.
 //
-// PENTING (root cause delay yang dilaporkan user): Gemini TTS API diukur
-// nyata butuh 3-14 DETIK per generate — jauh dari instan. Endpoint ini
-// SENGAJA TIDAK menunggu Gemini generate sama sekali: kalau cache belum
-// ada, langsung balas 404 (frontend fallback instan ke Web Speech API)
-// SAMBIL memicu generate di background untuk cache scan berikutnya.
+// PENTING (arsitektur, sama seperti Gemini sebelumnya): Edge TTS butuh
+// network round-trip (~1-3 detik) — BUKAN instan seperti espeak lama.
+// Endpoint ini SENGAJA TIDAK menunggu generate sama sekali: kalau cache
+// belum ada, langsung balas 404 (frontend fallback instan ke Web Speech
+// API) SAMBIL memicu generate di background untuk cache scan berikutnya.
 app.post('/api/tts/announce', authMiddleware, async (req, res) => {
   const text = String(req.body?.text || '').trim().slice(0, 200)
   if (!text) return res.status(400).json({ error: 'Teks kosong' })
-  
-  const { checkTtsCache, generateTtsAudioLocal } = require('./tts-local.cjs')
-  
-  // Cek cache dulu
+
+  const { checkTtsCache, generateTtsAudioLocalBackground } = require('./tts-local.cjs')
+
+  // Cek cache dulu (instan, sync, tanpa network)
   const cached = checkTtsCache(text, UPLOAD_DIR, req.tenantId)
   if (cached) return res.json(cached)
-  
-  // Tidak ada di cache: generate lokal (instan, synchronous)
-  try {
-    const result = await generateTtsAudioLocal(text, UPLOAD_DIR, req.tenantId)
-    res.json(result)
-  } catch (err) {
-    console.error('[TTS Local] generate error:', err.message)
-    // Fallback: client pakai Web Speech API
-    res.status(404).json({ error: 'TTS generation failed, fallback to browser speech', generating: false })
-  }
+
+  // Tidak ada di cache: generate DI BACKGROUND (fire-and-forget), balas 404
+  // sekarang juga supaya scan tidak pernah menunggu network Edge TTS.
+  generateTtsAudioLocalBackground(text, UPLOAD_DIR, req.tenantId)
+  res.status(404).json({ error: 'TTS generating, fallback to browser speech', generating: true })
 })
 
 // Pre-warm cache TTS untuk semua nama panggilan siswa aktif + GTK di tenant
 // ini sekaligus (dipanggil manual dari Pengaturan, idealnya sebelum jam
 // masuk sekolah) — supaya saat jam absensi tiba, SEMUA nama sudah ada di
-// cache dan scan langsung dapat suara pria instan, tidak pernah fallback
-// female karena menunggu generate pertama kali.
+// cache dan scan langsung dapat suara wanita (Edge TTS) instan, tidak pernah
+// fallback ke Web Speech browser karena menunggu generate pertama kali.
+//
+// Sejak 2026-09-26: engine adalah tts-local.cjs (Edge TTS neural, tanpa API
+// key), BUKAN gemini-tts.cjs — sebelumnya endpoint ini butuh API key Gemini
+// per tenant padahal jalur live (/api/tts/announce) sudah lama tidak pernah
+// memakai Gemini sama sekali, jadi fitur pre-warm dulu praktis mati untuk
+// hampir semua tenant. queue infra (createTtsJob/runTtsQueue) tetap dipakai
+// dari gemini-tts.cjs karena generik (bukan spesifik Gemini).
 app.post('/api/tts/prewarm', ADMIN, async (req, res) => {
-  const cfg = resolveAiConfig(db, req.tenantId, req.user?.id)
-  if (!cfg || cfg.provider !== 'gemini' || !cfg.apiKey) {
-    return res.status(404).json({ error: 'TTS Gemini belum dikonfigurasi untuk lembaga ini' })
-  }
   const {
-    generateTtsAudio, checkTtsCache, createTtsJob, runTtsQueue, DEFAULT_VOICE,
-  } = require('./gemini-tts.cjs')
+    generateTtsAudioLocal, checkTtsCache,
+  } = require('./tts-local.cjs')
+  const { createTtsJob, runTtsQueue } = require('./gemini-tts.cjs')
   const names = collectTtsAnnouncementNames(db, req.tenantId)
 
   const phrases = []
   for (const n of names) { phrases.push(`${n} masuk`); phrases.push(`${n} pulang`) }
-  const todo = phrases.filter(p => !checkTtsCache({ text: p, voiceName: DEFAULT_VOICE, uploadDir: UPLOAD_DIR, tenantId: req.tenantId }))
+  const todo = phrases.filter(p => !checkTtsCache(p, UPLOAD_DIR, req.tenantId))
 
   if (todo.length === 0) {
     return res.json({ total: phrases.length, alreadyCached: phrases.length, queued: 0 })
@@ -6009,21 +6009,13 @@ app.post('/api/tts/prewarm', ADMIN, async (req, res) => {
     jobId: job.id,
   })
 
-  // Tiga worker memangkas waktu prewarm sekitar 3x namun tetap membatasi burst
-  // agar VPS dan kuota Gemini tidak dibanjiri semua nama sekaligus.
+  // Edge TTS gratis tanpa kuota API, tapi tetap dijalankan 1-per-1 (bukan
+  // burst) supaya tidak membebani VPS/koneksi saat ratusan nama diproses.
   setImmediate(async () => {
-    await runTtsQueue(todo, text => generateTtsAudio({
-      apiKey: cfg.apiKey, text, voiceName: DEFAULT_VOICE, uploadDir: UPLOAD_DIR, tenantId,
-    }), {
-      concurrency: 1,
-      maxRetries: 3,
-      rateLimitDelayMs: 7000,
-      onRetry: ({ retryAfterMs }) => {
-        job.retrying++
-        job.phase = 'waiting-rate-limit'
-        job.retryAt = Date.now() + retryAfterMs
-        job.updatedAt = Date.now()
-      },
+    await runTtsQueue(todo, text => generateTtsAudioLocal(text, UPLOAD_DIR, tenantId), {
+      concurrency: 2,
+      maxRetries: 1,
+      rateLimitDelayMs: 300,
       onProgress: (error) => {
         if (error) job.failed++
         else job.done++
@@ -6040,7 +6032,7 @@ app.post('/api/tts/prewarm', ADMIN, async (req, res) => {
   })
 })
 
-// Status pre-warm: jobId baru memberi progress nyata termasuk kegagalan API;
+// Status pre-warm: jobId baru memberi progress nyata termasuk kegagalan;
 // tanpa jobId tetap kompatibel dengan client lama yang menghitung cache.
 app.get('/api/tts/prewarm/status', ADMIN, (req, res) => {
   if (req.query.jobId) {
@@ -6049,18 +6041,14 @@ app.get('/api/tts/prewarm/status', ADMIN, (req, res) => {
     if (!job) return res.status(404).json({ error: 'Job TTS tidak ditemukan atau sudah kedaluwarsa' })
     return res.json(job)
   }
-  const cfg = resolveAiConfig(db, req.tenantId, req.user?.id)
-  if (!cfg || cfg.provider !== 'gemini' || !cfg.apiKey) {
-    return res.status(404).json({ error: 'TTS Gemini belum dikonfigurasi untuk lembaga ini' })
-  }
-  const { checkTtsCache, DEFAULT_VOICE } = require('./gemini-tts.cjs')
+  const { checkTtsCache } = require('./tts-local.cjs')
   const names = collectTtsAnnouncementNames(db, req.tenantId)
   const phrases = []
   for (const n of names) { phrases.push(`${n} masuk`); phrases.push(`${n} pulang`) }
   const cached = []
   const missing = []
   for (const phrase of phrases) {
-    if (checkTtsCache({ text: phrase, voiceName: DEFAULT_VOICE, uploadDir: UPLOAD_DIR, tenantId: req.tenantId })) cached.push(phrase)
+    if (checkTtsCache(phrase, UPLOAD_DIR, req.tenantId)) cached.push(phrase)
     else missing.push(phrase)
   }
   res.json({ total: phrases.length, cached: cached.length, ready: missing.length === 0, phrases, missing })

@@ -1,20 +1,41 @@
-// Text-to-speech lokal menggunakan command-line TTS tools
-// 
-// Alternatif untuk Gemini TTS quota - process di lokal/command-line
-// Support:
-// 1. Linux: espeak, festival
-// 2. macOS: say command (built-in)
-// 3. Windows: PowerShell (built-in)
-// Dengan caching untuk menghindari regenerate saat nama sama
+// Text-to-speech lokal untuk pengumuman absensi ("Azzam masuk").
+//
+// Engine utama: Microsoft Edge TTS (voice neural online, gratis, tanpa API
+// key) — jauh lebih natural dibanding espeak (formant synthesis lama yang
+// terdengar robotic/kurang jelas, keluhan user 2026-09-26). Voice default
+// FEMALE Bahasa Indonesia (id-ID-GadisNeural) sesuai permintaan user.
+//
+// PENTING (arsitektur): Edge TTS butuh network round-trip (~1-3 detik),
+// BUKAN instan seperti espeak (~5ms). Panggilan HARUS async (execFile, bukan
+// execSync) dan proses generate TIDAK BOLEH menunggu di jalur request utama
+// (lihat generateTtsAudioLocalBackground) — kalau tidak, satu nama baru bisa
+// membekukan event loop Node.js untuk SEMUA tenant selama beberapa detik.
+//
+// Fallback berlapis kalau Edge TTS gagal (mis. VPS tanpa akses internet ke
+// speech.platform.bing.com, atau paket edge-tts/ffmpeg belum terpasang):
+// turun ke espeak lokal (robotic tapi selalu tersedia offline) supaya fitur
+// pengumuman suara tidak pernah mati total.
+//
+// Caching berbasis hash tenant+text seperti sebelumnya, supaya nama yang
+// sama tidak digenerate ulang setiap scan.
 
 const crypto = require('node:crypto')
 const fs = require('node:fs')
 const path = require('node:path')
-const { execSync, spawnSync } = require('node:child_process')
 const os = require('node:os')
+const { execFile, execSync } = require('node:child_process')
+const util = require('node:util')
 
-const DEFAULT_VOICE = 'id'
+const execFileAsync = util.promisify(execFile)
+
+// Override via env kalau path instalasi berbeda di server lain.
+const EDGE_TTS_BIN = process.env.EDGE_TTS_BIN || '/opt/jurnalku-edge-tts/venv/bin/edge-tts'
+const FFMPEG_BIN = process.env.FFMPEG_BIN || 'ffmpeg'
+// Voice FEMALE Bahasa Indonesia (Microsoft Edge neural). Ganti ke
+// id-ID-ArdiNeural (male) via env EDGE_TTS_VOICE bila suatu saat dibutuhkan lagi.
+const DEFAULT_VOICE = process.env.EDGE_TTS_VOICE || 'id-ID-GadisNeural'
 const CACHE_DIR_NAME = 'tts_local_cache'
+const GEN_TIMEOUT_MS = 8000
 
 function cacheDirFor(uploadDir) {
   const dir = path.join(uploadDir, CACHE_DIR_NAME)
@@ -35,134 +56,137 @@ function isUsableCacheFile(filePath) {
   }
 }
 
-/**
- * Detect OS dan command TTS yang tersedia
- */
-function detectTtsCommand() {
-  const platform = os.platform()
-  
-  if (platform === 'darwin') {
-    // macOS: gunakan `say` command (built-in)
-    try {
-      execSync('which say', { stdio: 'ignore' })
-      return 'say'
-    } catch { }
+function edgeTtsAvailable() {
+  try {
+    fs.accessSync(EDGE_TTS_BIN, fs.constants.X_OK)
+    return true
+  } catch {
+    return false
   }
-  
-  if (platform === 'linux') {
-    // Linux: cek espeak
-    try {
-      execSync('which espeak', { stdio: 'ignore' })
-      return 'espeak'
-    } catch { }
-    
-    // Fallback ke festival
-    try {
-      execSync('which festival', { stdio: 'ignore' })
-      return 'festival'
-    } catch { }
+}
+
+function espeakAvailable() {
+  try {
+    execSync('which espeak', { stdio: 'ignore' })
+    return true
+  } catch {
+    return false
   }
-  
-  if (platform === 'win32') {
-    // Windows: PowerShell SAPI TTS
-    return 'powershell'
-  }
-  
-  return null
 }
 
 /**
- * Generate audio lokal menggunakan command-line TTS
+ * Generate via Edge TTS (async, network) -> mp3 sementara -> convert ke WAV
+ * PCM 16-bit mono 24kHz via ffmpeg (format standar yang sudah divalidasi
+ * skill jurnalku-tts-cache).
+ */
+async function generateViaEdgeTts(text, outputPath) {
+  const tmpMp3 = path.join(os.tmpdir(), `tts_edge_${crypto.randomBytes(8).toString('hex')}.mp3`)
+  try {
+    await execFileAsync(EDGE_TTS_BIN, ['--voice', DEFAULT_VOICE, '--text', text, '--write-media', tmpMp3], {
+      timeout: GEN_TIMEOUT_MS,
+    })
+    if (!fs.existsSync(tmpMp3) || fs.statSync(tmpMp3).size === 0) {
+      throw new Error('Edge TTS menghasilkan file kosong')
+    }
+    await execFileAsync(FFMPEG_BIN, [
+      '-y', '-i', tmpMp3,
+      '-ar', '24000', '-ac', '1', '-sample_fmt', 's16',
+      '-f', 'wav', outputPath,
+    ], { timeout: GEN_TIMEOUT_MS })
+  } finally {
+    try { fs.unlinkSync(tmpMp3) } catch { }
+  }
+}
+
+/**
+ * Fallback offline: espeak (robotic tapi selalu tersedia tanpa internet).
+ */
+async function generateViaEspeak(text, outputPath) {
+  await execFileAsync('espeak', ['-l', 'id', '-w', outputPath, text], { timeout: GEN_TIMEOUT_MS })
+}
+
+/**
+ * Generate audio (async). Dipakai oleh prewarm (boleh menunggu) dan oleh
+ * generateTtsAudioLocalBackground (fire-and-forget, lihat di bawah).
  */
 async function generateTtsAudioLocal(text, uploadDir, tenantId) {
   const cacheDir = cacheDirFor(uploadDir)
   const key = cacheKey(tenantId, text)
   const outputPath = path.join(cacheDir, `${key}.wav`)
 
-  // Cek cache dulu
   if (isUsableCacheFile(outputPath)) {
     return {
       audioUrl: `/uploads/${CACHE_DIR_NAME}/${path.basename(outputPath)}`,
       cached: true,
-      filePath: outputPath
+      filePath: outputPath,
     }
   }
 
-  const command = detectTtsCommand()
-  if (!command) {
-    throw new Error('No TTS command found on system. Install: espeak (Linux), or use built-in (macOS/Windows)')
+  let lastErr = null
+  if (edgeTtsAvailable()) {
+    try {
+      await generateViaEdgeTts(text, outputPath)
+    } catch (err) {
+      lastErr = err
+      try { fs.unlinkSync(outputPath) } catch { }
+    }
   }
 
-  try {
-    switch (command) {
-      case 'say': {
-        // macOS: say command
-        execSync(`say -v Rishi -o "${outputPath}" "${text}"`, {
-          stdio: ['pipe', 'ignore', 'pipe']
-        })
-        break
-      }
-      
-      case 'espeak': {
-        // Linux: espeak command
-        execSync(`espeak -l id -w "${outputPath}" "${text}"`, {
-          stdio: ['pipe', 'ignore', 'pipe']
-        })
-        break
-      }
-      
-      case 'festival': {
-        // Linux: festival command
-        const scm = `(voice_default)(SayText "${text.replace(/"/g, '\\"')}")`
-        execSync(`echo '${scm}' | festival --pipe && ffmpeg -f wav -i /tmp/utt.wav -ar 16000 -ac 1 "${outputPath}"`, {
-          stdio: ['pipe', 'ignore', 'pipe'],
-          shell: true
-        })
-        break
-      }
-      
-      case 'powershell': {
-        // Windows: PowerShell SAPI
-        const ps = `Add-Type –AssemblyName System.Speech; (New-Object System.Speech.Synthesis.SpeechSynthesizer).Speak('${text.replace(/'/g, "''")}')`
-        execSync(`powershell -Command "${ps}"`, {
-          stdio: ['pipe', 'ignore', 'pipe']
-        })
-        // Note: PowerShell built-in speak tidak output ke file. Perlu alternatif seperti pyttsx3
-        throw new Error('PowerShell built-in TTS does not support file output. Install pyttsx3 Python package instead.')
-      }
-      
-      default:
-        throw new Error(`Unknown TTS command: ${command}`)
+  if (!isUsableCacheFile(outputPath)) {
+    if (!espeakAvailable()) {
+      throw new Error(`TTS generation failed: ${lastErr?.message || 'Edge TTS tidak tersedia dan espeak tidak terpasang'}`)
     }
+    try {
+      await generateViaEspeak(text, outputPath)
+    } catch (err) {
+      try { fs.unlinkSync(outputPath) } catch { }
+      throw new Error(`TTS generation failed (Edge TTS & espeak gagal): ${err.message}`)
+    }
+  }
 
-    if (isUsableCacheFile(outputPath)) {
-      return {
-        audioUrl: `/uploads/${CACHE_DIR_NAME}/${path.basename(outputPath)}`,
-        cached: false,
-        filePath: outputPath
-      }
-    } else {
-      throw new Error('Generated file is empty or too small')
-    }
-  } catch (err) {
-    // Clean up partial file
-    try { fs.unlinkSync(outputPath) } catch { }
-    throw new Error(`TTS generation failed: ${err.message}`)
+  if (!isUsableCacheFile(outputPath)) {
+    throw new Error('Generated file is empty or too small')
+  }
+
+  return {
+    audioUrl: `/uploads/${CACHE_DIR_NAME}/${path.basename(outputPath)}`,
+    cached: false,
+    filePath: outputPath,
   }
 }
 
+// Cegah request duplikat (dua scan hampir bersamaan utk nama yang sama)
+// memicu generate paralel yang sia-sia.
+const inFlight = new Set()
+
 /**
- * Check apakah audio sudah ada di cache
+ * Generate DI BACKGROUND (fire-and-forget) — dipanggil dari endpoint
+ * /api/tts/announce saat cache belum ada, supaya SCAN SEKARANG tidak
+ * menunggu network Edge TTS (~1-3 detik), tapi SCAN BERIKUTNYA untuk nama
+ * yang sama sudah dapat audio dari cache. Sama persis polanya dengan
+ * generateTtsAudioBackground di gemini-tts.cjs.
+ */
+function generateTtsAudioLocalBackground(text, uploadDir, tenantId) {
+  const flightKey = `${tenantId}|${text}`
+  if (inFlight.has(flightKey)) return
+  inFlight.add(flightKey)
+  generateTtsAudioLocal(text, uploadDir, tenantId)
+    .catch((err) => console.error('[tts-local background]', text, err.message))
+    .finally(() => inFlight.delete(flightKey))
+}
+
+/**
+ * Check apakah audio sudah ada di cache (sync, tanpa memanggil TTS apapun).
  */
 function checkTtsCache(text, uploadDir, tenantId) {
   const cacheDir = cacheDirFor(uploadDir)
   const key = cacheKey(tenantId, text)
   const filePath = path.join(cacheDir, `${key}.wav`)
-  
+
   if (isUsableCacheFile(filePath)) {
     return {
       audioUrl: `/uploads/${CACHE_DIR_NAME}/${path.basename(filePath)}`,
-      cached: true
+      cached: true,
     }
   }
   return null
@@ -175,7 +199,7 @@ function cleanOldCache(uploadDir, maxAgeDays = 7) {
   const cacheDir = cacheDirFor(uploadDir)
   const maxAgeMs = maxAgeDays * 24 * 60 * 60 * 1000
   const now = Date.now()
-  
+
   try {
     const files = fs.readdirSync(cacheDir)
     for (const file of files) {
@@ -192,11 +216,13 @@ function cleanOldCache(uploadDir, maxAgeDays = 7) {
 
 module.exports = {
   generateTtsAudioLocal,
+  generateTtsAudioLocalBackground,
   checkTtsCache,
   cleanOldCache,
-  detectTtsCommand,
+  edgeTtsAvailable,
+  espeakAvailable,
   cacheKey,
   cacheDirFor,
   DEFAULT_VOICE,
-  CACHE_DIR_NAME
+  CACHE_DIR_NAME,
 }

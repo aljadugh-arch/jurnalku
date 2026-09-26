@@ -3,14 +3,14 @@ import toast from 'react-hot-toast'
 import { Volume2, RefreshCw } from 'lucide-react'
 import api from '../services/api'
 
-// Kartu Pengaturan: pre-warm cache TTS Gemini (voice pria natural) untuk
-// semua nama panggilan siswa + GTK aktif di lembaga ini.
+// Kartu Pengaturan: pre-warm cache TTS (voice wanita natural, Edge TTS)
+// untuk semua nama panggilan siswa + GTK aktif di lembaga ini.
 //
-// KENAPA INI PERLU ADA: Gemini TTS API diukur nyata butuh 3-14 detik per
-// generate — terlalu lambat untuk dipanggil langsung saat scan absensi.
-// Sistem generate audio DI BACKGROUND saat nama belum ada di cache (scan
-// pertama tetap dapat suara lama/female sebagai fallback instan), lalu scan
-// BERIKUTNYA untuk nama yang sama baru dapat suara pria dari cache.
+// KENAPA INI PERLU ADA: Edge TTS butuh network round-trip (~1-3 detik) per
+// nama — terlalu lambat untuk dipanggil langsung saat scan absensi. Sistem
+// generate audio DI BACKGROUND saat nama belum ada di cache (scan pertama
+// tetap dapat suara fallback browser instan), lalu scan BERIKUTNYA untuk
+// nama yang sama baru dapat suara wanita natural dari cache.
 //
 // Supaya tidak ada delay/fallback sama sekali SAAT jam absensi berlangsung,
 // jalankan pre-warm ini SEBELUM jam masuk sekolah (mis. malam sebelumnya
@@ -67,7 +67,7 @@ export default function TtsPrewarmCard() {
       const res = await api.post('/tts/prewarm')
       const { total, alreadyCached, queued, jobId: newJobId } = res.data
       if (queued === 0) {
-        toast.success(`Semua ${total} nama sudah tersimpan di cache suara pria`)
+        toast.success(`Semua ${total} nama sudah tersimpan di cache suara wanita`)
       } else {
         setStatus({ total: queued, cached: 0 })
         setJobPhase('processing')
@@ -79,7 +79,7 @@ export default function TtsPrewarmCard() {
     } catch (err: any) {
       if (err?.response?.status === 404) {
         setAvailable(false)
-        toast.error('Isi API key Gemini di Konfigurasi AI dulu sebelum pre-warm')
+        toast.error('Fitur pre-warm TTS tidak tersedia')
       } else {
         toast.error('Gagal memulai pre-warm TTS')
       }
@@ -106,11 +106,11 @@ export default function TtsPrewarmCard() {
     <div className="bg-white rounded-xl p-4 sm:p-6 shadow-sm border border-gray-100">
       <div className="flex items-center gap-2 mb-2">
         <Volume2 size={18} className="text-indigo-600" />
-        <h3 className="font-semibold text-gray-800">Siapkan Suara TTS Absensi (Pria, Natural)</h3>
+        <h3 className="font-semibold text-gray-800">Siapkan Suara TTS Absensi (Wanita, Natural)</h3>
       </div>
       <p className="text-sm text-gray-500 mb-4">
-        Gemini butuh beberapa detik untuk membuat suara tiap nama pertama kali dipakai — kalau belum siap, sistem otomatis pakai suara lama supaya absensi tidak tertunda.
-        Tekan tombol ini SEBELUM jam masuk sekolah untuk menyiapkan suara pria semua siswa &amp; guru sekaligus di latar belakang, supaya saat jam absensi tiba semua nama sudah langsung terdengar suara pria.
+        Sistem butuh beberapa detik untuk membuat suara tiap nama pertama kali dipakai — kalau belum siap, sistem otomatis pakai suara browser sementara supaya absensi tidak tertunda.
+        Tekan tombol ini SEBELUM jam masuk sekolah untuk menyiapkan suara wanita semua siswa &amp; guru sekaligus di latar belakang, supaya saat jam absensi tiba semua nama sudah langsung terdengar jelas.
       </p>
       {status && (
         <div className="mb-4">

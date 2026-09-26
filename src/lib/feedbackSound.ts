@@ -115,36 +115,34 @@ function pickBestVoice(synth: SpeechSynthesis): SpeechSynthesisVoice | null {
   // model neural TTS modern — jauh lebih manusiawi dibanding voice legacy berbasis
   // formant synthesis (espeak/SAPI4/robotic). Diprioritaskan bila tersedia.
   const isNatural = (v: SpeechSynthesisVoice) => /natural|online|neural/i.test(name(v))
-  // Nama voice pria yang benar-benar terverifikasi male di browser umum. HATI-HATI:
-  // "Google US English" BUKAN voice pria (itu voice wanita default Chrome) — jangan
-  // dijadikan fallback male seperti sebelumnya, itu salah dan bikin suara wanita
-  // terdengar dipakaikan label "male-first".
-  const isVerifiedMale = (v: SpeechSynthesisVoice) =>
-    /\bmale\b|\bpria\b|laki[- ]?laki|\bman\b|\bpria\b/i.test(name(v)) ||
-    /google uk english male|microsoft david|microsoft andika|microsoft ardi|microsoft rizwan|microsoft farrell|microsoft ryan|microsoft guy|microsoft brian|microsoft christopher|microsoft eric/i.test(name(v))
+  // Nama voice wanita yang benar-benar terverifikasi female di browser umum.
+  const isVerifiedFemale = (v: SpeechSynthesisVoice) =>
+    /\bfemale\b|\bwanita\b|perempuan/i.test(name(v)) ||
+    /microsoft zira|microsoft gadis|microsoft hazel|microsoft susan|microsoft jenny|microsoft aria|microsoft michelle|microsoft samantha/i.test(name(v))
 
   const idVoices = voices.filter(isId)
 
-  // Prioritas MALE-first + neural-first (suara lebih manusiawi/enak didengar):
-  // 1) male Indonesia natural/neural
-  // 2) male Indonesia (non-neural)
-  // 3) male natural/neural bahasa lain (Inggris dsb, tetap jelas & manusiawi)
-  // 4) male verified lain
-  // 5) female Indonesia (fallback terakhir bila memang tak ada voice pria sama sekali)
+  // Prioritas FEMALE-first + neural-first (suara lebih manusiawi/enak didengar
+  // dan konsisten dengan voice server-side Edge TTS id-ID-GadisNeural):
+  // 1) female Indonesia natural/neural
+  // 2) female Indonesia (non-neural)
+  // 3) female natural/neural bahasa lain (Inggris dsb, tetap jelas & manusiawi)
+  // 4) female verified lain
+  // 5) voice Indonesia apa pun (fallback terakhir bila tak ada female eksplisit)
 
-  const maleIdNatural = idVoices.find(v => isVerifiedMale(v) && isNatural(v))
-  if (maleIdNatural) return maleIdNatural
+  const femaleIdNatural = idVoices.find(v => isVerifiedFemale(v) && isNatural(v))
+  if (femaleIdNatural) return femaleIdNatural
 
-  const maleId = idVoices.find(isVerifiedMale)
-  if (maleId) return maleId
+  const femaleId = idVoices.find(isVerifiedFemale)
+  if (femaleId) return femaleId
 
-  const maleNaturalAny = voices.find(v => isVerifiedMale(v) && isNatural(v))
-  if (maleNaturalAny) return maleNaturalAny
+  const femaleNaturalAny = voices.find(v => isVerifiedFemale(v) && isNatural(v))
+  if (femaleNaturalAny) return femaleNaturalAny
 
-  const maleAny = voices.find(isVerifiedMale)
-  if (maleAny) return maleAny
+  const femaleAny = voices.find(isVerifiedFemale)
+  if (femaleAny) return femaleAny
 
-  // (d) voice Indonesia apa pun (natural/neural diprioritaskan bila ada beberapa), fallback bisa female
+  // (d) voice Indonesia apa pun (natural/neural diprioritaskan bila ada beberapa)
   const idNatural = idVoices.find(isNatural)
   if (idNatural) return idNatural
   if (idVoices[0]) return idVoices[0]
@@ -198,18 +196,18 @@ function speakClear(text: string) {
 // supaya nama yang sama berulang (scan pagi lalu pulang) tidak perlu
 // request ulang ke server dalam sesi browser yang sama.
 const geminiAudioCache = new Map<string, HTMLAudioElement>()
-// Kalau server pernah menjawab tenant belum konfigurasi API key Gemini sama
-// sekali (bukan sekadar cache-miss), jangan coba lagi di sesi ini.
+// Kalau server pernah menjawab dengan 404 generic (bukan sekadar
+// cache-miss dengan generating:true), jangan coba lagi di sesi ini.
 let geminiTtsUnavailable = false
 
 /**
- * Coba TTS server-side (Gemini, voice pria natural, id-ID) lebih dulu.
- * Endpoint server HANYA mengecek cache (instan, tidak pernah menunggu
- * Gemini generate — diukur nyata Gemini butuh 3-14 detik, jauh terlalu
- * lambat untuk jalur scan langsung). Kalau cache belum ada, server balas
- * 404 SEKARANG JUGA dan mulai generate di background untuk scan berikutnya
- * dengan nama yang sama — jadi fallback ke Web Speech API di sini SELALU
- * instan, tidak ada delay tunggu network Gemini.
+ * Coba TTS server-side (Edge TTS neural, voice wanita natural, id-ID)
+ * lebih dulu. Endpoint server HANYA mengecek cache (instan, tidak pernah
+ * menunggu Edge TTS generate — network round-trip ~1-3 detik, jauh
+ * terlalu lambat untuk jalur scan langsung). Kalau cache belum ada, server
+ * balas 404 SEKARANG JUGA dan mulai generate di background untuk scan
+ * berikutnya dengan nama yang sama — jadi fallback ke Web Speech API di
+ * sini SELALU instan, tidak ada delay tunggu network.
  */
 async function speakViaGeminiOrFallback(text: string) {
   if (geminiTtsUnavailable) return speakClear(text)
