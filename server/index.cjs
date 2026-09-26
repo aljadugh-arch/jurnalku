@@ -2978,14 +2978,14 @@ app.post('/api/siswa/bulk-import', ADMIN, (req, res) => {
     if (!name) return null
     const n = String(name).trim()
     
-    // Convert format: 7A -> VII-A, 8B -> VIII-B, 9C -> IX-C
-    const match = n.match(/^(\d+)([A-Z]?)$/)
+    // Convert format: 7A -> VII-A, 8B -> VIII-B, 9C -> IX-C (case-insensitive input)
+    const match = n.match(/^(\d+)\s*-?\s*([A-Za-z]?)$/)
     if (match) {
       const num = parseInt(match[1])
-      const letter = match[2] || ''
+      const letter = (match[2] || '').toUpperCase()
       const romanMap = { 1: 'I', 2: 'II', 3: 'III', 4: 'IV', 5: 'V', 6: 'VI', 7: 'VII', 8: 'VIII', 9: 'IX' }
       if (romanMap[num]) {
-        return `${romanMap[num]}-${letter}`.trim()
+        return letter ? `${romanMap[num]}-${letter}` : romanMap[num]
       }
     }
     
