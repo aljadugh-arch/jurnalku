@@ -66,7 +66,10 @@ export default function ImportExcel({ title, templateName, templateUrl, headerRo
     const reader = new FileReader()
     reader.onload = (evt) => {
       const data = new Uint8Array(evt.target?.result as ArrayBuffer)
-      const wb = XLSX.read(data, { type: 'array' })
+      // cellDates: true membuat sel bertipe tanggal Excel diparse menjadi
+      // objek Date JS, bukan angka serial mentah (mis. 41552) — mencegah
+      // kolom seperti "Tanggal Lahir" tersimpan sebagai angka yang salah.
+      const wb = XLSX.read(data, { type: 'array', cellDates: true })
       const sh = wb.Sheets[wb.SheetNames[0]]
       const rows: any[][] = XLSX.utils.sheet_to_json(sh, { header: 1 })
       
@@ -80,8 +83,18 @@ export default function ImportExcel({ title, templateName, templateUrl, headerRo
         const obj: Record<string, any> = {}
         hdrs.forEach((h, idx) => {
           const field = columnMap[h]
-          if (field && row[idx] !== undefined && row[idx] !== null) {
-            obj[field] = row[idx].toString().trim()
+          const cell = row[idx]
+          if (field && cell !== undefined && cell !== null) {
+            if (cell instanceof Date) {
+              // Format sebagai YYYY-MM-DD, dihitung di waktu lokal agar
+              // tidak bergeser satu hari akibat konversi UTC.
+              const y = cell.getFullYear()
+              const m = String(cell.getMonth() + 1).padStart(2, '0')
+              const d = String(cell.getDate()).padStart(2, '0')
+              obj[field] = `${y}-${m}-${d}`
+            } else {
+              obj[field] = cell.toString().trim()
+            }
           }
         })
         if (Object.keys(obj).length > 0) mapped.push(obj)
