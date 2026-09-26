@@ -15,6 +15,7 @@ interface Tenant {
   slug: string
   nama: string
   domain_custom?: string | null
+  domain_status?: string | null
   email?: string | null
   telepon?: string | null
   plan: 'trial' | 'lite' | 'pro' | string
@@ -31,7 +32,8 @@ export default function TenantManagementPage() {
   const [tenants, setTenants] = useState<Tenant[]>([])
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
-  const [form, setForm] = useState({ slug: '', nama: '', email: '', telepon: '', max_siswa: 100, max_gtk: 20, base_domain: 'jurnal.cc.cd' })
+  const [domainMode, setDomainMode] = useState<'subdomain' | 'custom'>('subdomain')
+  const [form, setForm] = useState({ slug: '', nama: '', email: '', telepon: '', max_siswa: 100, max_gtk: 20, base_domain: 'jurnal.cc.cd', domain_custom: '' })
   const [created, setCreated] = useState<any>(null)
   const [unlock, setUnlock] = useState<{ tenantId: string; tenantName: string; plan: 'lite' | 'pro'; months: number } | null>(null)
   const [generatedKey, setGeneratedKey] = useState('')
@@ -63,10 +65,25 @@ export default function TenantManagementPage() {
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault()
     try {
-      const { data } = await api.post('/tenants', form)
+      const payload: Record<string, unknown> = { ...form }
+      if (domainMode === 'custom') {
+        if (!form.domain_custom.trim()) { alert('Domain custom wajib diisi'); return }
+        // Domain sendiri: subdomain platform tidak dipakai sebagai alamat publik,
+        // tapi backend tetap butuh slug unik sebagai identifier internal.
+        if (!payload.slug) payload.slug = form.domain_custom.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 30)
+        payload.domain_custom = form.domain_custom.trim().toLowerCase().replace(/^https?:\/\//, '').replace(/\/+$/, '')
+        // Dibuat langsung oleh superadmin (bukan lewat verify-domain self-service),
+        // jadi domain_status di-set 'active' langsung — DNS/Caddy diasumsikan
+        // sudah/akan dipasang manual oleh superadmin sebelum diberitahukan ke lembaga.
+        payload.domain_status = 'active'
+      } else {
+        delete payload.domain_custom
+      }
+      const { data } = await api.post('/tenants', payload)
       setCreated(data)
       setShowForm(false)
-      setForm({ slug: '', nama: '', email: '', telepon: '', max_siswa: 100, max_gtk: 20, base_domain: 'jurnal.cc.cd' })
+      setDomainMode('subdomain')
+      setForm({ slug: '', nama: '', email: '', telepon: '', max_siswa: 100, max_gtk: 20, base_domain: 'jurnal.cc.cd', domain_custom: '' })
       loadTenants()
     } catch (err: any) {
       alert(err.response?.data?.error || 'Gagal membuat tenant')
@@ -184,7 +201,8 @@ export default function TenantManagementPage() {
           <h3 className="font-semibold text-green-800">Lembaga Berhasil Dibuat</h3>
           <div className="mt-2 text-sm text-green-700 space-y-1">
             <p>Nama: <strong>{created.nama}</strong></p>
-            <p>URL: <strong>https://{created.slug}.{created.base_domain || 'jurnal.cc.cd'}</strong></p>
+            <p>URL: <strong>https://{created.domain_custom || `${created.slug}.${created.base_domain || 'jurnal.cc.cd'}`}</strong></p>
+            {created.domain_custom && <p className="text-amber-700 text-xs">Pastikan DNS domain ini sudah diarahkan (A record) ke server sebelum diberikan ke lembaga.</p>}
             <p>Email Admin: <strong>{created.admin_email}</strong></p>
             <p>Password awal: <strong>{created.admin_initial_password || created.admin_password}</strong></p>
             <p>Trial: <strong>Gratis satu bulan</strong></p>
@@ -196,27 +214,57 @@ export default function TenantManagementPage() {
       {showForm && (
         <form onSubmit={handleCreate} className="bg-white rounded-xl shadow-sm border p-4 space-y-3">
           <h3 className="font-semibold text-lg">Tambah Lembaga Baru</h3>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Jenis Domain</label>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <button type="button" onClick={() => setDomainMode('subdomain')}
+                className={`flex flex-col items-start gap-1 p-3 rounded-xl border-2 text-left transition-colors ${domainMode === 'subdomain' ? 'border-primary bg-primary/5' : 'border-gray-200 hover:border-gray-300'}`}>
+                <span className={`text-sm font-semibold ${domainMode === 'subdomain' ? 'text-primary' : 'text-gray-700'}`}>Subdomain Platform</span>
+                <span className="text-xs text-gray-400">*.jurnal.cc.cd atau *.jurnalmadrasah.web.id — gratis, langsung aktif</span>
+              </button>
+              <button type="button" onClick={() => setDomainMode('custom')}
+                className={`flex flex-col items-start gap-1 p-3 rounded-xl border-2 text-left transition-colors ${domainMode === 'custom' ? 'border-primary bg-primary/5' : 'border-gray-200 hover:border-gray-300'}`}>
+                <span className={`text-sm font-semibold ${domainMode === 'custom' ? 'text-primary' : 'text-gray-700'}`}>Domain Sendiri</span>
+                <span className="text-xs text-gray-400">Domain milik lembaga sendiri — subdomain platform tidak dipakai</span>
+              </button>
+            </div>
+          </div>
+
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Nama Lembaga</label>
               <input type="text" required value={form.nama} onChange={e => setForm({...form, nama: e.target.value})}
                 className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary/20 focus:border-primary" placeholder="SDIT Al-Fatih" />
             </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Domain Utama</label>
-              <select value={form.base_domain} onChange={e => setForm({...form, base_domain: e.target.value})}
-                className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary/20 focus:border-primary">
-                {BASE_DOMAIN_OPTIONS.map(d => <option key={d} value={d}>{d}</option>)}
-              </select>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Slug (subdomain)</label>
-              <div className="flex items-center">
-                <input type="text" required value={form.slug} onChange={e => setForm({...form, slug: e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '')})}
-                  className="w-full px-3 py-2 border rounded-l-lg focus:ring-2 focus:ring-primary/20 focus:border-primary" placeholder="sdit-alfatih" />
-                <span className="px-3 py-2 bg-gray-100 border border-l-0 rounded-r-lg text-sm text-gray-500">.{form.base_domain}</span>
+            {domainMode === 'subdomain' ? (
+              <>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Domain Utama</label>
+                  <select value={form.base_domain} onChange={e => setForm({...form, base_domain: e.target.value})}
+                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary/20 focus:border-primary">
+                    {BASE_DOMAIN_OPTIONS.map(d => <option key={d} value={d}>{d}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Slug (subdomain)</label>
+                  <div className="flex items-center">
+                    <input type="text" required value={form.slug} onChange={e => setForm({...form, slug: e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '')})}
+                      className="w-full px-3 py-2 border rounded-l-lg focus:ring-2 focus:ring-primary/20 focus:border-primary" placeholder="sdit-alfatih" />
+                    <span className="px-3 py-2 bg-gray-100 border border-l-0 rounded-r-lg text-sm text-gray-500">.{form.base_domain}</span>
+                  </div>
+                </div>
+              </>
+            ) : (
+              <div className="md:col-span-2">
+                <label className="block text-sm font-medium text-gray-700 mb-1">Domain Sendiri</label>
+                <input type="text" required value={form.domain_custom} onChange={e => setForm({...form, domain_custom: e.target.value})}
+                  className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary/20 focus:border-primary" placeholder="jurnal.sekolahku.sch.id" />
+                <p className="text-xs text-amber-600 mt-1">
+                  Pastikan DNS domain ini (A record) sudah/akan diarahkan ke server sebelum diberikan ke lembaga. Subdomain platform (*.jurnal.cc.cd) tidak akan aktif untuk lembaga ini.
+                </p>
               </div>
-            </div>
+            )}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Email Admin</label>
               <input type="email" required value={form.email} onChange={e => setForm({...form, email: e.target.value})}
@@ -261,14 +309,31 @@ export default function TenantManagementPage() {
                   <div className="text-xs text-gray-400 mt-0.5">{t.email}</div>
                 </td>
                 <td className="px-3 py-2.5 align-top">
-                  <a href={`https://${t.slug}.${t.base_domain || 'jurnal.cc.cd'}`} target="_blank" rel="noreferrer"
-                    className="inline-flex items-center gap-1 text-sm text-primary hover:underline">
-                    {t.slug}.{t.base_domain || 'jurnal.cc.cd'}
-                    <ExternalLink size={12} className="shrink-0 opacity-60" />
-                  </a>
+                  {t.domain_custom && t.domain_status === 'active' ? (
+                    <span className="inline-flex items-center gap-1 text-xs text-gray-400 line-through decoration-gray-300" title="Nonaktif — lembaga sudah pakai domain sendiri">
+                      {t.slug}.{t.base_domain || 'jurnal.cc.cd'}
+                    </span>
+                  ) : (
+                    <a href={`https://${t.slug}.${t.base_domain || 'jurnal.cc.cd'}`} target="_blank" rel="noreferrer"
+                      className="inline-flex items-center gap-1 text-sm text-primary hover:underline">
+                      {t.slug}.{t.base_domain || 'jurnal.cc.cd'}
+                      <ExternalLink size={12} className="shrink-0 opacity-60" />
+                    </a>
+                  )}
                 </td>
                 <td className="px-3 py-2.5 align-top text-sm text-gray-600">
-                  {t.domain_custom || <span className="text-gray-300">—</span>}
+                  {t.domain_custom ? (
+                    <div>
+                      <a href={`https://${t.domain_custom}`} target="_blank" rel="noreferrer"
+                        className="inline-flex items-center gap-1 font-medium text-primary hover:underline">
+                        {t.domain_custom}
+                        <ExternalLink size={12} className="shrink-0 opacity-60" />
+                      </a>
+                      <div className={`text-[11px] mt-0.5 ${t.domain_status === 'active' ? 'text-green-600' : t.domain_status === 'pending' ? 'text-amber-600' : 'text-red-500'}`}>
+                        {t.domain_status === 'active' ? 'Aktif (alamat resmi)' : t.domain_status === 'pending' ? 'Menunggu verifikasi DNS' : t.domain_status || 'Belum aktif'}
+                      </div>
+                    </div>
+                  ) : <span className="text-gray-300">—</span>}
                 </td>
                 <td className="px-3 py-2.5 align-top">
                   <span className={`inline-block px-2.5 py-1 rounded-full text-xs font-medium ${t.plan === 'trial' ? 'bg-amber-50 text-amber-700' : t.plan === 'pro' ? 'bg-blue-50 text-blue-700' : 'bg-purple-50 text-purple-700'}`}>

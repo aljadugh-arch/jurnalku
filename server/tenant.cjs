@@ -151,8 +151,24 @@ function tenantMiddleware(db) {
     if (matchedBase) {
       const slug = host.slice(0, -(matchedBase.length + 1))
       if (slug && slug !== 'www') {
-        // Custom domain is an alias, not a replacement: tenant remains reachable by slug too.
         tenant = db.prepare('SELECT * FROM tenants WHERE slug = ? AND aktif = 1').get(slug)
+
+        // Once a tenant has an ACTIVE custom domain, its platform subdomain
+        // (slug.jurnal.cc.cd / slug.jurnalmadrasah.web.id) is retired — all
+        // traffic must go through the custom domain instead. This avoids the
+        // tenant being reachable (and indexed/bookmarked) under two different
+        // hosts, and avoids confusion like jurnal.mtsplussd7.cc.cd (custom)
+        // vs mtsplussd7.jurnal.cc.cd (subdomain) both resolving to the tenant.
+        if (tenant && tenant.domain_custom && tenant.domain_status === 'active') {
+          const target = `https://${tenant.domain_custom}${req.originalUrl}`
+          if (req.path.startsWith('/api')) {
+            return res.status(410).json({
+              error: 'Lembaga ini sudah menggunakan domain sendiri. Silakan akses melalui domain resmi.',
+              domain_custom: tenant.domain_custom,
+            })
+          }
+          return res.redirect(301, target)
+        }
       }
     }
 
@@ -210,7 +226,7 @@ function registerTenantRoutes(app, db, authMiddleware, uuidv4, SUPER) {
   // Create new tenant
   app.post('/api/tenants', authMiddleware, (req, res) => {
     if (req.user.role !== 'super_admin') return res.status(403).json({ error: 'Forbidden' })
-    const { slug, nama, domain_custom, email, telepon, alamat, max_siswa, max_gtk } = req.body
+    const { slug, nama, domain_custom, domain_status, email, telepon, alamat, max_siswa, max_gtk } = req.body
     if (!slug || !nama) return res.status(400).json({ error: 'slug dan nama wajib' })
 
     // Validate slug format
@@ -222,6 +238,22 @@ function registerTenantRoutes(app, db, authMiddleware, uuidv4, SUPER) {
     const exists = db.prepare('SELECT id FROM tenants WHERE slug = ?').get(slug)
     if (exists) return res.status(409).json({ error: 'Slug sudah digunakan' })
 
+    // Domain sendiri (custom domain): validasi format & pastikan belum dipakai
+    // tenant lain. Saat domain custom aktif, subdomain platform (slug.jurnal.cc.cd)
+    // otomatis nonaktif untuk tenant ini (lihat tenantMiddleware redirect 301).
+    let domainVal = null
+    let domainStatusVal = null
+    if (domain_custom) {
+      const d = String(domain_custom).trim().toLowerCase().replace(/^https?:\/\//, '').replace(/\/+$/, '')
+      if (!/^[a-z0-9]([a-z0-9.-]*[a-z0-9])?\.[a-z]{2,}$/.test(d)) {
+        return res.status(400).json({ error: 'Format domain custom tidak valid' })
+      }
+      const dupDomain = db.prepare('SELECT id FROM tenants WHERE domain_custom = ?').get(d)
+      if (dupDomain) return res.status(409).json({ error: 'Domain sudah digunakan tenant lain' })
+      domainVal = d
+      domainStatusVal = domain_status === 'pending' ? 'pending' : 'active'
+    }
+
     // base_domain: domain kanonik pilihan admin untuk branding link. Boleh dikirim
     // eksplisit dari form (base_domain), kalau tidak fallback ke domain request saat ini.
     const reqHostForEmail = (req.headers['host'] || req.headers['x-forwarded-host'] || '').split(':')[0].toLowerCase()
@@ -231,9 +263,9 @@ function registerTenantRoutes(app, db, authMiddleware, uuidv4, SUPER) {
       : requestBase
 
     const id = uuidv4()
-    db.prepare(`INSERT INTO tenants (id, slug, nama, domain_custom, email, telepon, alamat, plan, max_siswa, max_gtk, trial_ends_at, base_domain)
-      VALUES (?,?,?,?,?,?,?,?,?,?,datetime('now','+1 month'),?)`)
-      .run(id, slug, nama, domain_custom || null, email || null, telepon || null, alamat || null, 'trial', max_siswa || 100, max_gtk || 20, baseDomain)
+    db.prepare(`INSERT INTO tenants (id, slug, nama, domain_custom, domain_status, email, telepon, alamat, plan, max_siswa, max_gtk, trial_ends_at, base_domain)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,datetime('now','+1 month'),?)`)
+      .run(id, slug, nama, domainVal, domainStatusVal, email || null, telepon || null, alamat || null, 'trial', max_siswa || 100, max_gtk || 20, baseDomain)
 
     // Create default admin user for tenant.
     // Catatan: must_change_password=1 agar user dipaksa ganti password
@@ -260,7 +292,7 @@ function registerTenantRoutes(app, db, authMiddleware, uuidv4, SUPER) {
     // karena password tidak pernah dikirim ulang dan tidak dapat di-decrypt.
     // User harus ganti setelah login pertama (must_change_password=1).
     console.log(`[tenant] Created tenant "${nama}" admin_email=${adminEmail} initial_password=${adminInitialPassword} (wajib ganti setelah login)`)
-    res.json({ id, slug, nama, base_domain: baseDomain, admin_email: adminEmail, admin_initial_password: adminInitialPassword, must_change_password: true })
+    res.json({ id, slug, nama, base_domain: baseDomain, domain_custom: domainVal, domain_status: domainStatusVal, admin_email: adminEmail, admin_initial_password: adminInitialPassword, must_change_password: true })
   })
 
   // Update tenant
@@ -282,10 +314,27 @@ function registerTenantRoutes(app, db, authMiddleware, uuidv4, SUPER) {
       slugVal = normalized
     }
 
-    db.prepare(`UPDATE tenants SET nama=COALESCE(?,nama), domain_custom=?, plan=COALESCE(?,plan),
+    // BUG LAMA: domain_custom selalu ditulis ulang (fallback null) walau body tidak
+    // mengirim field ini sama sekali — akibatnya endpoint ini (dipanggil juga oleh modal
+    // "Ubah Paket Langganan" yang hanya mengirim {plan}) menghapus domain custom tenant
+    // yang sudah aktif. Sekarang: hanya diubah jika field domain_custom eksplisit ada di body.
+    const domainProvided = Object.prototype.hasOwnProperty.call(req.body, 'domain_custom')
+    const domainCustomVal = domainProvided ? (domain_custom ? String(domain_custom).trim().toLowerCase() : null) : undefined
+    const domainStatusVal = domainProvided ? (domainCustomVal ? 'active' : null) : undefined
+
+    if (domainProvided && domainCustomVal) {
+      const dupDomain = db.prepare('SELECT id FROM tenants WHERE domain_custom = ? AND id != ?').get(domainCustomVal, req.params.id)
+      if (dupDomain) return res.status(409).json({ error: 'Domain sudah dipakai tenant lain' })
+    }
+
+    db.prepare(`UPDATE tenants SET nama=COALESCE(?,nama),
+      domain_custom=CASE WHEN ?=1 THEN ? ELSE domain_custom END,
+      domain_status=CASE WHEN ?=1 THEN ? ELSE domain_status END,
+      plan=COALESCE(?,plan),
       max_siswa=COALESCE(?,max_siswa), max_gtk=COALESCE(?,max_gtk), aktif=COALESCE(?,aktif),
       expired_at=?, base_domain=COALESCE(?,base_domain), slug=COALESCE(?,slug) WHERE id=?`)
-      .run(nama, domain_custom || null, plan, max_siswa, max_gtk, aktif, expired_at || null, baseDomainVal, slugVal, req.params.id)
+      .run(nama, domainProvided ? 1 : 0, domainCustomVal ?? null, domainProvided ? 1 : 0, domainStatusVal ?? null,
+        plan, max_siswa, max_gtk, aktif, expired_at || null, baseDomainVal, slugVal, req.params.id)
     res.json({ success: true })
   })
 
@@ -297,8 +346,14 @@ function registerTenantRoutes(app, db, authMiddleware, uuidv4, SUPER) {
       const existing = db.prepare('SELECT id FROM tenants WHERE domain_custom = ? AND id != ?').get(domain_custom, req.params.id)
       if (existing) return res.status(400).json({ error: 'Domain sudah digunakan tenant lain' })
     }
-    db.prepare('UPDATE tenants SET domain_custom = ? WHERE id = ?').run(domain_custom || null, req.params.id)
-    res.json({ success: true, domain_custom })
+    // BUG LAMA: kolom domain_status tidak pernah di-set di sini, sehingga domain_custom
+    // terisi tapi statusnya tetap NULL/pending selamanya — tenantMiddleware mengandalkan
+    // domain_status='active' untuk memutuskan mana host resmi tenant (lihat root cause
+    // tenant jurnal.mtsplussd7.cc.cd yang terdaftar tapi tidak pernah resolve ke tenant-nya).
+    // Set domain_status secara eksplisit: 'active' saat mengisi domain, NULL saat dihapus.
+    const domainStatusVal = domain_custom ? 'active' : null
+    db.prepare('UPDATE tenants SET domain_custom = ?, domain_status = ? WHERE id = ?').run(domain_custom || null, domainStatusVal, req.params.id)
+    res.json({ success: true, domain_custom, domain_status: domainStatusVal })
   })
 
   // Delete tenant (cascade all data)
