@@ -154,34 +154,34 @@ export default function GuruKoreksiJawabanPage() {
     </div>
 
     {/* Tabs */}
-    <div className="flex gap-2 border-b border-gray-200 dark:border-slate-700">
+    <div className="flex gap-2 overflow-x-auto border-b border-gray-200 dark:border-slate-700">
       <button
         onClick={() => setShowBulkTab(false)}
-        className={`px-4 py-2 font-semibold text-sm transition-colors ${!showBulkTab ? 'border-b-2 border-primary text-primary' : 'text-gray-500 hover:text-gray-700 dark:text-slate-400'}`}
+        className={`whitespace-nowrap px-3 py-2 sm:px-4 font-semibold text-xs sm:text-sm transition-colors ${!showBulkTab ? 'border-b-2 border-primary text-primary' : 'text-gray-500 hover:text-gray-700 dark:text-slate-400'}`}
       >
         Koreksi Manual
       </button>
       <button
         onClick={() => setShowBulkTab(true)}
-        className={`px-4 py-2 font-semibold text-sm transition-colors flex items-center gap-2 ${showBulkTab ? 'border-b-2 border-primary text-primary' : 'text-gray-500 hover:text-gray-700 dark:text-slate-400'}`}
+        className={`whitespace-nowrap px-3 py-2 sm:px-4 font-semibold text-xs sm:text-sm transition-colors flex items-center gap-1 sm:gap-2 ${showBulkTab ? 'border-b-2 border-primary text-primary' : 'text-gray-500 hover:text-gray-700 dark:text-slate-400'}`}
       >
-        <Upload size={16} /> Bulk Scan LJK ({bulkScanResults.length})
+        <Upload size={14} className="sm:w-4" /> <span className="hidden sm:inline">Bulk Scan LJK</span><span className="sm:hidden">Bulk</span> ({bulkScanResults.length})
       </button>
     </div>
 
     {showBulkTab ? (
       /* Bulk Upload Tab */
       <div className="space-y-4">
-        <section className="rounded-2xl border border-gray-100 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+        <section className="rounded-2xl border border-gray-100 bg-white p-4 sm:p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900">
           <h2 className="mb-4 flex items-center gap-2 font-semibold text-gray-800 dark:text-slate-100">
             <Upload size={20} className="text-primary" /> Upload Banyak File LJK
           </h2>
           <p className="mb-4 text-sm text-gray-600 dark:text-slate-300">Upload multiple file gambar LJK sekaligus, sistem akan otomatis scan semua file dan ekstrak teks menggunakan OCR.</p>
           
-          <label className="flex cursor-pointer items-center justify-center gap-3 rounded-xl border-2 border-dashed border-gray-300 bg-gray-50 p-8 transition-colors hover:border-primary hover:bg-primary/5 dark:border-slate-700 dark:bg-slate-800/50">
+          <label className="flex cursor-pointer items-center justify-center gap-3 rounded-xl border-2 border-dashed border-gray-300 bg-gray-50 p-4 sm:p-8 transition-colors hover:border-primary hover:bg-primary/5 dark:border-slate-700 dark:bg-slate-800/50">
             <div className="text-center">
-              <Upload size={32} className="mx-auto mb-2 text-primary" />
-              <p className="font-semibold text-gray-700 dark:text-slate-100">Klik atau drag gambar di sini</p>
+              <Upload size={24} className="mx-auto mb-2 text-primary sm:w-8 sm:h-8" />
+              <p className="font-semibold text-sm sm:text-base text-gray-700 dark:text-slate-100">Klik atau drag gambar di sini</p>
               <p className="text-xs text-gray-500 dark:text-slate-400">Dukung PNG, JPG, WebP (max 10 file sekaligus)</p>
             </div>
             <input 
@@ -196,22 +196,22 @@ export default function GuruKoreksiJawabanPage() {
 
           {bulkScanResults.length > 0 && (
             <div className="mt-6 space-y-3">
-              <div className="flex items-center justify-between">
-                <h3 className="font-semibold text-gray-800 dark:text-slate-100">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
+                <h3 className="font-semibold text-gray-800 dark:text-slate-100 text-sm sm:text-base">
                   Hasil Scan ({bulkScanResults.filter(r => r.status === 'success').length}/{bulkScanResults.length})
                 </h3>
-                <div className="flex gap-2">
+                <div className="flex gap-2 flex-wrap">
                   {bulkScanResults.some(r => r.status === 'success') && (
                     <button
                       onClick={downloadBulkResults}
-                      className="flex items-center gap-2 rounded-lg bg-emerald-100 px-3 py-1.5 text-xs font-semibold text-emerald-700 hover:bg-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-300"
+                      className="flex items-center gap-2 rounded-lg bg-emerald-100 px-2 sm:px-3 py-1.5 text-xs font-semibold text-emerald-700 hover:bg-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-300 whitespace-nowrap"
                     >
-                      <FileText size={14} /> Download CSV
+                      <FileText size={14} /> <span className="hidden sm:inline">Download CSV</span><span className="sm:hidden">CSV</span>
                     </button>
                   )}
                   <button
                     onClick={clearBulkResults}
-                    className="flex items-center gap-2 rounded-lg bg-red-100 px-3 py-1.5 text-xs font-semibold text-red-700 hover:bg-red-200 dark:bg-red-900/30 dark:text-red-300"
+                    className="flex items-center gap-2 rounded-lg bg-red-100 px-2 sm:px-3 py-1.5 text-xs font-semibold text-red-700 hover:bg-red-200 dark:bg-red-900/30 dark:text-red-300 whitespace-nowrap"
                   >
                     <Trash2 size={14} /> Hapus
                   </button>
