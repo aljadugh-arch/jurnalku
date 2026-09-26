@@ -2976,6 +2976,7 @@ app.post('/api/siswa/bulk-import', ADMIN, (req, res) => {
   let success = 0
   let failed = 0
   const errors = []
+  const createdSiswaIds = []
 
   const tx = db.transaction(() => {
     for (const row of students) {
@@ -3040,9 +3041,7 @@ app.post('/api/siswa/bulk-import', ADMIN, (req, res) => {
           String(row.kerja_wali || '').trim() || null
         )
 
-        const siswa = db.prepare('SELECT * FROM siswa WHERE id = ? AND tenant_id = ?').get(id, req.tenantId)
-        rememberStudentQrIdentifiers(siswa, req.tenantId)
-        ensureStudentUser(siswa, req.tenantId)
+        createdSiswaIds.push(id)
         success++
       } catch (e) {
         failed++
@@ -3057,6 +3056,23 @@ app.post('/api/siswa/bulk-import', ADMIN, (req, res) => {
 
   try {
     tx()
+    
+    // Post-transaction: QR tracking dan user account creation (outside transaction untuk faster response)
+    // Ini dilakukan async/background untuk tidak block response
+    setImmediate(() => {
+      for (const siswaId of createdSiswaIds) {
+        try {
+          const siswa = db.prepare('SELECT * FROM siswa WHERE id = ? AND tenant_id = ?').get(siswaId, req.tenantId)
+          if (siswa) {
+            rememberStudentQrIdentifiers(siswa, req.tenantId)
+            ensureStudentUser(siswa, req.tenantId)
+          }
+        } catch (err) {
+          console.error(`Post-import QR/user creation failed for siswa ${siswaId}:`, err.message)
+        }
+      }
+    })
+    
     res.json({ success, failed, total: students.length, errors: errors.slice(0, 10) })
   } catch (e) {
     console.error('Bulk import siswa error:', e.message)
