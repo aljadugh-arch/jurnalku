@@ -704,22 +704,38 @@ export default function DataSiswaPage() {
           headerRow={0}
           columnMap={{ 'Nama': 'nama', 'NAMA': 'nama', 'Nama Panggilan': 'nama_panggilan', 'NIK': 'nik', 'NIS': 'nis', 'NISN': 'nisn', 'JK': 'jenis_kelamin', 'Jenis Kelamin': 'jenis_kelamin', 'Tempat Lahir': 'tempat_lahir', 'Tanggal Lahir': 'tanggal_lahir', 'Alamat': 'alamat', 'No HP': 'no_hp', 'Nama Ortu': 'nama_ortu', 'Rombel': 'rombel_nama' }}
           onImport={async (rows) => {
-            for (const row of rows) {
-              if (!row.nama) continue
-              const jk = (row.jenis_kelamin || 'L').toString().charAt(0).toUpperCase()
-              const rombelName = String(row.rombel_nama || '').trim().toLocaleLowerCase('id-ID')
-              const rombel = rombelName ? rombels.find((item) => item.nama.trim().toLocaleLowerCase('id-ID') === rombelName) : undefined
-              if (rombelName && !rombel) throw new Error(`Rombel "${row.rombel_nama}" tidak ditemukan. Buat rombel terlebih dahulu atau kosongkan kolom Rombel.`)
-              await api.post('/siswa', {
-                nis: String(row.nis || ''), nisn: String(row.nisn || ''), nama: row.nama,
-                nama_panggilan: row.nama_panggilan || '',
-                jenis_kelamin: jk, tempat_lahir: row.tempat_lahir || '',
-                nik: String(row.nik || ''), tanggal_lahir: row.tanggal_lahir || '', alamat: row.alamat || '',
-                no_hp: String(row.no_hp || ''), nama_ortu: row.nama_ortu || '',
-                rombel_id: rombel?.id || '', status: 'aktif'
-              })
+            const studentData = rows.map(row => ({
+              nama: row.nama,
+              nama_panggilan: row.nama_panggilan || '',
+              nik: String(row.nik || '').trim(),
+              nis: String(row.nis || '').trim(),
+              nisn: String(row.nisn || '').trim(),
+              jenis_kelamin: (row.jenis_kelamin || 'L').toString().charAt(0).toUpperCase(),
+              tempat_lahir: row.tempat_lahir || '',
+              tanggal_lahir: row.tanggal_lahir || '',
+              alamat: row.alamat || '',
+              no_hp: String(row.no_hp || '').trim(),
+              nama_ortu: row.nama_ortu || '',
+              rombel_nama: row.rombel_nama || '',
+              agama: row.agama || 'Islam',
+              status_keluarga: row.status_keluarga || 'Anak Kandung',
+              anak_ke: row.anak_ke || '',
+              asal_sekolah: row.asal_sekolah || '',
+              nama_ayah: row.nama_ayah || '',
+              nama_ibu: row.nama_ibu || '',
+              alamat_ortu: row.alamat_ortu || '',
+              kerja_ayah: row.kerja_ayah || '',
+              kerja_ibu: row.kerja_ibu || '',
+              nama_wali: row.nama_wali || '',
+              kerja_wali: row.kerja_wali || ''
+            }))
+            
+            const { data } = await api.post('/siswa/bulk-import', { students: studentData })
+            if (data.failed > 0) {
+              const errorMsg = data.errors.map((e: any) => `${e.nama || e.nis}: ${e.error}`).join('; ')
+              throw new Error(`${data.success}/${data.total} berhasil, ${data.failed} gagal. Detail: ${errorMsg}`)
             }
-            fetchData()
+            await fetchData()
           }}
           onClose={() => setShowImport(false)}
         />

@@ -2963,6 +2963,108 @@ app.post('/api/siswa/bulk-delete', ADMIN, (req, res) => {
   }
 })
 
+app.post('/api/siswa/bulk-import', ADMIN, (req, res) => {
+  const students = req.body?.students || []
+  if (!Array.isArray(students) || students.length === 0) {
+    return res.status(400).json({ error: 'students array wajib (minimal 1 siswa)' })
+  }
+
+  // Get all rombels untuk mapping
+  const allRombels = db.prepare('SELECT id, nama FROM rombel WHERE tenant_id=?').all(req.tenantId)
+  const rombelMap = new Map(allRombels.map(r => [r.nama.trim().toLowerCase(), r.id]))
+
+  let success = 0
+  let failed = 0
+  const errors = []
+
+  const tx = db.transaction(() => {
+    for (const row of students) {
+      try {
+        const id = uuidv4()
+        const nik = String(row.nik || '').trim() || null
+        const nis = String(row.nis || '').trim()
+        const nisn = String(row.nisn || '').trim()
+        const nama = String(row.nama || '').trim()
+        
+        if (!nama) {
+          failed++
+          errors.push({ nis, error: 'Nama wajib diisi' })
+          continue
+        }
+
+        // Validate NIK if provided
+        if (nik && !/^\d{16}$/.test(nik)) {
+          failed++
+          errors.push({ nis, nama, error: 'NIK harus berupa 16 digit angka' })
+          continue
+        }
+
+        // Auto-map rombel by name
+        let rombelId = null
+        if (row.rombel_nama) {
+          const rombelKey = String(row.rombel_nama).trim().toLowerCase()
+          rombelId = rombelMap.get(rombelKey)
+          if (!rombelId) {
+            failed++
+            errors.push({ nis, nama, error: `Rombel "${row.rombel_nama}" tidak ditemukan` })
+            continue
+          }
+        }
+
+        // Insert siswa
+        db.prepare(`INSERT INTO siswa (
+          id, nik, nis, nisn, nama, jenis_kelamin, tempat_lahir, tanggal_lahir, alamat, no_hp, 
+          nama_ortu, nama_panggilan, rombel_id, tenant_id, agama, status_keluarga, anak_ke, 
+          asal_sekolah, nama_ayah, nama_ibu, alamat_ortu, kerja_ayah, kerja_ibu, nama_wali, kerja_wali
+        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(
+          id, nik, nis, nisn, nama,
+          (String(row.jenis_kelamin || 'L').charAt(0).toUpperCase()),
+          String(row.tempat_lahir || '').trim(),
+          String(row.tanggal_lahir || '').trim(),
+          String(row.alamat || '').trim(),
+          String(row.no_hp || '').trim(),
+          String(row.nama_ortu || '').trim(),
+          (String(row.nama_panggilan || '').trim() || null),
+          rombelId,
+          req.tenantId,
+          String(row.agama || 'Islam').trim(),
+          String(row.status_keluarga || 'Anak Kandung').trim(),
+          String(row.anak_ke || '').trim() || null,
+          String(row.asal_sekolah || '').trim() || null,
+          String(row.nama_ayah || '').trim() || null,
+          String(row.nama_ibu || '').trim() || null,
+          String(row.alamat_ortu || '').trim() || null,
+          String(row.kerja_ayah || '').trim() || null,
+          String(row.kerja_ibu || '').trim() || null,
+          String(row.nama_wali || '').trim() || null,
+          String(row.kerja_wali || '').trim() || null
+        )
+
+        const siswa = db.prepare('SELECT * FROM siswa WHERE id = ? AND tenant_id = ?').get(id, req.tenantId)
+        rememberStudentQrIdentifiers(siswa, req.tenantId)
+        ensureStudentUser(siswa, req.tenantId)
+        success++
+      } catch (e) {
+        failed++
+        if (e.code === 'SQLITE_CONSTRAINT_UNIQUE' || e.code === 'SQLITE_CONSTRAINT') {
+          errors.push({ nis: row.nis, nama: row.nama, error: 'NIS sudah dipakai atau constraint violation' })
+        } else {
+          errors.push({ nis: row.nis, nama: row.nama, error: e.message })
+        }
+      }
+    }
+  })
+
+  try {
+    tx()
+    res.json({ success, failed, total: students.length, errors: errors.slice(0, 10) })
+  } catch (e) {
+    console.error('Bulk import siswa error:', e.message)
+    res.status(500).json({ error: 'Gagal import data siswa secara atomik', details: e.message })
+  }
+})
+
+
 app.post('/api/siswa', ADMIN, (req, res) => {
   const id = uuidv4()
   const {
