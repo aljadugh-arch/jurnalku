@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { ScanText, Sparkles, Loader2, CheckCircle2, ClipboardCheck, Upload, FileText, Trash2 } from 'lucide-react'
+import { ScanText, Sparkles, Loader2, CheckCircle2, ClipboardCheck, Upload, FileText, Trash2, File } from 'lucide-react'
 import toast from 'react-hot-toast'
 import api from '../../services/api'
 import { handleOcrFile } from '../../lib/ocr'
@@ -114,6 +114,39 @@ export default function GuruKoreksiJawabanPage() {
     setBulkScanResults([])
   }
 
+  const handleFileUpload = async (file: File, fieldType: 'soal' | 'jawaban' | 'kunci') => {
+    if (!file) return
+    
+    try {
+      // Untuk PDF atau document, ekstrak text dengan OCR jika gambar, atau simpan path jika PDF
+      if (file.type.startsWith('image/')) {
+        // Gambar - gunakan OCR
+        const formData = new FormData()
+        formData.append('image', file)
+        const { data } = await api.post('/ocr/scan', formData, { 
+          headers: { 'Content-Type': 'multipart/form-data' } 
+        })
+        
+        if (data.text) {
+          const prefix = fieldType === 'soal' ? 'Soal dari file: ' : fieldType === 'jawaban' ? 'Jawaban dari file: ' : 'Kunci dari file: '
+          if (fieldType === 'soal') setSoal(prev => prev ? `${prev}\n${prefix}${data.text}` : prefix + data.text)
+          else if (fieldType === 'jawaban') setJawabanSiswa(prev => prev ? `${prev}\n${prefix}${data.text}` : prefix + data.text)
+          else setKunciJawaban(prev => prev ? `${prev}\n${prefix}${data.text}` : prefix + data.text)
+          toast.success(`Teks berhasil diambil dari ${file.name}`)
+        } else {
+          toast.error('Tidak ada teks yang terdeteksi pada gambar')
+        }
+      } else if (file.type === 'application/pdf') {
+        toast.success('Upload PDF berhasil - manual input dari file PDF')
+        // Untuk PDF, biarkan user extract manual dulu (tidak auto-extract)
+      } else {
+        toast.error('Format file tidak didukung. Gunakan gambar (JPG, PNG, WebP) atau PDF')
+      }
+    } catch (error: any) {
+      toast.error(error.response?.data?.error || 'Gagal memproses file')
+    }
+  }
+
   return <div className="space-y-6">
     <div>
       <h1 className="text-2xl font-bold text-gray-800 dark:text-slate-100">Koreksi Jawaban Otomatis (AI + OCR)</h1>
@@ -218,17 +251,38 @@ export default function GuruKoreksiJawabanPage() {
         <section className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900 sm:p-6 space-y-5">
           <div>
             <span className={labelClass}>Soal (opsional jika kunci jawaban sudah lengkap)</span>
-            <textarea className={inputClass} rows={3} value={soal} onChange={e => setSoal(e.target.value)} placeholder="Tuliskan atau scan soal ujian" />
+            <div className="flex gap-2">
+              <textarea className={inputClass} rows={3} value={soal} onChange={e => setSoal(e.target.value)} placeholder="Tuliskan atau scan soal ujian" />
+              <label className="flex h-fit flex-col items-center justify-center rounded-lg border-2 border-dashed border-blue-300 bg-blue-50 p-3 text-center dark:border-blue-700 dark:bg-blue-900/30 cursor-pointer hover:bg-blue-100 dark:hover:bg-blue-900/50">
+                <Upload size={18} className="text-blue-600 dark:text-blue-300" />
+                <span className="mt-1 text-xs font-medium text-blue-600 dark:text-blue-300">Upload<br/>Soal</span>
+                <input type="file" accept="image/*,.pdf" onChange={e => e.target.files?.[0] && handleFileUpload(e.target.files[0], 'soal')} className="hidden" />
+              </label>
+            </div>
             <div className="mt-2">{scanButton(scanningSoal, setScanningSoal, text => setSoal(prev => prev ? `${prev}\n${text}` : text), 'Scan Foto Soal')}</div>
           </div>
           <div>
             <span className={labelClass}>Kunci Jawaban / Rubrik Penilaian</span>
-            <textarea className={inputClass} rows={3} value={kunciJawaban} onChange={e => setKunciJawaban(e.target.value)} placeholder="Tuliskan atau scan kunci jawaban" />
+            <div className="flex gap-2">
+              <textarea className={inputClass} rows={3} value={kunciJawaban} onChange={e => setKunciJawaban(e.target.value)} placeholder="Tuliskan atau scan kunci jawaban" />
+              <label className="flex h-fit flex-col items-center justify-center rounded-lg border-2 border-dashed border-purple-300 bg-purple-50 p-3 text-center dark:border-purple-700 dark:bg-purple-900/30 cursor-pointer hover:bg-purple-100 dark:hover:bg-purple-900/50">
+                <Upload size={18} className="text-purple-600 dark:text-purple-300" />
+                <span className="mt-1 text-xs font-medium text-purple-600 dark:text-purple-300">Upload<br/>Kunci</span>
+                <input type="file" accept="image/*,.pdf" onChange={e => e.target.files?.[0] && handleFileUpload(e.target.files[0], 'kunci')} className="hidden" />
+              </label>
+            </div>
             <div className="mt-2">{scanButton(scanningKunci, setScanningKunci, text => setKunciJawaban(prev => prev ? `${prev}\n${text}` : text), 'Scan Foto Kunci Jawaban')}</div>
           </div>
           <div>
             <span className={labelClass}>Jawaban Siswa</span>
-            <textarea className={inputClass} rows={5} value={jawabanSiswa} onChange={e => setJawabanSiswa(e.target.value)} placeholder="Tuliskan atau scan lembar jawaban siswa (mendukung tulisan tangan)" />
+            <div className="flex gap-2">
+              <textarea className={inputClass} rows={5} value={jawabanSiswa} onChange={e => setJawabanSiswa(e.target.value)} placeholder="Tuliskan atau scan lembar jawaban siswa (mendukung tulisan tangan)" />
+              <label className="flex h-fit flex-col items-center justify-center rounded-lg border-2 border-dashed border-green-300 bg-green-50 p-3 text-center dark:border-green-700 dark:bg-green-900/30 cursor-pointer hover:bg-green-100 dark:hover:bg-green-900/50">
+                <Upload size={18} className="text-green-600 dark:text-green-300" />
+                <span className="mt-1 text-xs font-medium text-green-600 dark:text-green-300">Upload<br/>LJK/Jawab</span>
+                <input type="file" accept="image/*,.pdf" onChange={e => e.target.files?.[0] && handleFileUpload(e.target.files[0], 'jawaban')} className="hidden" />
+              </label>
+            </div>
             <div className="mt-2">{scanButton(scanningJawaban, setScanningJawaban, text => setJawabanSiswa(prev => prev ? `${prev}\n${text}` : text), 'Scan Foto Jawaban Siswa')}</div>
           </div>
           <label className="block max-w-[200px]"><span className={labelClass}>Skala Nilai Maksimal</span><input type="number" min={1} max={1000} className={inputClass} value={skalaMax} onChange={e => setSkalaMax(Number(e.target.value))} /></label>

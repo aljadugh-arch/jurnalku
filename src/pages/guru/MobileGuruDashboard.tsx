@@ -11,6 +11,7 @@ import {
   Star,
   Target,
   Users,
+  ScanText,
 } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import toast from 'react-hot-toast'
@@ -172,6 +173,14 @@ export default function MobileGuruDashboard() {
       tile: 'bg-violet-500',
       bg: 'bg-violet-50',
       path: '/guru/penilaian-harian',
+    },
+    {
+      label: 'Koreksi Jawaban',
+      subtitle: 'Scan LJK dengan AI+OCR',
+      icon: <ScanText size={20} />,
+      tile: 'bg-orange-500',
+      bg: 'bg-orange-50',
+      path: '/guru/koreksi-jawaban',
     },
   ]
 
