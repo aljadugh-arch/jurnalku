@@ -730,7 +730,7 @@ export default function DataSiswaPage() {
               kerja_wali: row.kerja_wali || ''
             }))
             
-            const { data } = await api.post('/api/siswa/bulk-import', { students: studentData })
+            const { data } = await api.post('/siswa/bulk-import', { students: studentData })
             if (data.failed > 0) {
               const errorMsg = data.errors.map((e: any) => `${e.nama || e.nis}: ${e.error}`).join('; ')
               throw new Error(`${data.success}/${data.total} berhasil, ${data.failed} gagal. Detail: ${errorMsg}`)

@@ -7,7 +7,7 @@ import MobileBendaharaDashboard from './MobileBendaharaDashboard'
 export default function BendaharaDashboard() {
   const navigate = useNavigate()
   const [data, setData] = useState<any>(null)
-  useEffect(() => { api.get('/api/bendahara/dashboard').then(r => setData(r.data)).catch(() => setData(null)) }, [])
+  useEffect(() => { api.get('/bendahara/dashboard').then(r => setData(r.data)).catch(() => setData(null)) }, [])
   const money = (n: number) => new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(Number(n || 0))
   const cards = [
     { label: 'Tagihan Belum Bayar', value: money(data?.tagihan_belum?.nominal || 0), sub: `${data?.tagihan_belum?.jumlah || 0} tagihan`, icon: <DollarSign size={20} />, path: '/admin/tagihan' },
