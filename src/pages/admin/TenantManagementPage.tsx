@@ -1,7 +1,14 @@
 import { useState, useEffect, useRef } from 'react'
 import api from '../../services/api'
 import toast from 'react-hot-toast'
-import { MoreVertical, ExternalLink, Ban, CheckCircle2, Globe2, Link2, ArrowLeftRight, KeyRound } from 'lucide-react'
+import { MoreVertical, ExternalLink, Ban, CheckCircle2, Globe2, Link2, ArrowLeftRight, KeyRound, Repeat } from 'lucide-react'
+
+const PLAN_OPTIONS: { value: string; label: string; desc: string }[] = [
+  { value: 'trial', label: 'Trial', desc: 'Masa percobaan gratis, semua fitur aktif, otomatis terkunci saat trial_ends_at lewat' },
+  { value: 'lite', label: 'Lite', desc: 'Berbayar dasar — tanpa Backup ke Drive & Kelola Website Lembaga' },
+  { value: 'pro', label: 'Pro', desc: 'Berbayar lengkap — semua fitur aktif, tidak ada batasan modul' },
+  { value: 'premium', label: 'Premium (legacy)', desc: 'Plan lama/grandfather — diperlakukan sama seperti Pro (semua fitur aktif), dipertahankan agar tenant lama tidak terkunci' },
+]
 
 interface Tenant {
   id: string
@@ -29,6 +36,8 @@ export default function TenantManagementPage() {
   const [unlock, setUnlock] = useState<{ tenantId: string; tenantName: string; plan: 'lite' | 'pro'; months: number } | null>(null)
   const [generatedKey, setGeneratedKey] = useState('')
   const [generating, setGenerating] = useState(false)
+  const [changePlan, setChangePlan] = useState<{ tenantId: string; tenantName: string; plan: string } | null>(null)
+  const [savingPlan, setSavingPlan] = useState(false)
   const [openMenuId, setOpenMenuId] = useState<string | null>(null)
   const menuRef = useRef<HTMLDivElement | null>(null)
 
@@ -112,6 +121,18 @@ export default function TenantManagementPage() {
       toast.success('Kunci unlock berhasil dibuat')
     } catch (e: any) { toast.error(e.response?.data?.error || 'Gagal membuat kunci unlock') }
     finally { setGenerating(false) }
+  }
+
+  const saveChangePlan = async () => {
+    if (!changePlan) return
+    setSavingPlan(true)
+    try {
+      await api.put(`/tenants/${changePlan.tenantId}`, { plan: changePlan.plan })
+      toast.success(`Paket "${changePlan.tenantName}" diubah ke ${changePlan.plan}`)
+      setChangePlan(null)
+      loadTenants()
+    } catch (e: any) { toast.error(e.response?.data?.error || 'Gagal mengubah paket langganan') }
+    finally { setSavingPlan(false) }
   }
 
   const copyUnlockKey = async () => {
@@ -307,6 +328,13 @@ export default function TenantManagementPage() {
                         <KeyRound size={15} className="text-purple-600" />
                         Buat Kunci Langganan
                       </button>
+                      <button
+                        onClick={() => { setChangePlan({ tenantId: t.id, tenantName: t.nama, plan: t.plan || 'trial' }); setOpenMenuId(null) }}
+                        className="w-full flex items-center gap-2.5 px-3.5 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                      >
+                        <Repeat size={15} className="text-indigo-600" />
+                        Ubah Paket Langganan
+                      </button>
                     </div>
                   )}
                 </td>
@@ -331,6 +359,40 @@ export default function TenantManagementPage() {
             <button onClick={copyUnlockKey} className="mt-3 w-full rounded-lg bg-primary px-4 py-2 text-white">Salin Kunci</button>
           </div>}
           <button onClick={() => setUnlock(null)} className="mt-3 w-full rounded-lg border px-4 py-2 text-gray-600">Tutup</button>
+        </div>
+      </div>}
+
+      {changePlan && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => setChangePlan(null)}>
+        <div className="w-full max-w-md rounded-2xl bg-white p-5 shadow-xl" onClick={e => e.stopPropagation()}>
+          <h2 className="text-lg font-bold text-gray-900">Ubah Paket Langganan</h2>
+          <p className="mt-1 text-sm text-gray-500">{changePlan.tenantName}</p>
+          <div className="mt-5 space-y-2">
+            {PLAN_OPTIONS.map(opt => (
+              <label
+                key={opt.value}
+                className={`flex cursor-pointer items-start gap-3 rounded-lg border p-3 text-sm ${changePlan.plan === opt.value ? 'border-primary bg-primary/5' : 'border-gray-200 hover:bg-gray-50'}`}
+              >
+                <input
+                  type="radio"
+                  name="plan"
+                  className="mt-1"
+                  checked={changePlan.plan === opt.value}
+                  onChange={() => setChangePlan({ ...changePlan, plan: opt.value })}
+                />
+                <span>
+                  <span className="block font-medium text-gray-900">{opt.label}</span>
+                  <span className="block text-xs text-gray-500">{opt.desc}</span>
+                </span>
+              </label>
+            ))}
+          </div>
+          <p className="mt-3 text-xs text-amber-600">
+            Catatan: mengubah paket langsung di sini tidak mengubah tanggal expired/trial. Untuk memperpanjang masa aktif, gunakan "Buat Kunci Langganan".
+          </p>
+          <div className="mt-4 flex gap-2">
+            <button disabled={savingPlan} onClick={saveChangePlan} className="flex-1 rounded-lg bg-primary px-4 py-2 text-white disabled:opacity-50">{savingPlan ? 'Menyimpan...' : 'Simpan'}</button>
+            <button onClick={() => setChangePlan(null)} className="flex-1 rounded-lg border px-4 py-2 text-gray-600">Batal</button>
+          </div>
         </div>
       </div>}
     </div>

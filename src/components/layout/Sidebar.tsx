@@ -130,8 +130,13 @@ export default function Sidebar() {
     { name: 'LAYANAN', labels: ['Perpustakaan Digital', 'Generator AI Guru'] },
     { name: 'KEUANGAN & OPERASIONAL', labels: ['Keuangan', 'E-Kantin & Cashless'] },
     { name: 'KOMUNIKASI', labels: ['WhatsApp'] },
-    { name: 'MANAJEMEN LEMBAGA', labels: ['Pengaturan', 'Manajemen Pengguna', 'Backup & Restore', 'Kelola Website', 'REST API Developer'] },
+    { name: 'MANAJEMEN LEMBAGA', labels: ['Manajemen Lembaga', 'Pengaturan', 'Manajemen Pengguna', 'Backup & Restore', 'Kelola Website', 'REST API Developer'] },
   ]
+
+  // Safety net: item yang tidak match label manapun di atas (mis. menu baru
+  // yang belum dimasukkan ke grouping) tetap tampil, bukan hilang diam-diam.
+  const groupedLabels = new Set(adminMenuGroups.flatMap(g => g.labels))
+  const ungroupedItems = menuItems.filter(item => !groupedLabels.has(item.label))
 
   const getGroupedMenus = (groups: typeof adminMenuGroups) => {
     const groupedMenus: { [key: string]: typeof menuItems } = {}
@@ -183,8 +188,8 @@ export default function Sidebar() {
           {showGrouping ? (
             // Admin grouping view (expanded sidebar only)
             <div className="space-y-6">
-              {adminMenuGroups.map(group => {
-                const groupItems = groupedMenus?.[group.name] || []
+              {[...adminMenuGroups, ...(ungroupedItems.length ? [{ name: 'LAINNYA', labels: ungroupedItems.map(i => i.label) }] : [])].map(group => {
+                const groupItems = groupedMenus?.[group.name] || (group.name === 'LAINNYA' ? ungroupedItems : [])
                 return (
                   <div key={group.name}>
                     <p className="px-3 mb-2 text-[11px] font-semibold text-white/50 uppercase tracking-wider">

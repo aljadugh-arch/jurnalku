@@ -5,6 +5,11 @@ const PLAN_FEATURES = {
   trial: FEATURE_KEYS,
   lite: FEATURE_KEYS.filter(key => !['backup_drive', 'website'].includes(key)),
   pro: FEATURE_KEYS,
+  // 'premium' adalah nama plan legacy (dipakai sebelum sistem trial/lite/pro
+  // dirapikan) — beberapa tenant lama (termasuk tenant demo) masih menyimpan
+  // nilai ini di kolom plan. Diperlakukan setara 'pro' (fitur lengkap) agar
+  // tidak salah dianggap 'trial' kadaluarsa dan terkunci secara keliru.
+  premium: FEATURE_KEYS,
 }
 const FEATURE_PREFIXES = {
   master_data: ['/api/siswa', '/api/gtk', '/api/mapel', '/api/rombel', '/api/users', '/api/tahun-ajaran'],
@@ -44,8 +49,13 @@ function parseFeatures(value) {
 }
 
 function accessForTenant(tenant, now = new Date()) {
-  const plan = ['lite', 'pro'].includes(tenant.plan) ? tenant.plan : 'trial'
-  const expiresAt = tenant.subscription_ends_at || tenant.trial_ends_at || tenant.expired_at || null
+  const plan = ['lite', 'pro', 'premium'].includes(tenant.plan) ? tenant.plan : 'trial'
+  // Plan 'premium' adalah grandfather/legacy plan berbayar tanpa siklus trial —
+  // trial_ends_at pada tenant ini adalah sisa data lama dan tidak relevan;
+  // hanya subscription_ends_at (jika pernah diset eksplisit) yang berlaku.
+  const expiresAt = plan === 'premium'
+    ? (tenant.subscription_ends_at || null)
+    : (tenant.subscription_ends_at || tenant.trial_ends_at || tenant.expired_at || null)
   const locked = tenant.id !== 'default' && !!expiresAt && new Date(expiresAt).getTime() <= now.getTime()
   const allowed = new Set(PLAN_FEATURES[plan] || PLAN_FEATURES.trial)
   const choices = parseFeatures(tenant.features_json)
