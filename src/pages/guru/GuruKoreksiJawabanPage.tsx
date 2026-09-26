@@ -9,6 +9,9 @@ interface BulkScanResult {
   text: string
   status: 'success' | 'processing' | 'error'
   error?: string
+  skor?: number
+  alasan?: string
+  saran?: string
 }
 
 export default function GuruKoreksiJawabanPage() {
@@ -26,6 +29,8 @@ export default function GuruKoreksiJawabanPage() {
   const [bulkScanResults, setBulkScanResults] = useState<BulkScanResult[]>([])
   const [bulkScanning, setBulkScanning] = useState(false)
   const [showBulkTab, setShowBulkTab] = useState(false)
+  const [bulkKunciJawaban, setBulkKunciJawaban] = useState('')
+  const [bulkSkalaMax, setBulkSkalaMax] = useState(100)
 
   const nilai = async () => {
     if (!jawabanSiswa.trim()) return toast.error('Jawaban siswa wajib diisi (ketik atau scan foto)')
@@ -96,9 +101,51 @@ export default function GuruKoreksiJawabanPage() {
     }
   }
 
+  const bulkAutoKoreksi = async () => {
+    if (!bulkKunciJawaban.trim()) {
+      return toast.error('Kunci jawaban wajib diisi untuk auto-koreksi')
+    }
+    
+    const successResults = bulkScanResults.filter(r => r.status === 'success')
+    if (successResults.length === 0) {
+      return toast.error('Tidak ada hasil scan yang berhasil')
+    }
+
+    toast.loading('Mengoreksi jawaban dengan AI...')
+    let correctedCount = 0
+
+    try {
+      for (let i = 0; i < bulkScanResults.length; i++) {
+        const result = bulkScanResults[i]
+        if (result.status !== 'success') continue
+
+        try {
+          const { data } = await api.post('/ai-koreksi/nilai', {
+            soal: '',
+            kunciJawaban: bulkKunciJawaban,
+            jawabanSiswa: result.text,
+            skalaMax: bulkSkalaMax
+          })
+
+          result.skor = data.skor
+          result.alasan = data.alasan
+          result.saran = data.saran
+          correctedCount++
+          setBulkScanResults([...bulkScanResults])
+        } catch (error: any) {
+          result.error = error.response?.data?.error || 'Gagal mengoreksi'
+          setBulkScanResults([...bulkScanResults])
+        }
+      }
+      
+      toast.success(`${correctedCount}/${successResults.length} jawaban berhasil dikoreksi`)
+    } finally {
+      // toast.dismiss()
+    }
+  }
   const downloadBulkResults = () => {
-    const csv = ['File,Status,Teks\n', ...bulkScanResults.map(r => 
-      `"${r.file}","${r.status}","${r.text.replace(/"/g, '""')}"`
+    const csv = ['File,Status,Teks,Skor,Alasan,Saran\n', ...bulkScanResults.map(r => 
+      `"${r.file}","${r.status}","${r.text.replace(/"/g, '""')}","${r.skor ?? ''}","${r.alasan?.replace(/"/g, '""') ?? ''}","${r.saran?.replace(/"/g, '""') ?? ''}"`
     )].join('\n')
     
     const blob = new Blob([csv], { type: 'text/csv' })
@@ -178,6 +225,47 @@ export default function GuruKoreksiJawabanPage() {
           </h2>
           <p className="mb-4 text-sm text-gray-600 dark:text-slate-300">Upload multiple file gambar LJK sekaligus, sistem akan otomatis scan semua file dan ekstrak teks menggunakan OCR.</p>
           
+          <div className="mb-6 space-y-3 rounded-xl bg-blue-50 p-4 dark:bg-blue-900/20">
+            <div>
+              <label className="mb-2 block text-xs font-semibold uppercase tracking-wide text-gray-600 dark:text-slate-300">Kunci Jawaban / Rubrik Penilaian</label>
+              <textarea 
+                value={bulkKunciJawaban} 
+                onChange={e => setBulkKunciJawaban(e.target.value)}
+                placeholder="Ketik atau scan kunci jawaban untuk auto-koreksi semua hasil LJK"
+                className="w-full rounded-lg border border-gray-300 bg-white px-3.5 py-2.5 text-sm text-gray-800 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                rows={3}
+              />
+              <button
+                onClick={() => setScanningKunci(true)}
+                disabled={true}
+                className="mt-2 inline-flex items-center gap-2 rounded-lg border border-purple-300 px-3 py-1.5 text-xs font-semibold text-purple-700 dark:border-purple-700 dark:text-purple-300"
+              >
+                <ScanText size={14} /> Scan Foto Kunci
+              </button>
+            </div>
+            <div className="flex items-center gap-2">
+              <label className="flex items-center gap-2">
+                <span className="text-xs font-semibold text-gray-600 dark:text-slate-300">Skala Nilai Maksimal:</span>
+                <input 
+                  type="number" 
+                  min={1} 
+                  max={1000} 
+                  value={bulkSkalaMax}
+                  onChange={e => setBulkSkalaMax(Number(e.target.value))}
+                  className="w-16 rounded-lg border border-gray-300 px-2 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                />
+              </label>
+            </div>
+            {bulkScanResults.some(r => r.status === 'success' && !r.skor) && (
+              <button
+                onClick={bulkAutoKoreksi}
+                className="w-full flex items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white hover:bg-primary/90 transition disabled:opacity-60"
+              >
+                <Sparkles size={16} /> Auto Koreksi Semua Jawaban ({bulkScanResults.filter(r => r.status === 'success' && !r.skor).length})
+              </button>
+            )}
+          </div>
+          
           <label className="flex cursor-pointer items-center justify-center gap-3 rounded-xl border-2 border-dashed border-gray-300 bg-gray-50 p-4 sm:p-8 transition-colors hover:border-primary hover:bg-primary/5 dark:border-slate-700 dark:bg-slate-800/50">
             <div className="text-center">
               <Upload size={24} className="mx-auto mb-2 text-primary sm:w-8 sm:h-8" />
@@ -231,6 +319,17 @@ export default function GuruKoreksiJawabanPage() {
                         </div>
                         {result.text && (
                           <p className="text-xs text-gray-600 dark:text-slate-400 line-clamp-2">{result.text}</p>
+                        )}
+                        {result.skor !== undefined && (
+                          <div className="mt-2 space-y-1">
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs font-semibold text-primary">Skor: {result.skor}</span>
+                              {result.skor >= 75 && <span className="text-xs px-2 py-0.5 bg-emerald-100 text-emerald-700 rounded dark:bg-emerald-900/30 dark:text-emerald-300">Bagus</span>}
+                              {result.skor < 75 && result.skor >= 50 && <span className="text-xs px-2 py-0.5 bg-yellow-100 text-yellow-700 rounded dark:bg-yellow-900/30 dark:text-yellow-300">Perlu Perbaiki</span>}
+                              {result.skor < 50 && <span className="text-xs px-2 py-0.5 bg-red-100 text-red-700 rounded dark:bg-red-900/30 dark:text-red-300">Kurang</span>}
+                            </div>
+                            {result.alasan && <p className="text-xs text-gray-600 dark:text-slate-400">📌 {result.alasan.substring(0, 100)}...</p>}
+                          </div>
                         )}
                         {result.error && (
                           <p className="text-xs text-red-600 dark:text-red-400">{result.error}</p>
