@@ -188,8 +188,13 @@ export default function Sidebar() {
           {showGrouping ? (
             // Admin grouping view (expanded sidebar only)
             <div className="space-y-6">
-              {[...adminMenuGroups, ...(ungroupedItems.length ? [{ name: 'LAINNYA', labels: ungroupedItems.map(i => i.label) }] : [])].map(group => {
-                const groupItems = groupedMenus?.[group.name] || (group.name === 'LAINNYA' ? ungroupedItems : [])
+              {[...adminMenuGroups, ...(ungroupedItems.length ? [{ name: 'LAINNYA', labels: ungroupedItems.map(i => i.label) }] : [])]
+                .map(group => ({ group, groupItems: groupedMenus?.[group.name] || (group.name === 'LAINNYA' ? ungroupedItems : []) }))
+                // Sembunyikan grup yang tidak punya item sama sekali untuk role ini
+                // (mis. superadmin tidak punya menu di MASTER DATA/AKADEMIK/dst.) —
+                // hanya berefek saat grup benar-benar kosong, tidak mengubah role lain.
+                .filter(({ groupItems }) => groupItems.length > 0)
+                .map(({ group, groupItems }) => {
                 return (
                   <div key={group.name}>
                     <p className="px-3 mb-2 text-[11px] font-semibold text-white/50 uppercase tracking-wider">
