@@ -17,6 +17,7 @@ interface ImportExcelProps {
 export default function ImportExcel({ title, templateName, templateUrl, headerRow, columnMap, sampleRows, onImport, onClose }: ImportExcelProps) {
   const [preview, setPreview] = useState<Record<string, any>[]>([])
   const [loading, setLoading] = useState(false)
+  const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
 
   /** Generate template XLSX dari columnMap + sampleRows (jika templateUrl tidak tersedia) */
@@ -63,6 +64,7 @@ export default function ImportExcel({ title, templateName, templateUrl, headerRo
   const handleFile = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
+    setErrorMessage(null)
     const reader = new FileReader()
     reader.onload = (evt) => {
       const data = new Uint8Array(evt.target?.result as ArrayBuffer)
@@ -107,11 +109,16 @@ export default function ImportExcel({ title, templateName, templateUrl, headerRo
   const handleImport = async () => {
     if (preview.length === 0) { toast.error('Tidak ada data untuk diimport'); return }
     setLoading(true)
+    setErrorMessage(null)
     try {
       await onImport(preview)
       toast.success(`${preview.length} data berhasil diimport`)
       onClose()
-    } catch (err: any) { toast.error(err.message || 'Gagal import') }
+    } catch (err: any) {
+      const msg = err.message || 'Gagal import'
+      setErrorMessage(msg)
+      toast.error(msg.length > 120 ? `${msg.slice(0, 120)}... (lihat detail di bawah)` : msg, { duration: 8000 })
+    }
     finally { setLoading(false) }
   }
 
@@ -165,6 +172,14 @@ export default function ImportExcel({ title, templateName, templateUrl, headerRo
                 {loading ? 'Mengimport...' : 'Import Sekarang'}
               </button>
             </div>
+            {errorMessage && (
+              <div className="mb-3 bg-red-50 border border-red-200 rounded-lg p-3 text-sm text-red-700">
+                <p className="font-semibold mb-1">Sebagian/semua data gagal diimport:</p>
+                <ul className="list-disc list-inside space-y-0.5 max-h-40 overflow-y-auto">
+                  {errorMessage.split(/;\s*(?=[^:]+:)/).map((line, i) => <li key={i}>{line.replace(/^Detail:\s*/, '')}</li>)}
+                </ul>
+              </div>
+            )}
             <div className="overflow-x-auto border rounded-lg max-h-60 overflow-y-auto">
               <table className="w-full text-xs">
                 <thead className="bg-gray-50 sticky top-0">
