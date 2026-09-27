@@ -8,6 +8,7 @@ VPS_USER="${VPS_USER:-root}"
 VPS_PASS="${VPS_PASS:?Set VPS_PASS via environment}"
 SSH_KNOWN_HOSTS="${SSH_KNOWN_HOSTS:-$HOME/.ssh/known_hosts}"
 LIVE="${LIVE_DIR:-/www/wwwroot/jurnal.cc.cd}"
+SECONDARY_LIVE="${SECONDARY_LIVE_DIR:-/www/wwwroot/jurnalmadrasah.web.id}"
 STG="${STG_DIR:-/www/wwwroot/staging.jurnal.cc.cd}"
 LIVE_PM2_APP="${LIVE_PM2_APP:-jurnalku-api}"
 LIVE_HEALTH_URL="${LIVE_HEALTH_URL:-https://jurnal.cc.cd/api/health}"
@@ -24,10 +25,11 @@ echo "PERINGATAN: tindakan ini mengubah production jurnal.cc.cd."
 read -r -p "Ketik LIVE untuk lanjut: " confirm
 [[ "$confirm" == "LIVE" ]] || { echo "Batal."; exit 1; }
 
-remote bash -s -- "$LIVE" "$STG" "$TS" "$LIVE_PM2_APP" "$LIVE_HEALTH_URL" <<'REMOTE'
+remote bash -s -- "$LIVE" "$SECONDARY_LIVE" "$STG" "$TS" "$LIVE_PM2_APP" "$LIVE_HEALTH_URL" <<'REMOTE'
 set -euo pipefail
-LIVE="$1"; STG="$2"; TS="$3"; PM2_APP="$4"; HEALTH_URL="$5"
+LIVE="$1"; SECONDARY_LIVE="$2"; STG="$3"; TS="$4"; PM2_APP="$5"; HEALTH_URL="$6"
 BACKUP="$LIVE/.rollback-$TS"
+SECONDARY_BACKUP="$SECONDARY_LIVE/.rollback-$TS"
 ACTIVATED=0
 
 rollback() {
@@ -37,6 +39,10 @@ rollback() {
     mv "$BACKUP/dist" "$LIVE/dist"
     rm -f "$LIVE"/server/*.cjs
     cp -a "$BACKUP/server/." "$LIVE/server/"
+    if [[ -d "$SECONDARY_BACKUP/dist" ]]; then
+      rm -rf "$SECONDARY_LIVE/dist"
+      mv "$SECONDARY_BACKUP/dist" "$SECONDARY_LIVE/dist"
+    fi
     pm2 restart "$PM2_APP" --update-env >/dev/null 2>&1 || true
   fi
   exit "$status"
@@ -45,8 +51,9 @@ trap rollback ERR
 
 # Backup seluruh dist + seluruh modul server *.cjs (bukan cuma index/tenant),
 # supaya rollback benar-benar memulihkan semua dependency yang mungkin berubah.
-mkdir -p "$BACKUP/server"
+mkdir -p "$BACKUP/server" "$SECONDARY_BACKUP"
 cp -a "$LIVE/dist" "$BACKUP/dist"
+cp -a "$SECONDARY_LIVE/dist" "$SECONDARY_BACKUP/dist"
 cp -a "$LIVE"/server/*.cjs "$BACKUP/server/"
 mkdir -p /root/backups/jurnalku
 sqlite3 "$LIVE/server/jurnalku.db" ".backup /root/backups/jurnalku/jurnalku.db.pre-deploy-$TS"
@@ -56,10 +63,12 @@ for f in "$STG"/server/*.cjs; do
   node -c "$f"
 done
 ACTIVATED=1
-rm -rf "$LIVE/dist.next"
+rm -rf "$LIVE/dist.next" "$SECONDARY_LIVE/dist.next"
 cp -a "$STG/dist" "$LIVE/dist.next"
-rm -rf "$LIVE/dist"
+cp -a "$STG/dist" "$SECONDARY_LIVE/dist.next"
+rm -rf "$LIVE/dist" "$SECONDARY_LIVE/dist"
 mv "$LIVE/dist.next" "$LIVE/dist"
+mv "$SECONDARY_LIVE/dist.next" "$SECONDARY_LIVE/dist"
 for f in "$STG"/server/*.cjs; do
   install -m 0644 "$f" "$LIVE/server/$(basename "$f")"
 done
@@ -69,8 +78,11 @@ for attempt in {1..10}; do
   [[ "$attempt" -lt 10 ]] || exit 1
   sleep 1
 done
+curl --fail --silent --show-error --max-time 15 https://jurnalmadrasah.web.id/api/health >/dev/null
 ACTIVATED=0
 ln -sfn "$BACKUP" "$LIVE/.rollback-current"
+ln -sfn "$SECONDARY_BACKUP" "$SECONDARY_LIVE/.rollback-current"
 REMOTE
 
-echo "LIVE sehat: $LIVE_HEALTH_URL"
+node scripts/check-live-frontend-sync.mjs jurnal.cc.cd jurnalmadrasah.web.id
+echo "LIVE sehat dan frontend sinkron: $LIVE_HEALTH_URL + https://jurnalmadrasah.web.id/api/health"
