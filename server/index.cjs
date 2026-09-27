@@ -2985,26 +2985,7 @@ app.post('/api/siswa/bulk-import', ADMIN, (req, res) => {
 
   // Get all rombels untuk mapping
   const allRombels = db.prepare('SELECT id, nama FROM rombel WHERE tenant_id=?').all(req.tenantId)
-  const rombelMap = new Map(allRombels.map(r => [r.nama.trim().toLowerCase(), r.id]))
-  
-  // Helper function untuk convert format rombel (e.g., 7A -> VII-A)
-  const normalizeRombelName = (name) => {
-    if (!name) return null
-    const n = String(name).trim()
-    
-    // Convert format: 7A -> VII-A, 8B -> VIII-B, 9C -> IX-C (case-insensitive input)
-    const match = n.match(/^(\d+)\s*-?\s*([A-Za-z]?)$/)
-    if (match) {
-      const num = parseInt(match[1])
-      const letter = (match[2] || '').toUpperCase()
-      const romanMap = { 1: 'I', 2: 'II', 3: 'III', 4: 'IV', 5: 'V', 6: 'VI', 7: 'VII', 8: 'VIII', 9: 'IX' }
-      if (romanMap[num]) {
-        return letter ? `${romanMap[num]}-${letter}` : romanMap[num]
-      }
-    }
-    
-    return n
-  }
+  const { resolveRombel } = require('./rombel-matcher.cjs')
 
   let success = 0
   let failed = 0
@@ -3033,26 +3014,16 @@ app.post('/api/siswa/bulk-import', ADMIN, (req, res) => {
           continue
         }
 
-        // Auto-map rombel by name (with format conversion)
+        // Auto-map rombel by exact name, normalized code, or unique grade.
         let rombelId = null
         if (row.rombel_nama) {
-          let rombelKey = String(row.rombel_nama).trim().toLowerCase()
-          
-          // Try direct match first
-          let mapped = rombelMap.get(rombelKey)
-          
-          // If not found, try normalized format
-          if (!mapped) {
-            const normalized = normalizeRombelName(rombelKey)
-            mapped = rombelMap.get(normalized.toLowerCase())
-          }
-          
-          rombelId = mapped
-          if (!rombelId) {
+          const resolvedRombel = resolveRombel(row.rombel_nama, allRombels)
+          if (resolvedRombel.error) {
             failed++
-            errors.push({ nis, nama, error: `Rombel "${row.rombel_nama}" tidak ditemukan (coba: ${normalizeRombelName(rombelKey)})` })
+            errors.push({ nis, nama, error: resolvedRombel.error })
             continue
           }
+          rombelId = resolvedRombel.id
         }
 
         // Insert siswa
