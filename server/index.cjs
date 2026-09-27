@@ -564,6 +564,20 @@ db.exec(`
     FOREIGN KEY (mapel_id) REFERENCES mapel(id)
   );
   CREATE INDEX IF NOT EXISTS idx_penilaian_tenant ON penilaian_harian(tenant_id);
+
+  CREATE TABLE IF NOT EXISTS penilaian_ekskul (
+    id TEXT PRIMARY KEY,
+    siswa_id TEXT NOT NULL,
+    ekskul_id TEXT NOT NULL,
+    tanggal TEXT NOT NULL,
+    nilai INTEGER DEFAULT 0,
+    catatan TEXT,
+    tenant_id TEXT DEFAULT 'default',
+    created_at TEXT DEFAULT (datetime('now')),
+    FOREIGN KEY (siswa_id) REFERENCES siswa(id),
+    FOREIGN KEY (ekskul_id) REFERENCES ekskul(id)
+  );
+  CREATE INDEX IF NOT EXISTS idx_penilaian_ekskul_tenant ON penilaian_ekskul(tenant_id);
   CREATE INDEX IF NOT EXISTS idx_penilaian_siswa ON penilaian_harian(siswa_id);
   CREATE INDEX IF NOT EXISTS idx_penilaian_tanggal ON penilaian_harian(tanggal);
 
@@ -3659,6 +3673,52 @@ app.post('/api/absensi-ekskul/bulk', STAFF, (req, res) => {
       db.prepare('UPDATE absensi_ekskul SET status=?, keterangan=? WHERE id=? AND tenant_id=?').run(d.status, d.keterangan || '', exists.id, req.tenantId)
     } else {
       db.prepare('INSERT INTO absensi_ekskul (id, siswa_id, ekskul_id, tanggal, status, keterangan, tenant_id) VALUES (?,?,?,?,?,?,?)').run(uuidv4(), d.siswa_id, ekskul_id, tanggal, d.status, d.keterangan || '', req.tenantId)
+    }
+    count++
+  }
+  res.json({ count })
+})
+
+// ==================== PENILAIAN EKSKUL ====================
+app.get('/api/penilaian-ekskul', authMiddleware, (req, res) => {
+  const { ekskul_id, tanggal_from, tanggal_to } = req.query
+  if (isTeacherContext(req)) {
+    const gtk = resolveGtkForUser(req.user.id, req.tenantId)
+    if (ekskul_id && (!gtk || !db.prepare('SELECT 1 FROM ekskul WHERE id=? AND pembina_id=? AND tenant_id=?').get(ekskul_id, gtk.id, req.tenantId))) {
+      return res.status(403).json({ error: 'Bukan pembina ekskul ini' })
+    }
+  }
+  let sql = `SELECT p.*, s.nama as siswa_nama, s.nis, e.nama as ekskul_nama
+    FROM penilaian_ekskul p
+    LEFT JOIN siswa s ON p.siswa_id = s.id
+    LEFT JOIN ekskul e ON p.ekskul_id = e.id
+    WHERE p.tenant_id=?`
+  const params = [req.tenantId]
+  if (ekskul_id) { sql += ' AND p.ekskul_id = ?'; params.push(ekskul_id) }
+  if (tanggal_from) { sql += ' AND p.tanggal >= ?'; params.push(tanggal_from) }
+  if (tanggal_to) { sql += ' AND p.tanggal <= ?'; params.push(tanggal_to) }
+  sql += ' ORDER BY p.tanggal DESC'
+  res.json(db.prepare(sql).all(...params))
+})
+
+app.post('/api/penilaian-ekskul/bulk', STAFF, (req, res) => {
+  const { ekskul_id, tanggal, data } = req.body
+  const activity = db.prepare('SELECT id,pembina_id FROM ekskul WHERE id=? AND tenant_id=?').get(ekskul_id, req.tenantId)
+  if (!activity) return res.status(400).json({ error: 'Ekstrakurikuler tidak ditemukan' })
+  if (isTeacherContext(req)) {
+    const gtk = resolveGtkForUser(req.user.id, req.tenantId)
+    if (!gtk || activity.pembina_id !== gtk.id) return res.status(403).json({ error: 'Bukan pembina ekskul ini' })
+  }
+  if (!data || !Array.isArray(data)) return res.status(400).json({ error: 'Data harus array' })
+  const allowedMember = db.prepare('SELECT 1 FROM ekskul_anggota WHERE ekskul_id=? AND siswa_id=? AND tenant_id=?')
+  if (data.some(d => !d.siswa_id || !allowedMember.get(ekskul_id, d.siswa_id, req.tenantId))) return res.status(400).json({ error: 'Peserta tidak valid' })
+  let count = 0
+  for (const d of data) {
+    const exists = db.prepare('SELECT id FROM penilaian_ekskul WHERE siswa_id = ? AND ekskul_id = ? AND tanggal = ? AND tenant_id=?').get(d.siswa_id, ekskul_id, tanggal, req.tenantId)
+    if (exists) {
+      db.prepare('UPDATE penilaian_ekskul SET nilai=?, catatan=? WHERE id=? AND tenant_id=?').run(d.nilai || 0, d.catatan || '', exists.id, req.tenantId)
+    } else {
+      db.prepare('INSERT INTO penilaian_ekskul (id, siswa_id, ekskul_id, tanggal, nilai, catatan, tenant_id) VALUES (?,?,?,?,?,?,?)').run(uuidv4(), d.siswa_id, ekskul_id, tanggal, d.nilai || 0, d.catatan || '', req.tenantId)
     }
     count++
   }

@@ -11,7 +11,6 @@ import {
   Star,
   Target,
   Users,
-  ScanText,
 } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import toast from 'react-hot-toast'
@@ -141,6 +140,10 @@ export default function MobileGuruDashboard() {
     }
   }
 
+  const mapelDiampu = data.mapel_diampu || []
+  const ekskulDiampu = data.ekskul_diampu || []
+  const isEkskulOnly = mapelDiampu.length === 0 && ekskulDiampu.length > 0
+
   const quickActions = [
     {
       label: 'Jadwal Mengajar',
@@ -159,28 +162,27 @@ export default function MobileGuruDashboard() {
       path: '/guru/absensi-guru',
     },
     {
-      label: 'Absensi Siswa',
+      label: 'Absensi Siswa (Mapel)',
       subtitle: `${data.absensi_hari_ini ?? 0} siswa hari ini`,
       icon: <Users size={20} />,
       tile: 'bg-rose-500',
       bg: 'bg-rose-50',
-      path: '/guru/absensi-siswa',
+      path: '/guru/absensi-mapel',
     },
-    {
+    isEkskulOnly ? {
+      label: 'Penilaian Ekskul',
+      subtitle: `${ekskulDiampu.length} ekskul diampu`,
+      icon: <Star size={20} />,
+      tile: 'bg-violet-500',
+      bg: 'bg-violet-50',
+      path: '/guru/penilaian-ekskul',
+    } : {
       label: 'Penilaian Siswa',
       subtitle: `${data.nilai_siswa_count ?? 0} penilaian`,
       icon: <Star size={20} />,
       tile: 'bg-violet-500',
       bg: 'bg-violet-50',
       path: '/guru/penilaian-harian',
-    },
-    {
-      label: 'Koreksi Jawaban',
-      subtitle: 'Scan LJK dengan AI+OCR',
-      icon: <ScanText size={20} />,
-      tile: 'bg-orange-500',
-      bg: 'bg-orange-50',
-      path: '/guru/koreksi-jawaban',
     },
   ]
 

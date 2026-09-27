@@ -3,7 +3,7 @@ import {
   ClipboardList, UserCheck, QrCode, MapPin,
   Layers, Activity, Globe, Sparkles, DollarSign, Settings, MessageSquare,
   FileText, ClipboardCheck, ScrollText, School, Wallet, Receipt, DatabaseBackup, Code2, ScanText,
-  FileQuestion, Monitor
+  FileQuestion, Monitor, Star
 } from 'lucide-react'
 
 export interface MenuItem {
@@ -101,6 +101,7 @@ export const guruMenuItems: MenuItem[] = [
   { label: 'Posting', icon: <FileText size={20} />, path: '/guru/posting' },
   { label: 'Jurnal Mengajar', icon: <ClipboardList size={20} />, path: '/guru/jurnal' },
   { label: 'Penilaian Harian', icon: <BookOpen size={20} />, path: '/guru/penilaian-harian' },
+  { label: 'Penilaian Ekskul', icon: <Star size={20} />, path: '/guru/penilaian-ekskul' },
   { label: 'Nilai STS', icon: <ClipboardCheck size={20} />, path: '/guru/nilai-sts' },
   { label: 'Nilai SAS', icon: <ClipboardCheck size={20} />, path: '/guru/nilai-sas' },
   { label: 'Rekap Nilai per Mapel', icon: <ClipboardCheck size={20} />, path: '/guru/rekap-nilai' },

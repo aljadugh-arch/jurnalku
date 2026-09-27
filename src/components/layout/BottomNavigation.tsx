@@ -21,6 +21,7 @@ import {
   ListChecks,
   MapPin,
   MoreHorizontal,
+  ScanText,
   Settings,
   ShieldCheck,
   UserCheck,
@@ -62,6 +63,7 @@ function roleItems(role?: string, hideStaffCeklok?: boolean): NavItem[] {
       { label: 'Perpus', path: '/guru/perpustakaan', icon: <BookOpen size={iconSize} /> },
       { label: 'Catatan', path: '/guru/catatan-kepribadian', icon: <FileText size={iconSize} /> },
       { label: 'Modul', path: '/guru/modul-ajar', icon: <FileText size={iconSize} /> },
+      { label: 'Koreksi LJK', path: '/guru/koreksi-jawaban', icon: <ScanText size={iconSize} /> },
     ]
     return role === 'wali_kelas'
       ? teacherItems.concat(
