@@ -77,3 +77,34 @@ test('environment scripts do not load credentials from workstation-specific file
     assert.equal(script.includes(retiredAddress), false)
   }
 })
+
+test('provision-domain.sh memakai Caddy port 3002, bukan nginx port 3001 yang sudah mati', () => {
+  const script = read('server/scripts/provision-domain.sh')
+  assert.match(script, /\/etc\/caddy\/Caddyfile/)
+  assert.match(script, /127\.0\.0\.1:3002/)
+  // Sisa artefak nginx/panel lama akan membuat custom domain tidak pernah dilayani.
+  assert.doesNotMatch(script, /127\.0\.0\.1:3001/)
+  assert.doesNotMatch(script, /proxy_pass/)
+  assert.doesNotMatch(script, /nginx -s reload/)
+  assert.doesNotMatch(script, /\/www\/server\/panel\/vhost/)
+})
+
+test('provision-domain.sh memvalidasi Caddyfile sebelum reload dan membalikkan perubahan bila gagal', () => {
+  const script = read('server/scripts/provision-domain.sh')
+  assert.match(script, /caddy validate --adapter caddyfile --config/)
+  assert.match(script, /cp -a "\$BACKUP" "\$CADDYFILE"/)
+  assert.match(script, /restore_and_exit/)
+  assert.match(script, /systemctl reload caddy/)
+  // Harus bisa diarahkan ke Caddyfile lain supaya perubahan bisa diuji tanpa menyentuh produksi.
+  assert.match(script, /CADDYFILE="\$\{CADDYFILE:-/)
+  assert.match(script, /DRY_RUN/)
+})
+
+test('rollback-live.sh memulihkan seluruh modul server/*.cjs, bukan hanya index dan tenant', () => {
+  const script = read('scripts/rollback-live.sh')
+  assert.match(script, /"\$BACKUP"\/server\/\*\.cjs/)
+  assert.match(script, /install -m 0644 "\$f" "\$LIVE\/server\/\$\(basename "\$f"\)"/)
+  assert.match(script, /-d "\$BACKUP\/server"/)
+  assert.doesNotMatch(script, /\$BACKUP\/index\.cjs/)
+  assert.doesNotMatch(script, /\$BACKUP\/tenant\.cjs/)
+})
