@@ -45,6 +45,7 @@ const { FEATURE_KEYS, addMonthsIso, accessForTenant, featureForPath, normalizeFe
 const { setupBackupTables, registerBackupRoutes, startBackupScheduler } = require('./backup-drive.cjs')
 const { DOCUMENT_TYPES, buildPrompt, validateGenerateInput, createTemplateContent, createDocumentDocx, callAi, clean } = require('./ai-documents.cjs')
 const { encryptSecret, decryptSecret, maskKey, PROVIDER_ENDPOINTS, setupAiConfigTables, resolveAiConfig } = require('./ai-config.cjs')
+const { assertSafeOutboundUrl } = require('./ssrf-guard.cjs')
 const { setupEkskulMembership } = require('./extracurricular-membership.cjs')
 const { countStudents, deleteStudents } = require('./student-data-delete.cjs')
 const { migrateClassSessionScheduleSource } = require('./class-session-schema.cjs')
@@ -177,6 +178,17 @@ const apiLimiter = rateLimit({
   legacyHeaders: false
 })
 app.use('/api/', apiLimiter)
+
+// Limiter untuk endpoint pembuatan akun / reset password. Sebelumnya hanya
+// /api/auth/login yang dibatasi, sehingga pendaftaran tenant baru (yang langsung
+// memberi peran admin) bisa dibanjiri berulang tanpa hambatan.
+const accountLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: 20,
+  message: { error: 'Terlalu banyak permintaan pembuatan akun. Coba lagi nanti.' },
+  standardHeaders: true,
+  legacyHeaders: false
+})
 
 // Generic uploads are retained for documents. User-visible images use the
 // stricter imageUpload so database URLs always point at safe image files.
@@ -2358,7 +2370,7 @@ app.get('/api/auth/me/foto', authMiddleware, (req, res) => {
   res.json({ foto: gtk?.foto || null })
 })
 
-app.post('/api/auth/register', (req, res) => {
+app.post('/api/auth/register', accountLimiter, (req, res) => {
   const { nama_lembaga, nama, email, password, no_hp, domain_type, custom_domain, slug: slugInput } = req.body
   const vErr = vRegister(req.body); if (vErr) return res.status(400).json({ error: vErr })
   const exists = db.prepare('SELECT id FROM users WHERE email = ?').get(email)
@@ -2481,7 +2493,7 @@ app.get('/api/tenant/domain-status', authMiddleware, (req, res) => {
   res.json({ ...t, dns_target_ip: process.env.PUBLIC_IP || null })
 })
 
-app.post('/api/auth/forgot-password', (req, res) => {
+app.post('/api/auth/forgot-password', accountLimiter, (req, res) => {
   const { email } = req.body
   const user = db.prepare('SELECT id FROM users WHERE email = ?').get(email)
   if (!user) return res.status(400).json({ error: 'Email tidak ditemukan' })
@@ -5931,12 +5943,33 @@ app.get('/api/ai-config/tenant', STAFF, (req, res) => {
   })
 })
 
-app.put('/api/ai-config/tenant', ADMIN, (req, res) => {
+app.put('/api/ai-config/tenant', ADMIN, async (req, res) => {
   const { provider, apiKey, model, customEndpoint } = req.body || {}
   const validProviders = ['gemini', 'openai', 'custom']
   if (!validProviders.includes(String(provider))) return res.status(400).json({ error: 'Provider tidak valid' })
   const existing = db.prepare('SELECT * FROM ai_config WHERE tenant_id = ?').get(req.tenantId)
-  const encrypted = apiKey && apiKey.trim() ? encryptSecret(apiKey) : (existing ? existing.api_key_encrypted : '')
+  const nextEndpoint = String(customEndpoint || '').trim()
+  // Penjaga SSRF: server memanggil endpoint ini sambil membawa kunci AI tenant,
+  // jadi alamatnya wajib publik (atau ada di allowlist privat operator).
+  if (String(provider) === 'custom') {
+    if (!nextEndpoint) return res.status(400).json({ error: 'Endpoint custom wajib diisi' })
+    try {
+      await assertSafeOutboundUrl(nextEndpoint, 'Endpoint AI')
+    } catch (error) {
+      return res.status(400).json({ error: error.message })
+    }
+  }
+  // Kunci tersimpan TIDAK BOLEH dikirim ulang ke alamat/penyedia yang berbeda:
+  // tanpa aturan ini, mengganti endpoint ke alamat penyerang cukup dengan
+  // membiarkan kolom kunci kosong.
+  const previousEndpoint = existing && existing.provider === 'custom' ? String(existing.custom_endpoint || '').trim() : ''
+  const incomingKey = String(apiKey || '').trim()
+  const endpointChanged = Boolean(existing && existing.api_key_encrypted) &&
+    (String(existing.provider) !== String(provider) || nextEndpoint !== previousEndpoint)
+  if (endpointChanged && !incomingKey) {
+    return res.status(400).json({ error: 'Isi ulang API key saat mengubah penyedia atau endpoint AI' })
+  }
+  const encrypted = incomingKey ? encryptSecret(apiKey) : (existing ? existing.api_key_encrypted : '')
   db.prepare(`INSERT INTO ai_config (tenant_id, provider, api_key_encrypted, model, custom_endpoint, updated_by, updated_at)
     VALUES (?,?,?,?,?,?, datetime('now'))
     ON CONFLICT(tenant_id) DO UPDATE SET provider=excluded.provider, api_key_encrypted=excluded.api_key_encrypted,
@@ -8635,9 +8668,17 @@ app.get('/api/wa-gateway/config', authMiddleware, (req, res) => {
 })
 
 // Update WA config (per-tenant)
-app.put('/api/wa-gateway/config', ADMIN, (req, res) => {
+app.put('/api/wa-gateway/config', ADMIN, async (req, res) => {
   const { provider, enabled, sender_name, baileys_webhook, sidobe_api_url, sidobe_api_key, sidobe_device_id } = req.body
   waGateway.getConfig(req.tenantId) // pastikan baris ada
+  // Penjaga SSRF: URL ini disimpan dari input admin tenant, tetapi dipanggil oleh
+  // server sambil membawa kredensial WhatsApp tenant.
+  try {
+    if (String(baileys_webhook || '').trim()) await assertSafeOutboundUrl(baileys_webhook, 'Webhook WhatsApp')
+    if (String(sidobe_api_url || '').trim()) await assertSafeOutboundUrl(sidobe_api_url, 'URL API Sidobe')
+  } catch (error) {
+    return res.status(400).json({ error: error.message })
+  }
   db.prepare(`UPDATE wa_gateway_config SET provider=?, enabled=?, sender_name=?, baileys_webhook=?, sidobe_api_url=?, sidobe_api_key=?, sidobe_device_id=? WHERE tenant_id=?`)
     .run(provider, enabled ? 1 : 0, sender_name || 'JURNALKU', baileys_webhook || '', sidobe_api_url || '', sidobe_api_key || '', sidobe_device_id || '', req.tenantId)
   res.json({ success: true })

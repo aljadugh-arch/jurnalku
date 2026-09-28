@@ -15,6 +15,8 @@ const {
 } = require('docx')
 const fs = require('node:fs')
 const path = require('node:path')
+// Penjaga SSRF: endpoint AI diatur admin tenant, jadi wajib divalidasi sebelum dipanggil.
+const { safeFetch } = require('./ssrf-guard.cjs')
 
 const DOCUMENT_TYPES = {
   STS: { label: 'Soal STS', title: 'SUMATIF TENGAH SEMESTER', category: 'assessment' },
@@ -213,8 +215,8 @@ async function callAi(prompt, options = {}) {
   const url = endpoint.endsWith('/chat/completions') ? endpoint : `${endpoint.replace(/\/$/, '')}/chat/completions`
   const headers = { 'Content-Type': 'application/json' }
   if (apiKey) headers.Authorization = `Bearer ${apiKey}`
-  const response = await fetch(url, { method: 'POST', headers, body: JSON.stringify({ model, temperature: 0.4, stream: false, messages: [{ role: 'system', content: 'Anda adalah asisten administrasi guru Indonesia. Ikuti format dan jumlah yang diminta secara tepat.' }, { role: 'user', content: prompt }] }), signal: AbortSignal.timeout(120000) })
-  const raw = await response.text()
+  const response = await safeFetch(url, { method: 'POST', headers, body: JSON.stringify({ model, temperature: 0.4, stream: false, messages: [{ role: 'system', content: 'Anda adalah asisten administrasi guru Indonesia. Ikuti format dan jumlah yang diminta secara tepat.' }, { role: 'user', content: prompt }] }), timeoutMs: 120000, label: 'Endpoint layanan AI' })
+  const raw = response.text
   let body = {}
   try { body = JSON.parse(raw) } catch {}
   if (!response.ok) throw new Error(body?.error?.message || body?.error || `Layanan AI gagal (${response.status})`)

@@ -2,6 +2,9 @@
  * WhatsApp Gateway Service - Hybrid (Baileys + Sidobe)
  * Per-tenant config. Stateless: config diambil per-call berdasarkan tenantId.
  */
+// Penjaga SSRF: baileys_webhook & sidobe_api_url diatur admin tenant, tetapi
+// dipanggil server sambil membawa kredensial WA tersimpan.
+const { safeFetch } = require('./ssrf-guard.cjs')
 
 class WAGateway {
   constructor(db) {
@@ -62,12 +65,14 @@ class WAGateway {
   async sendViaBaileys(phone, message, config) {
     const url = config.baileys_webhook || 'http://localhost:8000/send-message'
     try {
-      const resp = await fetch(url, {
+      const resp = await safeFetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone, message })
+        body: JSON.stringify({ phone, message }),
+        timeoutMs: 20000,
+        label: 'Webhook WhatsApp (baileys)'
       })
-      const data = await resp.json()
+      const data = JSON.parse(resp.text)
       return { success: data.status === true || data.success === true, messageId: data.messageId || data.id }
     } catch (err) {
       return { success: false, error: `Baileys error: ${err.message}` }
@@ -77,7 +82,7 @@ class WAGateway {
   async sendViaSidobe(phone, message, config) {
     const url = `${config.sidobe_api_url || 'https://api.sidobe.com'}/v1/messages/send`
     try {
-      const resp = await fetch(url, {
+      const resp = await safeFetch(url, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -88,9 +93,11 @@ class WAGateway {
           phone,
           message,
           type: 'text'
-        })
+        }),
+        timeoutMs: 20000,
+        label: 'URL API Sidobe'
       })
-      const data = await resp.json()
+      const data = JSON.parse(resp.text)
       return { success: data.status === 'sent' || data.success === true, messageId: data.message_id || data.id }
     } catch (err) {
       return { success: false, error: `Sidobe error: ${err.message}` }
