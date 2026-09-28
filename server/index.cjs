@@ -26,7 +26,7 @@ const { setupPortalCashless, registerPortalRoutes, registerKantinRoutes, selectP
 const waQueue = require('./wa-queue.cjs')
 const notificationMonitor = require('./notification-monitor.cjs')
 const ExcelJS = require('exceljs')
-const { generateRaporForRombel } = require('./rapor-grade-service.cjs')
+const { generateRaporForRombel, refreshGeneratedRapor } = require('./rapor-grade-service.cjs')
 const { getAuthorizedLedgerRombels, getLedgerRows, createLedgerWorkbook, createLedgerPdf } = require('./ledger-service.cjs')
 const {
   getTeacherMapelRombelContext, getGuruWithAssignments, isTeacherAssignedToPair,
@@ -7000,9 +7000,14 @@ app.post('/api/penilaian-harian', STAFF, (req, res) => {
     const siswa = db.prepare('SELECT rombel_id FROM siswa WHERE id=? AND tenant_id=?').get(siswa_id, req.tenantId)
     if (!gtk || !siswa || !teacherCanTeachPair(gtk.id, req.tenantId, mapel_id, siswa.rombel_id, tanggal)) return res.status(403).json({ error: 'Siswa/mapel tidak sesuai jadwal mengajar Anda' })
   }
-  db.prepare(`INSERT INTO penilaian_harian (id, jurnal_id, siswa_id, mapel_id, tanggal, sikap, keaktifan, pengetahuan, catatan, tenant_id) 
-    VALUES (?,?,?,?,?,?,?,?,?,?)`).run(id, jurnal_id||null, siswa_id, mapel_id, tanggal, sikap||0, keaktifan||0, pengetahuan||0, catatan||'', req.tenantId)
-  res.json({ id })
+  // Nilai harian dan hitung ulang rapor tersimpan sebagai satu transaksi:
+  // tidak boleh ada nilai masuk tanpa rapor ikut diperbarui (atau sebaliknya).
+  const raporUpdated = db.transaction(() => {
+    db.prepare(`INSERT INTO penilaian_harian (id, jurnal_id, siswa_id, mapel_id, tanggal, sikap, keaktifan, pengetahuan, catatan, tenant_id)
+      VALUES (?,?,?,?,?,?,?,?,?,?)`).run(id, jurnal_id||null, siswa_id, mapel_id, tanggal, sikap||0, keaktifan||0, pengetahuan||0, catatan||'', req.tenantId)
+    return refreshRaporSetelahNilaiBerubah({ tenantId: req.tenantId, siswaId: siswa_id, mapelId: mapel_id, tanggal })
+  })()
+  res.json({ id, count: 1, rapor_updated: raporUpdated })
 })
 
 app.post('/api/penilaian-harian/bulk', STAFF, (req, res) => {
@@ -7015,28 +7020,42 @@ app.post('/api/penilaian-harian/bulk', STAFF, (req, res) => {
       return !siswa || !teacherCanTeachPair(gtk.id, req.tenantId, mapel_id, siswa.rombel_id, tanggal)
     })) return res.status(403).json({ error: 'Terdapat siswa di luar jadwal mengajar Anda' })
   }
-  let count = 0
-  for (const d of data) {
-    const exists = db.prepare('SELECT id FROM penilaian_harian WHERE siswa_id = ? AND mapel_id = ? AND tanggal = ? AND tenant_id=?').get(d.siswa_id, mapel_id, tanggal, req.tenantId)
-    if (exists) {
-      db.prepare('UPDATE penilaian_harian SET sikap=?, keaktifan=?, pengetahuan=?, catatan=? WHERE id=? AND tenant_id=?').run(d.sikap||0, d.keaktifan||0, d.pengetahuan||0, d.catatan||'', exists.id, req.tenantId)
-    } else {
-      db.prepare('INSERT INTO penilaian_harian (id, jurnal_id, siswa_id, mapel_id, tanggal, sikap, keaktifan, pengetahuan, catatan, tenant_id) VALUES (?,?,?,?,?,?,?,?,?,?)').run(uuidv4(), jurnal_id||null, d.siswa_id, mapel_id, tanggal, d.sikap||0, d.keaktifan||0, d.pengetahuan||0, d.catatan||'', req.tenantId)
+  const result = db.transaction(() => {
+    let count = 0
+    for (const d of data) {
+      const exists = db.prepare('SELECT id FROM penilaian_harian WHERE siswa_id = ? AND mapel_id = ? AND tanggal = ? AND tenant_id=?').get(d.siswa_id, mapel_id, tanggal, req.tenantId)
+      if (exists) {
+        db.prepare('UPDATE penilaian_harian SET sikap=?, keaktifan=?, pengetahuan=?, catatan=? WHERE id=? AND tenant_id=?').run(d.sikap||0, d.keaktifan||0, d.pengetahuan||0, d.catatan||'', exists.id, req.tenantId)
+      } else {
+        db.prepare('INSERT INTO penilaian_harian (id, jurnal_id, siswa_id, mapel_id, tanggal, sikap, keaktifan, pengetahuan, catatan, tenant_id) VALUES (?,?,?,?,?,?,?,?,?,?)').run(uuidv4(), jurnal_id||null, d.siswa_id, mapel_id, tanggal, d.sikap||0, d.keaktifan||0, d.pengetahuan||0, d.catatan||'', req.tenantId)
+      }
+      count++
     }
-    count++
-  }
-  res.json({ count })
+    const raporUpdated = refreshRaporSetelahNilaiBerubah({ tenantId: req.tenantId, mapelId: mapel_id, tanggal })
+    return { count, raporUpdated }
+  })()
+  res.json({ count: result.count, rapor_updated: result.raporUpdated })
 })
 
 app.put('/api/penilaian-harian/:id', STAFF, (req, res) => {
   const { sikap, keaktifan, pengetahuan, catatan } = req.body
-  db.prepare('UPDATE penilaian_harian SET sikap=?, keaktifan=?, pengetahuan=?, catatan=? WHERE id=? AND tenant_id=?').run(sikap||0, keaktifan||0, pengetahuan||0, catatan||'', req.params.id, req.tenantId)
-  res.json({ success: true })
+  const existing = db.prepare('SELECT siswa_id, mapel_id, tanggal FROM penilaian_harian WHERE id=? AND tenant_id=?').get(req.params.id, req.tenantId)
+  if (!existing) return res.status(404).json({ error: 'Penilaian tidak ditemukan' })
+  const raporUpdated = db.transaction(() => {
+    db.prepare('UPDATE penilaian_harian SET sikap=?, keaktifan=?, pengetahuan=?, catatan=? WHERE id=? AND tenant_id=?').run(sikap||0, keaktifan||0, pengetahuan||0, catatan||'', req.params.id, req.tenantId)
+    return refreshRaporSetelahNilaiBerubah({ tenantId: req.tenantId, siswaId: existing.siswa_id, mapelId: existing.mapel_id, tanggal: existing.tanggal })
+  })()
+  res.json({ success: true, count: 1, rapor_updated: raporUpdated })
 })
 
 app.delete('/api/penilaian-harian/:id', STAFF, (req, res) => {
-  db.prepare('DELETE FROM penilaian_harian WHERE id = ? AND tenant_id=?').run(req.params.id, req.tenantId)
-  res.json({ success: true })
+  const existing = db.prepare('SELECT siswa_id, mapel_id, tanggal FROM penilaian_harian WHERE id=? AND tenant_id=?').get(req.params.id, req.tenantId)
+  if (!existing) return res.status(404).json({ error: 'Penilaian tidak ditemukan' })
+  const raporUpdated = db.transaction(() => {
+    db.prepare('DELETE FROM penilaian_harian WHERE id = ? AND tenant_id=?').run(req.params.id, req.tenantId)
+    return refreshRaporSetelahNilaiBerubah({ tenantId: req.tenantId, siswaId: existing.siswa_id, mapelId: existing.mapel_id, tanggal: existing.tanggal })
+  })()
+  res.json({ success: true, rapor_updated: raporUpdated })
 })
 
 app.get('/api/penilaian-harian/rekap/:siswa_id', authMiddleware, (req, res) => {
@@ -7216,8 +7235,21 @@ function validateRaporPeriod(tahunAjaran, semester, jenis) {
   const [awal, akhir] = String(tahunAjaran).split('/').map(Number)
   if (akhir !== awal + 1) return 'Rentang tahun ajaran tidak valid'
   if (!['ganjil', 'genap'].includes(semester)) return 'Semester tidak valid'
-  if (jenis != null && !['rapor_sts', 'rapor_sas'].includes(jenis)) return 'Jenis rapor tidak valid'
+  // 'sts'/'sas' adalah baris asesmen kanonik (nilai ujian mentah), 'sumatif'
+  // adalah alias lama yang membaca keduanya. Ceklok nilai guru memakai nilai
+  // kanonik ini, jadi harus lolos validasi yang sama.
+  if (jenis != null && !['rapor_sts', 'rapor_sas', 'sts', 'sas', 'sumatif'].includes(jenis)) return 'Jenis rapor tidak valid'
   return ''
+}
+
+// Setelah nilai sumber (penilaian harian atau asesmen) berubah, rapor yang
+// SUDAH digenerate harus dihitung ulang di transaksi yang sama. Tanpa ini nilai
+// rapor tetap angka lama meski guru sudah memperbaiki nilainya.
+function refreshRaporSetelahNilaiBerubah({ tenantId, siswaId, mapelId, tahunAjaran, semester, tanggal }) {
+  const { updated } = refreshGeneratedRapor(db, {
+    tenantId, siswaId, mapelId, tahunAjaran, semester, tanggal, predikatFromNilai,
+  })
+  return updated
 }
 
 function canReadRaporStudent(req, siswaId) {
@@ -7256,7 +7288,9 @@ app.get('/api/rapor', authMiddleware, (req, res) => {
   if (siswa_id) { sql += ' AND r.siswa_id = ?'; params.push(siswa_id) }
   if (tahun_ajaran) { sql += ' AND r.tahun_ajaran = ?'; params.push(tahun_ajaran) }
   if (semester) { sql += ' AND r.semester = ?'; params.push(semester) }
-  if (jenis) { sql += ' AND r.jenis = ?'; params.push(jenis) }
+  // Alias lama 'sumatif' membaca baris asesmen STS + SAS sekaligus.
+  if (jenis === 'sumatif') { sql += " AND r.jenis IN ('sts','sas')" }
+  else if (jenis) { sql += ' AND r.jenis = ?'; params.push(jenis) }
   sql += ' ORDER BY m.nama'
   res.json(db.prepare(sql).all(...params))
 })
@@ -7410,40 +7444,62 @@ app.post('/api/rapor/asesmen', STAFF, (req, res) => {
   
   const trx = db.transaction(() => {
     let count = 0
+    let skipped = 0
     const processedSiswaMapel = new Set()
+    const pairs = new Map()
     
     for (const item of items.slice(0, 500)) {
       const siswa_id = String(item.siswa_id || '').trim()
       const mapel_id = String(item.mapel_id || '').trim()
       
       // Validate siswa_id and mapel_id exist
-      if (!siswa_id) continue
-      if (!mapel_id) continue
+      if (!siswa_id) { skipped++; continue }
+      if (!mapel_id) { skipped++; continue }
       
       const siswaExists = db.prepare('SELECT 1 FROM siswa WHERE id=? AND tenant_id=? AND rombel_id=?').get(siswa_id, req.tenantId, rombelIdStr)
-      if (!siswaExists) continue
+      if (!siswaExists) { skipped++; continue }
       
       const mapelExists = db.prepare('SELECT 1 FROM mapel WHERE id=? AND tenant_id=?').get(mapel_id, req.tenantId)
-      if (!mapelExists) continue
+      if (!mapelExists) { skipped++; continue }
       
       // Check for duplicates within this batch
       const key = `${siswa_id}:${mapel_id}`
-      if (processedSiswaMapel.has(key)) continue
+      if (processedSiswaMapel.has(key)) { skipped++; continue }
       processedSiswaMapel.add(key)
       
       // Validate nilai: must be numeric, 0-100
       let nilai = Number(item.nilai)
-      if (isNaN(nilai)) continue // Skip if not numeric
+      if (isNaN(nilai)) { skipped++; continue } // Skip if not numeric
       nilai = Math.max(0, Math.min(100, nilai)) // Clamp to 0-100
       
       upsert.run(uuidv4(), siswa_id, mapel_id, tahun_ajaran, semester, jenis, nilai, req.tenantId)
+      pairs.set(key, { siswaId: siswa_id, mapelId: mapel_id })
       count++
     }
-    return count
+
+    // Nilai asesmen berubah -> rapor STS/SAS yang sudah digenerate dihitung
+    // ulang dalam transaksi yang sama.
+    let raporUpdated = 0
+    for (const pair of pairs.values()) {
+      raporUpdated += refreshRaporSetelahNilaiBerubah({
+        tenantId: req.tenantId,
+        siswaId: pair.siswaId,
+        mapelId: pair.mapelId,
+        tahunAjaran: tahun_ajaran,
+        semester,
+      })
+    }
+    return { count, skipped, raporUpdated }
   })
   
-  const count = trx()
-  res.json({ success: true, count, message: `${count} nilai asesmen ${jenis.toUpperCase()} berhasil disimpan` })
+  const result = trx()
+  res.json({
+    success: true,
+    count: result.count,
+    skipped: result.skipped,
+    rapor_updated: result.raporUpdated,
+    message: `${result.count} nilai asesmen ${jenis.toUpperCase()} berhasil disimpan${result.skipped ? `, ${result.skipped} dilewati` : ''}`,
+  })
 })
 
 // POST /api/rapor/generate — generate rapor STS atau SAS untuk satu rombel
@@ -7508,19 +7564,47 @@ app.post('/api/rapor/nilai-sumatif', STAFF, (req, res) => {
     ON CONFLICT(tenant_id, siswa_id, mapel_id, tahun_ajaran, semester, jenis) DO UPDATE SET nilai_sts=excluded.nilai_sts, updated_at=datetime('now')`)
   const trx = db.transaction(() => {
     let count = 0
+    let skipped = 0
+    let rows = 0
+    const processed = new Set()
+    const pairs = new Map()
     for (const item of items.slice(0, 500)) {
       const siswa_id = String(item.siswa_id || '').trim()
       const mapel_id = String(item.mapel_id || '').trim()
-      if (!db.prepare('SELECT 1 FROM siswa WHERE id=? AND tenant_id=?').get(siswa_id, req.tenantId)) continue
-      if (!db.prepare('SELECT 1 FROM mapel WHERE id=? AND tenant_id=?').get(mapel_id, req.tenantId)) continue
-      if (item.nilai_sts != null) { const v = Math.max(0, Math.min(100, Number(item.nilai_sts)||0)); upsertSts.run(uuidv4(), siswa_id, mapel_id, tahun_ajaran, semester, v, req.tenantId) }
-      if (item.nilai_sas != null) { const v = Math.max(0, Math.min(100, Number(item.nilai_sas)||0)); upsertSas.run(uuidv4(), siswa_id, mapel_id, tahun_ajaran, semester, v, req.tenantId) }
+      if (!siswa_id || !mapel_id) { skipped++; continue }
+      if (!db.prepare('SELECT 1 FROM siswa WHERE id=? AND tenant_id=?').get(siswa_id, req.tenantId)) { skipped++; continue }
+      if (!db.prepare('SELECT 1 FROM mapel WHERE id=? AND tenant_id=?').get(mapel_id, req.tenantId)) { skipped++; continue }
+      const key = `${siswa_id}:${mapel_id}`
+      if (processed.has(key)) { skipped++; continue }
+      processed.add(key)
+      // Nilai kosong/null bukan nol: hanya komponen yang benar-benar dikirim
+      // yang disimpan, sehingga tidak menimpa nilai lama dengan angka 0.
+      let written = 0
+      if (item.nilai_sts != null) { const v = Math.max(0, Math.min(100, Number(item.nilai_sts)||0)); upsertSts.run(uuidv4(), siswa_id, mapel_id, tahun_ajaran, semester, v, req.tenantId); written++ }
+      if (item.nilai_sas != null) { const v = Math.max(0, Math.min(100, Number(item.nilai_sas)||0)); upsertSas.run(uuidv4(), siswa_id, mapel_id, tahun_ajaran, semester, v, req.tenantId); written++ }
+      if (!written) { skipped++; continue }
+      rows += written
+      pairs.set(key, { siswaId: siswa_id, mapelId: mapel_id })
       count++
     }
-    return count
+    let raporUpdated = 0
+    for (const pair of pairs.values()) {
+      raporUpdated += refreshRaporSetelahNilaiBerubah({
+        tenantId: req.tenantId, siswaId: pair.siswaId, mapelId: pair.mapelId,
+        tahunAjaran: tahun_ajaran, semester,
+      })
+    }
+    return { count, skipped, rows, raporUpdated }
   })
-  const count = trx()
-  res.json({ success: true, count, message: `${count} nilai sumatif berhasil disimpan` })
+  const result = trx()
+  res.json({
+    success: true,
+    count: result.count,
+    rows: result.rows,
+    skipped: result.skipped,
+    rapor_updated: result.raporUpdated,
+    message: `${result.count} nilai sumatif berhasil disimpan${result.skipped ? `, ${result.skipped} dilewati` : ''}`,
+  })
 })
 
 // ==================== LEDGER NILAI ====================

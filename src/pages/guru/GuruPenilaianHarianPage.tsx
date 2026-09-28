@@ -1,5 +1,6 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import api from '../../services/api'
+import { verifySavedCount, verifyGradeRows } from '../../lib/gradeVerification'
 import { todayWib } from '../../lib/dateFormat'
 import { BookOpen, Save, Users } from 'lucide-react'
 
@@ -14,22 +15,44 @@ export default function GuruPenilaianHarianPage() {
   const [tanggal, setTanggal] = useState(todayWib())
   const [penilaianData, setPenilaianData] = useState<any[]>([])
   const [loading, setLoading] = useState(false)
-  const [success, setSuccess] = useState(false)
+  const [success, setSuccess] = useState<number | null>(null)
+  const [loadError, setLoadError] = useState('')
+  const [saveError, setSaveError] = useState('')
+  const [dataLoading, setDataLoading] = useState(false)
+  const [contextDate, setContextDate] = useState('')
+  const [loadedScope, setLoadedScope] = useState('')
+  const contextRequest = useRef(0)
+  const gradeRequest = useRef(0)
+  const scopeKey = JSON.stringify([selectedMapel, selectedRombel, tanggal])
+  const ready = contextDate === tanggal && loadedScope === scopeKey && !dataLoading && !loadError
 
   useEffect(() => {
     loadJadwalContext(tanggal)
-  }, [])
+    // Invalidate the latest request, not a DOM ref captured at mount.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    return () => { contextRequest.current++; gradeRequest.current++ }
+  }, [tanggal])
 
   useEffect(() => {
-    if (selectedRombel) {
-      loadSiswa()
-    }
-  }, [selectedRombel, contextSiswa])
+    if (selectedMapel && selectedRombel && contextDate === tanggal) loadSiswa()
+    // Invalidate the latest request, not a DOM ref captured at mount.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    return () => { gradeRequest.current++ }
+  // All grade scope inputs are listed; the loader is recreated each render.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedMapel, selectedRombel, tanggal, contextSiswa, contextDate])
 
-  // Auto-scope: hanya pasangan mapel/kelas pada jadwal mengajar tanggal terpilih.
+  // Auto-scope: hanya pasangan mapel/kelas pada jadwal tanggal terpilih.
   const loadJadwalContext = async (date: string) => {
+    const request = ++contextRequest.current
+    gradeRequest.current++
+    setDataLoading(true); setLoadError(''); setSuccess(null)
+    setContextDate(''); setLoadedScope('')
+    setSiswaList([]); setPenilaianData([]); setJadwalList([]); setRombelList([])
+    setSelectedJadwal(''); setSelectedMapel(''); setSelectedRombel('')
     try {
       const { data } = await api.get('/guru/jadwal-context', { params: { tanggal: date } })
+      if (request !== contextRequest.current) return
       const rows = data.jadwal || []
       setJadwalList(rows)
       setContextSiswa(data.siswa || [])
@@ -38,45 +61,36 @@ export default function GuruPenilaianHarianPage() {
       setSelectedJadwal(first?.jadwal_id || '')
       setSelectedMapel(first?.mapel_id || '')
       setSelectedRombel(first?.rombel_id || '')
-      if (!first) { setSiswaList([]); setPenilaianData([]) }
-    } catch (e) {
-      console.error(e)
+      setContextDate(date)
+    } catch {
+      if (request === contextRequest.current) setLoadError('Gagal memuat jadwal/kelas. Coba lagi sebelum mengisi nilai.')
+    } finally {
+      if (request === contextRequest.current) setDataLoading(false)
     }
   }
 
   const loadSiswa = async () => {
+    const request = ++gradeRequest.current
+    setDataLoading(true); setLoadError(''); setLoadedScope(''); setSuccess(null)
+    setSiswaList([]); setPenilaianData([])
     try {
-      const data = contextSiswa.filter((s: any) => s.rombel_id === selectedRombel)
-      setSiswaList(data)
-      // Initialize penilaian data
-      const initial = data.map((s: any) => ({
-        siswa_id: s.id,
-        nama: s.nama,
-        nis: s.nis,
-        sikap: 0,
-        keaktifan: 0,
-        pengetahuan: 0,
-        catatan: ''
-      }))
-      setPenilaianData(initial)
-      // Load existing penilaian if any
-      loadExistingPenilaian(data.map((s: any) => s.id))
-    } catch (e) {
-      console.error(e)
-    }
-  }
-
-  const loadExistingPenilaian = async (siswaIds: string[]) => {
-    if (!selectedMapel || !tanggal) return
-    try {
+      const siswa = contextSiswa.filter((s: any) => s.rombel_id === selectedRombel)
       const { data } = await api.get(`/penilaian-harian?mapel_id=${selectedMapel}&tanggal_from=${tanggal}&tanggal_to=${tanggal}`)
-      // Merge with existing data
-      setPenilaianData(prev => prev.map(p => {
-        const existing = data.find((e: any) => e.siswa_id === p.siswa_id)
-        return existing ? { ...p, ...existing } : p
+      if (request !== gradeRequest.current) return
+      setPenilaianData(siswa.map((s: any) => {
+        const existing = data.find((e: any) => e.siswa_id === s.id)
+        return {
+          siswa_id: s.id, nama: s.nama, nis: s.nis,
+          sikap: existing?.sikap ?? '', keaktifan: existing?.keaktifan ?? '',
+          pengetahuan: existing?.pengetahuan ?? '', catatan: existing?.catatan ?? ''
+        }
       }))
-    } catch (e) {
-      console.error(e)
+      setSiswaList(siswa)
+      setLoadedScope(scopeKey)
+    } catch {
+      if (request === gradeRequest.current) setLoadError('Gagal memuat nilai. Penyimpanan dinonaktifkan agar nilai lama tidak tertimpa.')
+    } finally {
+      if (request === gradeRequest.current) setDataLoading(false)
     }
   }
 
@@ -87,29 +101,45 @@ export default function GuruPenilaianHarianPage() {
   }
 
   const handleSave = async () => {
+    if (!ready || loading) return
     if (!selectedMapel || !selectedRombel || !tanggal) {
       alert('Pilih mapel, kelas, dan tanggal terlebih dahulu')
       return
     }
 
+    setSaveError('')
+    const fields = ['sikap', 'keaktifan', 'pengetahuan']
+    const filled = penilaianData.filter(p => fields.some(f => p[f] !== '' && p[f] != null) || p.catatan)
+    if (!filled.length) { setSaveError('Masukkan nilai untuk minimal 1 siswa'); return }
+    if (filled.some(p => fields.some(f => p[f] === '' || p[f] == null || !Number.isFinite(Number(p[f])) || Number(p[f]) < 0 || Number(p[f]) > 100))) {
+      setSaveError('Lengkapi ketiga nilai 0–100 untuk setiap siswa yang diisi. Nilai kosong tidak diubah menjadi nol.')
+      return
+    }
     setLoading(true)
-    setSuccess(false)
+    setSuccess(null)
     try {
-      await api.post('/penilaian-harian/bulk', {
+      const { data: result } = await api.post('/penilaian-harian/bulk', {
         mapel_id: selectedMapel,
         tanggal,
-        data: penilaianData.map(p => ({
+        data: filled.map(p => ({
           siswa_id: p.siswa_id,
-          sikap: parseInt(p.sikap) || 0,
-          keaktifan: parseInt(p.keaktifan) || 0,
-          pengetahuan: parseInt(p.pengetahuan) || 0,
+          sikap: Number(p.sikap),
+          keaktifan: Number(p.keaktifan),
+          pengetahuan: Number(p.pengetahuan),
           catatan: p.catatan || ''
         }))
       })
-      setSuccess(true)
-      setTimeout(() => setSuccess(false), 3000)
+      verifySavedCount(result.count, filled.length)
+      const { data: persisted } = await api.get(`/penilaian-harian?mapel_id=${selectedMapel}&tanggal_from=${tanggal}&tanggal_to=${tanggal}`)
+      verifyGradeRows(filled, persisted, ['siswa_id'], fields)
+      if (filled.some(p => persisted.find((r: any) => r.siswa_id === p.siswa_id)?.catatan !== (p.catatan || ''))) {
+        throw new Error('Verifikasi catatan gagal. Muat ulang nilai sebelum mencoba lagi.')
+      }
+      setSuccess(filled.length)
     } catch (err: any) {
-      alert(err.response?.data?.error || 'Gagal menyimpan penilaian')
+      setLoadedScope('')
+      setLoadError('Penyimpanan belum terverifikasi. Muat ulang nilai sebelum mencoba lagi.')
+      setSaveError(err.response?.data?.error || err.message || 'Gagal menyimpan penilaian')
     } finally {
       setLoading(false)
     }
@@ -124,9 +154,13 @@ export default function GuruPenilaianHarianPage() {
         </div>
       </div>
 
-      {success && (
+      {saveError && <div role="alert" className="rounded-lg p-4 bg-red-50 text-red-700">{saveError}</div>}
+      {loadError && <div role="alert" className="rounded-lg p-4 bg-red-50 text-red-700">{loadError} <button onClick={() => contextDate === tanggal ? loadSiswa() : loadJadwalContext(tanggal)}>Coba lagi</button></div>}
+      {dataLoading && <div role="status">Memuat nilai...</div>}
+
+      {success !== null && (
         <div className="bg-green-50 border border-green-200 rounded-lg p-4 text-green-700">
-          ✓ Penilaian berhasil disimpan
+          ✓ {success} penilaian berhasil disimpan dan terverifikasi
         </div>
       )}
 
@@ -138,13 +172,15 @@ export default function GuruPenilaianHarianPage() {
             <input
               type="date"
               value={tanggal}
-              onChange={e => { setTanggal(e.target.value); loadJadwalContext(e.target.value) }}
+              disabled={loading}
+              onChange={e => setTanggal(e.target.value)}
               className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary/20 focus:border-primary"
             />
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Jadwal Mengajar</label>
             <select
+              disabled={loading || contextDate !== tanggal}
               value={selectedJadwal}
               onChange={e => { const j = jadwalList.find(x => x.jadwal_id === e.target.value); setSelectedJadwal(e.target.value); setSelectedMapel(j?.mapel_id || ''); setSelectedRombel(j?.rombel_id || '') }}
               className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary/20 focus:border-primary"
@@ -171,7 +207,7 @@ export default function GuruPenilaianHarianPage() {
           <div className="flex items-end">
             <button
               onClick={handleSave}
-              disabled={loading || !selectedMapel || !selectedRombel || siswaList.length === 0}
+              disabled={!ready || loading || !selectedMapel || !selectedRombel || siswaList.length === 0}
               className="w-full px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary-dark transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
             >
               <Save size={18} />
@@ -182,7 +218,7 @@ export default function GuruPenilaianHarianPage() {
       </div>
 
       {/* Info */}
-      {selectedMapel && selectedRombel && siswaList.length > 0 && (
+      {ready && selectedMapel && selectedRombel && siswaList.length > 0 && (
         <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 text-sm text-blue-700">
           <Users size={16} className="inline mr-1" />
           <strong>{siswaList.length} siswa</strong> di kelas ini. 
@@ -191,7 +227,7 @@ export default function GuruPenilaianHarianPage() {
       )}
 
       {/* Penilaian Table */}
-      {selectedMapel && selectedRombel && siswaList.length > 0 && (
+      {ready && selectedMapel && selectedRombel && siswaList.length > 0 && (
         <div className="bg-white rounded-xl shadow-sm border overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full">
@@ -214,6 +250,7 @@ export default function GuruPenilaianHarianPage() {
                     <td className="px-4 py-3 text-sm font-medium text-gray-900">{p.nama}</td>
                     <td className="px-4 py-3">
                       <input
+                        disabled={!ready || loading}
                         type="number"
                         min="0"
                         max="100"
@@ -224,6 +261,7 @@ export default function GuruPenilaianHarianPage() {
                     </td>
                     <td className="px-4 py-3">
                       <input
+                        disabled={!ready || loading}
                         type="number"
                         min="0"
                         max="100"
@@ -234,6 +272,7 @@ export default function GuruPenilaianHarianPage() {
                     </td>
                     <td className="px-4 py-3">
                       <input
+                        disabled={!ready || loading}
                         type="number"
                         min="0"
                         max="100"
@@ -244,6 +283,7 @@ export default function GuruPenilaianHarianPage() {
                     </td>
                     <td className="px-4 py-3">
                       <input
+                        disabled={!ready || loading}
                         type="text"
                         value={p.catatan}
                         onChange={e => updatePenilaian(p.siswa_id, 'catatan', e.target.value)}
@@ -259,7 +299,7 @@ export default function GuruPenilaianHarianPage() {
         </div>
       )}
 
-      {selectedMapel && selectedRombel && siswaList.length === 0 && (
+      {ready && selectedMapel && selectedRombel && siswaList.length === 0 && (
         <div className="bg-white rounded-xl shadow-sm border p-12 text-center text-gray-400">
           <BookOpen size={48} className="mx-auto mb-4 opacity-50" />
           <p>Tidak ada siswa di kelas ini</p>

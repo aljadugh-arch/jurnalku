@@ -1,5 +1,6 @@
 import { useState, useRef } from 'react'
 import api from '../services/api'
+import { verifySavedCount, verifyGradeRows } from '../lib/gradeVerification'
 import { Upload, Download, AlertCircle, CheckCircle } from 'lucide-react'
 import Papa from 'papaparse'
 import type { ParseResult } from 'papaparse'
@@ -10,7 +11,9 @@ interface ImportNilaiAsesmenExcelProps {
   selectedMapel: string
   tahunAjaran: string
   semester: string
-  onSuccess?: () => void
+  onSuccess?: () => void | Promise<void>
+  onBusyChange?: (busy: boolean) => void
+  onUnverified?: () => void
 }
 
 export default function ImportNilaiAsesmenExcel({
@@ -19,7 +22,9 @@ export default function ImportNilaiAsesmenExcel({
   selectedMapel,
   tahunAjaran,
   semester,
-  onSuccess
+  onSuccess,
+  onBusyChange,
+  onUnverified
 }: ImportNilaiAsesmenExcelProps) {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [loading, setLoading] = useState(false)
@@ -83,7 +88,10 @@ export default function ImportNilaiAsesmenExcel({
     const file = event.target.files?.[0]
     if (!file) return
 
+    if (loading) return
     setLoading(true)
+    onBusyChange?.(true)
+    let submitted = false
     setMessage('')
     setErrors([])
 
@@ -127,18 +135,29 @@ export default function ImportNilaiAsesmenExcel({
         }))
       }
 
+      submitted = true
       const { data } = await api.post('/rapor/asesmen', payload)
-      setMessage(`✓ ${data.message || `${data.count || items.length} nilai berhasil disimpan`}`)
-      
-      if (onSuccess) {
-        onSuccess()
-      }
+      verifySavedCount(data.count, items.length)
+      const [{ data: siswa }, { data: persisted }] = await Promise.all([
+        api.get('/siswa', { params: { rombel_id } }),
+        api.get('/rapor', { params: { jenis, tahun_ajaran: tahunAjaran, semester } }),
+      ])
+      const expected = items.map(item => {
+        const matches = siswa.filter((s: any) => s.id === item.nis || s.nis === item.nis)
+        if (matches.length !== 1) throw new Error(`Verifikasi siswa ${item.nis} gagal`)
+        return { siswa_id: matches[0].id, mapel_id: selectedMapel, nilai_sts: item.nilai }
+      })
+      verifyGradeRows(expected, persisted, ['siswa_id', 'mapel_id'], ['nilai_sts'])
+      setMessage(`✓ ${items.length} nilai berhasil disimpan dan terverifikasi`)
+      await onSuccess?.()
     } catch (err: any) {
+      if (submitted) onUnverified?.()
       const errorMsg = err.response?.data?.error || err.message || 'Gagal mengimpor file'
       setMessage(`✗ ${errorMsg}`)
       setErrors([errorMsg])
     } finally {
       setLoading(false)
+      onBusyChange?.(false)
       if (fileInputRef.current) {
         fileInputRef.current.value = ''
       }
