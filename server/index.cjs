@@ -163,12 +163,29 @@ app.use((req, res, next) => {
 })
 
 // Rate limiter: strict on auth (brute-force), lenient global
+// Ambang login dipersempit. Sebelumnya 1000 percobaan gagal / 5 menit / IP
+// (praktis tanpa batas) sehingga password admin sekolah bisa ditebak paksa.
+// Dua lapis, keduanya lewat env supaya bisa disetel tanpa ubah kode:
+//   - per-IP      : LOGIN_MAX_PER_IP      (default 30 / 15 menit)
+//   - per-akun    : LOGIN_MAX_PER_ACCOUNT (default 15 / 15 menit, lintas IP
+//                   supaya penyerang yang berganti-ganti IP tetap tertahan)
+// Percobaan yang BERHASIL tidak dihitung, jadi login normal tidak pernah terkunci.
+const LOGIN_WINDOW_MS = Number(process.env.LOGIN_WINDOW_MS || 15 * 60 * 1000)
 const authLimiter = rateLimit({
-  windowMs: 5 * 60 * 1000,
-  max: 1000,
+  windowMs: LOGIN_WINDOW_MS,
+  max: Number(process.env.LOGIN_MAX_PER_IP || 30),
   skipSuccessfulRequests: true,
-  message: { error: 'Terlalu banyak percobaan login. Coba lagi 1 menit.' },
+  message: { error: 'Terlalu banyak percobaan login. Coba lagi dalam 15 menit.' },
   standardHeaders: true,
+  legacyHeaders: false
+})
+const loginAccountLimiter = rateLimit({
+  windowMs: LOGIN_WINDOW_MS,
+  max: Number(process.env.LOGIN_MAX_PER_ACCOUNT || 15),
+  skipSuccessfulRequests: true,
+  keyGenerator: (req) => 'acct:' + String(req.body?.email ?? req.body?.identifier ?? '').trim().toLowerCase(),
+  message: { error: 'Akun ini dikunci sementara karena terlalu banyak percobaan gagal. Coba lagi dalam 15 menit.' },
+  standardHeaders: false,
   legacyHeaders: false
 })
 const apiLimiter = rateLimit({
@@ -2324,7 +2341,7 @@ app.post('/api/auth/demo', (req, res) => {
   res.json({ token, user: { id: user.id, email: user.email, nama: user.nama, role: user.role, tenant_id: user.tenant_id, avatar: user.avatar || null } })
 })
 
-app.post('/api/auth/login', authLimiter, (req, res) => {
+app.post('/api/auth/login', authLimiter, loginAccountLimiter, (req, res) => {
   const { email, password } = req.body
   const vErr = vLogin(req.body); if (vErr) return res.status(400).json({ error: vErr })
   let tenantId = req.tenantId || 'default'

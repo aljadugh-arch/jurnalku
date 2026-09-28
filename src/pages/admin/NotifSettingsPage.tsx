@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
-import { Bell, MessageSquare, Save, Loader2 } from 'lucide-react'
+import { Link } from 'react-router-dom'
+import { Bell, MessageSquare, Save, Loader2, AlertTriangle } from 'lucide-react'
 import toast from 'react-hot-toast'
 import api from '../../services/api'
 
@@ -15,6 +16,8 @@ export default function NotifSettingsPage() {
   })
   const [saving, setSaving] = useState(false)
   const [testing, setTesting] = useState(false)
+  const [tahunAktif, setTahunAktif] = useState<any>(null)
+  const [cekTahunAjaran, setCekTahunAjaran] = useState(false)
   const [whitelist, setWhitelist] = useState<any[]>([])
   const [whiteForm, setWhiteForm] = useState({ target_type: 'phone', phone: '', target_id: '', reason: '' })
 
@@ -32,6 +35,14 @@ export default function NotifSettingsPage() {
         template_jadwal_guru: d.template_jadwal_guru || '',
       })
     })
+    // Peringatan dini: pengingat jadwal guru hanya terbit bila lembaga punya
+    // tahun ajaran aktif yang mencakup tanggal hari ini (lihat queueDueSchedules
+    // di server/wa-queue.cjs). Tanpa itu, centangnya menyala tapi tidak berkirim.
+    api.get('/tahun-ajaran').then(res => {
+      const rows = Array.isArray(res.data) ? res.data : []
+      const hariIniWIB = new Date(Date.now() + 7 * 3600 * 1000).toISOString().slice(0, 10)
+      setTahunAktif(rows.find((t: any) => t.aktif && t.tanggal_mulai <= hariIniWIB && hariIniWIB <= t.tanggal_selesai) || null)
+    }).catch(() => {}).finally(() => setCekTahunAjaran(true))
   }, [])
 
   const handleSave = async () => {
@@ -72,6 +83,21 @@ export default function NotifSettingsPage() {
           {saving ? 'Menyimpan...' : 'Simpan Pengaturan'}
         </button>
       </div>
+
+      {cekTahunAjaran && !tahunAktif && (
+        <div className="bg-amber-50 border border-amber-300 rounded-xl p-5 flex items-start gap-3">
+          <AlertTriangle size={20} className="text-amber-600 shrink-0 mt-0.5" />
+          <div className="text-sm text-amber-900">
+            <p className="font-semibold">Tahun ajaran aktif belum diisi — pengingat jadwal guru tidak akan terkirim</p>
+            <p className="mt-1">
+              Pengingat jadwal mengajar hanya dibuat bila lembaga punya tahun ajaran berstatus aktif yang
+              mencakup tanggal hari ini. Saat ini syarat itu belum terpenuhi, jadi centang di bawah belum
+              berpengaruh. Notifikasi absensi (ke wali murid dan ceklok guru) tidak terpengaruh.
+            </p>
+            <Link to="/admin/tahun-ajaran" className="inline-block mt-2 font-semibold underline">Buka menu Tahun Ajaran →</Link>
+          </div>
+        </div>
+      )}
 
       {/* Toggle Notifikasi */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -150,6 +176,9 @@ export default function NotifSettingsPage() {
       <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100 space-y-4">
         <h3 className="font-semibold text-gray-800">Notifikasi Jadwal Guru Mapel</h3>
         <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={settings.notif_jadwal_guru} onChange={e => setSettings({...settings, notif_jadwal_guru: e.target.checked})} /> Aktifkan pengingat 5 menit sebelum jam mapel</label>
+        {cekTahunAjaran && !tahunAktif && (
+          <p className="text-xs text-amber-700">Belum ada tahun ajaran aktif — centang ini belum akan mengirim apa pun.</p>
+        )}
         <textarea value={settings.template_jadwal_guru} onChange={e => setSettings({...settings, template_jadwal_guru: e.target.value})} rows={3} className="w-full px-3 py-2 border rounded-lg text-sm" placeholder="{nama_guru}, {mapel}, {rombel}, {jam_mulai}, {jam_selesai}, {tanggal}, {lembaga}" />
         <button onClick={handleTestJadwalGuru} className="px-4 py-2 bg-primary text-white rounded-lg text-sm">Test Notif Jadwal Sekarang</button>
       </div>
