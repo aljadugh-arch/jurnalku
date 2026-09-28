@@ -39,6 +39,10 @@ rollback() {
     mv "$BACKUP/dist" "$LIVE/dist"
     rm -f "$LIVE"/server/*.cjs
     cp -a "$BACKUP/server/." "$LIVE/server/"
+    if [[ -d "$BACKUP/server/scripts" ]]; then
+      rm -rf "$LIVE/server/scripts"
+      cp -a "$BACKUP/server/scripts" "$LIVE/server/scripts"
+    fi
     if [[ -d "$SECONDARY_BACKUP/dist" ]]; then
       rm -rf "$SECONDARY_LIVE/dist"
       mv "$SECONDARY_BACKUP/dist" "$SECONDARY_LIVE/dist"
@@ -55,12 +59,19 @@ mkdir -p "$BACKUP/server" "$SECONDARY_BACKUP"
 cp -a "$LIVE/dist" "$BACKUP/dist"
 cp -a "$SECONDARY_LIVE/dist" "$SECONDARY_BACKUP/dist"
 cp -a "$LIVE"/server/*.cjs "$BACKUP/server/"
+# Skrip bantu (server/scripts/) juga dipakai fitur runtime (auto-provision domain
+# custom). Ikut di-backup supaya rollback benar-benar memulihkan keadaan sebelumnya.
+[[ ! -d "$LIVE/server/scripts" ]] || cp -a "$LIVE/server/scripts" "$BACKUP/server/scripts"
 mkdir -p /root/backups/jurnalku
 sqlite3 "$LIVE/server/jurnalku.db" ".backup /root/backups/jurnalku/jurnalku.db.pre-deploy-$TS"
 
 test -s "$STG/dist/index.html"
 for f in "$STG"/server/*.cjs; do
   node -c "$f"
+done
+for f in "$STG"/server/scripts/*; do
+  [[ -f "$f" ]] || continue
+  bash -n "$f"
 done
 ACTIVATED=1
 rm -rf "$LIVE/dist.next" "$SECONDARY_LIVE/dist.next"
@@ -72,6 +83,16 @@ mv "$SECONDARY_LIVE/dist.next" "$SECONDARY_LIVE/dist"
 for f in "$STG"/server/*.cjs; do
   install -m 0644 "$f" "$LIVE/server/$(basename "$f")"
 done
+if [[ -d "$STG/server/scripts" ]]; then
+  mkdir -p "$LIVE/server/scripts"
+  for f in "$STG"/server/scripts/*; do
+    [[ -f "$f" ]] || continue
+    case "$f" in
+      *.sh) install -m 0755 "$f" "$LIVE/server/scripts/$(basename "$f")" ;;
+      *)    install -m 0644 "$f" "$LIVE/server/scripts/$(basename "$f")" ;;
+    esac
+  done
+fi
 pm2 restart "$PM2_APP" --update-env
 for attempt in {1..10}; do
   curl --fail --silent --show-error --max-time 15 "$HEALTH_URL" >/dev/null && break

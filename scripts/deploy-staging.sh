@@ -33,9 +33,21 @@ if [[ ${#SERVER_FILES[@]} -eq 0 ]]; then
   exit 1
 fi
 
-echo "[1/5] Syntax check server (${#SERVER_FILES[@]} modul)..."
+# Skrip bantu di server/scripts/ (mis. provision-domain.sh) TIDAK ikut terambil
+# oleh find -maxdepth 1 di atas. Tanpa menyertakannya, perbaikan pada skrip itu
+# hilang begitu VPS di-provision ulang, dan fitur yang memanggilnya (auto-provision
+# domain custom tenant) mati diam-diam tanpa error apa pun saat deploy.
+SERVER_SCRIPTS=()
+if [[ -d server/scripts ]]; then
+  mapfile -t SERVER_SCRIPTS < <(find server/scripts -maxdepth 1 -type f -printf '%f\n' | sort)
+fi
+
+echo "[1/5] Syntax check server (${#SERVER_FILES[@]} modul, ${#SERVER_SCRIPTS[@]} skrip)..."
 for f in "${SERVER_FILES[@]}"; do
   node -c "server/$f"
+done
+for f in "${SERVER_SCRIPTS[@]}"; do
+  bash -n "server/scripts/$f"
 done
 
 echo "[2/5] Build frontend..."
@@ -46,7 +58,9 @@ TAR_SERVER_ARGS=()
 for f in "${SERVER_FILES[@]}"; do
   TAR_SERVER_ARGS+=("server/$f")
 done
-tar -czf "$LOCAL_ARCHIVE" dist "${TAR_SERVER_ARGS[@]}"
+TAR_ARGS=(dist "${TAR_SERVER_ARGS[@]}")
+[[ ${#SERVER_SCRIPTS[@]} -eq 0 ]] || TAR_ARGS+=(server/scripts)
+tar -czf "$LOCAL_ARCHIVE" "${TAR_ARGS[@]}"
 sshpass -e scp "${SSH_OPTS[@]}" "$LOCAL_ARCHIVE" "$TARGET:$REMOTE_ARCHIVE"
 
 echo "[4/5] Pasang artefak staging secara atomik..."
@@ -78,6 +92,10 @@ test -s "$WORK/dist/index.html"
 for f in "$WORK"/server/*.cjs; do
   node -c "$f"
 done
+for f in "$WORK"/server/scripts/*; do
+  [[ -f "$f" ]] || continue
+  bash -n "$f"
+done
 
 mkdir -p "$BACKUP_SERVER"
 cp -a "$STG/server/." "$BACKUP_SERVER/" 2>/dev/null || true
@@ -91,6 +109,16 @@ mv "$STG/dist.next" "$STG/dist"
 for f in "$WORK"/server/*.cjs; do
   install -m 0644 "$f" "$STG/server/$(basename "$f")"
 done
+if [[ -d "$WORK/server/scripts" ]]; then
+  mkdir -p "$STG/server/scripts"
+  for f in "$WORK"/server/scripts/*; do
+    [[ -f "$f" ]] || continue
+    case "$f" in
+      *.sh) install -m 0755 "$f" "$STG/server/scripts/$(basename "$f")" ;;
+      *)    install -m 0644 "$f" "$STG/server/scripts/$(basename "$f")" ;;
+    esac
+  done
+fi
 pm2 restart "$PM2_APP" --update-env
 for attempt in {1..10}; do
   curl --fail --silent --show-error --max-time 15 "$HEALTH_URL" >/dev/null && break

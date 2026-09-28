@@ -1,6 +1,7 @@
 const test = require('node:test')
 const assert = require('node:assert/strict')
 const fs = require('node:fs')
+const os = require('node:os')
 const path = require('node:path')
 const { execFileSync } = require('node:child_process')
 
@@ -107,4 +108,56 @@ test('rollback-live.sh memulihkan seluruh modul server/*.cjs, bukan hanya index 
   assert.match(script, /-d "\$BACKUP\/server"/)
   assert.doesNotMatch(script, /\$BACKUP\/index\.cjs/)
   assert.doesNotMatch(script, /\$BACKUP\/tenant\.cjs/)
+})
+
+test('server/scripts/ ter-commit dan tidak diabaikan git', () => {
+  // Kalau server/scripts/ di-gitignore, clone bersih tidak punya skrip ini dan
+  // fitur auto-provision domain custom mati tanpa error saat deploy.
+  assert.ok(
+    trackedFiles.includes('server/scripts/provision-domain.sh'),
+    'server/scripts/provision-domain.sh harus git-tracked'
+  )
+  const ignore = read('.gitignore')
+  assert.doesNotMatch(ignore, /^server\/scripts\/?$/m)
+})
+
+test('arsip deploy benar-benar memuat skrip server/scripts (bukan hanya ada di repo)', () => {
+  const discovered = execFileSync(
+    'bash',
+    ['-c', "find server/scripts -maxdepth 1 -type f -printf '%f\\n' | sort"],
+    { cwd: root }
+  )
+    .toString()
+    .split('\n')
+    .filter(Boolean)
+  assert.ok(
+    discovered.includes('provision-domain.sh'),
+    `find server/scripts harus menemukan provision-domain.sh, dapat: ${discovered.join(', ')}`
+  )
+
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'jurnalku-arch-'))
+  try {
+    const archive = path.join(tmp, 'artefak.tgz')
+    // Replikasi perintah tar pada scripts/deploy-staging.sh.
+    execFileSync('tar', ['-czf', archive, 'server/scripts'], { cwd: root })
+    const listing = execFileSync('tar', ['-tzf', archive]).toString()
+    assert.match(listing, /server\/scripts\/provision-domain\.sh/)
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true })
+  }
+})
+
+test('deploy staging dan promote live menyertakan server/scripts/ beserta backup rollback', () => {
+  const staging = read('scripts/deploy-staging.sh')
+  assert.match(staging, /SERVER_SCRIPTS/)
+  assert.match(staging, /find server\/scripts -maxdepth 1 -type f/)
+  assert.match(staging, /TAR_ARGS\+=\(server\/scripts\)/)
+  assert.match(staging, /bash -n/)
+  assert.match(staging, /\$STG\/server\/scripts/)
+
+  const live = read('scripts/promote-live.sh')
+  assert.match(live, /bash -n/)
+  assert.match(live, /\$STG\/server\/scripts/)
+  assert.match(live, /\$BACKUP\/server\/scripts/)
+  assert.match(live, /\$LIVE\/server\/scripts/)
 })
