@@ -37,17 +37,18 @@ test('gemini-tts.cjs menyediakan generateTtsAudio dengan cache berbasis hash dan
   assert.match(geminiTts, /voiceConfig.*prebuiltVoiceConfig/s, 'harus set voice pria via prebuiltVoiceConfig')
 })
 
-test('endpoint POST /api/tts/announce HANYA cek cache (instan), TIDAK PERNAH menunggu Gemini generate secara sinkron (root cause delay yang dilaporkan user)', () => {
+test('endpoint POST /api/tts/announce HANYA cek cache (instan), TIDAK PERNAH menunggu generate secara sinkron (root cause delay yang dilaporkan user)', () => {
   const route = serverIndex.slice(
     serverIndex.indexOf("app.post('/api/tts/announce'"),
     serverIndex.indexOf("// Pre-warm cache TTS")
   )
   assert.notEqual(route, '', 'endpoint /api/tts/announce belum ditemukan')
   assert.match(route, /authMiddleware/, 'endpoint harus terautentikasi (bukan publik)')
-  assert.match(route, /resolveAiConfig\(db, req\.tenantId, req\.user\?\.id\)/, 'harus reuse konfigurasi AI existing per tenant/guru')
-  assert.match(route, /checkTtsCache/, 'harus cek cache TANPA memanggil generateTtsAudio (yang menunggu Gemini 3-14 detik)')
-  assert.doesNotMatch(route, /await generateTtsAudio\(/, 'endpoint TIDAK BOLEH await generateTtsAudio secara langsung — itulah bug delay yang dilaporkan user')
-  assert.match(route, /generateTtsAudioBackground/, 'cache-miss harus memicu generate di BACKGROUND (fire-and-forget), bukan ditunggu')
+  // Sejak 16da41c: pakai tts-local.cjs (Edge TTS neural, tanpa API key) —
+  // tidak perlu resolveAiConfig lagi. Tetap cek cache dulu (instan, sync).
+  assert.match(route, /checkTtsCache/, 'harus cek cache TANPA memanggil generateTtsAudioLocal (yang butuh network 1-3 detik)')
+  assert.doesNotMatch(route, /await generateTtsAudioLocal\(/, 'endpoint TIDAK BOLEH await generateTtsAudioLocal secara langsung — itulah bug delay')
+  assert.match(route, /generateTtsAudioLocalBackground/, 'cache-miss harus memicu generate di BACKGROUND (fire-and-forget), bukan ditunggu')
   assert.match(route, /res\.status\(404\)\.json\(\{[^}]*generating: true/, 'cache-miss harus balas 404 SEKARANG dengan flag generating agar frontend beda dari "belum dikonfigurasi"')
 })
 

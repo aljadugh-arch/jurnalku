@@ -63,11 +63,12 @@ test('pickBestVoice memprioritaskan voice natural/neural untuk suara yang lebih 
   const fn = soundLib.slice(soundLib.indexOf('function pickBestVoice'), soundLib.indexOf('function primeSpeechSynthesis'))
   assert.match(fn, /isNatural/)
   assert.match(fn, /natural\|online\|neural/i)
-  assert.match(fn, /maleIdNatural/)
+  // Sejak 16da41c: female-first (konsisten dgn Edge TTS id-ID-GadisNeural)
+  assert.match(fn, /femaleIdNatural/)
 })
 
-test('pickBestVoice tetap male-first dengan daftar voice pria yang terverifikasi', () => {
+test('pickBestVoice female-first dengan daftar voice wanita yang terverifikasi (konsisten dgn Edge TTS server)', () => {
   const fn = soundLib.slice(soundLib.indexOf('function pickBestVoice'), soundLib.indexOf('function primeSpeechSynthesis'))
-  assert.match(fn, /isVerifiedMale/)
-  assert.match(fn, /microsoft david/i)
+  assert.match(fn, /isVerifiedFemale/)
+  assert.match(fn, /microsoft gadis|microsoft zira/i)
 })

@@ -55,7 +55,7 @@ test('Prewarm phrase generation produces normalized names matching runtime', () 
   assert.match(prewarmLoop, /names\.add\(normalized\)/, 'Prewarm must add firstName result')
 })
 
-test('Browser fallback speakClear uses pickBestVoice for male-first preference', () => {
+test('Browser fallback speakClear uses pickBestVoice for female-first preference', () => {
   const speakClearFn = clientCode.slice(
     clientCode.indexOf('function speakClear'),
     clientCode.indexOf('const geminiAudioCache')
@@ -63,27 +63,28 @@ test('Browser fallback speakClear uses pickBestVoice for male-first preference',
   assert.match(speakClearFn, /pickBestVoice/, 'speakClear must use pickBestVoice')
 })
 
-test('pickBestVoice prioritizes male voices before female fallback', () => {
+test('pickBestVoice prioritizes female voices (konsisten dgn Edge TTS id-ID-GadisNeural server)', () => {
   const pickBestVoice = clientCode.slice(
     clientCode.indexOf('function pickBestVoice'),
     clientCode.indexOf('function primeSpeechSynthesis')
   )
   
-  // Must check male options in order
-  assert.match(pickBestVoice, /maleIdNatural/, 'Check male Indonesia natural')
-  assert.match(pickBestVoice, /maleId\b/, 'Check male Indonesia')
-  assert.match(pickBestVoice, /maleNaturalAny/, 'Check male natural any language')
-  assert.match(pickBestVoice, /maleAny/, 'Check male any language')
+  // Sejak 16da41c: female-first (bukan male-first) agar suara browser
+  // konsisten dengan voice server-side Edge TTS id-ID-GadisNeural.
+  assert.match(pickBestVoice, /femaleIdNatural/, 'Check female Indonesia natural')
+  assert.match(pickBestVoice, /femaleId\b/, 'Check female Indonesia')
+  assert.match(pickBestVoice, /femaleNaturalAny/, 'Check female natural any language')
+  assert.match(pickBestVoice, /femaleAny/, 'Check female any language')
   
-  // After all male checks, must try Indonesia voices as fallback (which may include female)
+  // After all female checks, must try Indonesia voices as fallback (gender-neutral)
   const lines = pickBestVoice.split('\n')
-  const maleAnyIndex = lines.findIndex(l => /const maleAny =/.test(l))
+  const femaleAnyIndex = lines.findIndex(l => /const femaleAny =/.test(l))
   const idNaturalIndex = lines.findIndex(l => /const idNatural =/.test(l))
-  assert(maleAnyIndex >= 0, 'Should check maleAny')
-  assert(idNaturalIndex > maleAnyIndex, 'Indonesia voices checked after all male checks')
+  assert(femaleAnyIndex >= 0, 'Should check femaleAny')
+  assert(idNaturalIndex > femaleAnyIndex, 'Indonesia voices checked after all female checks')
 })
 
-test('when Gemini TTS fails, speakViaGeminiOrFallback calls speakClear with male voice', () => {
+test('when Edge TTS fails, speakViaGeminiOrFallback calls speakClear with female voice', () => {
   const fallbackFn = clientCode.slice(
     clientCode.indexOf('async function speakViaGeminiOrFallback'),
     clientCode.indexOf('export function announceAttendanceSuccess')

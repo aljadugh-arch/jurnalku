@@ -51,7 +51,8 @@ test('progress job menghitung kegagalan permanen sebagai processed agar UI tidak
     serverIndex.indexOf("app.get('/api/tts/prewarm/status'")
   )
   assert.match(route, /job\.processed\s*=\s*job\.done \+ job\.failed/)
-  assert.match(route, /retrying/)
+  // Sejak 16da41c: Edge TTS gratis tanpa rate limit, fase processing saja
+  assert.match(route, /phase/)
   assert.match(feedbackSound, /timeout:\s*800/)
 })
 
@@ -63,11 +64,13 @@ test('progress menunjukkan fase menunggu rate limit, bukan 0 persen tanpa penjel
   assert.match(card, /Math\.max\(1,/)
 })
 
-test('429 menandai job sebagai menunggu sebelum retry', () => {
+test('prewarm onProgress menyimpan status phase dan updatedAt', () => {
   const route = serverIndex.slice(
     serverIndex.indexOf("app.post('/api/tts/prewarm'"),
     serverIndex.indexOf("app.get('/api/tts/prewarm/status'")
   )
-  assert.match(route, /job\.phase\s*=\s*'waiting-rate-limit'/)
-  assert.match(route, /job\.retryAt/)
+  // Edge TTS gratis: fase tetap 'processing', retryAt selalu null (tak ada 429 dari Edge).
+  // Tapi gemini-tts.cjs runTtsQueue masih mendukung onRetry callback secara generik.
+  assert.match(route, /job\.phase\s*=\s*'processing'/)
+  assert.match(route, /job\.retryAt\s*=\s*null/)
 })

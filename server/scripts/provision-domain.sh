@@ -2,7 +2,18 @@
 # provision-domain.sh — Auto-provision custom domain for JURNALKU
 # Usage: bash provision-domain.sh <domain>
 # Called by Node app after DNS is verified against PUBLIC_IP.
-# Must be run as root (or with sudo for nginx reload + acme.sh)
+# Must be run as root.
+#
+# Production memakai Caddy (BUKAN nginx) dan API bersama di port 3002.
+# Custom domain ditambahkan sebagai blok eksplisit di Caddyfile yang
+# menyajikan dist dari /www/wwwroot/jurnal.cc.cd/dist dan mem-proxy /api/*,
+# /uploads/*, serta ikon tenant ke 127.0.0.1:3002. Caddy mengurus sertifikat
+# HTTPS (Let's Encrypt) secara otomatis.
+#
+# Env opsional (untuk pengujian):
+#   CADDYFILE=/path  -> path Caddyfile (default /etc/caddy/Caddyfile)
+#   LIVE_DIR=/path   -> root dokumen live
+#   DRY_RUN=1        -> append + validasi saja, tidak reload Caddy
 
 set -euo pipefail
 
@@ -18,110 +29,74 @@ if [[ ! "$DOMAIN" =~ ^[a-z0-9][a-z0-9.-]*[a-z0-9]\.[a-z]{2,}$ ]]; then
   exit 1
 fi
 
-NGINX_CONF="/www/server/panel/vhost/nginx/${DOMAIN}.conf"
-CERT_DIR="/www/server/panel/vhost/cert/${DOMAIN}"
-ACME="$HOME/.acme.sh/acme.sh"
-WEBROOT="/www/wwwroot/jurnal.cc.cd/dist"
+CADDYFILE="${CADDYFILE:-/etc/caddy/Caddyfile}"
+LIVE_DIR="${LIVE_DIR:-/www/wwwroot/jurnal.cc.cd}"
+DRY_RUN="${DRY_RUN:-0}"
 
-echo "[1/5] Generating Nginx config..."
+[[ -f "$CADDYFILE" ]] || { echo "ERROR: Caddyfile tidak ditemukan: $CADDYFILE" >&2; exit 1; }
+[[ -d "$LIVE_DIR/dist" ]] || { echo "ERROR: dist live tidak ditemukan: $LIVE_DIR/dist" >&2; exit 1; }
 
-mkdir -p /www/server/panel/vhost/nginx
-mkdir -p /www/server/panel/vhost/cert
-mkdir -p "$WEBROOT/.well-known/acme-challenge"
+# Idempoten: jangan tambah dua kali.
+if grep -qE "^[[:space:]]*${DOMAIN//./\\.}[,[:space:]]" "$CADDYFILE"; then
+  echo "Domain $DOMAIN sudah terdaftar di Caddyfile, skip."
+  exit 0
+fi
 
-cat > "$NGINX_CONF" <<NGINX
-server {
-    listen 80;
-    server_name ${DOMAIN};
+BACKUP="$(mktemp)"
+cp -a "$CADDYFILE" "$BACKUP"
+trap 'rm -f "$BACKUP"' EXIT
 
-    location /.well-known/acme-challenge/ {
-        root ${WEBROOT};
-    }
-
-    location / {
-        proxy_pass http://127.0.0.1:3001;
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade \$http_upgrade;
-        proxy_set_header Connection 'upgrade';
-        proxy_set_header Host \$host;
-        proxy_set_header X-Real-IP \$remote_addr;
-        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto \$scheme;
-        proxy_cache_bypass \$http_upgrade;
-    }
-
-    access_log /www/wwwlogs/${DOMAIN}.log;
-    error_log /www/wwwlogs/${DOMAIN}.error.log;
-}
-NGINX
-
-echo "[2/5] Testing Nginx config..."
-nginx -t 2>&1 || { echo "ERROR: nginx config test failed" >&2; exit 1; }
-
-echo "[3/5] Reloading Nginx (HTTP mode)..."
-nginx -s reload 2>/dev/null || pkill -HUP nginx 2>/dev/null || true
-sleep 1
-
-echo "[4/5] Issuing SSL certificate via Let's Encrypt..."
-"$ACME" --issue \
-  -d "$DOMAIN" \
-  --webroot "$WEBROOT" \
-  --server letsencrypt \
-  --force 2>&1 || {
-    echo "WARN: acme.sh --issue failed, retrying from scratch..."
-    "$ACME" --remove -d "$DOMAIN" --ecc 2>/dev/null || true
-    "$ACME" --issue \
-      -d "$DOMAIN" \
-      --webroot "$WEBROOT" \
-      --server letsencrypt 2>&1
-  }
-
-echo "[5/5] Installing cert + enabling HTTPS..."
-mkdir -p "$CERT_DIR"
-"$ACME" --install-cert -d "$DOMAIN" --ecc \
-  --fullchain-file "${CERT_DIR}/fullchain.pem" \
-  --key-file "${CERT_DIR}/privkey.pem" \
-  --reloadcmd "nginx -s reload 2>/dev/null || pkill -HUP nginx 2>/dev/null || true" 2>&1
-
-# Update Nginx config to use SSL
-cat > "$NGINX_CONF" <<NGINX
-server {
-    listen 80;
-    server_name ${DOMAIN};
-    location /.well-known/acme-challenge/ { root ${WEBROOT}; }
-    location / { return 301 https://\$host\$request_uri; }
+restore_and_exit() {
+  cp -a "$BACKUP" "$CADDYFILE"
+  echo "ERROR: $1 — Caddyfile dikembalikan ke kondisi semula." >&2
+  exit 1
 }
 
-server {
-    listen 443 ssl;
-    server_name ${DOMAIN};
+echo "[1/3] Menambahkan blok Caddy untuk $DOMAIN..."
+cat >> "$CADDYFILE" <<CADDY
 
-    ssl_certificate     ${CERT_DIR}/fullchain.pem;
-    ssl_certificate_key ${CERT_DIR}/privkey.pem;
-    ssl_protocols       TLSv1.2 TLSv1.3;
-    ssl_ciphers         ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384;
-    ssl_prefer_server_ciphers off;
+${DOMAIN}, www.${DOMAIN} {
+	root * ${LIVE_DIR}/dist
+	encode gzip zstd
 
-    location /.well-known/acme-challenge/ { root ${WEBROOT}; }
+	handle /api/* {
+		reverse_proxy 127.0.0.1:3002
+	}
 
-    location / {
-        proxy_pass http://127.0.0.1:3001;
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade \$http_upgrade;
-        proxy_set_header Connection 'upgrade';
-        proxy_set_header Host \$host;
-        proxy_set_header X-Real-IP \$remote_addr;
-        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto \$scheme;
-        proxy_cache_bypass \$http_upgrade;
-    }
+	handle /uploads/* {
+		reverse_proxy 127.0.0.1:3002
+	}
 
-    access_log /www/wwwlogs/${DOMAIN}.log;
-    error_log /www/wwwlogs/${DOMAIN}.error.log;
+	@tenantIcons path /favicon.ico /apple-touch-icon.png
+	handle @tenantIcons {
+		reverse_proxy 127.0.0.1:3002
+	}
+
+	@staticAssets path /assets/*
+	handle @staticAssets {
+		header Cache-Control "public, max-age=31536000, immutable"
+		header X-Content-Type-Options "nosniff"
+		file_server
+	}
+
+	handle {
+		header Cache-Control "no-cache, must-revalidate"
+		try_files {path} /index.html
+		file_server
+	}
 }
-NGINX
+CADDY
 
-nginx -t 2>&1 || { echo "ERROR: final nginx config test failed" >&2; exit 1; }
-nginx -s reload 2>/dev/null || pkill -HUP nginx 2>/dev/null || true
+echo "[2/3] Validasi Caddyfile..."
+# --adapter caddyfile wajib: tanpa itu Caddy menganggap file sebagai JSON,
+# kecuali nama file persis 'Caddyfile'.
+caddy validate --adapter caddyfile --config "$CADDYFILE" >/dev/null 2>&1 || restore_and_exit "validasi Caddyfile gagal"
 
-echo "OK: ${DOMAIN} provisioned successfully (HTTPS active)"
+echo "[3/3] Reload Caddy..."
+if [[ "$DRY_RUN" == "1" ]]; then
+  echo "DRY_RUN=1: skip reload. Caddyfile tersimpan di $CADDYFILE"
+  exit 0
+fi
+systemctl reload caddy 2>/dev/null || caddy reload --adapter caddyfile --config "$CADDYFILE" || restore_and_exit "reload Caddy gagal"
+
+echo "OK: ${DOMAIN} provisioned successfully (Caddy HTTPS auto-managed)"

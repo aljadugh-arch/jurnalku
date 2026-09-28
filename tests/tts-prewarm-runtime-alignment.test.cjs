@@ -41,37 +41,37 @@ test('TTS runtime firstName() processes name with toNaturalCase for accent norma
     'firstName() must call toNaturalCase for proper accent handling')
 })
 
-test('pickBestVoice browser fallback prefers male id-ID voice, not arbitrary female', () => {
+test('pickBestVoice browser fallback prefers female id-ID voice (konsisten dgn Edge TTS server)', () => {
   const pickBestVoiceFn = soundLib.slice(
     soundLib.indexOf('function pickBestVoice'),
     soundLib.indexOf('function primeSpeechSynthesis')
   )
   
-  // Male must be checked before female fallback
-  assert.match(pickBestVoiceFn, /maleIdNatural/, 
-    'should prioritize male Indonesia natural/neural')
-  assert.match(pickBestVoiceFn, /maleId\b/, 
-    'should prioritize male Indonesia (non-neural)')
-  assert.match(pickBestVoiceFn, /maleNaturalAny/, 
-    'should prioritize male any language with natural/neural')
-  assert.match(pickBestVoiceFn, /maleAny/, 
-    'should prioritize any verified male')
+  // Sejak 16da41c: Female-first (konsisten dgn id-ID-GadisNeural server)
+  assert.match(pickBestVoiceFn, /femaleIdNatural/, 
+    'should prioritize female Indonesia natural/neural')
+  assert.match(pickBestVoiceFn, /femaleId\b/, 
+    'should prioritize female Indonesia (non-neural)')
+  assert.match(pickBestVoiceFn, /femaleNaturalAny/, 
+    'should prioritize female any language with natural/neural')
+  assert.match(pickBestVoiceFn, /femaleAny/, 
+    'should prioritize any verified female')
   
-  // Only AFTER all male options exhausted, then female fallback
+  // After all female options, Indonesia voice as gender-neutral fallback
   const lines = pickBestVoiceFn.split('\n')
-  const maleFallbackIndex = lines.findIndex(l => /fallback.*female|female.*fallback/i.test(l))
-  assert(maleFallbackIndex >= 0, 'should have a clear comment about female fallback')
+  const femaleAnyIndex = lines.findIndex(l => /const femaleAny =/.test(l))
+  assert(femaleAnyIndex >= 0, 'should have femaleAny variable')
 })
 
-test('when WAV TTS fails, speakClear() triggers Web Speech fallback with male-first voice', () => {
+test('when WAV TTS fails, speakClear() triggers Web Speech fallback with female-first voice', () => {
   const speakClearFn = soundLib.slice(
     soundLib.indexOf('function speakClear'),
     soundLib.indexOf('const geminiAudioCache')
   )
   
-  // Must call pickBestVoice which implements male-first logic
+  // Must call pickBestVoice which implements female-first logic
   assert.match(speakClearFn, /pickBestVoice/, 
-    'speakClear should use pickBestVoice for male-first voice selection')
+    'speakClear should use pickBestVoice for female-first voice selection')
 })
 
 test('TTS error fallback path exists and uses same voice selection as speakClear', () => {
@@ -82,7 +82,7 @@ test('TTS error fallback path exists and uses same voice selection as speakClear
   
   // Must call speakClear on error
   assert.match(fallbackLogic, /speakClear\(text\)/, 
-    'fallback should call speakClear which uses male-first voice selection')
+    'fallback should call speakClear which uses female-first voice selection')
 })
 
 test('TTS prewarm status endpoint uses same name extraction as prewarm generation', () => {
