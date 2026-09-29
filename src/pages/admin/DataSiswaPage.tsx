@@ -68,13 +68,15 @@ export default function DataSiswaPage() {
   const [editId, setEditId] = useState<string | null>(null)
   const [form, setForm] = useState<Omit<Siswa, 'id'>>(emptyForm)
   const [rombels, setRombels] = useState<{ id: string; nama: string }[]>([])
+  const [mapelList, setMapelList] = useState<{ id: string; nama: string }[]>([])
   const [showImport, setShowImport] = useState(false)
   const [uploadingFoto, setUploadingFoto] = useState(false)
   const [foundationTenantId, setFoundationTenantId] = useState<string | null>(null)
   const [selectedRombelId, setSelectedRombelId] = useState('')
   const [genderFilter, setGenderFilter] = useState<'all' | 'L' | 'P'>('all')
   const [showRdmSync, setShowRdmSync] = useState(false)
-  const [rdmSyncing, setRdmSyncing] = useState(false)
+  const [rdmOptions, setRdmOptions] = useState<any[]>([])
+  const [rdmLoadingOptions, setRdmLoadingOptions] = useState(false)
   const [rdmForm, setRdmForm] = useState({ base_url: 'https://ma-sd7.rdmku.pro', username: '', password: '', ajar_id: '', mapel_id: '', rombel_id: '', tahun_ajaran: '', semester: 'ganjil' })
   const [showBulkDelete, setShowBulkDelete] = useState(false)
   const [bulkDeleteScope, setBulkDeleteScope] = useState<'rombel' | 'all'>('rombel')
@@ -98,12 +100,14 @@ export default function DataSiswaPage() {
         params.tenant_id = foundationTenantId
       }
       const rombelParams = foundationTenantId && foundationTenantId !== 'all' ? { tenant_id: foundationTenantId } : {}
-      const [res, rombelRes] = await Promise.all([
+      const [res, rombelRes, mapelRes] = await Promise.all([
         api.get(foundationTenantId ? '/foundation/students' : '/siswa', { params }),
-        api.get(foundationTenantId ? '/foundation/rombels' : '/rombel', { params: rombelParams })
+        api.get(foundationTenantId ? '/foundation/rombels' : '/rombel', { params: rombelParams }),
+        api.get('/mapel')
       ])
       setData(res.data)
       setRombels(rombelRes.data)
+      setMapelList(mapelRes.data || [])
     } catch {
       toast.error('Gagal memuat data siswa')
     } finally {
@@ -273,14 +277,23 @@ export default function DataSiswaPage() {
     })
   }
 
-  const handleRdmSync = async (commit: boolean) => {
-    setRdmSyncing(true)
+  const handleRdmSync = async () => {
+    setRdmLoadingOptions(true)
     try {
-      const { data: result } = await api.post('/rapor/rdm/sas', { ...rdmForm, commit })
-      toast.success(commit ? `SAS tersimpan: ${result.saved}` : `Preview: ${result.matched} siswa cocok`)
-      if (commit) setShowRdmSync(false)
+      const { data: result } = await api.post('/rapor/rdm/options', { base_url: rdmForm.base_url, username: rdmForm.username, password: rdmForm.password })
+      setRdmOptions(result.ajars || [])
+      toast.success(`${result.ajars?.length || 0} ajar RDM ditemukan`)
+    } catch (error: any) { toast.error(error.response?.data?.error || 'Gagal membaca data RDM') }
+    finally { setRdmLoadingOptions(false) }
+  }
+
+  const handleRdmCommit = async () => {
+    const selected = rdmOptions.find(a => a.ajar_id === rdmForm.ajar_id)
+    if (!selected || !rdmForm.rombel_id || !rdmForm.mapel_id || !rdmForm.tahun_ajaran) { toast.error('Pilih ajar RDM, mapel, rombel, dan tahun ajaran'); return }
+    try {
+      const { data: result } = await api.post('/rapor/rdm/sas', { ...rdmForm, commit: true })
+      toast.success(`SAS tersimpan: ${result.saved}`); setShowRdmSync(false)
     } catch (error: any) { toast.error(error.response?.data?.error || 'Sinkron SAS RDM gagal') }
-    finally { setRdmSyncing(false) }
   }
 
   const handleGenerateKTS = async () => {
@@ -741,17 +754,22 @@ export default function DataSiswaPage() {
       )}
 
       {isLocalTenant && showRdmSync && (
-        <Modal open={showRdmSync} onClose={() => !rdmSyncing && setShowRdmSync(false)} title="Sinkron SAS dari RDM" maxWidth="md:max-w-2xl" footer={
+        <Modal open={showRdmSync} onClose={() => setShowRdmSync(false)} title="Sinkron SAS dari RDM" maxWidth="md:max-w-2xl" footer={
           <div className="flex gap-2 justify-end">
-            <button onClick={() => setShowRdmSync(false)} disabled={rdmSyncing} className="px-4 py-2 border rounded-lg text-sm">Batal</button>
-            <button onClick={() => handleRdmSync(false)} disabled={rdmSyncing} className="px-4 py-2 bg-indigo-100 text-indigo-700 rounded-lg text-sm">Preview Mapping</button>
-            <button onClick={() => handleRdmSync(true)} disabled={rdmSyncing} className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm">{rdmSyncing ? 'Memproses...' : 'Simpan SAS'}</button>
+            <button onClick={() => setShowRdmSync(false)} className="px-4 py-2 border rounded-lg text-sm">Batal</button>
+            {!rdmOptions.length ? <button onClick={handleRdmSync} disabled={rdmLoadingOptions} className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm">{rdmLoadingOptions ? 'Membaca RDM...' : 'Ambil Data RDM'}</button> : <button onClick={handleRdmCommit} className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm">Simpan SAS</button>}
           </div>
         }>
-          <p className="text-sm text-gray-500 mb-4">RDM hanya menjadi sumber nilai SAS. Preview terlebih dahulu; simpan hanya setelah mapping siswa dan mapel benar.</p>
+          <p className="text-sm text-gray-500 mb-4">Cukup isi URL tenant RDM, username, dan password. Ajar, mapel, kelas, dan tahun ajaran akan dibaca otomatis dari RDM.</p>
+          {!rdmOptions.length && <p className="text-xs text-indigo-600 mb-3">Setelah klik Ambil Data RDM, pilih ajar yang sesuai. Tidak perlu mengetahui atau mengetik Ajar ID.</p>}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            {([['base_url','URL RDM'],['username','User RDM'],['password','Password RDM'],['ajar_id','Ajar ID RDM'],['mapel_id','Mapel Jurnalku'],['rombel_id','Rombel Jurnalku'],['tahun_ajaran','Tahun Ajaran']] as const).map(([key,label]) => <label key={key} className="text-sm"><span className="block font-medium mb-1">{label}</span><input type={key === 'password' ? 'password' : 'text'} value={rdmForm[key]} onChange={e => setRdmForm(v => ({ ...v, [key]: e.target.value }))} className="w-full border rounded-lg px-3 py-2" /></label>)}
-            <label className="text-sm"><span className="block font-medium mb-1">Semester</span><select value={rdmForm.semester} onChange={e => setRdmForm(v => ({ ...v, semester: e.target.value }))} className="w-full border rounded-lg px-3 py-2"><option value="ganjil">Ganjil</option><option value="genap">Genap</option></select></label>
+            {([['base_url','URL Tenant RDM'],['username','User RDM'],['password','Password RDM']] as const).map(([key,label]) => <label key={key} className="text-sm"><span className="block font-medium mb-1">{label}</span><input type={key === 'password' ? 'password' : 'text'} value={rdmForm[key]} onChange={e => setRdmForm(v => ({ ...v, [key]: e.target.value }))} className="w-full border rounded-lg px-3 py-2" /></label>)}
+            {rdmOptions.length > 0 && <>
+              <label className="text-sm sm:col-span-2"><span className="block font-medium mb-1">Ajar / Mapel / Kelas RDM</span><select value={rdmForm.ajar_id} onChange={e => { const a = rdmOptions.find(x => x.ajar_id === e.target.value); setRdmForm(v => ({ ...v, ajar_id: e.target.value, tahun_ajaran: a?.tahunajaran_id ? `${a.tahunajaran_id}/${Number(a.tahunajaran_id) + 1}` : v.tahun_ajaran })) }} className="w-full border rounded-lg px-3 py-2"><option value="">Pilih dari RDM</option>{rdmOptions.map(a => <option key={a.ajar_id} value={a.ajar_id}>{a.mapel_nama || a.mapel_id} — {a.nama_kelas || a.kelas_id}</option>)}</select></label>
+              <label className="text-sm"><span className="block font-medium mb-1">Mapel Jurnalku</span><select value={rdmForm.mapel_id} onChange={e => setRdmForm(v => ({ ...v, mapel_id: e.target.value }))} className="w-full border rounded-lg px-3 py-2"><option value="">Pilih mapel</option>{mapelList.map(m => <option key={m.id} value={m.id}>{m.nama}</option>)}</select></label>
+              <label className="text-sm"><span className="block font-medium mb-1">Rombel Jurnalku</span><select value={rdmForm.rombel_id} onChange={e => setRdmForm(v => ({ ...v, rombel_id: e.target.value }))} className="w-full border rounded-lg px-3 py-2"><option value="">Pilih rombel</option>{rombels.map(r => <option key={r.id} value={r.id}>{r.nama}</option>)}</select></label>
+              <label className="text-sm"><span className="block font-medium mb-1">Tahun Ajaran</span><input value={rdmForm.tahun_ajaran} onChange={e => setRdmForm(v => ({ ...v, tahun_ajaran: e.target.value }))} className="w-full border rounded-lg px-3 py-2" /></label>
+            </>}
           </div>
         </Modal>
       )}

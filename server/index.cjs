@@ -1336,6 +1336,7 @@ for (const col of [
   ['settings', 'bg_blur', "INTEGER DEFAULT 0"],
   ['settings', 'kts_depan', "TEXT DEFAULT ''"],
   ['settings', 'kts_belakang', "TEXT DEFAULT ''"],
+  ['settings', 'kts_layout', "TEXT DEFAULT ''"],
   ['wa_gateway_config', 'tenant_id', "TEXT DEFAULT 'default'"],
   ['broadcast_log', 'tenant_id', "TEXT DEFAULT 'default'"],
   ['broadcast_detail', 'tenant_id', "TEXT DEFAULT 'default'"],
@@ -2879,6 +2880,21 @@ app.post('/api/settings/kts-template', ADMIN, ktsUpload.fields([
   res.json(saved)
 })
 
+app.put('/api/settings/kts-layout', ADMIN, (req, res) => {
+  const layout = req.body?.layout
+  if (!layout || typeof layout !== 'object') return res.status(400).json({ error: 'layout wajib berupa object' })
+  const clean = {}
+  for (const side of ['depan', 'belakang']) {
+    const v = layout[side] || {}
+    clean[side] = { nama: Number(v.nama) || 0, nis: Number(v.nis) || 0, qr: Number(v.qr) || 0 }
+  }
+  const id = canonicalSettingsId(req.tenantId)
+  db.prepare(`INSERT INTO settings (id,tenant_id,kts_layout,updated_at) VALUES (?,?,?,datetime('now'))
+    ON CONFLICT(id) DO UPDATE SET tenant_id=excluded.tenant_id,kts_layout=excluded.kts_layout,updated_at=datetime('now')`)
+    .run(id, req.tenantId, JSON.stringify(clean))
+  res.json({ success: true, layout: clean })
+})
+
 app.delete('/api/settings/kts-template/:side', ADMIN, (req, res) => {
   if (!['depan', 'belakang'].includes(req.params.side)) return res.status(400).json({ error: 'Sisi tidak valid' })
   const id = canonicalSettingsId(req.tenantId)
@@ -4416,7 +4432,7 @@ app.post('/api/siswa/generate-kts', STAFF, async (req, res) => {
   const qrMap = new Map()
   db.prepare(`SELECT siswa_id, token FROM qr_siswa_identifiers WHERE tenant_id=? AND siswa_id IN (${ids.map(() => '?').join(',')})`).all(req.tenantId, ...ids)
     .forEach(row => qrMap.set(row.siswa_id, row.token))
-  const settings = getTenantSettings(db, req.tenantId, 'nama_lembaga, kts_depan, kts_belakang') || {}
+  const settings = getTenantSettings(db, req.tenantId, 'nama_lembaga, kts_depan, kts_belakang, kts_layout') || {}
   const cards = siswaList.map(s => ({ ...s, qr_token: qrMap.get(s.id) || s.id }))
   try {
     const pdf = await createKtsPdf({ siswaList: cards, settings, uploadDir: UPLOAD_DIR })
@@ -7602,6 +7618,16 @@ app.post('/api/rapor/asesmen', STAFF, (req, res) => {
 
 // POST /api/rapor/rdm/sas — tarik SAS RDM lalu cocokkan ke siswa Jurnalku.
 // Default preview-only; tulis ke Jurnalku hanya jika commit=true dan admin.
+app.post('/api/rapor/rdm/options', STAFF, async (req, res) => {
+  const { base_url, username, password } = req.body || {}
+  if (!base_url || !username || !password) return res.status(400).json({ error: 'URL tenant RDM, user, dan password wajib diisi' })
+  try {
+    const client = createRdmClient({ baseUrl: base_url, username, password })
+    const scope = await client.getKelas()
+    res.json({ success: true, ajars: scope.ajars.map(a => ({ ajar_id: a.ajar_id, mapel_id: a.mapel_id, mapel_nama: a.mapel_nama, nama_kelas: a.nama_kelas, kelas_id: a.kelas_id, tingkat_nama: a.tingkat_nama, semester_nama: a.semester_nama })) })
+  } catch (error) { res.status(error.status && error.status >= 400 ? error.status : 502).json({ error: error.message }) }
+})
+
 app.post('/api/rapor/rdm/sas', STAFF, async (req, res) => {
   const {
     base_url, username, password, ajar_id, mapel_id, rombel_id,

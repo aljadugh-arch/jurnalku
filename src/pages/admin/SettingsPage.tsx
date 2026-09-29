@@ -1,7 +1,9 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, type PointerEvent } from 'react'
 import { AlertTriangle, Save, Trash2, Smartphone, BookOpen } from 'lucide-react'
 import toast from 'react-hot-toast'
 import api from '../../services/api'
+
+const CARD_PREVIEW_H = 145
 import { applyTheme } from '../../lib/applyTheme'
 import { clearLocalTheme } from '../../stores/themeStore'
 import { useSettingsStore } from '../../stores/settingsStore'
@@ -40,6 +42,8 @@ export default function SettingsPage() {
   const [background, setBackground] = useState('')
   const [kemenagLogo, setKemenagLogo] = useState('')
   const [kts, setKts] = useState({ depan: '', belakang: '' })
+  const [ktsLayout, setKtsLayout] = useState({ depan: { nama: 12, nis: 24, qr: 9 }, belakang: { nama: 0, nis: 0, qr: 0 } })
+  const [ktsDrag, setKtsDrag] = useState<{ side: 'depan' | 'belakang'; field: 'nama' | 'nis' | 'qr' } | null>(null)
   const [jam, setJam] = useState({
     sesi_masuk_mulai: '06:00', sesi_masuk_selesai: '07:30',
     sesi_pulang_mulai: '13:00', sesi_pulang_selesai: '15:00',
@@ -73,6 +77,7 @@ export default function SettingsPage() {
       setBackground(s.background || '')
       setKemenagLogo(s.logo_kemenag || '')
       setKts({ depan: s.kts_depan || '', belakang: s.kts_belakang || '' })
+      try { if (s.kts_layout) setKtsLayout(v => ({ ...v, ...JSON.parse(s.kts_layout) })) } catch {}
       setForm({
         nama_lembaga: s.nama_lembaga || '', alamat: s.alamat || '', telepon: s.telepon || '', email: s.email || '',
         kepala_sekolah: s.kepala_sekolah || '', npsn: s.npsn || '', nsm: s.nsm || '', kota_cetak: s.kota_cetak || '', yayasan_nama: s.yayasan_nama || '',
@@ -208,6 +213,21 @@ export default function SettingsPage() {
       setKts(v => ({ ...v, [side]: url })); setSettings({ ['kts_' + side]: url })
       toast.success(`Template ${side} diunggah`)
     } catch (e: any) { toast.error(e.response?.data?.error || 'Gagal mengunggah template') }
+  }
+
+  const saveKtsLayout = async () => {
+    try { await api.put('/settings/kts-layout', { layout: ktsLayout }); toast.success('Posisi elemen KTS disimpan') }
+    catch (e: any) { toast.error(e.response?.data?.error || 'Gagal menyimpan posisi KTS') }
+  }
+
+  const moveKtsField = (side: 'depan' | 'belakang', field: 'nama' | 'nis' | 'qr', y: number) => {
+    setKtsLayout(v => ({ ...v, [side]: { ...v[side], [field]: Math.max(0, Math.min(145, Math.round(y))) } }))
+  }
+
+  const handleKtsDrag = (e: PointerEvent<HTMLDivElement>, side: 'depan' | 'belakang', field: 'nama' | 'nis' | 'qr') => {
+    const rect = e.currentTarget.parentElement?.getBoundingClientRect()
+    if (!rect) return
+    moveKtsField(side, field, (e.clientY - rect.top) * (CARD_PREVIEW_H / rect.height))
   }
 
   const resetKts = async (side: 'depan' | 'belakang') => {
@@ -432,10 +452,17 @@ export default function SettingsPage() {
             <div key={side} className="border rounded-xl p-3">
               <p className="text-sm font-medium capitalize mb-2">{side}</p>
               <img src={kts[side] || `/kts-${side}.png`} alt={`Template KTS ${side}`} className="w-full aspect-[85.6/54] object-contain border rounded-lg bg-gray-50" />
+              <p className="text-[11px] text-gray-500 mt-3">Editor posisi: seret label ke lokasi cetak pada template.</p>
+              <div className="relative mt-2 w-full aspect-[85.6/54] overflow-hidden rounded-lg border bg-gray-50 select-none">
+                {kts[side] && <img src={kts[side]} alt="" className="absolute inset-0 w-full h-full object-fill opacity-70" />}
+                {(['nama', 'nis', 'qr'] as const).map(field => <div key={field} role="button" tabIndex={0} onPointerDown={e => handleKtsDrag(e, side, field)} style={{ top: `${Number(ktsLayout[side][field]) / CARD_PREVIEW_H * 100}%` }} className="absolute left-2 cursor-ns-resize rounded bg-indigo-600/90 px-2 py-1 text-[10px] text-white shadow">{field === 'nama' ? 'Nama Siswa' : field === 'nis' ? 'NIS / Rombel' : 'QR'}</div>)}
+              </div>
+              <div className="flex flex-wrap gap-2 mt-2 text-[11px] text-gray-500">{(['nama', 'nis', 'qr'] as const).map(field => <label key={field} className="flex items-center gap-1">{field.toUpperCase()}<input type="number" min="0" max="145" value={ktsLayout[side][field]} onChange={e => moveKtsField(side, field, Number(e.target.value))} className="w-14 border rounded px-1 py-0.5" /></label>)}</div>
               <div className="flex flex-wrap gap-2 mt-3">
                 <label className="px-3 py-2 bg-primary text-white rounded-lg text-xs cursor-pointer">Unggah {side}<input type="file" accept="image/png,image/jpeg,image/webp" className="hidden" onChange={e => { handleKtsChange(side, e.target.files?.[0]); e.target.value = '' }} /></label>
                 {kts[side] && <button type="button" onClick={() => resetKts(side)} className="px-3 py-2 border border-red-300 text-red-600 rounded-lg text-xs">Reset ke default</button>}
               </div>
+              <button type="button" onClick={saveKtsLayout} className="mt-2 px-3 py-2 bg-indigo-600 text-white rounded-lg text-xs">Simpan Posisi {side}</button>
             </div>
           ))}
         </div>

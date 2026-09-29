@@ -14,7 +14,7 @@ test('Data Siswa memiliki pilih semua dan filter jenis kelamin', () => {
 test('Data Siswa menyediakan menu Sinkron SAS RDM dengan preview dan commit', () => {
   const source = fs.readFileSync('src/pages/admin/DataSiswaPage.tsx', 'utf8')
   assert.match(source, /Sinkron SAS RDM/)
-  assert.match(source, /Preview Mapping/)
-  assert.match(source, /handleRdmSync\(true\)/)
+  assert.match(source, /Ambil Data RDM/)
+  assert.match(source, /handleRdmCommit/)
   assert.match(source, /\/rapor\/rdm\/sas/)
 })
