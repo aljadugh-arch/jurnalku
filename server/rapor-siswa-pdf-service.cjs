@@ -4,10 +4,15 @@ const { getTenantSettings } = require('./tenant-settings.cjs')
 const path = require('path')
 const fs = require('fs')
 
-// Rapor siswa siap-cetak (server-side PDF), mengikuti struktur referensi:
-// halaman 1: sampul, halaman 2: identitas peserta didik, halaman 3: capaian hasil belajar.
-// Query data (kehadiran, kepribadian, ekstrakurikuler, pelengkap) mengikuti pola
-// persis /api/rapor/ringkasan di index.cjs agar konsisten dengan tampilan browser-print.
+// Rapor siswa siap-cetak (server-side PDF).
+// Struktur mengikuti desain rapor RDM (Rapor Digital Madrasah) Kemenag:
+//   halaman 1: sampul
+//   halaman 2: identitas peserta didik
+//   halaman 3: KOP + identitas ringkas + CAPAIAN HASIL BELAJAR
+//              (Mata Pelajaran | Nilai Akhir | Capaian Kompetensi) + Jumlah
+//   halaman 4: Ekstrakurikuler, Prestasi, Ketidakhadiran, Catatan Wali Kelas,
+//              Tanggapan Orang Tua/Wali, dan blok tanda tangan
+// Tata letak memakai geometri yang diukur dari PDF rapor RDM asli (A4, margin 34pt).
 
 function safeText(value, fallback = '-') {
   const s = String(value ?? '').trim()
@@ -22,27 +27,7 @@ function resolveUploadPath(uploadDir, url) {
   return fs.existsSync(resolved) ? resolved : null
 }
 
-function estimateWrappedLines(text, fontSize, width, weightFactor = 0.53) {
-  const charsPerLine = Math.max(1, Math.floor(width / (fontSize * weightFactor)))
-  return String(text || '').split(/\r?\n/).reduce((total, paragraph) => {
-    const words = paragraph.trim().split(/\s+/).filter(Boolean)
-    if (!words.length) return total + 1
-    let lines = 1
-    let used = 0
-    for (const word of words) {
-      const size = word.length + (used ? 1 : 0)
-      if (used && used + size > charsPerLine) {
-        lines++
-        used = word.length
-      } else {
-        used += size
-      }
-    }
-    return total + lines
-  }, 0)
-}
-
-function coverLayout({ pageWidth, contentWidth, tahunAjaran }) {
+function coverLayout({ tahunAjaran }) {
   const tahun = String(tahunAjaran).split('/')[0]
   return {
     kemenagLogoY: 40,
@@ -63,7 +48,7 @@ function coverLayout({ pageWidth, contentWidth, tahunAjaran }) {
   }
 }
 
-function identitasLayout({ pageWidth, contentWidth }) {
+function identitasLayout({ pageWidth }) {
   return {
     headerY: 30,
     headerHeight: 60,
@@ -72,7 +57,14 @@ function identitasLayout({ pageWidth, contentWidth }) {
     contentStartY: 135,
     col1X: 60,
     col2X: pageWidth / 2 + 30,
-    colWidth: pageWidth / 2 - 50,
+    // Render memakai lebar nilai = colWidth - 125 mulai di col1X + 125, jadi
+    // colWidth harus berhenti tepat di margin kanan (pageWidth - 110) agar
+    // nilai panjang tidak melewati batas halaman.
+    colWidth: pageWidth - 110,
+    labelX: 85,
+    labelWidth: 120,
+    colonX: 210,
+    valueX: 220,
     rowHeight: 22,
     sectionSpacing: 30,
   }
@@ -86,6 +78,105 @@ function semesterRange(tahunAjaran, semester) {
   const from = semester === 'ganjil' ? `${y1}-07-01` : `${y2}-01-01`
   const to = semester === 'ganjil' ? `${y1}-12-31` : `${y2}-06-30`
   return { from, to }
+}
+
+// ---------------------------------------------------------------------------
+// Geometri rapor gaya RDM (diukur dari PDF rapor RDM A4, margin 34pt)
+// ---------------------------------------------------------------------------
+const RDM = {
+  pageWidth: 595.28,
+  pageHeight: 841.89,
+  margin: 34,
+  contentRight: 561.28,
+  kop: { line1Y: 42, line2Y: 55, line3Y: 69, line4Y: 81, ruleY: 92 },
+  identity: {
+    rowY0: 103,
+    rowPitch: 15.5,
+    leftLabelX: 37,
+    leftColonX: 86.5,
+    leftValueX: 94.8,
+    leftValueWidth: 200,
+    rightLabelX: 308.7,
+    rightColonX: 388.2,
+    rightValueX: 396.4,
+    rightValueWidth: 158,
+  },
+  titleY: 190,
+  table: {
+    headerTop: 220,
+    headerHeight: 16,
+    bodyStartY: 236,
+    minRowHeight: 17,
+    padX: 3,
+    c1: { x: 34, w: 138 },
+    c2: { x: 172, w: 56 },
+    c3: { x: 228, w: 333.28 },
+    bodySize: 8,
+    headerSize: 8,
+  },
+  footer: { ruleY: 810, textY: 816, leftX: 34, rightX: 561.28 },
+}
+
+// Fase capaian pembelajaran (Kurikulum Merdeka) dari tingkat kelas.
+// MI: I-II=A, III-IV=B, V-VI=C | MTs: VII-IX=D | MA: X=E, XI-XII=F
+// Tingkat disimpan sebagai angka ("7") maupun romawi ("VII-A") di data nyata.
+const ROMAN_TINGKAT = { i: 1, ii: 2, iii: 3, iv: 4, v: 5, vi: 6, vii: 7, viii: 8, ix: 9, x: 10, xi: 11, xii: 12 }
+
+function tingkatToNumber(tingkat) {
+  const raw = String(tingkat ?? '').trim()
+  if (!raw) return 0
+  const digits = raw.match(/\d+/)
+  if (digits) return Number(digits[0])
+  const roman = raw.toLowerCase().match(/^[ivx]+/)
+  return roman ? (ROMAN_TINGKAT[roman[0]] || 0) : 0
+}
+
+function faseFromTingkat(tingkat, jenjang = '') {
+  const n = tingkatToNumber(tingkat)
+  const j = String(jenjang || '').toLowerCase()
+  if (!n) return ''
+  if (j.includes('ibtidaiyah') || j === 'mi') {
+    if (n <= 2) return 'A'
+    if (n <= 4) return 'B'
+    return 'C'
+  }
+  if (j.includes('tsanawiyah') || j === 'mts') return 'D'
+  if (n <= 9) return 'D'
+  if (n === 10) return 'E'
+  return 'F'
+}
+
+// Capaian kompetensi per mata pelajaran — kalimat deskriptif bergaya RDM,
+// memakai materi terakhir yang diajarkan pada mapel tersebut bila tersedia.
+// Font standar PDFKit (Helvetica) hanya mendukung WinAnsi; materi berbahasa Arab
+// (mis. "المواد الدراسية") tercetak sebagai mojibake bila dibiarkan. Bersihkan dulu.
+function sanitizeLatin(text) {
+  return String(text ?? '')
+    .replace(/[^\x20-\x7E\u00A0-\u00FF\u2018\u2019\u201C\u201D\u2013\u2014]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+function buildCapaianKompetensi({ nilai, mapel, materi }) {
+  const n = Number(nilai) || 0
+  const kualitas = n >= 93 ? 'sangat baik'
+    : n >= 84 ? 'baik'
+    : n >= 75 ? 'cukup'
+    : 'perlu bimbingan'
+  const topik = sanitizeLatin(materi) || `kompetensi ${safeText(mapel, 'mata pelajaran')}`
+  return `Menunjukkan penguasaan yang ${kualitas} dalam ${topik}.`
+}
+
+const KELOMPOK_LABEL = {
+  wajib: 'Kelompok Mata Pelajaran Umum',
+  mulok: 'Kelompok Mata Pelajaran Pilihan',
+  'muatan lokal': 'Kelompok Mata Pelajaran Pilihan',
+  pilihan: 'Kelompok Mata Pelajaran Pilihan',
+}
+
+function kelompokLabel(kelompok) {
+  const key = String(kelompok || '').trim().toLowerCase()
+  return KELOMPOK_LABEL[key] || 'Kelompok Mata Pelajaran Umum'
 }
 
 async function createRaporSiswaPdf(db, options) {
@@ -102,10 +193,10 @@ async function createRaporSiswaPdf(db, options) {
   const settings = getTenantSettings(db, tenantId) || {}
 
   const rapor = db.prepare(`
-    SELECT r.*, m.nama AS mapel_nama
+    SELECT r.*, m.nama AS mapel_nama, m.kelompok AS mapel_kelompok
     FROM rapor r LEFT JOIN mapel m ON r.mapel_id = m.id AND m.tenant_id = r.tenant_id
     WHERE r.tenant_id=? AND r.siswa_id=? AND r.tahun_ajaran=? AND r.semester=? AND r.jenis=?
-    ORDER BY m.nama
+    ORDER BY COALESCE(m.kelompok,'wajib'), m.nama
   `).all(tenantId, siswaId, tahunAjaran, semester, jenis)
   if (rapor.length === 0) return { error: 'RAPOR_NOT_GENERATED' }
 
@@ -140,8 +231,26 @@ async function createRaporSiswaPdf(db, options) {
     .all(from, to, siswaId, tenantId)
     .map(row => ({ ...row, nilai: row.total_pertemuan ? Math.round((row.hadir / row.total_pertemuan) * 100) : null }))
 
+  // Kokurikuler: kegiatan khusus berjenis kokurikuler yang diikuti siswa pada semester ini.
+  let kokurikuler = []
+  try {
+    kokurikuler = db.prepare(`SELECT k.nama, k.deskripsi FROM kegiatan_khusus k
+      JOIN absensi_kegiatan ak ON ak.kegiatan_id=k.id AND ak.siswa_id=? AND ak.tenant_id=k.tenant_id
+      WHERE k.tenant_id=? AND k.jenis='kokurikuler' AND k.tanggal>=? AND k.tanggal<=?
+      GROUP BY k.id ORDER BY k.tanggal`).all(siswaId, tenantId, from, to)
+  } catch { kokurikuler = [] }
+
+  // Materi terakhir per mapel (dipakai untuk kalimat capaian kompetensi).
+  const materiByMapel = new Map()
+  try {
+    const rows = db.prepare(`SELECT mapel_id, materi FROM jurnal_mengajar
+      WHERE tenant_id=? AND rombel_id=? AND tanggal>=? AND tanggal<=? AND COALESCE(materi,'')<>''
+      ORDER BY tanggal ASC`).all(tenantId, siswa.rombel_id, from, to)
+    for (const row of rows) materiByMapel.set(row.mapel_id, row.materi)
+  } catch { /* jurnal_mengajar belum ada di fixture lama */ }
+
   const rataAkhir = rapor.length ? Math.round(rapor.reduce((sum, r) => sum + (Number(r.nilai_akhir) || 0), 0) / rapor.length) : 0
-  const jenisLabel = jenis === 'rapor_sas' ? 'AKHIR SEMESTER (SAS)' : 'TENGAH SEMESTER (STS)'
+  const jumlahNilai = rapor.reduce((sum, r) => sum + (Number(r.nilai_akhir) || 0), 0)
 
   const qrDataUrl = await QRCode.toDataURL(`Rapor - ${siswa.nama} - Kepsek: ${settings.kepala_sekolah || '-'} - Diverifikasi digital`)
   const qrBuffer = Buffer.from(qrDataUrl.split(',')[1], 'base64')
@@ -330,8 +439,8 @@ async function createRaporSiswaPdf(db, options) {
     ['6', 'Status dalam Keluarga', safeText(siswa.status_keluarga, '-')],
     ['7', 'Anak Ke', safeText(siswa.anak_ke, '-')],
     ['8', 'Alamat Peserta Didik', safeText(siswa.alamat, '-')],
-    ['9', 'Nomor Telepon', safeText(siswa.nomor_hp, '-')],
-    ['10', 'Sekolah Asal (SD/MI)', safeText(siswa.sekolah_asal, '-')],
+    ['9', 'Nomor Telepon', safeText(siswa.no_hp, '-')],
+    ['10', 'Sekolah Asal (SD/MI)', safeText(siswa.asal_sekolah, '-')],
   ]
 
   doc.font('Helvetica').fontSize(9)
@@ -353,11 +462,12 @@ async function createRaporSiswaPdf(db, options) {
 
   const dataOrangTua = [
     ['1', 'Nama Ayah', safeText(siswa.nama_ayah, '-')],
-    ['2', 'Pekerjaan Ayah', safeText(siswa.pekerjaan_ayah, '-')],
+    ['2', 'Pekerjaan Ayah', safeText(siswa.kerja_ayah, '-')],
     ['3', 'Nama Ibu', safeText(siswa.nama_ibu, '-')],
-    ['4', 'Pekerjaan Ibu', safeText(siswa.pekerjaan_ibu, '-')],
+    ['4', 'Pekerjaan Ibu', safeText(siswa.kerja_ibu, '-')],
     ['5', 'Alamat Orang Tua', safeText(siswa.alamat_ortu, '-')],
-    ['6', 'Nomor Telepon Orang Tua', safeText(siswa.nomor_hp_ortu, '-')],
+    ['6', 'Nama Wali', safeText(siswa.nama_wali, '-')],
+    ['7', 'Pekerjaan Wali', safeText(siswa.kerja_wali, '-')],
   ]
 
   for (const row of dataOrangTua) {
@@ -400,147 +510,289 @@ async function createRaporSiswaPdf(db, options) {
     underline: true,
   })
 
+  // ==========================================================================
+  // Halaman 3-4: Rapor (desain RDM)
+  // ==========================================================================
+
+  const fase = faseFromTingkat(siswa.tingkat, settings.jenjang)
+  const semesterLabel = semester === 'genap' ? 'Genap' : 'Ganjil'
+  const alamatLembaga = String(settings.alamat || '').trim()
+  const kecamatanLine = String(settings.kota_cetak || '').trim()
+
+  const raporPages = []
+
+  function newRaporPage() {
+    doc.addPage({ size: 'A4', margin: RDM.margin })
+    raporPages.push(doc.bufferedPageRange().count - 1)
+    return doc.page.margins.top
+  }
+
+  function drawKop() {
+    const center = { width: RDM.pageWidth - 2 * RDM.margin, align: 'center' }
+    doc.font('Helvetica').fontSize(10).fillColor('black')
+      .text('KEMENTERIAN AGAMA REPUBLIK INDONESIA', RDM.margin, RDM.kop.line1Y, { ...center, lineBreak: false })
+    doc.font('Helvetica-Bold').fontSize(12)
+      .text(safeText(settings.nama_lembaga, 'Nama Lembaga').toUpperCase(), RDM.margin, RDM.kop.line2Y, { ...center, lineBreak: false })
+    doc.font('Helvetica').fontSize(9)
+      .text(alamatLembaga, RDM.margin, RDM.kop.line3Y, { ...center, lineBreak: false })
+    if (kecamatanLine) {
+      doc.font('Helvetica').fontSize(9)
+        .text(kecamatanLine, RDM.margin, RDM.kop.line4Y, { ...center, lineBreak: false })
+    }
+    doc.moveTo(RDM.margin, RDM.kop.ruleY).lineTo(RDM.contentRight, RDM.kop.ruleY).lineWidth(1.2).stroke()
+  }
+
+  function drawIdentityGrid() {
+    const id = RDM.identity
+    const rows = [
+      ['NAMA', safeText(siswa.nama), 'Kelas', safeText(siswa.rombel_nama)],
+      ['NIS/NISN', `${safeText(siswa.nis)} / ${safeText(siswa.nisn)}`, 'Fase', fase],
+      ['Madrasah', safeText(settings.nama_lembaga), 'Semester', semesterLabel],
+      ['Alamat', alamatLembaga || '-', 'Tahun Ajaran', String(tahunAjaran)],
+    ]
+    let y = id.rowY0
+    for (const [labelKiri, nilaiKiri, labelKanan, nilaiKanan] of rows) {
+      doc.font('Helvetica').fontSize(9).fillColor('black')
+      doc.text(labelKiri, id.leftLabelX, y, { lineBreak: false })
+      doc.text(':', id.leftColonX, y, { lineBreak: false })
+      doc.text(nilaiKiri, id.leftValueX, y, { width: id.leftValueWidth })
+      doc.text(labelKanan, id.rightLabelX, y, { lineBreak: false })
+      doc.text(':', id.rightColonX, y, { lineBreak: false })
+      doc.text(nilaiKanan, id.rightValueX, y, { width: id.rightValueWidth })
+      const tinggiKiri = doc.heightOfString(nilaiKiri, { width: id.leftValueWidth })
+      y += Math.max(id.rowPitch, tinggiKiri + 7)
+    }
+    return y
+  }
+
+  function drawCapaianTable(startY) {
+    const t = RDM.table
+    let y = startY
+
+    function drawHeader() {
+      doc.rect(t.c1.x, y, RDM.contentRight - t.c1.x, t.headerHeight).lineWidth(0.7).stroke()
+      doc.font('Helvetica-Bold').fontSize(t.headerSize).fillColor('black')
+      doc.text('Mata Pelajaran', t.c1.x, y + 4, { width: t.c1.w, align: 'center', lineBreak: false })
+      doc.text('Nilai Akhir', t.c2.x, y + 4, { width: t.c2.w, align: 'center', lineBreak: false })
+      doc.text('Capaian Kompetensi', t.c3.x, y + 4, { width: t.c3.w, align: 'center', lineBreak: false })
+      y += t.headerHeight
+    }
+
+    function rowHeight(cells) {
+      doc.font('Helvetica').fontSize(t.bodySize)
+      const hNama = doc.heightOfString(cells.nama, { width: t.c1.w - 2 * t.padX - 20 })
+      const hCapaian = doc.heightOfString(cells.capaian, { width: t.c3.w - 2 * t.padX - 4 })
+      return Math.max(t.minRowHeight, Math.max(hNama, hCapaian) + 6)
+    }
+
+    function drawCells(cells, h) {
+      const left = t.c1.x
+      const right = RDM.contentRight
+      doc.lineWidth(0.7).strokeColor('black')
+      doc.moveTo(left, y).lineTo(right, y).stroke()
+      doc.moveTo(left, y + h).lineTo(right, y + h).stroke()
+      doc.moveTo(t.c2.x, y).lineTo(t.c2.x, y + h).stroke()
+      doc.moveTo(t.c3.x, y).lineTo(t.c3.x, y + h).stroke()
+      doc.font('Helvetica').fontSize(t.bodySize).fillColor('black')
+      if (cells.nomor != null) {
+        doc.text(String(cells.nomor), t.c1.x + 5, y + 5, { width: 20, align: 'left', lineBreak: false })
+      }
+      const namaX = cells.nomor != null ? t.c1.x + 19 : t.c1.x + t.padX
+      doc.text(cells.nama, namaX, y + 5, { width: t.c1.x + t.c1.w - namaX - t.padX })
+      if (cells.nilai != null) {
+        doc.text(String(cells.nilai), t.c2.x, y + 5, { width: t.c2.w, align: 'center', lineBreak: false })
+      }
+      doc.text(cells.capaian, t.c3.x + t.padX, y + 4, { width: t.c3.w - 2 * t.padX - 4 })
+      y += h
+    }
+
+    drawHeader()
+
+    let kelompokSebelumnya = null
+    let nomor = 0
+    const LANTAI = RDM.footer.ruleY - 20
+
+    for (const row of rapor) {
+      const labelKelompok = kelompokLabel(row.mapel_kelompok)
+      if (labelKelompok !== kelompokSebelumnya) {
+        kelompokSebelumnya = labelKelompok
+        const hGrup = t.minRowHeight
+        if (y + hGrup > LANTAI) { doc.addPage({ size: 'A4', margin: RDM.margin }); raporPages.push(doc.bufferedPageRange().count - 1); drawKop(); y = RDM.table.bodyStartY; drawHeader() }
+        doc.lineWidth(0.7).strokeColor('black')
+        doc.moveTo(t.c1.x, y).lineTo(RDM.contentRight, y).stroke()
+        doc.moveTo(t.c1.x, y + hGrup).lineTo(RDM.contentRight, y + hGrup).stroke()
+        doc.moveTo(t.c2.x, y).lineTo(t.c2.x, y + hGrup).stroke()
+        doc.moveTo(t.c3.x, y).lineTo(t.c3.x, y + hGrup).stroke()
+        doc.font('Helvetica-Bold').fontSize(t.bodySize).fillColor('black')
+        doc.text(labelKelompok, t.c1.x + 3.4, y + 4, { width: t.c1.w + t.c2.w, lineBreak: false })
+        y += hGrup
+      }
+      const capaian = String(row.deskripsi || '').trim()
+        || buildCapaianKompetensi({ nilai: row.nilai_akhir, mapel: row.mapel_nama, materi: materiByMapel.get(row.mapel_id) })
+      const cells = { nomor: ++nomor, nama: safeText(row.mapel_nama), nilai: row.nilai_akhir, capaian }
+      const h = rowHeight(cells)
+      if (y + h > LANTAI) { doc.addPage({ size: 'A4', margin: RDM.margin }); raporPages.push(doc.bufferedPageRange().count - 1); drawKop(); y = RDM.table.bodyStartY; drawHeader() }
+      drawCells(cells, h)
+    }
+
+    // Baris Jumlah (total Nilai Akhir), seperti pada rapor RDM.
+    const hJumlah = t.minRowHeight
+    if (y + hJumlah > LANTAI) { doc.addPage({ size: 'A4', margin: RDM.margin }); raporPages.push(doc.bufferedPageRange().count - 1); drawKop(); y = RDM.table.bodyStartY; drawHeader() }
+    doc.lineWidth(0.7).strokeColor('black')
+    doc.moveTo(t.c1.x, y).lineTo(RDM.contentRight, y).stroke()
+    doc.moveTo(t.c1.x, y + hJumlah).lineTo(RDM.contentRight, y + hJumlah).stroke()
+    doc.moveTo(t.c2.x, y).lineTo(t.c2.x, y + hJumlah).stroke()
+    doc.moveTo(t.c3.x, y).lineTo(t.c3.x, y + hJumlah).stroke()
+    doc.font('Helvetica-Bold').fontSize(t.bodySize).fillColor('black')
+    doc.text('Jumlah', t.c1.x + 3.4, y + 4, { lineBreak: false })
+    doc.text(String(jumlahNilai), t.c2.x, y + 4, { width: t.c2.w, align: 'center', lineBreak: false })
+    y += hJumlah
+
+    doc.font('Helvetica').fontSize(7).fillColor('black')
+      .text(`Rata-rata nilai akhir: ${rataAkhir}`, t.c1.x, y + 4)
+    return y
+  }
+
   // ---------- Halaman 3: Capaian Hasil Belajar ----------
-  doc.addPage({ size: 'A4', margin: 50 })
-  drawReportHeader(doc, settings, hasLogo ? settingsLogoPath : null, pageWidth)
-  doc.moveDown(0.6)
-  doc.font('Helvetica-Bold').fontSize(13).text(`CAPAIAN HASIL BELAJAR ${jenisLabel}`, { align: 'center', underline: true })
-  doc.moveDown(0.8)
-  doc.font('Helvetica').fontSize(9)
-  doc.text(`Nama: ${safeText(siswa.nama)}     NIS/NISN: ${safeText(siswa.nis)}/${safeText(siswa.nisn)}`, doc.page.margins.left, doc.y)
-  doc.text(`Kelas: ${safeText(siswa.rombel_nama)}     Semester: ${semester === 'genap' ? 'Genap' : 'Ganjil'} (${tahunAjaran})`, doc.page.margins.left, doc.y)
-  doc.moveDown(0.8)
+  newRaporPage()
+  drawKop()
+  let tabelY = drawIdentityGrid()
+  doc.font('Helvetica-Bold').fontSize(12).fillColor('black')
+    .text('CAPAIAN HASIL BELAJAR', RDM.margin, Math.max(RDM.titleY, tabelY + 8), {
+      width: RDM.pageWidth - 2 * RDM.margin, align: 'center', lineBreak: false,
+    })
+  drawCapaianTable(RDM.table.headerTop)
 
-  const cols = [
-    { key: 'no', label: 'No', w: 0.05 },
-    { key: 'mapel_nama', label: 'Mata Pelajaran', w: 0.30 },
-    { key: 'nilai_harian', label: 'Harian', w: 0.11 },
-    { key: 'nilai_sts', label: 'STS', w: 0.11 },
-    { key: 'nilai_sas', label: 'SAS', w: 0.11, hideIf: jenis !== 'rapor_sas' },
-    { key: 'nilai_akhir', label: 'Akhir', w: 0.11 },
-    { key: 'predikat', label: 'Predikat', w: 0.11 },
-  ].filter(c => !c.hideIf)
-  const totalRatio = cols.reduce((s, c) => s + c.w, 0)
-  cols.forEach(c => { c.width = (c.w / totalRatio) * pageWidth })
+  // ---------- Halaman 4: Ekstrakurikuler, Prestasi, dst. ----------
+  newRaporPage()
+  let y2 = 40
 
-  const rowH = 18
-  let tableY = doc.y
-  const startX = doc.page.margins.left
+  function sectionTitle(text) {
+    doc.font('Helvetica-Bold').fontSize(10).fillColor('black').text(text, RDM.margin, y2, { lineBreak: false })
+    y2 += 12
+  }
 
-  function drawTableRow(cells, isHeader) {
+  function tabelSederhana(headers, rows, widths) {
+    const total = widths.reduce((a, b) => a + b, 0)
+    const startX = RDM.margin
+    const h = 16
+    doc.lineWidth(0.7).strokeColor('black')
+    doc.rect(startX, y2, total, h).stroke()
+    doc.font('Helvetica-Bold').fontSize(8).fillColor('black')
     let x = startX
-    if (isHeader) { doc.rect(startX, tableY, pageWidth, rowH).fill('#D3D3D3'); doc.fillColor('black') }
-    doc.font(isHeader ? 'Helvetica-Bold' : 'Helvetica').fontSize(9)
-    for (const col of cols) {
-      doc.fillColor('black').text(String(cells[col.key] ?? ''), x + 3, tableY + 4, { width: col.width - 6, align: col.key === 'mapel_nama' ? 'left' : 'center' })
-      x += col.width
+    headers.forEach((label, i) => {
+      doc.text(label, x, y2 + 4, { width: widths[i], align: 'center', lineBreak: false })
+      if (i > 0) doc.moveTo(x, y2).lineTo(x, y2 + h).stroke()
+      x += widths[i]
+    })
+    y2 += h
+    const body = rows.length ? rows : [headers.map(() => '')]
+    for (const row of body) {
+      const hRow = 17
+      doc.rect(startX, y2, total, hRow).stroke()
+      doc.font('Helvetica').fontSize(8).fillColor('black')
+      x = startX
+      row.forEach((value, i) => {
+        doc.text(String(value ?? ''), x + 3, y2 + 5, { width: widths[i] - 6, align: i === 0 ? 'center' : 'left', lineBreak: false })
+        if (i > 0) doc.moveTo(x, y2).lineTo(x, y2 + hRow).stroke()
+        x += widths[i]
+      })
+      y2 += hRow
     }
-    doc.rect(startX, tableY, pageWidth, rowH).stroke()
-    tableY += rowH
+    y2 += 8
   }
 
-  const headerLabels = {}
-  cols.forEach(c => { headerLabels[c.key] = c.label })
-  drawTableRow(headerLabels, true)
-  rapor.forEach((row, index) => {
-    if (tableY + rowH > doc.page.height - doc.page.margins.bottom - 220) {
-      doc.addPage({ size: 'A4', margin: 50 })
-      tableY = doc.page.margins.top
-      drawTableRow(headerLabels, true)
-    }
-    drawTableRow({
-      no: index + 1,
-      mapel_nama: row.mapel_nama,
-      nilai_harian: row.nilai_harian ?? 0,
-      nilai_sts: row.nilai_sts ?? 0,
-      nilai_sas: row.nilai_sas ?? 0,
-      nilai_akhir: row.nilai_akhir,
-      predikat: row.predikat,
-    }, false)
-  })
-  doc.y = tableY + 10
-  doc.font('Helvetica').fontSize(8).text(
-    jenis === 'rapor_sas'
-      ? 'Nilai Akhir = (Nilai Harian x 40%) + (Asesmen STS x 20%) + (Asesmen SAS x 40%)'
-      : 'Nilai Akhir = (Nilai Harian x 60%) + (Asesmen STS x 40%)',
-    doc.page.margins.left,
-  )
-  doc.font('Helvetica-Bold').fontSize(9).text(`Rata-rata: ${rataAkhir}`, doc.page.margins.left)
-  doc.moveDown(0.6)
-
-  const boxTop = doc.y
-  const halfW = (pageWidth - 10) / 2
-  doc.rect(startX, boxTop, halfW, 60).stroke()
-  doc.font('Helvetica-Bold').fontSize(9).text('Sikap dan Kepribadian', startX + 5, boxTop + 5)
-  doc.font('Helvetica').fontSize(8)
-    .text(`Spiritual: ${safeText(kepribadian.sikap_spiritual || kepribadian.sikap_umum, '-')}   Sosial: ${safeText(kepribadian.sikap_sosial || kepribadian.sikap_umum, '-')}`, startX + 5, boxTop + 20, { width: halfW - 10 })
-    .text(`Kelakuan: ${safeText(kepribadian.kelakuan, 'Baik')}   Kedisiplinan: ${safeText(kepribadian.kedisiplinan, 'Baik')}`, startX + 5, boxTop + 35, { width: halfW - 10 })
-
-  doc.rect(startX + halfW + 10, boxTop, halfW, 60).stroke()
-  doc.font('Helvetica-Bold').fontSize(9).text('Kehadiran', startX + halfW + 15, boxTop + 5)
-  doc.font('Helvetica').fontSize(8)
-    .text(`Hadir: ${kehadiran.hadir}   Sakit: ${kehadiran.sakit}   Izin: ${kehadiran.izin}   Tanpa Keterangan: ${kehadiran.alpa}`, startX + halfW + 15, boxTop + 22, { width: halfW - 20 })
-  doc.y = boxTop + 70
-
-  const boxTop2 = doc.y
-  doc.rect(startX, boxTop2, halfW, 55).stroke()
-  doc.font('Helvetica-Bold').fontSize(9).text('Ekstrakurikuler', startX + 5, boxTop2 + 5)
-  doc.font('Helvetica').fontSize(8)
-  const ekstraLines = ekstrakurikuler.length
-    ? ekstrakurikuler.slice(0, 3).map(e => `${e.nama}: ${e.nilai ?? '-'}`).join('\n')
-    : 'Tidak mengikuti kegiatan ekstrakurikuler.'
-  doc.text(ekstraLines, startX + 5, boxTop2 + 20, { width: halfW - 10 })
-
-  doc.rect(startX + halfW + 10, boxTop2, halfW, 55).stroke()
-  doc.font('Helvetica-Bold').fontSize(9).text('Prestasi', startX + halfW + 15, boxTop2 + 5)
-  doc.font('Helvetica').fontSize(8)
-  const prestasiLines = prestasi.length
-    ? prestasi.slice(0, 3).map(p => `${p.jenis || '-'}: ${p.keterangan || '-'}`).join('\n')
-    : 'Belum ada catatan prestasi.'
-  doc.text(prestasiLines, startX + halfW + 15, boxTop2 + 20, { width: halfW - 20 })
-  doc.y = boxTop2 + 65
-
-  const catatanY = doc.y
-  doc.rect(startX, catatanY, pageWidth, 40).stroke()
-  doc.font('Helvetica-Bold').fontSize(9).text('Catatan Wali Kelas:', startX + 5, catatanY + 5)
-  doc.font('Helvetica-Oblique').fontSize(8).text(
-    safeText(pelengkap.catatan_wali_kelas || kepribadian.catatan_wali_kelas || kepribadian.saran, 'Tingkatkan terus kedisiplinan dan semangat belajarmu.'),
-    startX + 5, catatanY + 18, { width: pageWidth - 10 },
-  )
-  doc.y = catatanY + 50
-
-  if (doc.y + 150 > doc.page.height - doc.page.margins.bottom) {
-    doc.addPage({ size: 'A4', margin: 50 })
-    drawReportHeader(doc, settings, hasLogo ? settingsLogoPath : null, pageWidth)
-    doc.moveDown(1)
+  if (kokurikuler.length) {
+    sectionTitle('Kokurikuler')
+    const teks = kokurikuler.map(k => k.deskripsi ? `${k.nama} (${k.deskripsi})` : k.nama).join(', ')
+    doc.font('Helvetica').fontSize(8).fillColor('black')
+      .text(`Siswa mengikuti kegiatan kokurikuler: ${teks}.`, RDM.margin, y2, { width: RDM.contentRight - RDM.margin, align: 'justify' })
+    y2 = doc.y + 10
   }
-  doc.moveDown(1)
-  const sigY2 = doc.y
-  const thirdW = pageWidth / 3
+
+  sectionTitle('Ekstrakurikuler')
+  tabelSederhana(
+    ['No', 'Kegiatan Ekstrakurikuler', 'Nilai', 'Keterangan'],
+    ekstrakurikuler.map((e, i) => [
+      i + 1, e.nama, e.nilai == null ? '' : e.nilai,
+      e.nilai == null ? '' : (e.nilai >= 85 ? 'Sangat Baik' : e.nilai >= 70 ? 'Baik' : 'Cukup'),
+    ]),
+    [40, 230, 70, 187.28],
+  )
+
+  sectionTitle('Prestasi')
+  tabelSederhana(
+    ['No', 'Jenis Prestasi', 'Keterangan'],
+    prestasi.map((p, i) => [i + 1, p.jenis || '-', p.keterangan || '-']),
+    [40, 220, 267.28],
+  )
+
+  sectionTitle('Ketidakhadiran')
+  for (const [label, jumlah] of [['Sakit', kehadiran.sakit], ['Izin', kehadiran.izin], ['Alpa', kehadiran.alpa]]) {
+    doc.font('Helvetica').fontSize(9).fillColor('black')
+    doc.text(label, RDM.margin + 3.4, y2, { width: 120, lineBreak: false })
+    doc.text(String(jumlah), RDM.margin + 300, y2, { width: 40, align: 'right', lineBreak: false })
+    doc.text('Hari', RDM.margin + 350, y2, { lineBreak: false })
+    y2 += 17.7
+  }
+  y2 += 4
+
+  sectionTitle('Catatan Wali Kelas')
+  doc.font('Helvetica').fontSize(8).fillColor('black').text(
+    safeText(pelengkap.catatan_wali_kelas || kepribadian.catatan_wali_kelas || kepribadian.saran,
+      'Tingkatkan terus kedisiplinan dan semangat belajarmu.'),
+    RDM.margin, y2, { width: RDM.contentRight - RDM.margin, align: 'justify' },
+  )
+  y2 = doc.y + 14
+
+  sectionTitle('Tanggapan Orang Tua/Wali')
+  doc.font('Helvetica').fontSize(8).fillColor('black').text(
+    String(pelengkap.tanggapan_orang_tua || '').trim() || ' ',
+    RDM.margin, y2, { width: RDM.contentRight - RDM.margin, height: 26 },
+  )
+  y2 += 40
+
+  // Blok tanda tangan (tata letak RDM: kiri orang tua, kanan wali kelas, bawah tengah kepala madrasah)
+  const kolomKananX = 253.8
+  doc.font('Helvetica').fontSize(9).fillColor('black')
+    .text(`${safeText(settings.kota_cetak, 'Bondowoso')}, ${tanggalRapor}`, 372, y2, { width: 190, align: 'left', lineBreak: false })
+  doc.text('Orang Tua/Wali', 57.3, y2 + 20, { lineBreak: false })
+  doc.text('Wali Kelas', 372.3, y2 + 20, { lineBreak: false })
+
   doc.font('Helvetica').fontSize(9)
-  doc.text('Orang Tua / Wali', startX, sigY2, { width: thirdW, align: 'center' })
-  doc.font('Helvetica-Bold').text('( .................................... )', startX, sigY2 + 60, { width: thirdW, align: 'center' })
+    .text(safeText(siswa.wali_kelas_nama, '.....................'), 372.3, y2 + 90, { lineBreak: false })
+  doc.font('Helvetica').fontSize(9)
+    .text(`NIP. ${safeText(siswa.wali_kelas_nip, '-')}`, 372.3, y2 + 104, { lineBreak: false })
 
-  doc.font('Helvetica').text('Kepala Sekolah', startX + thirdW, sigY2, { width: thirdW, align: 'center' })
-  try { doc.image(qrBuffer, startX + thirdW + thirdW / 2 - 22, sigY2 + 14, { width: 44 }) } catch {}
-  doc.font('Helvetica-Bold').text(safeText(settings.kepala_sekolah, '( .................................... )'), startX + thirdW, sigY2 + 60, { width: thirdW, align: 'center', underline: true })
+  try { doc.image(qrBuffer, 60, y2 + 60, { width: 44 }) } catch {}
 
-  doc.font('Helvetica').text(`${safeText(settings.kota_cetak, 'Bondowoso')}, ${tanggalRapor}\nWali Kelas ${safeText(siswa.rombel_nama)}`, startX + thirdW * 2, sigY2, { width: thirdW, align: 'center' })
-  doc.font('Helvetica-Bold').text(safeText(siswa.wali_kelas_nama, '( .................................... )'), startX + thirdW * 2, sigY2 + 60, { width: thirdW, align: 'center', underline: true })
+  doc.font('Helvetica').fontSize(9)
+    .text('Mengetahui', kolomKananX, y2 + 128, { lineBreak: false })
+    .text('Kepala Madrasah', kolomKananX, y2 + 140, { lineBreak: false })
+    .text(safeText(settings.kepala_sekolah, '.....................'), kolomKananX, y2 + 200, { lineBreak: false })
+    .text('NIP. -', kolomKananX, y2 + 214, { lineBreak: false })
+
+  // ---------- Footer strip pada setiap halaman rapor (gaya RDM) ----------
+  const identitasFooter = `${safeText(siswa.rombel_nama)} _ ${safeText(siswa.nama)} _ ${safeText(siswa.nisn)}`
+  const range = doc.bufferedPageRange()
+  for (const pageIndex of raporPages) {
+    if (pageIndex >= range.count) continue
+    doc.switchToPage(pageIndex)
+    // Footer digambar di bawah margin bawah halaman; tanpa ini PDFKit menganggapnya
+    // overflow dan menyisipkan halaman kosong berisi nomor halaman saja.
+    const savedBottom = doc.page.margins.bottom
+    doc.page.margins.bottom = 0
+    doc.moveTo(RDM.footer.leftX, RDM.footer.ruleY).lineTo(RDM.footer.rightX, RDM.footer.ruleY).lineWidth(0.7).stroke()
+    doc.font('Helvetica').fontSize(7).fillColor('black')
+      .text(identitasFooter, RDM.footer.leftX, RDM.footer.textY + 2, { lineBreak: false })
+    doc.font('Helvetica').fontSize(8)
+      .text(`Halaman ${pageIndex - raporPages[0] + 1}`, RDM.footer.rightX - 60, RDM.footer.textY, {
+        width: 60, align: 'right', lineBreak: false,
+      })
+    doc.page.margins.bottom = savedBottom
+  }
 
   return doc
 }
 
-function drawReportHeader(doc, settings, logoPath, pageWidth) {
-  const startY = doc.y
-  if (logoPath) { try { doc.image(logoPath, doc.page.margins.left, startY, { width: 50, height: 50, fit: [50, 50] }) } catch {} }
-  doc.font('Helvetica-Bold').fontSize(11).text(safeText(settings.nama_lembaga, 'Nama Lembaga').toUpperCase(), doc.page.margins.left + 60, startY, { width: pageWidth - 120, align: 'center' })
-  const npsnLine = [settings.npsn && `NPSN: ${settings.npsn}`, settings.nsm && `NSM: ${settings.nsm}`].filter(Boolean).join('  |  ')
-  if (npsnLine) doc.font('Helvetica').fontSize(8).text(npsnLine, doc.page.margins.left + 60, doc.y, { width: pageWidth - 120, align: 'center' })
-  if (settings.alamat) doc.font('Helvetica').fontSize(8).text(settings.alamat, doc.page.margins.left + 60, doc.y, { width: pageWidth - 120, align: 'center' })
-  doc.y = Math.max(doc.y, startY + 50) + 5
-  doc.moveTo(doc.page.margins.left, doc.y).lineTo(doc.page.margins.left + pageWidth, doc.y).lineWidth(1.5).stroke()
-  doc.moveDown(0.5)
-}
-
-module.exports = { createRaporSiswaPdf, coverLayout }
+module.exports = { createRaporSiswaPdf, coverLayout, faseFromTingkat, buildCapaianKompetensi, RDM }

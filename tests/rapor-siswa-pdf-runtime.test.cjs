@@ -1,22 +1,22 @@
 const test = require('node:test')
 const assert = require('node:assert/strict')
 const Database = require('better-sqlite3')
-const { createRaporSiswaPdf, coverLayout } = require('../server/rapor-siswa-pdf-service.cjs')
+const { createRaporSiswaPdf, coverLayout, faseFromTingkat, buildCapaianKompetensi } = require('../server/rapor-siswa-pdf-service.cjs')
 
 // Bangun DB in-memory minimal yang meniru skema produksi (kolom yang dipakai
 // createRaporSiswaPdf saja) agar test tidak bergantung pada file DB nyata.
 function buildTestDb() {
   const db = new Database(':memory:')
   db.exec(`
-    CREATE TABLE settings (tenant_id TEXT PRIMARY KEY, nama_lembaga TEXT, alamat TEXT, logo TEXT,
-      kepala_sekolah TEXT, npsn TEXT, nsm TEXT, kota_cetak TEXT, jenjang TEXT);
+    CREATE TABLE settings (tenant_id TEXT PRIMARY KEY, nama_lembaga TEXT, alamat TEXT, logo TEXT, logo_kemenag TEXT,
+      kepala_sekolah TEXT, npsn TEXT, nsm TEXT, kota_cetak TEXT, jenjang TEXT, yayasan_nama TEXT);
     CREATE TABLE rombel (id TEXT PRIMARY KEY, tenant_id TEXT, nama TEXT, tingkat TEXT, wali_kelas_id TEXT);
     CREATE TABLE gtk (id TEXT PRIMARY KEY, tenant_id TEXT, nama TEXT, nip TEXT);
     CREATE TABLE siswa (id TEXT PRIMARY KEY, tenant_id TEXT, nis TEXT, nisn TEXT, nama TEXT,
       jenis_kelamin TEXT, tempat_lahir TEXT, tanggal_lahir TEXT, alamat TEXT, no_hp TEXT, nama_ortu TEXT,
       rombel_id TEXT, foto TEXT, agama TEXT, status_keluarga TEXT, anak_ke INTEGER, asal_sekolah TEXT,
       nama_ayah TEXT, nama_ibu TEXT, kerja_ayah TEXT, kerja_ibu TEXT, nama_wali TEXT, kerja_wali TEXT);
-    CREATE TABLE mapel (id TEXT PRIMARY KEY, tenant_id TEXT, nama TEXT);
+    CREATE TABLE mapel (id TEXT PRIMARY KEY, tenant_id TEXT, kode TEXT, nama TEXT, kelompok TEXT DEFAULT 'wajib');
     CREATE TABLE rapor (id TEXT PRIMARY KEY, tenant_id TEXT, siswa_id TEXT, mapel_id TEXT, tahun_ajaran TEXT,
       semester TEXT, jenis TEXT, nilai_harian INTEGER, nilai_sts INTEGER, nilai_sas INTEGER,
       nilai_akhir INTEGER, predikat TEXT);
@@ -29,6 +29,9 @@ function buildTestDb() {
     CREATE TABLE ekskul (id TEXT PRIMARY KEY, tenant_id TEXT, nama TEXT, jenis_kegiatan TEXT);
     CREATE TABLE ekskul_anggota (siswa_id TEXT, ekskul_id TEXT, tenant_id TEXT);
     CREATE TABLE absensi_ekskul (id TEXT PRIMARY KEY, ekskul_id TEXT, siswa_id TEXT, tenant_id TEXT, tanggal TEXT, status TEXT);
+    CREATE TABLE kegiatan_khusus (id TEXT PRIMARY KEY, tenant_id TEXT, nama TEXT, deskripsi TEXT, jenis TEXT, tanggal TEXT);
+    CREATE TABLE absensi_kegiatan (id TEXT PRIMARY KEY, kegiatan_id TEXT, siswa_id TEXT, tenant_id TEXT, tanggal TEXT, status TEXT);
+    CREATE TABLE jurnal_mengajar (id TEXT PRIMARY KEY, tenant_id TEXT, rombel_id TEXT, mapel_id TEXT, materi TEXT, tanggal TEXT);
   `)
 
   db.prepare(`INSERT INTO settings (tenant_id, nama_lembaga, alamat, logo, kepala_sekolah, npsn, nsm, kota_cetak, jenjang)
@@ -111,5 +114,52 @@ test('createRaporSiswaPdf tidak bocor lintas-tenant (siswa ada tapi beda tenant)
     tenantId: 't2-lain', siswaId: 's1', tahunAjaran: '2026/2027', semester: 'ganjil', jenis: 'rapor_sts', uploadDir: '/tmp/nonexistent-uploads',
   })
   assert.equal(doc, null)
+  db.close()
+})
+
+test('faseFromTingkat memetakan fase Kurikulum Merdeka per jenjang', () => {
+  // MI: I-II=A, III-IV=B, V-VI=C
+  assert.equal(faseFromTingkat('1', 'MI'), 'A')
+  assert.equal(faseFromTingkat('2', 'MI'), 'A')
+  assert.equal(faseFromTingkat('3', 'MI'), 'B')
+  assert.equal(faseFromTingkat('5', 'MI'), 'C')
+  // MTs: VII-IX=D
+  assert.equal(faseFromTingkat('7', 'MTs'), 'D')
+  assert.equal(faseFromTingkat('9', 'MTs'), 'D')
+  // MA: X=E, XI-XII=F
+  assert.equal(faseFromTingkat('10', 'MA'), 'E')
+  assert.equal(faseFromTingkat('11', 'MA'), 'F')
+  assert.equal(faseFromTingkat('12', 'MA'), 'F')
+  // tingkat kosong tidak menebak fase
+  assert.equal(faseFromTingkat('', 'MA'), '')
+})
+
+test('buildCapaianKompetensi memakai materi terakhir dan menaikkan kualitas sesuai nilai', () => {
+  const tinggi = buildCapaianKompetensi({ nilai: 95, mapel: 'Matematika', materi: 'SPLDV' })
+  assert.match(tinggi, /sangat baik/)
+  assert.match(tinggi, /SPLDV/)
+
+  const sedang = buildCapaianKompetensi({ nilai: 86, mapel: 'IPA', materi: '' })
+  assert.match(sedang, /baik/)
+  // tanpa materi, jatuh ke nama mapel
+  assert.match(sedang, /IPA/)
+
+  const rendah = buildCapaianKompetensi({ nilai: 60, mapel: 'IPS', materi: '' })
+  assert.match(rendah, /perlu bimbingan/)
+})
+
+test('rapor dengan kelompok mapel berbeda tetap menghasilkan PDF (baris kelompok)', async () => {
+  const db = buildTestDb()
+  db.prepare(`UPDATE mapel SET kelompok='mulok' WHERE id='m2'`).run()
+  const doc = await createRaporSiswaPdf(db, {
+    tenantId: 't1', siswaId: 's1', tahunAjaran: '2026/2027', semester: 'ganjil', jenis: 'rapor_sts', uploadDir: '/tmp/nonexistent-uploads',
+  })
+  assert.ok(doc, 'doc harus tetap dihasilkan untuk campuran kelompok mapel')
+  const chunks = []
+  doc.on('data', c => chunks.push(c))
+  const done = new Promise(resolve => doc.on('end', resolve))
+  doc.end()
+  await done
+  assert.equal(Buffer.concat(chunks).subarray(0, 4).toString(), '%PDF')
   db.close()
 })

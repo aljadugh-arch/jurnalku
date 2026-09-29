@@ -128,6 +128,9 @@ test('UI rapor menawarkan mode rapor_sts dan rapor_sas', () => {
 
 test('generate rapor STS menggunakan formula nilai_harian*0.6 + asesmen_STS*0.4', () => {
   assert.match(indexSource, /getAsesmenNilai/, 'generate membaca asesmen STS/SAS yang tersimpan')
-  assert.match(indexSource, /nilaiHarian \* 0\.6/, 'formula STS: harian*60%')
-  assert.match(indexSource, /nilaiSTS \* 0\.4/, 'formula STS: asesmen*40%')
+  // Bobot default tinggal di satu tempat (BOBOT_DEFAULT) supaya admin bisa
+  // mengubahnya per tenant; nilainya harus tetap sama dengan rumus lama.
+  assert.match(indexSource, /sts: \{ harian: 0\.6, sts: 0\.4, sas: 0 \}/, 'bobot default STS: harian 60% + asesmen 40%')
+  assert.match(indexSource, /sas: \{ harian: 0\.4, sts: 0\.2, sas: 0\.4 \}/, 'bobot default SAS: harian 40% + sts 20% + sas 40%')
+  assert.match(indexSource, /harian \* w\.harian \+ nilaiSTS \* w\.sts/, 'nilai akhir dihitung dari bobot efektif')
 })

@@ -45,7 +45,11 @@ test('setiap penulisan nilai menghitung ulang rapor yang sudah digenerate', () =
 })
 
 test('service sinkronisasi mengekspor helper dan tidak pernah membuat rapor baru', () => {
-  assert.match(service, /module\.exports = \{ generateRaporForRombel, refreshGeneratedRapor, periodFromTanggal \}/)
+  const exportsBlock = service.match(/module\.exports = \{[\s\S]*?\n\}/)?.[0] || ''
+  assert.ok(exportsBlock, 'module.exports ada')
+  for (const name of ['generateRaporForRombel', 'refreshGeneratedRapor', 'periodFromTanggal', 'computeNilai', 'pickBobot', 'loadBobot', 'normalizeBobot', 'BOBOT_DEFAULT']) {
+    assert.match(exportsBlock, new RegExp(`\\b${name}\\b`), `export ${name} ada`)
+  }
   const sync = service.match(/function refreshGeneratedRapor[\s\S]*?\n\}\n/)?.[0] || ''
   assert.ok(sync, 'helper refreshGeneratedRapor ada')
   assert.doesNotMatch(sync, /INSERT INTO rapor/, 'hitung ulang tidak boleh menyisipkan baris rapor baru')

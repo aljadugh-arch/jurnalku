@@ -26,6 +26,14 @@ export default function RaporPage() {
   const [saving, setSaving] = useState(false)
   const [msg, setMsg] = useState('')
   const [foundationTenantId, setFoundationTenantId] = useState<string | null>(null)
+  const [mapelList, setMapelList] = useState<any[]>([])
+  const [bobotMapel, setBobotMapel] = useState('')
+  const [bobot, setBobot] = useState<any>(null)
+  const [bobotRows, setBobotRows] = useState<any[]>([])
+  const [bobotDefaults, setBobotDefaults] = useState<any>(null)
+  const [bobotOpen, setBobotOpen] = useState(false)
+  const [bobotSaving, setBobotSaving] = useState(false)
+  const [bobotMsg, setBobotMsg] = useState('')
 
   useEffect(() => { loadRombel(); loadSettings() }, [foundationTenantId])
   useEffect(() => { setSelectedSiswa(''); setRapor([]); setRingkasan(null); if (selectedRombel) loadSiswa() }, [selectedRombel, foundationTenantId])
@@ -41,6 +49,41 @@ export default function RaporPage() {
       const { data } = await api.get(foundationTenantId ? '/foundation/students' : '/rombel', { params })
       setRombelList(data)
     } catch (e) { console.error(e) }
+  }
+  // Bobot nilai hanya berlaku untuk data lembaga sendiri (bukan mode yayasan).
+  useEffect(() => { if (!foundationTenantId) loadMapel() }, [foundationTenantId])
+  useEffect(() => { if (!foundationTenantId && selectedRombel) loadBobot() }, [selectedRombel, bobotMapel, foundationTenantId])
+
+  const loadMapel = async () => {
+    try { const { data } = await api.get('/mapel'); setMapelList(data) } catch (e) { console.error(e) }
+  }
+  const loadBobot = async () => {
+    try {
+      const params: any = { rombel_id: selectedRombel }
+      if (bobotMapel) params.mapel_id = bobotMapel
+      const { data } = await api.get('/rapor/bobot', { params })
+      setBobot(data.effective); setBobotRows(data.rows || []); setBobotDefaults(data.defaults)
+    } catch (e) { console.error(e) }
+  }
+  const simpanBobot = async () => {
+    if (!selectedRombel) return
+    setBobotSaving(true); setBobotMsg('')
+    try {
+      await api.put('/rapor/bobot', { rombel_id: selectedRombel, mapel_id: bobotMapel, ...flattenBobot(bobot) })
+      setBobotMsg('✓ Bobot tersimpan — klik Generate untuk menghitung ulang nilai akhir')
+      await loadBobot()
+    } catch (e: any) { setBobotMsg(`✗ ${e.response?.data?.error || 'Gagal menyimpan bobot'}`) }
+    finally { setBobotSaving(false) }
+  }
+  const hapusBobot = async () => {
+    if (!selectedRombel) return
+    setBobotSaving(true); setBobotMsg('')
+    try {
+      await api.delete('/rapor/bobot', { params: { rombel_id: selectedRombel, mapel_id: bobotMapel } })
+      setBobotMsg('✓ Bobot dikembalikan ke bawaan')
+      await loadBobot()
+    } catch (e: any) { setBobotMsg(`✗ ${e.response?.data?.error || 'Gagal menghapus bobot'}`) }
+    finally { setBobotSaving(false) }
   }
   const loadSiswa = async () => {
     try {
@@ -169,6 +212,54 @@ export default function RaporPage() {
         {msg && <p className={`mt-3 text-sm ${msg.startsWith('✓') ? 'text-green-600' : 'text-red-600'}`}>{msg}</p>}
       </div>
 
+      {!foundationTenantId && (
+        <div className="card p-5 print:hidden">
+          <button type="button" onClick={() => setBobotOpen(!bobotOpen)} className="flex w-full items-center justify-between text-left">
+            <span className="font-semibold text-gray-800">Bobot Nilai Rapor</span>
+            <span className="text-sm text-gray-500">{bobotOpen ? 'Sembunyikan' : 'Atur'} {bobot && `· STS ${pct(bobot.sts?.harian)}/${pct(bobot.sts?.sts)}${bobot.sts?.sas ? `/${pct(bobot.sts.sas)}` : ''}`}</span>
+          </button>
+          {bobotOpen && (
+            <div className="mt-4 space-y-4">
+              <p className="text-sm text-gray-500">
+                Bobot menentukan bagaimana Nilai Harian, STS, dan SAS digabung menjadi nilai akhir.
+                Kosongkan mapel untuk aturan seluruh kelas, atau pilih mapel untuk aturan khusus mapel tersebut.
+              </p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <Field label="Berlaku untuk">
+                  <select value={bobotMapel} onChange={e => setBobotMapel(e.target.value)} className="input">
+                    <option value="">Seluruh mapel di kelas ini</option>
+                    {mapelList.map(m => <option key={m.id} value={m.id}>{m.nama}</option>)}
+                  </select>
+                </Field>
+                <div className="flex items-end gap-2">
+                  <button onClick={simpanBobot} disabled={bobotSaving || !bobot} className="btn-primary flex items-center gap-2"><Save className="w-4 h-4" />{bobotSaving ? 'Menyimpan...' : 'Simpan Bobot'}</button>
+                  <button onClick={hapusBobot} disabled={bobotSaving || !selectedRombel} className="btn-secondary">Kembalikan ke Bawaan</button>
+                </div>
+              </div>
+              {bobot && <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                <BobotGroup title="Rapor STS (Tengah Semester)" jenis="sts" bobot={bobot.sts} defaults={bobotDefaults?.sts} onChange={(v: any) => setBobot({ ...bobot, sts: v })} />
+                <BobotGroup title="Rapor SAS (Akhir Semester)" jenis="sas" bobot={bobot.sas} defaults={bobotDefaults?.sas} onChange={(v: any) => setBobot({ ...bobot, sas: v })} />
+              </div>}
+              {bobotMsg && <p className={`text-sm ${bobotMsg.startsWith('✓') ? 'text-green-600' : 'text-red-600'}`}>{bobotMsg}</p>}
+              {bobotRows.length > 0 && (
+                <div>
+                  <p className="text-sm font-medium text-gray-700 mb-2">Aturan yang sudah disimpan</p>
+                  <table className="w-full text-xs">
+                    <thead><tr className="bg-gray-100"><Th align="left">Kelas</Th><Th align="left">Mapel</Th><Th>STS (Harian/STS/SAS)</Th><Th>SAS (Harian/STS/SAS)</Th></tr></thead>
+                    <tbody>{bobotRows.map((r, i) => <tr key={i}>
+                      <Td align="left">{r.rombel_id ? (rombelList.find(x => x.id === r.rombel_id)?.nama || r.rombel_id) : 'Semua kelas'}</Td>
+                      <Td align="left">{r.mapel_id ? (mapelList.find(x => x.id === r.mapel_id)?.nama || r.mapel_id) : 'Semua mapel'}</Td>
+                      <Td>{pct(r.sts_harian)} / {pct(r.sts_sts)} / {pct(r.sts_sas)}</Td>
+                      <Td>{pct(r.sas_harian)} / {pct(r.sas_sts)} / {pct(r.sas_sas)}</Td>
+                    </tr>)}</tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
       {selectedSiswa && !foundationTenantId && (
         <div className="card p-5 print:hidden space-y-4">
           <h2 className="font-semibold text-gray-800">Data Pelengkap Rapor</h2>
@@ -263,6 +354,38 @@ function descriptionFor(row: any) {
   return `Perlu bimbingan dan latihan lanjutan untuk meningkatkan penguasaan kompetensi.`
 }
 function Field({ label, children }: any) { return <div><label className="block text-sm font-medium text-gray-700 mb-1">{label}</label>{children}</div> }
+// Bobot disimpan sebagai pecahan 0..1; ditampilkan sebagai persen agar mudah diisi.
+function pct(value: any) { return `${Math.round((Number(value) || 0) * 100)}%` }
+// API mengembalikan bobot bersarang {sts:{harian,sts,sas}}; server menerima flat.
+function flattenBobot(bobot: any) {
+  const out: any = {}
+  for (const jenis of ['sts', 'sas']) for (const key of ['harian', 'sts', 'sas']) out[`${jenis}_${key}`] = Number(bobot?.[jenis]?.[key]) || 0
+  return out
+}
+function BobotGroup({ title, jenis, bobot, defaults, onChange }: any) {
+  const fields: Array<[string, string]> = [['harian', 'Nilai Harian'], ['sts', 'STS'], ['sas', 'SAS']]
+  const jumlah = fields.reduce((sum, [key]) => sum + (Number(bobot?.[key]) || 0), 0)
+  const sah = Math.abs(jumlah - 1) <= 0.01
+  const ubah = (key: string, raw: string) => onChange({ ...bobot, [key]: raw === '' ? 0 : Number(raw) / 100 })
+  const pakaiBawaan = () => onChange(defaults ? { ...defaults } : bobot)
+  return (
+    <div className="border border-gray-300 rounded-lg p-4 space-y-3">
+      <div className="flex items-center justify-between">
+        <h3 className="font-semibold text-gray-800 text-sm">{title}</h3>
+        {defaults && <button type="button" onClick={pakaiBawaan} className="text-xs text-primary-600">Pakai bawaan ({pct(defaults.harian)}/{pct(defaults.sts)}/{pct(defaults.sas)})</button>}
+      </div>
+      <div className="grid grid-cols-3 gap-3">
+        {fields.map(([key, label]) => <Field key={`${jenis}-${key}`} label={`${label} (%)`}>
+          <input type="number" min={0} max={100} step={5} value={Math.round((Number(bobot?.[key]) || 0) * 100)}
+            onChange={e => ubah(key, e.target.value)} className="input [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" />
+        </Field>)}
+      </div>
+      <p className={`text-xs ${sah ? 'text-gray-500' : 'text-red-600'}`}>
+        {sah ? `Total ${pct(jumlah)} — nilai akhir = ${fields.filter(([k]) => (Number(bobot?.[k]) || 0) > 0).map(([k, l]) => `${pct(bobot?.[k])} ${l}`).join(' + ')}` : `Total ${pct(jumlah)} — harus berjumlah 100%`}
+      </p>
+    </div>
+  )
+}
 function TextArea({ label, value, onChange }: any) { return <Field label={label}><textarea value={value || ''} onChange={e => onChange(e.target.value)} rows={3} className="input resize-y" /></Field> }
 function Select({ label, value, onChange, options, placeholder, disabled }: any) { return <Field label={label}><select value={value} onChange={e => onChange(e.target.value)} disabled={disabled} className="input"><option value="">{placeholder || `Pilih ${label}`}</option>{options.map((o: any) => <option key={o.value} value={o.value}>{o.label}</option>)}</select></Field> }
 function ReportHeader({ settings, title, compact = false }: any) { return <div className={`flex items-center gap-4 border-b-2 border-black ${compact ? 'pb-3' : 'pb-5'}`}>{settings.logo && <img src={settings.logo} alt="Logo" className={compact ? 'w-14 h-14 object-contain' : 'w-20 h-20 object-contain'} onError={e => { (e.target as HTMLImageElement).style.display = 'none' }} />}<div className="flex-1 text-center"><p className="text-[10px] tracking-wide">{title}</p><h2 className={`${compact ? 'text-lg' : 'text-2xl'} font-bold`}>{settings.nama_lembaga || 'Nama Lembaga'}</h2><p className="text-xs">{[settings.alamat, settings.telepon && `Telp. ${settings.telepon}`, settings.email].filter(Boolean).join(' · ')}</p><p className="text-xs">{[settings.npsn && `NPSN: ${settings.npsn}`, settings.nsm && `NSM: ${settings.nsm}`].filter(Boolean).join(' · ')}</p></div>{settings.logo && <div className={compact ? 'w-14' : 'w-20'} />}</div> }

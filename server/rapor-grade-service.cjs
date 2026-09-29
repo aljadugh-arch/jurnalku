@@ -3,11 +3,37 @@
 // pernah menghasilkan angka berbeda untuk data sumber yang sama.
 const JENIS_GENERATED = "'rapor_sts','rapor_sas'"
 
+// Bobot bawaan = rumus yang sudah dipakai produksi:
+//   rapor_sts = harian*0.6 + sts*0.4
+//   rapor_sas = harian*0.4 + sts*0.2 + sas*0.4
+// Nilai ini bisa ditimpa per tenant/rombel/mapel lewat tabel `rapor_bobot`
+// (padanan "bobot Sumatif / SAS" pada RDM). Selama tidak ada baris di tabel
+// itu, hasil hitung identik dengan rumus lama.
+const BOBOT_DEFAULT = {
+  sts: { harian: 0.6, sts: 0.4, sas: 0 },
+  sas: { harian: 0.4, sts: 0.2, sas: 0.4 },
+}
+
 function clampNilai(value) {
   return Math.max(0, Math.min(100, Number(value) || 0))
 }
 
-function computeNilai({ daily, sts, sas, jenis }) {
+// Kolom tabel: sts_harian, sts_sts, sts_sas, sas_harian, sas_sts, sas_sas.
+function normalizeBobot(row, jenis) {
+  if (!row) return null
+  const base = BOBOT_DEFAULT[jenis] || BOBOT_DEFAULT.sts
+  const pick = (value, fallback) => {
+    const n = Number(value)
+    return Number.isFinite(n) && n >= 0 ? n : fallback
+  }
+  return {
+    harian: pick(row[`${jenis}_harian`], base.harian),
+    sts: pick(row[`${jenis}_sts`], base.sts),
+    sas: pick(row[`${jenis}_sas`], base.sas),
+  }
+}
+
+function computeNilai({ daily, sts, sas, jenis, bobot }) {
   const pengetahuan = daily?.p == null ? 0 : Math.round(Number(daily.p))
   const keterampilan = daily?.k == null ? 0 : Math.round(Number(daily.k))
   const sikap = daily?.sk == null ? 0 : Math.round(Number(daily.sk))
@@ -17,11 +43,32 @@ function computeNilai({ daily, sts, sas, jenis }) {
 
   const nilaiSTS = sts == null ? 0 : clampNilai(sts)
   const nilaiSAS = jenis === 'rapor_sas' && sas != null ? clampNilai(sas) : 0
+  const w = bobot || BOBOT_DEFAULT[jenis === 'rapor_sas' ? 'sas' : 'sts']
   const akhir = jenis === 'rapor_sas'
-    ? Math.round(harian * 0.4 + nilaiSTS * 0.2 + nilaiSAS * 0.4)
-    : Math.round(harian * 0.6 + nilaiSTS * 0.4)
+    ? Math.round(harian * w.harian + nilaiSTS * w.sts + nilaiSAS * w.sas)
+    : Math.round(harian * w.harian + nilaiSTS * w.sts)
 
   return { pengetahuan, keterampilan, sikap, harian, sts: nilaiSTS, sas: nilaiSAS, akhir }
+}
+
+// Bobot tersimpan untuk satu tenant. Tabel dibuat saat startup; bila DB lama
+// belum memilikinya, perhitungan jatuh ke BOBOT_DEFAULT (perilaku lama).
+function loadBobot(db, tenantId) {
+  try {
+    return db.prepare('SELECT * FROM rapor_bobot WHERE tenant_id=?').all(tenantId)
+  } catch {
+    return []
+  }
+}
+
+// Baris paling spesifik menang: (mapel+rombel) > mapel > rombel > default tenant.
+function pickBobot(rows, { rombelId, mapelId }, jenis) {
+  if (!rows?.length) return null
+  const rid = rombelId || ''
+  const mid = mapelId || ''
+  const find = (r, m) => rows.find(row => (row.rombel_id || '') === r && (row.mapel_id || '') === m)
+  const row = find(rid, mid) || find('', mid) || find(rid, '') || find('', '')
+  return row ? normalizeBobot(row, jenis) : null
 }
 
 // Prepared statement dibuat sekali per periode, bukan per siswa, agar hitung
@@ -38,14 +85,16 @@ function makeStatements(db, { tenantId, from, to }) {
     WHERE siswa_id=? AND mapel_id=? AND tenant_id=? AND tanggal BETWEEN ? AND ?
   `)
   const asesmen = db.prepare(`
-    SELECT nilai_sts
+    SELECT nilai_sts, nilai_sas
     FROM rapor
     WHERE siswa_id=? AND mapel_id=? AND tahun_ajaran=? AND semester=? AND jenis=? AND tenant_id=?
   `)
   return {
     dailyFor: (siswaId, mapelId) => daily.get(siswaId, mapelId, tenantId, from, to),
-    asesmenFor: (siswaId, mapelId, tahunAjaran, semester, jenis) =>
-      asesmen.get(siswaId, mapelId, tahunAjaran, semester, jenis, tenantId),
+    asesmenFor: (siswaId, mapelId, tahunAjaran, semester, jenis) => {
+      const row = asesmen.get(siswaId, mapelId, tahunAjaran, semester, jenis, tenantId)
+      return row ? { ...row, nilai: jenis === 'sas' ? (row.nilai_sas || row.nilai_sts) : row.nilai_sts } : row
+    },
   }
 }
 
@@ -82,6 +131,7 @@ function generateRaporForRombel(db, options) {
   )
 
   const { dailyFor, asesmenFor } = makeStatements(db, { tenantId, from, to })
+  const bobotRows = loadBobot(db, tenantId)
   const upsert = db.prepare(`
     INSERT INTO rapor (
       id, siswa_id, mapel_id, tahun_ajaran, semester, jenis,
@@ -106,9 +156,10 @@ function generateRaporForRombel(db, options) {
     for (const candidate of candidates) {
       const computed = computeNilai({
         daily: dailyFor(candidate.siswa_id, candidate.mapel_id),
-        sts: asesmenFor(candidate.siswa_id, candidate.mapel_id, tahunAjaran, semester, 'sts')?.nilai_sts,
-        sas: asesmenFor(candidate.siswa_id, candidate.mapel_id, tahunAjaran, semester, 'sas')?.nilai_sts,
+        sts: asesmenFor(candidate.siswa_id, candidate.mapel_id, tahunAjaran, semester, 'sts')?.nilai,
+        sas: asesmenFor(candidate.siswa_id, candidate.mapel_id, tahunAjaran, semester, 'sas')?.nilai,
         jenis,
+        bobot: pickBobot(bobotRows, { rombelId, mapelId: candidate.mapel_id }, jenis === 'rapor_sas' ? 'sas' : 'sts'),
       })
       upsert.run(
         idFactory(), candidate.siswa_id, candidate.mapel_id, tahunAjaran, semester, jenis,
@@ -201,6 +252,8 @@ function refreshGeneratedRapor(db, options) {
       nilai_pengetahuan=?, nilai_keterampilan=?, nilai_sikap=?, nilai_harian=?,
       nilai_sts=?, nilai_sas=?, nilai_akhir=?, updated_at=datetime('now')
     WHERE tenant_id=? AND siswa_id=? AND mapel_id=? AND tahun_ajaran=? AND semester=? AND jenis=?`)
+  const rombelStatement = db.prepare('SELECT rombel_id FROM siswa WHERE id=? AND tenant_id=?')
+  const bobotRows = loadBobot(db, tenantId)
   const statements = new Map()
 
   return db.transaction(() => {
@@ -222,9 +275,20 @@ function refreshGeneratedRapor(db, options) {
       const daily = dailyFor(target.siswaId, target.mapelId)
       const sts = asesmenFor(target.siswaId, target.mapelId, target.tahunAjaran, target.semester, 'sts')?.nilai_sts
       const sas = asesmenFor(target.siswaId, target.mapelId, target.tahunAjaran, target.semester, 'sas')?.nilai_sts
+      const rombelId = rombelStatement.get(target.siswaId, tenantId)?.rombel_id
 
       for (const row of existing) {
-        const computed = computeNilai({ daily, sts, sas, jenis: row.jenis })
+        const computed = computeNilai({
+          daily,
+          sts,
+          sas,
+          jenis: row.jenis,
+          bobot: pickBobot(
+            bobotRows,
+            { rombelId, mapelId: target.mapelId },
+            row.jenis === 'rapor_sas' ? 'sas' : 'sts',
+          ),
+        })
         if (predikatFromNilai) {
           update.run(
             computed.pengetahuan, computed.keterampilan, computed.sikap, computed.harian,
@@ -245,4 +309,14 @@ function refreshGeneratedRapor(db, options) {
   })()
 }
 
-module.exports = { generateRaporForRombel, refreshGeneratedRapor, periodFromTanggal }
+module.exports = {
+  generateRaporForRombel,
+  refreshGeneratedRapor,
+  periodFromTanggal,
+  computeNilai,
+  normalizeBobot,
+  pickBobot,
+  loadBobot,
+  makeStatements,
+  BOBOT_DEFAULT,
+}

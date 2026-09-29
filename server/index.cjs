@@ -26,7 +26,8 @@ const { setupPortalCashless, registerPortalRoutes, registerKantinRoutes, selectP
 const waQueue = require('./wa-queue.cjs')
 const notificationMonitor = require('./notification-monitor.cjs')
 const ExcelJS = require('exceljs')
-const { generateRaporForRombel, refreshGeneratedRapor } = require('./rapor-grade-service.cjs')
+const { generateRaporForRombel, refreshGeneratedRapor, loadBobot, pickBobot, BOBOT_DEFAULT } = require('./rapor-grade-service.cjs')
+const { createRdmClient, buildSasImportItems, bobotRdmKeJurnalku } = require('./rdm-sas-connector.cjs')
 const { getAuthorizedLedgerRombels, getLedgerRows, createLedgerWorkbook, createLedgerPdf } = require('./ledger-service.cjs')
 const {
   getTeacherMapelRombelContext, getGuruWithAssignments, isTeacherAssignedToPair,
@@ -658,6 +659,25 @@ db.exec(`
     FOREIGN KEY (siswa_id) REFERENCES siswa(id)
   );
   CREATE INDEX IF NOT EXISTS idx_rapor_pelengkap_tenant_siswa ON rapor_pelengkap(tenant_id, siswa_id);
+
+  -- Bobot nilai rapor (padanan "bobot Sumatif / SAS" RDM). rombel_id/mapel_id
+  -- kosong ('') berarti berlaku umum; baris paling spesifik yang menang.
+  CREATE TABLE IF NOT EXISTS rapor_bobot (
+    id TEXT PRIMARY KEY,
+    tenant_id TEXT NOT NULL,
+    rombel_id TEXT NOT NULL DEFAULT '',
+    mapel_id TEXT NOT NULL DEFAULT '',
+    sts_harian REAL NOT NULL DEFAULT 0.6,
+    sts_sts REAL NOT NULL DEFAULT 0.4,
+    sts_sas REAL NOT NULL DEFAULT 0,
+    sas_harian REAL NOT NULL DEFAULT 0.4,
+    sas_sts REAL NOT NULL DEFAULT 0.2,
+    sas_sas REAL NOT NULL DEFAULT 0.4,
+    created_at TEXT DEFAULT (datetime('now')),
+    updated_at TEXT,
+    UNIQUE(tenant_id, rombel_id, mapel_id)
+  );
+  CREATE INDEX IF NOT EXISTS idx_rapor_bobot_tenant ON rapor_bobot(tenant_id);
 
   -- Bank Soal & Ujian
   CREATE TABLE IF NOT EXISTS bank_soal (
@@ -7408,6 +7428,86 @@ app.put('/api/rapor/pelengkap', STAFF, (req, res) => {
   res.json({ success: true })
 })
 
+// Bobot nilai rapor (padanan "bobot Sumatif / SAS" RDM). Baris paling spesifik
+// menang: (mapel+rombel) > mapel > rombel > default tenant > rumus bawaan.
+const BOBOT_FIELDS = ['sts_harian', 'sts_sts', 'sts_sas', 'sas_harian', 'sas_sts', 'sas_sas']
+
+function stripBobotRow(row) {
+  const out = { rombel_id: row.rombel_id || '', mapel_id: row.mapel_id || '' }
+  for (const field of BOBOT_FIELDS) out[field] = Number(row[field])
+  return out
+}
+
+function parseBobotBody(body) {
+  const values = {}
+  for (const field of BOBOT_FIELDS) {
+    const raw = body?.[field]
+    const n = raw === '' || raw == null ? 0 : Number(raw)
+    if (!Number.isFinite(n) || n < 0 || n > 1) throw new RangeError(`${field} harus di antara 0 dan 1`)
+    values[field] = n
+  }
+  const stsSum = values.sts_harian + values.sts_sts + values.sts_sas
+  const sasSum = values.sas_harian + values.sas_sts + values.sas_sas
+  if (Math.abs(stsSum - 1) > 0.01) throw new RangeError(`bobot STS harus berjumlah 1 (sekarang ${stsSum.toFixed(2)})`)
+  if (Math.abs(sasSum - 1) > 0.01) throw new RangeError(`bobot SAS harus berjumlah 1 (sekarang ${sasSum.toFixed(2)})`)
+  return values
+}
+
+// GET /api/rapor/bobot?rombel_id=&mapel_id= — bobot efektif + semua baris tenant.
+app.get('/api/rapor/bobot', authMiddleware, (req, res) => {
+  const rombelId = String(req.query.rombel_id || '')
+  const mapelId = String(req.query.mapel_id || '')
+  const rows = loadBobot(db, req.tenantId)
+  res.json({
+    defaults: BOBOT_DEFAULT,
+    rows: rows.map(stripBobotRow),
+    effective: {
+      sts: pickBobot(rows, { rombelId, mapelId }, 'sts') || BOBOT_DEFAULT.sts,
+      sas: pickBobot(rows, { rombelId, mapelId }, 'sas') || BOBOT_DEFAULT.sas,
+    },
+  })
+})
+
+// PUT /api/rapor/bobot — simpan bobot untuk kombinasi rombel/mapel (boleh kosong).
+app.put('/api/rapor/bobot', ADMIN, (req, res) => {
+  const rombelId = String(req.body?.rombel_id || '')
+  const mapelId = String(req.body?.mapel_id || '')
+  if (rombelId && !db.prepare('SELECT id FROM rombel WHERE id=? AND tenant_id=?').get(rombelId, req.tenantId)) {
+    return res.status(404).json({ error: 'Rombel tidak ditemukan' })
+  }
+  if (mapelId && !db.prepare('SELECT id FROM mapel WHERE id=? AND tenant_id=?').get(mapelId, req.tenantId)) {
+    return res.status(404).json({ error: 'Mata pelajaran tidak ditemukan' })
+  }
+  let values
+  try {
+    values = parseBobotBody(req.body)
+  } catch (error) {
+    return res.status(400).json({ error: error.message })
+  }
+  db.prepare(`INSERT INTO rapor_bobot (id,tenant_id,rombel_id,mapel_id,${BOBOT_FIELDS.join(',')},updated_at)
+    VALUES (?,?,?,?,${BOBOT_FIELDS.map(() => '?').join(',')},datetime('now'))
+    ON CONFLICT(tenant_id,rombel_id,mapel_id) DO UPDATE SET
+      ${BOBOT_FIELDS.map(f => `${f}=excluded.${f}`).join(',')},updated_at=datetime('now')`)
+    .run(uuidv4(), req.tenantId, rombelId, mapelId, ...BOBOT_FIELDS.map(f => values[f]))
+  const rows = loadBobot(db, req.tenantId)
+  res.json({
+    success: true,
+    effective: {
+      sts: pickBobot(rows, { rombelId, mapelId }, 'sts') || BOBOT_DEFAULT.sts,
+      sas: pickBobot(rows, { rombelId, mapelId }, 'sas') || BOBOT_DEFAULT.sas,
+    },
+  })
+})
+
+// DELETE /api/rapor/bobot?rombel_id=&mapel_id= — hapus override, kembali ke bawaan.
+app.delete('/api/rapor/bobot', ADMIN, (req, res) => {
+  const rombelId = String(req.query.rombel_id || '')
+  const mapelId = String(req.query.mapel_id || '')
+  const info = db.prepare('DELETE FROM rapor_bobot WHERE tenant_id=? AND rombel_id=? AND mapel_id=?')
+    .run(req.tenantId, rombelId, mapelId)
+  res.json({ success: true, deleted: info.changes })
+})
+
 // POST /api/rapor/asesmen — input nilai asesmen STS atau SAS oleh guru mapel
 // body: { jenis: 'sts'|'sas', tahun_ajaran, semester, rombel_id, items: [{ siswa_id, mapel_id, nilai }] }
 app.post('/api/rapor/asesmen', STAFF, (req, res) => {
@@ -7500,6 +7600,49 @@ app.post('/api/rapor/asesmen', STAFF, (req, res) => {
     rapor_updated: result.raporUpdated,
     message: `${result.count} nilai asesmen ${jenis.toUpperCase()} berhasil disimpan${result.skipped ? `, ${result.skipped} dilewati` : ''}`,
   })
+})
+
+// POST /api/rapor/rdm/sas — tarik SAS RDM lalu cocokkan ke siswa Jurnalku.
+// Default preview-only; tulis ke Jurnalku hanya jika commit=true dan admin.
+app.post('/api/rapor/rdm/sas', STAFF, async (req, res) => {
+  const {
+    base_url, username, password, ajar_id, mapel_id, rombel_id,
+    tahun_ajaran, semester, commit = false,
+  } = req.body || {}
+  if (!base_url || !username || !password || !ajar_id || !mapel_id || !rombel_id || !tahun_ajaran || !semester) {
+    return res.status(400).json({ error: 'base_url, username, password, ajar_id, mapel_id, rombel_id, tahun_ajaran, semester wajib diisi' })
+  }
+  if (commit && !['admin', 'super_admin'].includes(req.user.role)) {
+    return res.status(403).json({ error: 'Hanya admin yang boleh commit impor SAS RDM' })
+  }
+  const rombel = db.prepare('SELECT id FROM rombel WHERE id=? AND tenant_id=?').get(String(rombel_id), req.tenantId)
+  if (!rombel) return res.status(404).json({ error: 'Rombel Jurnalku tidak ditemukan' })
+  const mapel = db.prepare('SELECT id FROM mapel WHERE id=? AND tenant_id=?').get(String(mapel_id), req.tenantId)
+  if (!mapel) return res.status(404).json({ error: 'Mapel Jurnalku tidak ditemukan' })
+  try {
+    const client = createRdmClient({ baseUrl: base_url, username, password })
+    const pulled = await client.pullSas({ ajarId: String(ajar_id) })
+    const siswa = db.prepare('SELECT id, nis, nisn, nama FROM siswa WHERE tenant_id=? AND rombel_id=? AND status=?')
+      .all(req.tenantId, String(rombel_id), 'aktif')
+    const mapped = buildSasImportItems({ rdmRows: pulled.rows, jurnalkuSiswa: siswa, mapelId: String(mapel_id) })
+    let saved = 0
+    if (commit) {
+      const upsert = db.prepare(`INSERT INTO rapor (id,siswa_id,mapel_id,tahun_ajaran,semester,jenis,nilai_sas,kkm,tenant_id,created_at,updated_at)
+        VALUES (?,?,?,?,?,?,?,70,?,datetime('now'),datetime('now'))
+        ON CONFLICT(tenant_id,siswa_id,mapel_id,tahun_ajaran,semester,jenis) DO UPDATE SET nilai_sas=excluded.nilai_sas,updated_at=datetime('now')`)
+      const save = db.transaction(() => {
+        for (const item of mapped.items) { upsert.run(uuidv4(), item.siswa_id, item.mapel_id, tahun_ajaran, semester, 'sas', item.nilai, req.tenantId); saved++ }
+      })
+      save()
+    }
+    res.json({ success: true, mode: commit ? 'committed' : 'preview', ajar_id, nilailock: pulled.nilailock,
+      bobot_rdm: pulled.bobot, bobot_jurnalku: bobotRdmKeJurnalku(pulled.bobot),
+      pulled: pulled.rows.length, matched: mapped.items.length, saved,
+      unmatched: mapped.unmatched.length, ambiguous: mapped.ambiguous.length, empty_value: mapped.emptyValue.length,
+      items: mapped.items.map(item => ({ siswa_id: item.siswa_id, mapel_id: item.mapel_id, nilai: item.nilai })) })
+  } catch (error) {
+    res.status(error.status && error.status >= 400 ? error.status : 502).json({ error: error.message })
+  }
 })
 
 // POST /api/rapor/generate — generate rapor STS atau SAS untuk satu rombel
