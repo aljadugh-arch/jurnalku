@@ -36,6 +36,7 @@ const {
 const { getAttendanceOverview, studentAttendance } = require('./attendance-summary.cjs')
 const { monitorStatus, sanitizeExamForMonitor } = require('./exam-proctor.cjs')
 const { createRaporSiswaPdf } = require('./rapor-siswa-pdf-service.cjs')
+const { createKtsPdf } = require('./kts-pdf-service.cjs')
 const { getCategoryRecap } = require('./attendance-recap.cjs')
 const { buildRekapRange, getPeriodicAttendanceRecap, deduplicateAttendance } = require('./attendance-periodic-recap.cjs')
 const { isDriveFolderUrl } = require('./library-config.cjs')
@@ -4400,33 +4401,29 @@ app.get('/api/siswa/qr-identifiers', STAFF, (req, res) => {
   res.json(data)
 })
 
-app.post('/api/siswa/generate-kts', STAFF, (req, res) => {
-  const { siswa_ids } = req.body
-  if (!Array.isArray(siswa_ids) || siswa_ids.length === 0) {
-    return res.status(400).json({ error: 'siswa_ids wajib berupa array tidak kosong' })
+app.post('/api/siswa/generate-kts', STAFF, async (req, res) => {
+  const { siswa_ids } = req.body || {}
+  if (!Array.isArray(siswa_ids) || siswa_ids.length === 0 || siswa_ids.length > 500) {
+    return res.status(400).json({ error: 'siswa_ids wajib berupa array 1-500 siswa' })
   }
-  const id = canonicalSettingsId(req.tenantId)
-  const settings = db.prepare('SELECT kts_template FROM settings WHERE id=? AND tenant_id=?').get(id, req.tenantId)
-  const template = settings?.kts_template
-  if (!template) {
-    return res.status(400).json({ error: 'Template KTS belum diunggah di menu Settings' })
-  }
+  const ids = [...new Set(siswa_ids.map(String).filter(Boolean))]
   const siswaList = db.prepare(`SELECT s.id, s.nis, s.nisn, s.nama, s.rombel_id, s.jenis_kelamin, s.tempat_lahir, s.tanggal_lahir, s.alamat,
-    r.nama as rombel_nama, t.id as tenant_id
-    FROM siswa s
-    LEFT JOIN rombel r ON r.id=s.rombel_id AND r.tenant_id=s.tenant_id
-    LEFT JOIN tenants t ON t.id=s.tenant_id
-    WHERE s.tenant_id=? AND s.id IN (${siswa_ids.map(()=>'?').join(',')}) AND s.status='aktif'`).all(req.tenantId, ...siswa_ids)
-  if (siswaList.length === 0) {
-    return res.status(404).json({ error: 'Tidak ada siswa ditemukan' })
-  }
+    r.nama as rombel_nama
+    FROM siswa s LEFT JOIN rombel r ON r.id=s.rombel_id AND r.tenant_id=s.tenant_id
+    WHERE s.tenant_id=? AND s.id IN (${ids.map(() => '?').join(',')}) AND s.status='aktif'`).all(req.tenantId, ...ids)
+  if (!siswaList.length) return res.status(404).json({ error: 'Tidak ada siswa ditemukan' })
   const qrMap = new Map()
-  db.prepare(`SELECT siswa_id, token FROM qr_siswa_identifiers WHERE tenant_id=? AND siswa_id IN (${siswa_ids.map(()=>'?').join(',')})`).all(req.tenantId, ...siswa_ids).forEach(r => qrMap.set(r.siswa_id, r.token))
-  res.json({
-    message: 'KTS data siap dibuat',
-    count: siswaList.length,
-    siswa_list: siswaList.map(s => ({id: s.id, nis: s.nis, nisn: s.nisn, nama: s.nama, rombel_nama: s.rombel_nama, qr_token: qrMap.get(s.id) || ''}))
-  })
+  db.prepare(`SELECT siswa_id, token FROM qr_siswa_identifiers WHERE tenant_id=? AND siswa_id IN (${ids.map(() => '?').join(',')})`).all(req.tenantId, ...ids)
+    .forEach(row => qrMap.set(row.siswa_id, row.token))
+  const settings = getTenantSettings(db, req.tenantId, 'nama_lembaga, kts_depan, kts_belakang') || {}
+  const cards = siswaList.map(s => ({ ...s, qr_token: qrMap.get(s.id) || s.id }))
+  try {
+    const pdf = await createKtsPdf({ siswaList: cards, settings, uploadDir: UPLOAD_DIR })
+    res.set({ 'Content-Type': 'application/pdf', 'Content-Disposition': 'attachment; filename="kartu-tanda-siswa.pdf"', 'Content-Length': pdf.length })
+    return res.send(pdf)
+  } catch (error) {
+    return res.status(500).json({ error: `Generate KTS gagal: ${error.message}` })
+  }
 })
 
 app.get('/api/guru/absensi-saya', CEKLOK_ACCESS, (req, res) => {

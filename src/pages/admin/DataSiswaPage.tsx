@@ -266,9 +266,13 @@ export default function DataSiswaPage() {
     }
     setGeneratingKTS(true)
     try {
-      const response = await api.post('/siswa/generate-kts', { siswa_ids: selected })
-      toast.success(`KTS siap untuk ${response.data.count} siswa`)
-      setSelectedForKTS(new Set())
+      const response = await api.post('/siswa/generate-kts', { siswa_ids: selected }, { responseType: 'blob' })
+      const blob = response.data instanceof Blob ? response.data : new Blob([response.data], { type: 'application/pdf' })
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url; link.download = 'kartu-tanda-siswa.pdf'; link.click()
+      URL.revokeObjectURL(url)
+      toast.success('PDF KTS berhasil diunduh')
     } catch (error: any) {
       toast.error(error.response?.data?.error || 'Generate KTS gagal')
     } finally {
