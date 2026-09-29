@@ -2985,7 +2985,7 @@ app.post('/api/settings/reset-data', ADMIN, (req, res) => {
 
 // ==================== SISWA ====================
 app.get('/api/siswa', authMiddleware, (req, res) => {
-  const { search, rombel_id, status } = req.query
+  const { search, rombel_id, status, jenis_kelamin } = req.query
   let sql = `SELECT s.*, r.nama rombel_nama FROM siswa s LEFT JOIN rombel r ON r.id=s.rombel_id AND r.tenant_id=s.tenant_id WHERE 1=1 AND s.tenant_id=?`
   const params = [req.tenantId]
   if (isTeacherContext(req)) {
@@ -2998,6 +2998,7 @@ app.get('/api/siswa', authMiddleware, (req, res) => {
   if (search) { sql += ' AND (s.nama LIKE ? OR s.nik LIKE ? OR s.nis LIKE ? OR s.nisn LIKE ? OR r.nama LIKE ?)'; params.push(`%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`) }
   if (rombel_id) { sql += ' AND s.rombel_id = ?'; params.push(rombel_id) }
   if (status) { sql += ' AND s.status = ?'; params.push(status) }
+  if (jenis_kelamin && ['L', 'P'].includes(String(jenis_kelamin).toUpperCase())) { sql += ' AND UPPER(s.jenis_kelamin) = ?'; params.push(String(jenis_kelamin).toUpperCase()) }
   // Siswa yang rombelnya kosong atau menunjuk rombel yang sudah tidak ada tetap
   // terlihat, tetapi selalu ditempatkan setelah siswa dengan rombel valid.
   sql += ' ORDER BY CASE WHEN r.id IS NULL THEN 1 ELSE 0 END, s.nama COLLATE NOCASE'

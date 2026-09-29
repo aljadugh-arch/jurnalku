@@ -27,13 +27,13 @@ async function createKtsPdf({ siswaList, settings = {}, uploadDir }) {
       doc.addPage({ size: [CARD_W, CARD_H], margin: 0 })
       if (bg) { try { doc.image(bg, 0, 0, { width: CARD_W, height: CARD_H }) } catch {} }
       if (side === 'depan') {
-        doc.fontSize(7).fillColor('#111').text(String(siswa.nama || ''), 12, CARD_H - 38, { width: CARD_W - 70, lineBreak: false })
-        doc.fontSize(5.5).text(`NIS: ${siswa.nis || '-'}   ${siswa.rombel_nama || ''}`, 12, CARD_H - 27, { width: CARD_W - 70, lineBreak: false })
+        // Template depan adalah artwork utama; data hanya ditambahkan di area
+        // informasi standar dan tidak pernah menimpa template belakang.
+        doc.fontSize(7).fillColor('#111').text(String(siswa.nama || ''), 12, 12, { width: CARD_W - 70, lineBreak: false })
+        doc.fontSize(5.5).text(`NIS: ${siswa.nis || '-'}   ${siswa.rombel_nama || ''}`, 12, 24, { width: CARD_W - 70, lineBreak: false })
         if (siswa.qr_token) {
-          try { const qr = await QRCode.toDataURL(String(siswa.qr_token), { margin: 0, width: 180 }); doc.image(qr, CARD_W - 48, CARD_H - 50, { width: 36, height: 36 }) } catch {}
+          try { const qr = await QRCode.toDataURL(String(siswa.qr_token), { margin: 0, width: 180 }); doc.image(qr, CARD_W - 48, 9, { width: 36, height: 36 }) } catch {}
         }
-      } else {
-        doc.fontSize(6).fillColor('#111').text(String(settings.nama_lembaga || ''), 10, CARD_H - 25, { width: CARD_W - 20, align: 'center' })
       }
     }
   }

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Search, Plus, Edit, Trash2, Download, Upload, X, Camera, ChevronRight, UsersRound, KeyRound } from 'lucide-react'
+import { Search, Plus, Edit, Trash2, Download, Upload, X, Camera, ChevronRight, UsersRound, KeyRound, RefreshCw } from 'lucide-react'
 import toast from 'react-hot-toast'
 import api from '../../services/api'
 import ImportExcel from '../../components/ImportExcel'
@@ -72,6 +72,10 @@ export default function DataSiswaPage() {
   const [uploadingFoto, setUploadingFoto] = useState(false)
   const [foundationTenantId, setFoundationTenantId] = useState<string | null>(null)
   const [selectedRombelId, setSelectedRombelId] = useState('')
+  const [genderFilter, setGenderFilter] = useState<'all' | 'L' | 'P'>('all')
+  const [showRdmSync, setShowRdmSync] = useState(false)
+  const [rdmSyncing, setRdmSyncing] = useState(false)
+  const [rdmForm, setRdmForm] = useState({ base_url: 'https://ma-sd7.rdmku.pro', username: '', password: '', ajar_id: '', mapel_id: '', rombel_id: '', tahun_ajaran: '', semester: 'ganjil' })
   const [showBulkDelete, setShowBulkDelete] = useState(false)
   const [bulkDeleteScope, setBulkDeleteScope] = useState<'rombel' | 'all'>('rombel')
   const [bulkDeleteCount, setBulkDeleteCount] = useState(0)
@@ -89,6 +93,7 @@ export default function DataSiswaPage() {
     try {
       const params: any = { search }
       if (selectedRombelId) params.rombel_id = selectedRombelId
+      if (genderFilter !== 'all') params.jenis_kelamin = genderFilter
       if (foundationTenantId && foundationTenantId !== 'all') {
         params.tenant_id = foundationTenantId
       }
@@ -106,7 +111,7 @@ export default function DataSiswaPage() {
     }
   }
 
-  useEffect(() => { fetchData() }, [search, foundationTenantId, selectedRombelId])
+  useEffect(() => { fetchData() }, [search, foundationTenantId, selectedRombelId, genderFilter])
 
   // Sync selected panel when data refreshes
   useEffect(() => {
@@ -258,6 +263,26 @@ export default function DataSiswaPage() {
     toast.success('Export berhasil')
   }
 
+  const toggleAllKts = () => {
+    const ids = data.map(s => s.id)
+    const allSelected = ids.length > 0 && ids.every(id => selectedForKTS.has(id))
+    setSelectedForKTS(prev => {
+      const next = new Set(prev)
+      ids.forEach(id => allSelected ? next.delete(id) : next.add(id))
+      return next
+    })
+  }
+
+  const handleRdmSync = async (commit: boolean) => {
+    setRdmSyncing(true)
+    try {
+      const { data: result } = await api.post('/rapor/rdm/sas', { ...rdmForm, commit })
+      toast.success(commit ? `SAS tersimpan: ${result.saved}` : `Preview: ${result.matched} siswa cocok`)
+      if (commit) setShowRdmSync(false)
+    } catch (error: any) { toast.error(error.response?.data?.error || 'Sinkron SAS RDM gagal') }
+    finally { setRdmSyncing(false) }
+  }
+
   const handleGenerateKTS = async () => {
     const selected = Array.from(selectedForKTS)
     if (selected.length === 0) {
@@ -301,6 +326,12 @@ export default function DataSiswaPage() {
           {isLocalTenant && <button disabled={syncingAccounts} onClick={handleSyncStudentAccounts} className="flex items-center gap-2 px-4 py-2 bg-amber-600 text-white rounded-lg text-sm hover:bg-amber-700 disabled:opacity-60">
             <KeyRound size={16} /> {syncingAccounts ? 'Memproses...' : 'Reset Password ke NISN/NIS'}
           </button>}
+          {isLocalTenant && <button type="button" onClick={() => setShowRdmSync(true)} className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm hover:bg-indigo-700">
+            <RefreshCw size={16} /> Sinkron SAS RDM
+          </button>}
+          {isLocalTenant && <button type="button" onClick={toggleAllKts} disabled={data.length === 0} className="flex items-center gap-2 px-4 py-2 border border-purple-300 text-purple-700 rounded-lg text-sm hover:bg-purple-50 disabled:opacity-50">
+            <UsersRound size={16} /> {data.length > 0 && data.every(s => selectedForKTS.has(s.id)) ? 'Batal Pilih Semua' : 'Pilih Semua'}
+          </button>}
           {isLocalTenant && <button disabled={generatingKTS || selectedForKTS.size === 0} onClick={handleGenerateKTS} className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg text-sm hover:bg-purple-700 disabled:opacity-60">
             <Download size={16} /> {generatingKTS ? 'Memproses...' : `Generate KTS (${selectedForKTS.size})`}
           </button>}
@@ -343,9 +374,19 @@ export default function DataSiswaPage() {
             />
           </div>
           <select
+            aria-label="Filter jenis kelamin"
+            value={genderFilter}
+            onChange={(e) => { setGenderFilter(e.target.value as 'all' | 'L' | 'P'); setSelectedSiswa(null); setSelectedForKTS(new Set()) }}
+            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary/20"
+          >
+            <option value="all">Semua jenis kelamin</option>
+            <option value="L">Laki-laki</option>
+            <option value="P">Perempuan</option>
+          </select>
+          <select
             aria-label="Filter rombel atau kelas"
             value={selectedRombelId}
-            onChange={(e) => { setSelectedRombelId(e.target.value); setSelectedSiswa(null) }}
+            onChange={(e) => { setSelectedRombelId(e.target.value); setSelectedSiswa(null); setSelectedForKTS(new Set()) }}
             className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary/20"
           >
             <option value="">Semua rombel / kelas</option>
@@ -695,6 +736,22 @@ export default function DataSiswaPage() {
                 className="w-full rounded-lg border border-red-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-200"
               />
             </div>
+          </div>
+        </Modal>
+      )}
+
+      {isLocalTenant && showRdmSync && (
+        <Modal open={showRdmSync} onClose={() => !rdmSyncing && setShowRdmSync(false)} title="Sinkron SAS dari RDM" maxWidth="md:max-w-2xl" footer={
+          <div className="flex gap-2 justify-end">
+            <button onClick={() => setShowRdmSync(false)} disabled={rdmSyncing} className="px-4 py-2 border rounded-lg text-sm">Batal</button>
+            <button onClick={() => handleRdmSync(false)} disabled={rdmSyncing} className="px-4 py-2 bg-indigo-100 text-indigo-700 rounded-lg text-sm">Preview Mapping</button>
+            <button onClick={() => handleRdmSync(true)} disabled={rdmSyncing} className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm">{rdmSyncing ? 'Memproses...' : 'Simpan SAS'}</button>
+          </div>
+        }>
+          <p className="text-sm text-gray-500 mb-4">RDM hanya menjadi sumber nilai SAS. Preview terlebih dahulu; simpan hanya setelah mapping siswa dan mapel benar.</p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {([['base_url','URL RDM'],['username','User RDM'],['password','Password RDM'],['ajar_id','Ajar ID RDM'],['mapel_id','Mapel Jurnalku'],['rombel_id','Rombel Jurnalku'],['tahun_ajaran','Tahun Ajaran']] as const).map(([key,label]) => <label key={key} className="text-sm"><span className="block font-medium mb-1">{label}</span><input type={key === 'password' ? 'password' : 'text'} value={rdmForm[key]} onChange={e => setRdmForm(v => ({ ...v, [key]: e.target.value }))} className="w-full border rounded-lg px-3 py-2" /></label>)}
+            <label className="text-sm"><span className="block font-medium mb-1">Semester</span><select value={rdmForm.semester} onChange={e => setRdmForm(v => ({ ...v, semester: e.target.value }))} className="w-full border rounded-lg px-3 py-2"><option value="ganjil">Ganjil</option><option value="genap">Genap</option></select></label>
           </div>
         </Modal>
       )}
