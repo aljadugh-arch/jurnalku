@@ -7551,10 +7551,18 @@ app.post('/api/rapor/asesmen', STAFF, (req, res) => {
     }
   }
   
-  const upsert = db.prepare(`INSERT INTO rapor (id, siswa_id, mapel_id, tahun_ajaran, semester, jenis, nilai_sts, kkm, tenant_id, created_at, updated_at)
+  // FIX: pilih kolom sesuai jenis. Bug sebelumnya selalu menulis ke nilai_sts
+  // walau jenis='sas', sehingga nilai SAS masuk ke kolom yang salah dan tidak
+  // pernah muncul di rapor SAS (generator baca kolom nilai_sas untuk jenis=sas).
+  const upsertSts = db.prepare(`INSERT INTO rapor (id, siswa_id, mapel_id, tahun_ajaran, semester, jenis, nilai_sts, kkm, tenant_id, created_at, updated_at)
     VALUES (?,?,?,?,?,?,?,70,?,datetime('now'),datetime('now'))
     ON CONFLICT(tenant_id, siswa_id, mapel_id, tahun_ajaran, semester, jenis) DO UPDATE SET
       nilai_sts=excluded.nilai_sts, updated_at=datetime('now')`)
+  const upsertSas = db.prepare(`INSERT INTO rapor (id, siswa_id, mapel_id, tahun_ajaran, semester, jenis, nilai_sas, kkm, tenant_id, created_at, updated_at)
+    VALUES (?,?,?,?,?,?,?,70,?,datetime('now'),datetime('now'))
+    ON CONFLICT(tenant_id, siswa_id, mapel_id, tahun_ajaran, semester, jenis) DO UPDATE SET
+      nilai_sas=excluded.nilai_sas, updated_at=datetime('now')`)
+  const upsert = jenis === 'sas' ? upsertSas : upsertSts
   
   const trx = db.transaction(() => {
     let count = 0
@@ -7726,9 +7734,9 @@ app.post('/api/rapor/nilai-sumatif', STAFF, (req, res) => {
   const upsertSts = db.prepare(`INSERT INTO rapor (id, siswa_id, mapel_id, tahun_ajaran, semester, jenis, nilai_sts, kkm, tenant_id, created_at, updated_at)
     VALUES (?,?,?,?,?,'sts',?,70,?,datetime('now'),datetime('now'))
     ON CONFLICT(tenant_id, siswa_id, mapel_id, tahun_ajaran, semester, jenis) DO UPDATE SET nilai_sts=excluded.nilai_sts, updated_at=datetime('now')`)
-  const upsertSas = db.prepare(`INSERT INTO rapor (id, siswa_id, mapel_id, tahun_ajaran, semester, jenis, nilai_sts, kkm, tenant_id, created_at, updated_at)
+  const upsertSas = db.prepare(`INSERT INTO rapor (id, siswa_id, mapel_id, tahun_ajaran, semester, jenis, nilai_sas, kkm, tenant_id, created_at, updated_at)
     VALUES (?,?,?,?,?,'sas',?,70,?,datetime('now'),datetime('now'))
-    ON CONFLICT(tenant_id, siswa_id, mapel_id, tahun_ajaran, semester, jenis) DO UPDATE SET nilai_sts=excluded.nilai_sts, updated_at=datetime('now')`)
+    ON CONFLICT(tenant_id, siswa_id, mapel_id, tahun_ajaran, semester, jenis) DO UPDATE SET nilai_sas=excluded.nilai_sas, updated_at=datetime('now')`)
   const trx = db.transaction(() => {
     let count = 0
     let skipped = 0
