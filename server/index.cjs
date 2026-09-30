@@ -35,6 +35,8 @@ const {
 } = require('./nilai-rekap-service.cjs')
 const { getAttendanceOverview, studentAttendance } = require('./attendance-summary.cjs')
 const { monitorStatus, sanitizeExamForMonitor } = require('./exam-proctor.cjs')
+const { buatPemeriksaOrigin } = require('./cors-origin.cjs')
+const { migrateRaporUniqueIndex } = require('./rapor-unique-index.cjs')
 const { createRaporSiswaPdf } = require('./rapor-siswa-pdf-service.cjs')
 const { createKtsPdf } = require('./kts-pdf-service.cjs')
 const { getCategoryRecap } = require('./attendance-recap.cjs')
@@ -75,28 +77,15 @@ app.use(helmet({
   referrerPolicy: { policy: 'strict-origin-when-cross-origin' } // default Helmet no-referrer terlalu ketat untuk mobile
 }))
 
-// CORS: restrict to known origins in production, allow all in dev
+// CORS: restrict to known origins in production, allow all in dev.
+// Penolakan memakai status 403 (lihat server/cors-origin.cjs) supaya tidak
+// lagi jatuh ke error handler global sebagai 500.
 const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS || 'https://jurnal.cc.cd,https://jurnalmadrasah.web.id')
   .split(',').map(s => s.trim())
+const cariDomainTenant = (host) =>
+  db.prepare("SELECT id FROM tenants WHERE lower(trim(domain_custom, '.')) = ? AND aktif = 1").get(host)
 app.use(cors({
-  origin: (origin, cb) => {
-    if (!origin) return cb(null, true) // curl / same-origin / mobile
-    if (!IS_PROD) return cb(null, true)
-    // allow main domains
-    if (ALLOWED_ORIGINS.includes(origin)) return cb(null, true)
-    // allow any subdomain under jurnal.cc.cd or jurnalmadrasah.web.id
-    // termasuk multi-level: jurnal.mtsplussd7.cc.cd → ends with .cc.cd
-    if (/^https:\/\/[a-z0-9][a-z0-9.-]+\.(jurnal\.cc\.cd|jurnalmadrasah\.web\.id|cc\.cd|web\.id)$/i.test(origin)) {
-      return cb(null, true)
-    }
-    // allow registered custom domains (from tenant DB)
-    try {
-      const host = origin.replace(/^https?:\/\//, '').split(':')[0].toLowerCase().replace(/\.$/, '')
-      const tenant = db.prepare("SELECT id FROM tenants WHERE lower(trim(domain_custom, '.')) = ? AND aktif = 1").get(host)
-      if (tenant) return cb(null, true)
-    } catch {}
-    return cb(new Error('Not allowed by CORS'))
-  },
+  origin: buatPemeriksaOrigin({ allowedOrigins: ALLOWED_ORIGINS, isProd: IS_PROD, cariTenantDomain: cariDomainTenant }),
   credentials: true
 }))
 
@@ -1203,15 +1192,10 @@ try {
 
 // Pastikan uniqueness rapor selalu tenant-scoped. SQLite tidak mengubah
 // definisi index yang sudah ada saat CREATE INDEX IF NOT EXISTS dipanggil.
+// Logika di server/rapor-unique-index.cjs: hanya DROP+CREATE bila definisi
+// yang ada memang berbeda, jadi restart tidak lagi membangun ulang index.
 try {
-  const migrateRaporUnique = db.transaction(() => {
-    const duplicates = db.prepare(`SELECT tenant_id,siswa_id,mapel_id,tahun_ajaran,semester,jenis,COUNT(*) AS total
-      FROM rapor GROUP BY tenant_id,siswa_id,mapel_id,tahun_ajaran,semester,jenis HAVING COUNT(*)>1 LIMIT 1`).get()
-    if (duplicates) throw new Error('duplikat rapor harus diselesaikan sebelum migrasi index')
-    db.exec('DROP INDEX IF EXISTS idx_rapor_unique')
-    db.exec('CREATE UNIQUE INDEX idx_rapor_unique ON rapor(tenant_id, siswa_id, mapel_id, tahun_ajaran, semester, jenis)')
-  })
-  migrateRaporUnique()
+  if (migrateRaporUniqueIndex(db)) console.log('[migrate] idx_rapor_unique dibangun ulang (tenant-scoped)')
 } catch (e) { console.error('[migrate] rapor unique tenant failed', e.message) }
 
 // Migrasi settings: kolom kop lembaga untuk cetak rapor.
@@ -9123,12 +9107,26 @@ app.use((req, res, next) => {
 
 // Global error handler: cegah crash 500 kosong, kembalikan JSON error yang bisa dibaca frontend
 app.use((err, req, res, next) => {
-  console.error('Unhandled error:', req.method, req.path, err.message)
   if (res.headersSent) return next(err)
+  // Origin CORS yang ditolak bukan kesalahan server: balas 403, bukan 500.
+  if (err.code === 'CORS_ORIGIN_DENIED') {
+    console.warn('CORS ditolak:', req.method, req.path, err.origin)
+    return res.status(403).json({ error: 'Origin tidak diizinkan' })
+  }
+  const statusBawaan = Number(err.status || err.statusCode)
+  const status4xx = Number.isInteger(statusBawaan) && statusBawaan >= 400 && statusBawaan < 500
+  const galatBatasan =
+    err.code === 'SQLITE_CONSTRAINT_UNIQUE' || err.code === 'SQLITE_CONSTRAINT' || err.code === 'SQLITE_CONSTRAINT_FOREIGNKEY'
+  // 4xx = permintaan klien tidak valid, bukan kegagalan server: catat sebagai peringatan
+  // agar log produksi tidak penuh "Unhandled error" untuk hal yang bukan error server.
+  if (status4xx || galatBatasan) console.warn('Permintaan ditolak:', req.method, req.path, err.code || statusBawaan, err.message)
+  else console.error('Unhandled error:', req.method, req.path, err.message)
   if (err.code === 'SQLITE_CONSTRAINT_UNIQUE' || err.code === 'SQLITE_CONSTRAINT')
     return res.status(400).json({ error: 'Data duplikat (kode/NIP/NIS sudah dipakai).' })
   if (err.code === 'SQLITE_CONSTRAINT_FOREIGNKEY')
     return res.status(400).json({ error: 'Data masih dipakai di tabel lain. Hapus data terkait dulu.' })
+  // Hormati status 4xx eksplisit dari middleware (mis. body parser: 400/413).
+  if (status4xx) return res.status(statusBawaan).json({ error: err.message || 'Permintaan tidak valid' })
   res.status(500).json({ error: 'Terjadi kesalahan server: ' + (err.message || 'unknown') })
 })
 
