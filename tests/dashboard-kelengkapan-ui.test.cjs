@@ -14,6 +14,7 @@ const path = require('path')
 const baca = rel => fs.readFileSync(path.join(__dirname, '..', rel), 'utf8')
 
 const HALAMAN = 'src/pages/admin/MonitoringDataPage.tsx'
+const GERBANG = 'src/lib/halamanTindakan.ts'
 const MENU = 'src/lib/menuItems.tsx'
 const SIDEBAR = 'src/components/layout/Sidebar.tsx'
 
@@ -63,6 +64,54 @@ test('route /admin/monitoring terdaftar dan lazy-loaded', () => {
   const app = baca('src/App.tsx')
   assert.ok(app.includes("import('./pages/admin/MonitoringDataPage')"), 'halaman monitoring belum lazy-loaded')
   assert.ok(app.includes('<Route path="monitoring" element={<MonitoringDataPage />} />'), 'route monitoring belum terdaftar di /admin')
+})
+
+test('tautan khusus admin disembunyikan dari peran non-admin', () => {
+  const app = baca('src/App.tsx')
+  const hal = baca(HALAMAN)
+  const gerbang = baca(GERBANG)
+  const backend = baca('server/dashboard-kelengkapan.cjs')
+
+  // Semua tautan yang dikirim backend harus ikut dipertimbangkan.
+  const tautan = [...backend.matchAll(/tautan:\s*'(\/admin\/[a-z-]+)'/g)].map(m => m[1])
+  assert.ok(tautan.length >= 10, `peta tautan backend tidak terbaca (${tautan.length})`)
+
+  // Daftar di modul gerbang bersama (satu sumber kebenaran untuk semua UI).
+  const digate = new Set([...gerbang.matchAll(/'(?:\/admin\/[a-z-]+)'/g)].map(m => m[0].slice(1, -1)))
+
+  // Sebuah halaman "hanya admin" bila route-nya tidak mengizinkan kepala.
+  // Pencarian dibatasi sampai '>' pertama agar tidak menyeberang ke route
+  // berikutnya (route tanpa guard sering diikuti route ber-guard).
+  const hanyaAdmin = (path) => {
+    const nama = path.replace('/admin/', '')
+    const m = app.match(new RegExp('<Route path="' + nama + '"[^>]{0,240}?allowedRoles=\\{([^}]*)\\}'))
+    if (!m) return false
+    return m[1].includes("'admin'") && !m[1].includes("'kepala'") && !m[1].includes("'operator'")
+  }
+
+  const wajibDigate = tautan.filter(hanyaAdmin)
+  assert.ok(wajibDigate.length > 0, 'tidak ada halaman khusus admin yang terdeteksi — cek parser route')
+
+  for (const t of wajibDigate) {
+    assert.ok(digate.has(t), `tautan ${t} hanya bisa dibuka admin tapi tetap dirender untuk kepala`)
+  }
+  // Jangan menutup tautan yang sebenarnya boleh dibuka peran lain.
+  for (const t of tautan.filter(x => !hanyaAdmin(x))) {
+    assert.ok(!digate.has(t), `tautan ${t} sebenarnya boleh dibuka kepala tapi ikut disembunyikan`)
+  }
+
+  // Gate-nya harus benar-benar dipakai saat merender (desktop & mobile).
+  assert.ok(hal.includes('const bisaBuka ='), 'helper bisaBuka tidak ada di halaman monitoring')
+  assert.ok(hal.includes('bisaBuka(item.tautan)'), 'tombol kartu tidak memakai gate')
+  assert.ok(hal.includes('bisaBuka(p.tautan)'), 'tombol prioritas tidak memakai gate')
+  assert.ok(hal.includes("useAuthStore(s => s.user?.role)"), 'peran pengguna tidak dibaca di halaman monitoring')
+
+  const mobile = baca('src/pages/admin/MobileAdminDashboard.tsx')
+  assert.ok(mobile.includes('bisaBukaHalaman(user?.role, p.tautan)'), 'kartu prioritas mobile tidak memakai gate')
+
+  // Fungsi gerbang sendiri harus benar untuk peran kepala.
+  assert.ok(gerbang.includes("'/admin/settings'") && gerbang.includes("'/admin/rekap-nilai'"), 'daftar halaman khusus admin berubah')
+  assert.ok(/PERAN_ADMIN = \['admin', 'super_admin'\]/.test(gerbang), 'peran admin tidak didefinisikan')
 })
 
 test('dashboard admin/kepala hanya ringkas dan menaut ke halaman monitoring', () => {

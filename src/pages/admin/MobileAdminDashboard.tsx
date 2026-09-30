@@ -8,6 +8,7 @@ import {
 } from 'recharts'
 import api from '../../services/api'
 import { adminDashboardShortcuts, parseAdminDashboardShortcutKeys } from '../../lib/adminDashboardShortcuts'
+import { bisaBukaHalaman } from '../../lib/halamanTindakan'
 import { useAuthStore } from '../../stores/authStore'
 import { useSettingsStore } from '../../stores/settingsStore'
 import MobileHeader from '../../components/MobileHeader'
@@ -134,7 +135,10 @@ export default function MobileAdminDashboard({ stats, kelengkapan }: Props) {
               />
             </div>
             {/* Yang paling tertinggal saja — rincian penuh di menu Monitoring Data */}
-            {(kelengkapan.prioritas || []).slice(0, 3).map((p: any) => (
+            {(kelengkapan.prioritas || [])
+              .filter((p: any) => bisaBukaHalaman(user?.role, p.tautan))
+              .slice(0, 3)
+              .map((p: any) => (
               <Link
                 key={p.key}
                 to={p.tautan || '/admin/monitoring'}

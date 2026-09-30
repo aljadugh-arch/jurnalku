@@ -7,6 +7,8 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell
 } from 'recharts'
 import api from '../../services/api'
+import { useAuthStore } from '../../stores/authStore'
+import { bisaBukaHalaman } from '../../lib/halamanTindakan'
 import { PageHeader, Card, Badge, Button } from '../../components/ui'
 
 /**
@@ -81,6 +83,7 @@ const formatTanggal = (iso?: string) => {
 }
 
 export default function MonitoringDataPage() {
+  const role = useAuthStore(s => s.user?.role)
   const [data, setData] = useState<Kelengkapan | null>(null)
   const [loading, setLoading] = useState(true)
   const [gagal, setGagal] = useState(false)
@@ -103,6 +106,10 @@ export default function MonitoringDataPage() {
   const skorMeta = meta(data?.status_keseluruhan || 'kosong')
 
   const chartData = items.map(i => ({ nama: i.label, persen: i.persen, status: i.status }))
+
+  // Tautan yang tidak boleh dibuka peran ini ditampilkan sebagai keterangan,
+  // bukan tombol — supaya tidak ada klik yang berakhir memantul.
+  const bisaBuka = (tautan?: string) => bisaBukaHalaman(role, tautan)
 
   return (
     <div className="p-4 lg:p-6">
@@ -190,13 +197,19 @@ export default function MonitoringDataPage() {
                         </div>
                         {p.detail && <p className="text-xs text-gray-500 mt-0.5">{p.detail}</p>}
                       </div>
-                      <Link
-                        to={p.tautan}
-                        className="inline-flex items-center gap-1.5 rounded-lg bg-primary text-white text-sm font-medium px-3 py-2 shrink-0 active:scale-95 transition"
-                      >
-                        {p.tautan_label || 'Buka menu'}
-                        <ArrowRight size={14} />
-                      </Link>
+                      {bisaBuka(p.tautan) ? (
+                        <Link
+                          to={p.tautan}
+                          className="inline-flex items-center gap-1.5 rounded-lg bg-primary text-white text-sm font-medium px-3 py-2 shrink-0 active:scale-95 transition"
+                        >
+                          {p.tautan_label || 'Buka menu'}
+                          <ArrowRight size={14} />
+                        </Link>
+                      ) : (
+                        <span className="inline-flex items-center gap-1.5 rounded-lg bg-gray-100 text-gray-500 text-xs font-medium px-3 py-2 shrink-0">
+                          {p.tautan_label || 'Buka menu'} — hanya admin
+                        </span>
+                      )}
                     </div>
                   )
                 })}
@@ -247,7 +260,7 @@ export default function MonitoringDataPage() {
                   </div>
                   {item.detail && <p className="text-xs text-gray-500 mt-2">{item.detail}</p>}
                   <div className="flex flex-wrap items-center gap-2 mt-3">
-                    {item.tautan && (
+                    {item.tautan && bisaBuka(item.tautan) && (
                       <Link
                         to={item.tautan}
                         className={
@@ -261,7 +274,7 @@ export default function MonitoringDataPage() {
                         <ExternalLink size={14} />
                       </Link>
                     )}
-                    {item.tindakan_lain?.map(t => (
+                    {item.tindakan_lain?.filter(t => bisaBuka(t.tautan)).map(t => (
                       <Link
                         key={t.tautan}
                         to={t.tautan}
