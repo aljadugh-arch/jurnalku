@@ -37,7 +37,7 @@ const { getAttendanceOverview, studentAttendance } = require('./attendance-summa
 const { monitorStatus, sanitizeExamForMonitor } = require('./exam-proctor.cjs')
 const { buatPemeriksaOrigin } = require('./cors-origin.cjs')
 const { migrateRaporUniqueIndex } = require('./rapor-unique-index.cjs')
-const { createRaporSiswaPdf } = require('./rapor-siswa-pdf-service.cjs')
+const { createRaporSiswaPdf, normalizeBagian: normalizeBagianRapor, BAGIAN_VALID: BAGIAN_RAPOR_VALID } = require('./rapor-siswa-pdf-service.cjs')
 const { createKtsPdf } = require('./kts-pdf-service.cjs')
 const { getCategoryRecap } = require('./attendance-recap.cjs')
 const { buildRekapRange, getPeriodicAttendanceRecap, deduplicateAttendance } = require('./attendance-periodic-recap.cjs')
@@ -1235,28 +1235,62 @@ try {
 // Migrasi: kolom UNIQUE global (nip/nis/kode) peninggalan pra-multi-tenant bikin
 // import/edit gagal begitu ada NIP/NIS kosong kedua atau kode sama antar-sekolah.
 // Ganti jadi UNIQUE composite per-tenant via recreate table (aman: tidak ada FK ke kolom ini).
+// Pastikan kolom ada sebelum tabel di-recreate, agar DB lama tidak kehilangan
+// kemampuan menyimpan field yang ditambahkan migrasi lain.
+function ensureColumns(db, table, cols) {
+  const have = db.prepare(`PRAGMA table_info(${table})`).all().map(c => c.name)
+  for (const [name, type] of cols) {
+    if (!have.includes(name)) db.exec(`ALTER TABLE ${table} ADD COLUMN ${name} ${type}`)
+  }
+}
+
+// Bangun ulang tabel untuk melepas UNIQUE global peninggalan pra-multi-tenant.
+// Definisi kolom dibaca dari PRAGMA table_info (bukan daftar hardcoded) supaya
+// kolom hasil migrasi lain — mis. biodata ayah/ibu/wali pada `siswa` — tidak
+// ikut terhapus saat tabel di-recreate. UNIQUE inline sengaja tidak disalin,
+// karena diganti index komposit per-tenant.
+function rebuildTableWithoutGlobalUnique(db, table, indexes = []) {
+  const cols = db.prepare(`PRAGMA table_info(${table})`).all()
+  if (!cols.length) throw new Error(`tabel ${table} tidak ditemukan`)
+  const defs = cols.map(c => {
+    const parts = [`${c.name} ${c.type || 'TEXT'}`]
+    if (c.pk) parts.push('PRIMARY KEY')
+    if (c.notnull && !c.pk) parts.push('NOT NULL')
+    if (c.dflt_value !== null && c.dflt_value !== undefined) {
+      const raw = String(c.dflt_value)
+      // PRAGMA mengembalikan ekspresi apa adanya; SQLite menolak
+      // `DEFAULT datetime('now')` — ekspresi fungsi wajib dalam tanda kurung.
+      const expr = raw.includes('(') && !(raw.startsWith('(') && raw.endsWith(')')) ? `(${raw})` : raw
+      parts.push(`DEFAULT ${expr}`)
+    }
+    return parts.join(' ')
+  })
+  const colList = cols.map(c => c.name).join(', ')
+  // Dijalankan dalam satu transaksi: kalau salah satu langkah gagal, tabel asli
+  // tidak pernah ter-DROP (recreate tabel tanpa transaksi berisiko kehilangan data).
+  db.transaction(() => db.exec(`
+    DROP TABLE IF EXISTS ${table}_new;
+    CREATE TABLE ${table}_new (${defs.join(', ')});
+    INSERT INTO ${table}_new (${colList}) SELECT ${colList} FROM ${table};
+    DROP TABLE ${table};
+    ALTER TABLE ${table}_new RENAME TO ${table};
+    ${indexes.join(';\n')};
+  `))()
+}
+
 function migrateUniquePerTenant(db) {
   try {
     const idx = db.prepare("PRAGMA index_list(gtk)").all()
     const hasGlobalUnique = idx.some(i => i.unique && i.origin === 'u' && !i.name.includes('tenant'))
     if (hasGlobalUnique) {
-      const gtkCols = db.prepare('PRAGMA table_info(gtk)').all().map(c => c.name)
-      const nikSelect = gtkCols.includes('nik') ? 'nik' : 'NULL'
-      db.exec(`
-        DROP TABLE IF EXISTS gtk_new;
-        CREATE TABLE gtk_new (
-          id TEXT PRIMARY KEY, nik TEXT, nip TEXT, nuptk TEXT, nama TEXT NOT NULL, jenis_kelamin TEXT NOT NULL,
-          tempat_lahir TEXT, tanggal_lahir TEXT, alamat TEXT, no_hp TEXT, email TEXT,
-          jabatan TEXT DEFAULT 'guru', status_kepegawaian TEXT DEFAULT 'honorer', bidang_studi TEXT,
-          foto TEXT, status TEXT DEFAULT 'aktif', created_at TEXT DEFAULT (datetime('now')),
-          tenant_id TEXT DEFAULT 'default', kode_guru TEXT DEFAULT ''
-        );
-        INSERT INTO gtk_new SELECT id, ${nikSelect}, NULLIF(nip,''), nuptk, nama, jenis_kelamin, tempat_lahir, tanggal_lahir, alamat, no_hp, email, jabatan, status_kepegawaian, bidang_studi, foto, status, created_at, tenant_id, kode_guru FROM gtk;
-        DROP TABLE gtk;
-        ALTER TABLE gtk_new RENAME TO gtk;
-        CREATE UNIQUE INDEX IF NOT EXISTS idx_gtk_nip_tenant ON gtk(nip, tenant_id) WHERE nip IS NOT NULL;
-        CREATE INDEX IF NOT EXISTS idx_gtk_tenant ON gtk(tenant_id);
-      `)
+      ensureColumns(db, 'gtk', [['nik', 'TEXT'], ['kode_guru', "TEXT DEFAULT ''"]])
+      rebuildTableWithoutGlobalUnique(db, 'gtk', [
+        'CREATE UNIQUE INDEX IF NOT EXISTS idx_gtk_nip_tenant ON gtk(nip, tenant_id) WHERE nip IS NOT NULL',
+        'CREATE INDEX IF NOT EXISTS idx_gtk_tenant ON gtk(tenant_id)',
+      ])
+      // nip kosong dinormalkan ke NULL agar index unik parsial di atas benar-benar
+      // mengizinkan banyak guru tanpa NIP dalam satu tenant.
+      db.prepare("UPDATE gtk SET nip=NULL WHERE nip=''").run()
       console.log('[migrate] gtk: UNIQUE global -> per-tenant OK')
     }
   } catch (e) { console.error('migrate gtk unique failed', e.message) }
@@ -1265,23 +1299,14 @@ function migrateUniquePerTenant(db) {
     const idx = db.prepare("PRAGMA index_list(siswa)").all()
     const hasGlobalUnique = idx.some(i => i.unique && i.origin === 'u')
     if (hasGlobalUnique) {
-      const siswaCols = db.prepare('PRAGMA table_info(siswa)').all().map(c => c.name)
-      const nikSelect = siswaCols.includes('nik') ? 'nik' : 'NULL'
-      const panggilanSelect = siswaCols.includes('nama_panggilan') ? 'nama_panggilan' : 'NULL'
-      db.exec(`
-        DROP TABLE IF EXISTS siswa_new;
-        CREATE TABLE siswa_new (
-          id TEXT PRIMARY KEY, nik TEXT, nis TEXT NOT NULL, nisn TEXT, nama TEXT NOT NULL, jenis_kelamin TEXT NOT NULL,
-          tempat_lahir TEXT, tanggal_lahir TEXT, alamat TEXT, no_hp TEXT, nama_ortu TEXT, nama_panggilan TEXT,
-          rombel_id TEXT, foto TEXT, status TEXT DEFAULT 'aktif', created_at TEXT DEFAULT (datetime('now')),
-          tenant_id TEXT DEFAULT 'default'
-        );
-        INSERT INTO siswa_new SELECT id, ${nikSelect}, nis, nisn, nama, jenis_kelamin, tempat_lahir, tanggal_lahir, alamat, no_hp, nama_ortu, ${panggilanSelect}, rombel_id, foto, status, created_at, tenant_id FROM siswa;
-        DROP TABLE siswa;
-        ALTER TABLE siswa_new RENAME TO siswa;
-        CREATE UNIQUE INDEX IF NOT EXISTS idx_siswa_nis_tenant ON siswa(nis, tenant_id);
-        CREATE INDEX IF NOT EXISTS idx_siswa_tenant ON siswa(tenant_id);
-      `)
+      ensureColumns(db, 'siswa', [['nik', 'TEXT'], ['nama_panggilan', 'TEXT'],
+        ['agama', "TEXT DEFAULT 'Islam'"], ['status_keluarga', "TEXT DEFAULT 'Anak Kandung'"], ['anak_ke', 'INTEGER'],
+        ['asal_sekolah', 'TEXT'], ['nama_ayah', 'TEXT'], ['nama_ibu', 'TEXT'], ['alamat_ortu', 'TEXT'],
+        ['kerja_ayah', 'TEXT'], ['kerja_ibu', 'TEXT'], ['nama_wali', 'TEXT'], ['kerja_wali', 'TEXT']])
+      rebuildTableWithoutGlobalUnique(db, 'siswa', [
+        'CREATE UNIQUE INDEX IF NOT EXISTS idx_siswa_nis_tenant ON siswa(nis, tenant_id)',
+        'CREATE INDEX IF NOT EXISTS idx_siswa_tenant ON siswa(tenant_id)',
+      ])
       console.log('[migrate] siswa: UNIQUE global -> per-tenant OK')
     }
   } catch (e) { console.error('migrate siswa unique failed', e.message) }
@@ -1290,18 +1315,11 @@ function migrateUniquePerTenant(db) {
     const idx = db.prepare("PRAGMA index_list(mapel)").all()
     const hasGlobalUnique = idx.some(i => i.unique && i.origin === 'u')
     if (hasGlobalUnique) {
-      db.exec(`
-        DROP TABLE IF EXISTS mapel_new;
-        CREATE TABLE mapel_new (
-          id TEXT PRIMARY KEY, kode TEXT NOT NULL, nama TEXT NOT NULL, kelompok TEXT DEFAULT 'wajib',
-          tingkat TEXT DEFAULT '[]', jam_per_minggu INTEGER DEFAULT 2, tenant_id TEXT DEFAULT 'default'
-        );
-        INSERT INTO mapel_new SELECT id, kode, nama, kelompok, tingkat, jam_per_minggu, tenant_id FROM mapel;
-        DROP TABLE mapel;
-        ALTER TABLE mapel_new RENAME TO mapel;
-        CREATE UNIQUE INDEX IF NOT EXISTS idx_mapel_kode_tenant ON mapel(kode, tenant_id);
-        CREATE INDEX IF NOT EXISTS idx_mapel_tenant ON mapel(tenant_id);
-      `)
+      ensureColumns(db, 'mapel', [['tingkat', "TEXT DEFAULT '[]'"], ['jam_per_minggu', 'INTEGER DEFAULT 2']])
+      rebuildTableWithoutGlobalUnique(db, 'mapel', [
+        'CREATE UNIQUE INDEX IF NOT EXISTS idx_mapel_kode_tenant ON mapel(kode, tenant_id)',
+        'CREATE INDEX IF NOT EXISTS idx_mapel_tenant ON mapel(tenant_id)',
+      ])
       console.log('[migrate] mapel: UNIQUE global -> per-tenant OK')
     }
   } catch (e) { console.error('migrate mapel unique failed', e.message) }
@@ -7339,7 +7357,7 @@ app.get('/api/rapor/ringkasan', authMiddleware, (req, res) => {
   const kepribadian = db.prepare(`SELECT sikap_spiritual,sikap_sosial,sikap_umum,kelakuan,kerajinan,kerapian,kedisiplinan,catatan_wali_kelas,saran
     FROM catatan_kepribadian WHERE siswa_id=? AND tahun_ajaran=? AND semester=? AND tenant_id=? ORDER BY updated_at DESC LIMIT 1`)
     .get(siswa_id, tahun_ajaran, semester, req.tenantId) || {}
-  const pelengkap = db.prepare(`SELECT * FROM rapor_pelengkap
+  const pelengkap = db.prepare(`SELECT id,siswa_id,tahun_ajaran,semester,jenis,prestasi,catatan_wali_kelas,tanggapan_orang_tua,keputusan,tanggal_pembagian,updated_at FROM rapor_pelengkap
     WHERE tenant_id=? AND siswa_id=? AND tahun_ajaran=? AND semester=? AND jenis=?`)
     .get(req.tenantId, siswa_id, tahun_ajaran, semester, jenis) || {}
   try { pelengkap.prestasi = JSON.parse(pelengkap.prestasi || '[]') } catch { pelengkap.prestasi = [] }
@@ -7359,17 +7377,23 @@ app.get('/api/rapor/ringkasan', authMiddleware, (req, res) => {
 // Rapor siswa siap-cetak (PDF server-side, sampul + identitas + capaian hasil belajar).
 // Reuse validasi & scope akses persis /api/rapor/ringkasan di atas.
 app.get('/api/rapor/export/pdf', authMiddleware, async (req, res) => {
-  const { siswa_id, tahun_ajaran, semester, jenis = 'rapor_sts' } = req.query
+  const { siswa_id, tahun_ajaran, semester, jenis = 'rapor_sts', bagian } = req.query
   if (!siswa_id || !tahun_ajaran || !semester) return res.status(400).json({ error: 'siswa_id, tahun_ajaran, semester wajib' })
+  // bagian: cover (sampul), identitas (biodata siswa), nilai (capaian hasil
+  // belajar), lengkap (ketiganya). Tanpa bagian = lengkap (kompatibel mundur).
+  if (bagian !== undefined && bagian !== '' && !BAGIAN_RAPOR_VALID.includes(String(bagian).trim().toLowerCase())) {
+    return res.status(400).json({ error: `bagian harus salah satu dari: ${BAGIAN_RAPOR_VALID.join(', ')}` })
+  }
+  const bagianPdf = normalizeBagianRapor(bagian)
   const validationError = validateRaporPeriod(tahun_ajaran, semester, jenis)
   if (validationError) return res.status(400).json({ error: validationError })
   if (isTeacherContext(req) && !teacherCanAccessStudent(req, siswa_id)) return res.status(404).json({ error: 'Siswa tidak ditemukan' })
   try {
-    const doc = await createRaporSiswaPdf(db, { tenantId: req.tenantId, siswaId: siswa_id, tahunAjaran: tahun_ajaran, semester, jenis, uploadDir: UPLOAD_DIR })
+    const doc = await createRaporSiswaPdf(db, { tenantId: req.tenantId, siswaId: siswa_id, tahunAjaran: tahun_ajaran, semester, jenis, uploadDir: UPLOAD_DIR, bagian: bagianPdf })
     if (!doc) return res.status(404).json({ error: 'Siswa tidak ditemukan' })
     if (doc.error === 'RAPOR_NOT_GENERATED') return res.status(409).json({ error: 'Rapor belum digenerate. Klik Generate terlebih dahulu.' })
     res.setHeader('Content-Type', 'application/pdf')
-    res.setHeader('Content-Disposition', `attachment; filename="rapor-${siswa_id}-${semester}.pdf"`)
+    res.setHeader('Content-Disposition', `attachment; filename="${bagianPdf === 'lengkap' ? 'rapor' : bagianPdf}-${siswa_id}-${semester}.pdf"`)
     doc.pipe(res)
     doc.end()
   } catch (e) {
@@ -7385,17 +7409,6 @@ app.put('/api/rapor/pelengkap', STAFF, (req, res) => {
   if (validationError) return res.status(400).json({ error: validationError })
   const siswa = db.prepare('SELECT id FROM siswa WHERE id=? AND tenant_id=?').get(siswa_id, req.tenantId)
   if (!siswa || !canManageRaporStudent(req, siswa_id)) return res.status(404).json({ error: 'Siswa tidak ditemukan' })
-  const numberOrNull = (value, min, max, message) => {
-    if (value === '' || value == null) return null
-    const number = Number(value)
-    if (!Number.isFinite(number) || number < min || number > max) throw new RangeError(message)
-    return number
-  }
-  let tinggiBadan, beratBadan
-  try {
-    tinggiBadan = numberOrNull(req.body.tinggi_badan, 30, 250, 'tinggi_badan harus di antara 30 dan 250 cm')
-    beratBadan = numberOrNull(req.body.berat_badan, 1, 300, 'berat_badan harus di antara 1 dan 300 kg')
-  } catch (error) { return res.status(400).json({ error: error.message }) }
   const tanggalPembagian = String(req.body.tanggal_pembagian || '').trim()
   if (tanggalPembagian && (!/^\d{4}-\d{2}-\d{2}$/.test(tanggalPembagian) || Number.isNaN(Date.parse(`${tanggalPembagian}T00:00:00Z`)))) return res.status(400).json({ error: 'tanggal_pembagian tidak valid' })
   const keputusan = String(req.body.keputusan || '').trim().slice(0, 300)
@@ -7405,23 +7418,19 @@ app.put('/api/rapor/pelengkap', STAFF, (req, res) => {
     keterangan: String(item?.keterangan || '').slice(0, 300),
   })).filter(item => item.jenis || item.keterangan) : []
   const values = {
-    tinggi_badan: tinggiBadan,
-    berat_badan: beratBadan,
-    kondisi_kesehatan: String(req.body.kondisi_kesehatan || '').slice(0, 1000),
     prestasi: JSON.stringify(prestasi),
     catatan_wali_kelas: String(req.body.catatan_wali_kelas || '').slice(0, 2000),
     tanggapan_orang_tua: String(req.body.tanggapan_orang_tua || '').slice(0, 2000),
     keputusan,
     tanggal_pembagian: tanggalPembagian,
   }
-  db.prepare(`INSERT INTO rapor_pelengkap (id,siswa_id,tahun_ajaran,semester,jenis,tinggi_badan,berat_badan,kondisi_kesehatan,prestasi,catatan_wali_kelas,tanggapan_orang_tua,keputusan,tanggal_pembagian,tenant_id,updated_at)
-    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,datetime('now'))
+  db.prepare(`INSERT INTO rapor_pelengkap (id,siswa_id,tahun_ajaran,semester,jenis,prestasi,catatan_wali_kelas,tanggapan_orang_tua,keputusan,tanggal_pembagian,tenant_id,updated_at)
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,datetime('now'))
     ON CONFLICT(tenant_id,siswa_id,tahun_ajaran,semester,jenis) DO UPDATE SET
-      tinggi_badan=excluded.tinggi_badan,berat_badan=excluded.berat_badan,kondisi_kesehatan=excluded.kondisi_kesehatan,
       prestasi=excluded.prestasi,catatan_wali_kelas=excluded.catatan_wali_kelas,tanggapan_orang_tua=excluded.tanggapan_orang_tua,
       keputusan=excluded.keputusan,tanggal_pembagian=excluded.tanggal_pembagian,updated_at=datetime('now')`)
-    .run(uuidv4(), siswa_id, tahun_ajaran, semester, jenis, values.tinggi_badan, values.berat_badan,
-      values.kondisi_kesehatan, values.prestasi, values.catatan_wali_kelas, values.tanggapan_orang_tua,
+    .run(uuidv4(), siswa_id, tahun_ajaran, semester, jenis,
+      values.prestasi, values.catatan_wali_kelas, values.tanggapan_orang_tua,
       values.keputusan, values.tanggal_pembagian, req.tenantId)
   res.json({ success: true })
 })

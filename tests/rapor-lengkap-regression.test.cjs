@@ -21,8 +21,6 @@ test('backend menyimpan pelengkap rapor secara tenant-scoped', () => {
   assert.match(server, /UNIQUE\(tenant_id, siswa_id, tahun_ajaran, semester, jenis\)/)
   assert.match(server, /put\('\/api\/rapor\/pelengkap'/)
   assert.match(server, /keputusan/)
-  assert.match(server, /tinggi_badan/)
-  assert.match(server, /berat_badan/)
   assert.match(server, /prestasi/)
 })
 
@@ -46,9 +44,10 @@ test('hasil cetak rapor memiliki halaman identitas dan isi A4', () => {
 })
 
 test('aksi siap cetak memakai PDF server agar layout sampul konsisten', () => {
-  assert.match(page, /Download PDF \(Siap Cetak\)/)
+  assert.match(page, /exportPdf/)
+  assert.match(page, /\/rapor\/export\/pdf/)
+  assert.match(page, /responseType: 'blob'/)
   assert.doesNotMatch(page, /window\.print\(\)/)
-  assert.doesNotMatch(page, /Cetak \/ PDF/)
 })
 
 test('endpoint rapor memvalidasi periode, jenis, dan akses siswa', () => {
@@ -65,8 +64,17 @@ test('unique key rapor akademik menyertakan tenant', () => {
 })
 
 test('data pelengkap rapor divalidasi di backend', () => {
-  assert.match(server, /tinggi_badan harus di antara 30 dan 250 cm/)
-  assert.match(server, /berat_badan harus di antara 1 dan 300 kg/)
   assert.match(server, /tanggal_pembagian tidak valid/)
   assert.match(server, /Keputusan hanya dapat diisi pada rapor SAS/)
+})
+
+test('field pertumbuhan dan kesehatan dihapus dari rapor', () => {
+  // Kolom warisan tetap ada di skema agar data lama tidak hilang, tetapi tidak
+  // lagi dibaca/ditulis dan tidak lagi tampil di UI maupun validasi.
+  assert.doesNotMatch(server, /tinggi_badan harus di antara/)
+  assert.doesNotMatch(server, /berat_badan harus di antara/)
+  assert.doesNotMatch(page, /tinggi_badan/)
+  assert.doesNotMatch(page, /berat_badan/)
+  assert.doesNotMatch(page, /kondisi_kesehatan/)
+  assert.doesNotMatch(page, /Pertumbuhan dan Kesehatan/)
 })

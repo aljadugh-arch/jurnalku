@@ -1,14 +1,25 @@
 import { useEffect, useMemo, useState } from 'react'
 import api from '../../services/api'
-import { Download, FileText, Save, Zap } from 'lucide-react'
+import { FileText, Printer, Save, Zap } from 'lucide-react'
 import FoundationTenantPicker from '../../components/FoundationTenantPicker'
 import { QRCodeSVG } from 'qrcode.react'
 import { thumbUrl } from '../../lib/thumbUrl'
 
 const emptyPelengkap = {
-  tinggi_badan: '', berat_badan: '', kondisi_kesehatan: '', prestasi: [] as Array<{ jenis: string; keterangan: string }>,
+  prestasi: [] as Array<{ jenis: string; keterangan: string }>,
   catatan_wali_kelas: '', tanggapan_orang_tua: '', keputusan: '', tanggal_pembagian: '',
 }
+
+type BagianCetak = 'cover' | 'identitas' | 'nilai' | 'lengkap'
+
+// Menu cetak mengikuti struktur dokumen rapor RDM: sampul, identitas peserta
+// didik, lalu capaian hasil belajar. 'lengkap' menggabungkan ketiganya.
+const CETAK_MENU: Array<{ bagian: BagianCetak; label: string; deskripsi: string }> = [
+  { bagian: 'cover', label: 'Cetak Cover', deskripsi: 'Sampul rapor (A4)' },
+  { bagian: 'identitas', label: 'Cetak Identitas Siswa', deskripsi: 'Biodata peserta didik' },
+  { bagian: 'nilai', label: 'Cetak Rapor/Nilai Siswa', deskripsi: 'Capaian hasil belajar' },
+  { bagian: 'lengkap', label: 'Cetak Lengkap', deskripsi: 'Cover + identitas + nilai' },
+]
 
 export default function RaporPage() {
   const [rombelList, setRombelList] = useState<any[]>([])
@@ -26,6 +37,8 @@ export default function RaporPage() {
   const [saving, setSaving] = useState(false)
   const [msg, setMsg] = useState('')
   const [foundationTenantId, setFoundationTenantId] = useState<string | null>(null)
+  const [cetakOpen, setCetakOpen] = useState(false)
+  const [cetakBagian, setCetakBagian] = useState<BagianCetak>('lengkap')
   const [mapelList, setMapelList] = useState<any[]>([])
   const [bobotMapel, setBobotMapel] = useState('')
   const [bobot, setBobot] = useState<any>(null)
@@ -133,24 +146,37 @@ export default function RaporPage() {
     } catch (e: any) { setMsg(`✗ ${e.response?.data?.error || 'Gagal menyimpan pelengkap rapor'}`) }
     finally { setSaving(false) }
   }
-  const exportPdf = async () => {
-    if (!selectedSiswa || rapor.length === 0) { setMsg('✗ Tidak ada data untuk diekspor'); return }
+  const exportPdf = async (bagian: BagianCetak = 'lengkap') => {
+    if (!selectedSiswa) { setMsg('✗ Pilih siswa terlebih dahulu'); return }
+    if (bagian === 'nilai' || bagian === 'lengkap') {
+      if (rapor.length === 0) { setMsg('✗ Rapor belum digenerate. Klik Generate terlebih dahulu.'); return }
+    }
     if (foundationTenantId) return setMsg('✗ Export PDF hanya untuk data lembaga sendiri')
+    const label = { cover: 'Cover', identitas: 'Identitas', nilai: 'Nilai', lengkap: 'Rapor' }[bagian]
     try {
       const response = await api.get('/rapor/export/pdf', {
-        params: { siswa_id: selectedSiswa, tahun_ajaran: tahunAjaran, semester, jenis },
+        params: { siswa_id: selectedSiswa, tahun_ajaran: tahunAjaran, semester, jenis, bagian },
         responseType: 'blob',
       })
-      const url = window.URL.createObjectURL(new Blob([response.data]))
+      const url = window.URL.createObjectURL(new Blob([response.data], { type: 'application/pdf' }))
       const link = document.createElement('a')
       link.href = url
-      link.setAttribute('download', `Rapor-${siswa?.nama || selectedSiswa}-${tahunAjaran}-${semester}.pdf`)
+      link.setAttribute('download', `${label}-${siswa?.nama || selectedSiswa}-${tahunAjaran}-${semester}.pdf`)
       document.body.appendChild(link)
       link.click()
       link.parentNode?.removeChild(link)
       window.URL.revokeObjectURL(url)
+      setMsg(`✓ ${label} siap cetak (PDF)`)
     } catch (e: any) {
-      setMsg(`✗ ${e.response?.data?.error || 'Gagal download PDF'}`)
+      // responseType 'blob' membuat badan error ikut jadi blob; baca ulang sebagai JSON.
+      let pesan = 'Gagal download PDF'
+      const data = e.response?.data
+      if (data instanceof Blob) {
+        try { pesan = JSON.parse(await data.text()).error || pesan } catch { /* biarkan pesan bawaan */ }
+      } else if (data?.error) {
+        pesan = data.error
+      }
+      setMsg(`✗ ${pesan}`)
     }
   }
 
@@ -188,14 +214,40 @@ export default function RaporPage() {
   ], [siswa, rombel])
   const verificationText = `Rapor - ${siswa?.nama || '-'} - Kepsek: ${settings.kepala_sekolah || '-'} - Diverifikasi digital`
 
+  // Pratinjau mengikuti bagian cetak terakhir yang dipilih. Cover dan identitas
+  // hanya butuh data siswa, jadi tetap muncul walau rapor belum digenerate.
+  const tampilCover = ['cover', 'lengkap'].includes(cetakBagian)
+  const tampilIdentitas = ['identitas', 'lengkap'].includes(cetakBagian)
+  const tampilNilai = ['nilai', 'lengkap'].includes(cetakBagian) && rapor.length > 0
+  const tampilPratinjau = tampilCover || tampilIdentitas || tampilNilai
+
   return (
     <div className="space-y-6">
       <style>{`@media print { @page { size: A4 portrait; margin: 0; } body { print-color-adjust: exact; -webkit-print-color-adjust: exact; } #rapor-print { margin: 0 !important; } .report-page { box-sizing: border-box; width: 210mm; height: 297mm; min-height: 297mm; margin: 0 !important; padding: 14mm !important; overflow: hidden; box-shadow: none !important; border: 0 !important; border-radius: 0 !important; break-after: page; page-break-after: always; } .report-page:last-child { break-after: auto; page-break-after: auto; } }`}</style>
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between print:hidden">
         <div><h1 className="text-2xl font-display font-bold text-gray-800">Rapor Siswa</h1><p className="text-sm text-gray-500 mt-1">Rapor akademik dan perkembangan peserta didik</p></div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           {selectedSiswa && !foundationTenantId && <button onClick={savePelengkap} disabled={saving} className="btn-secondary flex items-center gap-2"><Save className="w-4 h-4" />{saving ? 'Menyimpan...' : 'Simpan Pelengkap'}</button>}
-          {selectedSiswa && rapor.length > 0 && !foundationTenantId && <button onClick={exportPdf} className="btn-primary flex items-center gap-2"><Download className="w-4 h-4" />Download PDF (Siap Cetak)</button>}
+          {selectedSiswa && !foundationTenantId && (
+            <div className="relative">
+              <button onClick={() => setCetakOpen(!cetakOpen)} aria-haspopup="menu" aria-expanded={cetakOpen} className="btn-primary flex items-center gap-2"><Printer className="w-4 h-4" />Cetak</button>
+              {cetakOpen && (
+                <div role="menu" className="absolute right-0 z-20 mt-2 w-64 overflow-hidden rounded-lg border border-gray-200 bg-white shadow-lg">
+                  {CETAK_MENU.map(item => (
+                    <button
+                      key={item.bagian}
+                      role="menuitem"
+                      onClick={() => { setCetakOpen(false); setCetakBagian(item.bagian); void exportPdf(item.bagian) }}
+                      className="block w-full px-4 py-2 text-left text-sm hover:bg-gray-50"
+                    >
+                      <span className="font-medium text-gray-800">{item.label}</span>
+                      <span className="block text-xs text-gray-500">{item.deskripsi}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </div>
 
@@ -263,14 +315,11 @@ export default function RaporPage() {
       {selectedSiswa && !foundationTenantId && (
         <div className="card p-5 print:hidden space-y-4">
           <h2 className="font-semibold text-gray-800">Data Pelengkap Rapor</h2>
-          <div className="grid sm:grid-cols-2 xl:grid-cols-4 gap-4">
-            <Field label="Tinggi Badan (cm)"><input type="number" value={pelengkap.tinggi_badan ?? ''} onChange={e => setPelengkap({ ...pelengkap, tinggi_badan: e.target.value })} className="input [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" /></Field>
-            <Field label="Berat Badan (kg)"><input type="number" value={pelengkap.berat_badan ?? ''} onChange={e => setPelengkap({ ...pelengkap, berat_badan: e.target.value })} className="input [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" /></Field>
+          <div className="grid sm:grid-cols-2 gap-4">
             <Field label="Tanggal Pembagian"><input type="date" value={pelengkap.tanggal_pembagian || ''} onChange={e => setPelengkap({ ...pelengkap, tanggal_pembagian: e.target.value })} className="input" /></Field>
             <Field label="Keputusan"><input value={pelengkap.keputusan || ''} onChange={e => setPelengkap({ ...pelengkap, keputusan: e.target.value })} placeholder="Naik ke kelas... / Lulus" className="input" /></Field>
           </div>
           <div className="grid lg:grid-cols-2 gap-4">
-            <TextArea label="Kondisi Kesehatan" value={pelengkap.kondisi_kesehatan} onChange={(v: string) => setPelengkap({ ...pelengkap, kondisi_kesehatan: v })} />
             <TextArea label="Catatan Wali Kelas" value={pelengkap.catatan_wali_kelas} onChange={(v: string) => setPelengkap({ ...pelengkap, catatan_wali_kelas: v })} />
             <TextArea label="Tanggapan Orang Tua/Wali" value={pelengkap.tanggapan_orang_tua} onChange={(v: string) => setPelengkap({ ...pelengkap, tanggapan_orang_tua: v })} />
           </div>
@@ -282,10 +331,10 @@ export default function RaporPage() {
       )}
 
       {!selectedSiswa && <div className="card py-16 text-center print:hidden"><FileText className="w-12 h-12 text-gray-300 mx-auto mb-3" /><p className="text-gray-500">Pilih kelas dan siswa untuk melihat rapor.</p></div>}
-      {selectedSiswa && !loading && rapor.length === 0 && <div className="card py-12 text-center print:hidden"><p className="text-gray-500">Nilai rapor belum tersedia. Klik Generate setelah nilai harian dan asesmen diisi.</p></div>}
+      {selectedSiswa && !loading && rapor.length === 0 && <div className="card py-12 text-center print:hidden"><p className="text-gray-500">Nilai rapor belum tersedia. Klik Generate setelah nilai harian dan asesmen diisi. Cover dan identitas siswa tetap bisa dicetak lewat menu Cetak.</p></div>}
 
-      {selectedSiswa && rapor.length > 0 && <div id="rapor-print" className="space-y-6 print:space-y-0">
-        <section className="report-page relative bg-white rounded-xl shadow-sm border-2 border-black p-6 sm:p-12 text-center flex flex-col items-center justify-center print:p-0">
+      {selectedSiswa && tampilPratinjau && <div id="rapor-print" className="space-y-6 print:space-y-0">
+        {tampilCover && <section className="report-page relative bg-white rounded-xl shadow-sm border-2 border-black p-6 sm:p-12 text-center flex flex-col items-center justify-center print:p-0">
           <div className="absolute inset-2 border border-black pointer-events-none" />
           {settings.logo && <img src={settings.logo} alt="Logo lembaga" className="w-28 h-28 object-contain mb-8" onError={e => { (e.target as HTMLImageElement).style.display = 'none' }} />}
           <h2 className="text-3xl font-bold tracking-wide">RAPOR PESERTA DIDIK</h2>
@@ -297,9 +346,9 @@ export default function RaporPage() {
           </div>
           <h3 className="mt-20 text-2xl font-bold uppercase">{settings.nama_lembaga || 'Nama Lembaga'}</h3>
           <p className="mt-3 font-semibold">Tahun Ajaran {tahunAjaran} · Semester <span className="capitalize">{semester}</span></p>
-        </section>
+        </section>}
 
-        <section className="report-page bg-white rounded-xl shadow-sm border p-6 sm:p-10 print:p-0">
+        {tampilIdentitas && <section className="report-page bg-white rounded-xl shadow-sm border p-6 sm:p-10 print:p-0">
           <ReportHeader settings={settings} title="BIODATA PESERTA DIDIK" compact />
           <h3 className="text-center font-bold text-lg mt-6 mb-4">IDENTITAS PESERTA DIDIK</h3>
           <div className="grid grid-cols-[1fr_110px] gap-6 items-start">
@@ -313,9 +362,9 @@ export default function RaporPage() {
             <QRCodeSVG value={verificationText} size={70} className="mx-auto my-2" />
             <p className="font-bold underline">{settings.kepala_sekolah || '( .................................... )'}</p>
           </div>
-        </section>
+        </section>}
 
-        <section className="report-page bg-white rounded-xl shadow-sm border p-6 sm:p-8 print:p-0">
+        {tampilNilai && <section className="report-page bg-white rounded-xl shadow-sm border p-6 sm:p-8 print:p-0">
           <ReportHeader settings={settings} title={`HASIL BELAJAR ${jenisLabel}`} compact />
           <div className="grid grid-cols-2 text-sm gap-x-8 gap-y-1 my-4"><p>Nama: <strong>{siswa?.nama}</strong></p><p>Kelas: <strong>{siswa?.rombel_nama || rombel?.nama}</strong></p><p>NIS/NISN: <strong>{[siswa?.nis, siswa?.nisn].filter(Boolean).join(' / ')}</strong></p><p>Semester: <strong className="capitalize">{semester}</strong></p></div>
           <table className="w-full text-xs border-collapse"><thead><tr className="bg-gray-100"><Th>No</Th><Th align="left">Mata Pelajaran</Th><Th>Harian</Th><Th>STS</Th>{jenis === 'rapor_sas' && <Th>SAS</Th>}<Th>Akhir</Th><Th>Predikat</Th><Th align="left">Deskripsi</Th></tr></thead><tbody>{rapor.map((r, i) => <tr key={r.id}><Td>{i + 1}</Td><Td align="left" bold>{r.mapel_nama}</Td><Td>{r.nilai_harian ?? 0}</Td><Td>{r.nilai_sts ?? 0}</Td>{jenis === 'rapor_sas' && <Td>{r.nilai_sas ?? 0}</Td>}<Td bold>{r.nilai_akhir}</Td><Td bold>{r.predikat}</Td><Td align="left">{r.deskripsi || descriptionFor(r)}</Td></tr>)}</tbody><tfoot><tr className="bg-gray-50"><Td colSpan={jenis === 'rapor_sas' ? 5 : 4} align="right" bold>Rata-rata</Td><Td bold>{rataAkhir}</Td><Td colSpan={2} /></tr></tfoot></table>
@@ -325,7 +374,6 @@ export default function RaporPage() {
             <ReportBox title="Sikap dan Kepribadian"><Info label="Spiritual" value={personality.sikap_spiritual || personality.sikap_umum} /><Info label="Sosial" value={personality.sikap_sosial || personality.sikap_umum} /><Info label="Kelakuan" value={personality.kelakuan} /><Info label="Kedisiplinan" value={personality.kedisiplinan} /></ReportBox>
             <ReportBox title="Kehadiran"><Info label="Hadir" value={`${attendance.hadir || 0} hari`} /><Info label="Sakit" value={`${attendance.sakit || 0} hari`} /><Info label="Izin" value={`${attendance.izin || 0} hari`} /><Info label="Tanpa Keterangan" value={`${attendance.alpa || 0} hari`} /></ReportBox>
             <ReportBox title="Ekstrakurikuler"><TableList empty="Belum ada data ekstrakurikuler" rows={(ringkasan?.ekstrakurikuler || []).map((e: any) => [e.nama, e.nilai == null ? '—' : `${e.nilai} / ${e.nilai >= 86 ? 'A' : e.nilai >= 76 ? 'B' : e.nilai >= 66 ? 'C' : 'D'}`])} /></ReportBox>
-            <ReportBox title="Pertumbuhan dan Kesehatan"><Info label="Tinggi Badan" value={pelengkap.tinggi_badan ? `${pelengkap.tinggi_badan} cm` : '—'} /><Info label="Berat Badan" value={pelengkap.berat_badan ? `${pelengkap.berat_badan} kg` : '—'} /><p className="mt-2 whitespace-pre-wrap">{pelengkap.kondisi_kesehatan || 'Tidak ada catatan kesehatan.'}</p></ReportBox>
           </div>
 
           <div className="mt-4 text-xs space-y-3">
@@ -340,7 +388,7 @@ export default function RaporPage() {
             <Signature title="Wali Kelas" name={siswa?.wali_kelas_nama || '_____________________'} subtitle={siswa?.wali_kelas_nip ? `NIP. ${siswa.wali_kelas_nip}` : undefined} />
             <Signature title={tanggalCetak} name={settings.kepala_sekolah || '_____________________'} subtitle={settings.kepala_sekolah ? `Kepala ${settings.nama_lembaga || 'Lembaga'}` : undefined} />
           </div>
-        </section>
+        </section>}
       </div>}
     </div>
   )

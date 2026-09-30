@@ -781,7 +781,8 @@ export default function DataSiswaPage() {
           templateName="template-import-siswa.xlsx"
           templateUrl="/templates/template-import-siswa.xlsx"
           headerRow={0}
-          columnMap={{ 'Nama': 'nama', 'NAMA': 'nama', 'Nama Panggilan': 'nama_panggilan', 'NIK': 'nik', 'NIS': 'nis', 'NISN': 'nisn', 'JK': 'jenis_kelamin', 'Jenis Kelamin': 'jenis_kelamin', 'Tempat Lahir': 'tempat_lahir', 'Tanggal Lahir': 'tanggal_lahir', 'Alamat': 'alamat', 'No HP': 'no_hp', 'Nama Ortu': 'nama_ortu', 'Rombel': 'rombel_nama' }}
+          columnMap={{ 'NIK': 'nik', 'NIS': 'nis', 'NISN': 'nisn', 'Nama': 'nama', 'Nama Panggilan': 'nama_panggilan', 'JK': 'jenis_kelamin', 'Jenis Kelamin': 'jenis_kelamin', 'Tempat Lahir': 'tempat_lahir', 'Tanggal Lahir': 'tanggal_lahir', 'Alamat': 'alamat', 'No HP': 'no_hp', 'Agama': 'agama', 'Status Keluarga': 'status_keluarga', 'Anak Ke': 'anak_ke', 'Asal Sekolah': 'asal_sekolah', 'Nama Ortu': 'nama_ortu', 'Nama Ayah': 'nama_ayah', 'Pekerjaan Ayah': 'kerja_ayah', 'Nama Ibu': 'nama_ibu', 'Pekerjaan Ibu': 'kerja_ibu', 'Alamat Ortu': 'alamat_ortu', 'Nama Wali': 'nama_wali', 'Pekerjaan Wali': 'kerja_wali', 'Rombel': 'rombel_nama' }}
+          sampleRows={[{ nik: '3511010101010001', nis: '1001', nisn: '0012345678', nama: 'Ahmad Fauzi', nama_panggilan: 'Ahmad', jenis_kelamin: 'L', tempat_lahir: 'Bondowoso', tanggal_lahir: '2015-05-14', alamat: 'Jl. Contoh No. 1', no_hp: '081234567890', agama: 'Islam', status_keluarga: 'Anak Kandung', anak_ke: 1, asal_sekolah: 'SDN 1 Contoh', nama_ortu: 'Bapak/Ibu Ahmad', nama_ayah: 'Slamet Riyadi', kerja_ayah: 'Petani', nama_ibu: 'Siti Aminah', kerja_ibu: 'Ibu Rumah Tangga', alamat_ortu: 'Jl. Contoh No. 1', nama_wali: 'Kakek Ahmad', kerja_wali: 'Pensiunan', rombel_nama: '7A' }]}
           onImport={async (rows) => {
             const studentData = rows.map(row => ({
               nama: row.nama,

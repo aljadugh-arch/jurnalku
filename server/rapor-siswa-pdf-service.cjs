@@ -179,8 +179,22 @@ function kelompokLabel(kelompok) {
   return KELOMPOK_LABEL[key] || 'Kelompok Mata Pelajaran Umum'
 }
 
+// Bagian dokumen yang dicetak. 'lengkap' = perilaku lama (sampul + identitas +
+// nilai dalam satu PDF). 'cover' dan 'identitas' hanya butuh data siswa, jadi
+// tetap bisa dicetak walau rapor belum digenerate.
+const BAGIAN_VALID = ['cover', 'identitas', 'nilai', 'lengkap']
+
+function normalizeBagian(bagian) {
+  const nilai = String(bagian ?? '').trim().toLowerCase()
+  return BAGIAN_VALID.includes(nilai) ? nilai : 'lengkap'
+}
+
 async function createRaporSiswaPdf(db, options) {
   const { tenantId, siswaId, tahunAjaran, semester, jenis, uploadDir } = options
+  const bagian = normalizeBagian(options.bagian)
+  const cetakCover = bagian === 'cover' || bagian === 'lengkap'
+  const cetakIdentitas = bagian === 'identitas' || bagian === 'lengkap'
+  const butuhNilai = bagian === 'nilai' || bagian === 'lengkap'
 
   const siswa = db.prepare(`
     SELECT s.*, r.nama AS rombel_nama, r.tingkat, g.nama AS wali_kelas_nama, g.nip AS wali_kelas_nip
@@ -198,7 +212,9 @@ async function createRaporSiswaPdf(db, options) {
     WHERE r.tenant_id=? AND r.siswa_id=? AND r.tahun_ajaran=? AND r.semester=? AND r.jenis=?
     ORDER BY COALESCE(m.kelompok,'wajib'), m.nama
   `).all(tenantId, siswaId, tahunAjaran, semester, jenis)
-  if (rapor.length === 0) return { error: 'RAPOR_NOT_GENERATED' }
+  // Hanya bagian nilai/lengkap yang butuh rapor sudah digenerate; sampul dan
+  // identitas tetap bisa dicetak dari data siswa saja.
+  if (butuhNilai && rapor.length === 0) return { error: 'RAPOR_NOT_GENERATED' }
 
   const { from, to } = semesterRange(tahunAjaran, semester)
 
@@ -215,7 +231,7 @@ async function createRaporSiswaPdf(db, options) {
     FROM catatan_kepribadian WHERE siswa_id=? AND tahun_ajaran=? AND semester=? AND tenant_id=? ORDER BY updated_at DESC LIMIT 1`)
     .get(siswaId, tahunAjaran, semester, tenantId) || {}
 
-  const pelengkap = db.prepare(`SELECT * FROM rapor_pelengkap WHERE tenant_id=? AND siswa_id=? AND tahun_ajaran=? AND semester=? AND jenis=?`)
+  const pelengkap = db.prepare(`SELECT prestasi,catatan_wali_kelas,tanggapan_orang_tua,keputusan,tanggal_pembagian FROM rapor_pelengkap WHERE tenant_id=? AND siswa_id=? AND tahun_ajaran=? AND semester=? AND jenis=?`)
     .get(tenantId, siswaId, tahunAjaran, semester, jenis) || {}
   let prestasi = []
   try { prestasi = JSON.parse(pelengkap.prestasi || '[]') } catch { prestasi = [] }
@@ -266,6 +282,7 @@ async function createRaporSiswaPdf(db, options) {
   const pageWidth = doc.page.width - doc.page.margins.left - doc.page.margins.right
 
   // ---------- Halaman 1: Sampul (Cover) ----------
+  if (cetakCover) {
   // Border halaman
   doc.rect(30, 30, doc.page.width - 60, doc.page.height - 60).lineWidth(2).stroke()
   doc.rect(36, 36, doc.page.width - 72, doc.page.height - 72).lineWidth(0.5).stroke()
@@ -392,8 +409,10 @@ async function createRaporSiswaPdf(db, options) {
     align: 'center',
     lineBreak: false,
   })
+  }
 
   // ---------- Halaman 2: Identitas Peserta Didik ----------
+  if (cetakIdentitas) {
   doc.addPage({ size: 'A4', margin: 50 })
   const idLayout = identitasLayout({ pageWidth, contentWidth: pageWidth })
 
@@ -509,10 +528,12 @@ async function createRaporSiswaPdf(db, options) {
     align: 'center',
     underline: true,
   })
+  }
 
   // ==========================================================================
   // Halaman 3-4: Rapor (desain RDM)
   // ==========================================================================
+  if (butuhNilai) {
 
   const fase = faseFromTingkat(siswa.tingkat, settings.jenjang)
   const semesterLabel = semester === 'genap' ? 'Genap' : 'Ganjil'
@@ -791,8 +812,9 @@ async function createRaporSiswaPdf(db, options) {
       })
     doc.page.margins.bottom = savedBottom
   }
+  }
 
   return doc
 }
 
-module.exports = { createRaporSiswaPdf, coverLayout, faseFromTingkat, buildCapaianKompetensi, RDM }
+module.exports = { createRaporSiswaPdf, normalizeBagian, BAGIAN_VALID, coverLayout, faseFromTingkat, buildCapaianKompetensi, RDM }

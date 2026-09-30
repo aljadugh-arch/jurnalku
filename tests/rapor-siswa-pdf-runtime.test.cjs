@@ -21,7 +21,7 @@ function buildTestDb() {
       semester TEXT, jenis TEXT, nilai_harian INTEGER, nilai_sts INTEGER, nilai_sas INTEGER,
       nilai_akhir INTEGER, predikat TEXT);
     CREATE TABLE rapor_pelengkap (tenant_id TEXT, siswa_id TEXT, tahun_ajaran TEXT, semester TEXT, jenis TEXT,
-      prestasi TEXT, catatan_wali_kelas TEXT, tanggal_pembagian TEXT);
+      prestasi TEXT, catatan_wali_kelas TEXT, tanggapan_orang_tua TEXT, keputusan TEXT, tanggal_pembagian TEXT);
     CREATE TABLE catatan_kepribadian (siswa_id TEXT, tahun_ajaran TEXT, semester TEXT, tenant_id TEXT,
       sikap_spiritual TEXT, sikap_sosial TEXT, sikap_umum TEXT, kelakuan TEXT, kerajinan TEXT, kerapian TEXT, kedisiplinan TEXT,
       catatan_wali_kelas TEXT, saran TEXT, updated_at TEXT);
