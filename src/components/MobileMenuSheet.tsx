@@ -11,7 +11,7 @@ const colors = [
 ]
 
 const categoryFor = (item: FlatMenu) => {
-  if (/Siswa|GTK|Rombongan|Mata Pelajaran|Pengguna|Lembaga/.test(item.label)) return 'Manajemen Data'
+  if (/Siswa|GTK|Rombongan|Mata Pelajaran|Pengguna|Lembaga|Monitoring/.test(item.label)) return 'Manajemen Data'
   if (/Jadwal|Pengajar|Jurnal|Rapor|Kepribadian|Supervisi|Kalender|Modul|Tahun Ajaran/.test(item.label)) return 'Akademik & Kelas'
   if (/Tagihan|Tabungan|Kantin|Topup|Transfer|Kasir|Backup|REST API|Website|Pengaturan/.test(item.label)) return 'Administrasi & Keuangan'
   if (/Broadcast|WhatsApp|Gateway|Notifikasi/.test(item.label)) return 'Komunikasi'

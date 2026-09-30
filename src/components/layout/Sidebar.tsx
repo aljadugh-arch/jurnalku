@@ -7,7 +7,7 @@ import {
   LayoutDashboard, Users, GraduationCap, BookOpen, Calendar,
   ClipboardList, UserCheck, QrCode, MapPin,
   X, ChevronDown, ChevronRight, LogOut, Layers,
-  DollarSign, FileText, Newspaper, PiggyBank, ClipboardCheck, NotebookPen
+  DollarSign, FileText, Newspaper, PiggyBank, ClipboardCheck, NotebookPen, Activity
 } from 'lucide-react'
 import { clsx } from 'clsx'
 import { roleLabel } from '../../lib/roles'
@@ -39,6 +39,7 @@ const siswaMenuItems: MenuItem[] = [
 // Kepala Madrasah/Sekolah = pimpinan. Sesuai live bundle (Sc).
 const kepalaMenuItems: MenuItem[] = [
   { label: 'Dashboard', icon: <LayoutDashboard size={20} />, path: '/admin' },
+  { label: 'Monitoring Data', icon: <Activity size={20} />, path: '/admin/monitoring' },
   { label: 'Posting', icon: <Newspaper size={20} />, path: '/admin/posting' },
   { label: 'Ceklok Saya', icon: <MapPin size={20} />, path: '/admin/ceklok' },
   { label: 'Absensi Saya', icon: <MapPin size={20} />, path: '/admin/absensi-saya' },
@@ -123,7 +124,7 @@ export default function Sidebar() {
   // Grouping configuration untuk admin desktop view (sesuai struktur yang diminta user)
   // Menggunakan label matching karena menuItems sudah di-filter oleh pathEnabled()
   const adminMenuGroups: Array<{ name: string; labels: string[] }> = [
-    { name: 'DASHBOARD', labels: ['Dashboard', 'Posting'] },
+    { name: 'DASHBOARD', labels: ['Dashboard', 'Monitoring Data', 'Posting'] },
     { name: 'MASTER DATA', labels: ['Data Siswa', 'Data GTK', 'Mata Pelajaran', 'Rombongan Belajar', 'Tahun Ajaran'] },
     { name: 'AKADEMIK', labels: ['Kalender KBM', 'Jadwal Pelajaran', 'Absensi', 'Ceklok & Rekap', 'Absensi Saya', 'Jurnal Mengajar'] },
     { name: 'PENILAIAN & EVALUASI', labels: ['Ujian & Bank Soal', 'Ledger Nilai', 'Rekap Nilai per Mapel', 'Rapor Siswa', 'Catatan Kepribadian'] },

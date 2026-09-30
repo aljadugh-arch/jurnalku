@@ -16,6 +16,25 @@ const { getTenantSettings } = require('./tenant-settings.cjs')
 
 const STATUS_THRESHOLDS = { lengkap: 100, hampir: 75, belum_lengkap: 25 }
 
+/**
+ * Halaman tindak lanjut untuk tiap kategori. Dipakai dashboard monitoring
+ * supaya admin lembaga baru bisa langsung klik dari kategori yang kosong ke
+ * menu pengisiannya, bukan mencari sendiri di sidebar.
+ */
+const TAUTAN = {
+  profil_lembaga: { tautan: '/admin/settings', tautan_label: 'Buka Pengaturan Lembaga' },
+  data_siswa: { tautan: '/admin/siswa', tautan_label: 'Buka Data Siswa' },
+  data_gtk: { tautan: '/admin/gtk', tautan_label: 'Buka Data GTK' },
+  data_mapel: { tautan: '/admin/mapel', tautan_label: 'Buka Mata Pelajaran' },
+  data_rombel: { tautan: '/admin/rombel', tautan_label: 'Buka Rombongan Belajar' },
+  kalender_kbm: { tautan: '/admin/kalender-kbm', tautan_label: 'Buka Kalender KBM' },
+  jadwal_pelajaran: { tautan: '/admin/jadwal', tautan_label: 'Buka Jadwal Pelajaran' },
+  penilaian_harian: { tautan: '/admin/rekap-nilai', tautan_label: 'Lihat Rekap Nilai' },
+  rapor: { tautan: '/admin/rapor', tautan_label: 'Buka Rapor Siswa' },
+  absensi_hari_ini: { tautan: '/admin/rekap-absensi', tautan_label: 'Buka Rekap Absensi' }
+}
+
+
 function statusUntuk(persen) {
   if (persen >= STATUS_THRESHOLDS.lengkap) return 'lengkap'
   if (persen >= STATUS_THRESHOLDS.hampir) return 'hampir'
@@ -271,11 +290,31 @@ function hitungKelengkapan(db, tenantId, options = {}) {
     detail: `Siswa: ${siswaAbsenHariIni}/${totalSiswa} · Guru: ${guruAbsenHariIni}/${totalGTK} (${today})`
   })
 
+  // Tempelkan tautan tindak lanjut + penanda "perlu tindakan" ke setiap item.
+  // Sebuah item dianggap perlu tindakan bila persennya belum 100; itulah yang
+  // disorot di halaman monitoring agar lembaga baru tahu harus mengisi apa.
+  for (const item of items) {
+    const meta = TAUTAN[item.key]
+    if (meta) {
+      item.tautan = meta.tautan
+      item.tautan_label = meta.tautan_label
+    }
+    item.perlu_tindakan = item.persen < 100
+    if (item.key === 'data_gtk' && item.total > 0 && (item.punya_mapel || 0) < item.total) {
+      item.tindakan_lain = [{
+        label: 'Atur penugasan mapel',
+        tautan: '/admin/pengajar',
+        jumlah: Math.max(0, item.total - (item.punya_mapel || 0))
+      }]
+    }
+  }
+
   const skorKeseluruhan = items.length
     ? Math.round(items.reduce((sum, item) => sum + item.persen, 0) / items.length)
     : 0
 
   const belumLengkap = items.filter(item => item.persen < 100).map(item => item.key)
+  const perluTindakan = items.filter(item => item.perlu_tindakan)
 
   return {
     items,
@@ -283,9 +322,22 @@ function hitungKelengkapan(db, tenantId, options = {}) {
     status_keseluruhan: statusUntuk(skorKeseluruhan),
     jumlah_lengkap: items.length - belumLengkap.length,
     jumlah_item: items.length,
+    jumlah_perlu_tindakan: perluTindakan.length,
+    // Diurutkan dari yang paling tertinggal supaya lembaga baru tahu prioritas.
+    prioritas: perluTindakan
+      .slice()
+      .sort((a, b) => a.persen - b.persen)
+      .map(item => ({
+        key: item.key,
+        label: item.label,
+        persen: item.persen,
+        detail: item.detail || '',
+        tautan: item.tautan || '',
+        tautan_label: item.tautan_label || ''
+      })),
     belum_lengkap: belumLengkap,
     dihitung_pada: new Date().toISOString()
   }
 }
 
-module.exports = { hitungKelengkapan, statusUntuk, persenDari, STATUS_THRESHOLDS }
+module.exports = { hitungKelengkapan, statusUntuk, persenDari, STATUS_THRESHOLDS, TAUTAN }

@@ -335,3 +335,93 @@ test('endpoint HTTP hanya menjembatani module (tanpa SQL inline)', () => {
   assert.ok(block.includes('hitungKelengkapan(db, req.tenantId)'))
   assert.ok(!/db\.prepare/.test(block), 'endpoint tidak boleh lagi punya SQL inline')
 })
+
+// --- Tautan tindak lanjut & prioritas -------------------------------------
+
+const SEMUA_KEY = [
+  'profil_lembaga', 'data_siswa', 'data_gtk', 'data_mapel', 'data_rombel',
+  'kalender_kbm', 'jadwal_pelajaran', 'penilaian_harian', 'rapor', 'absensi_hari_ini'
+]
+
+test('setiap kategori punya tautan menu pengisian dan labelnya', () => {
+  const db = makeDb(); seedLengkap(db)
+  const hasil = hitungKelengkapan(db, TENANT, { today: TODAY })
+  assert.deepEqual(hasil.items.map(i => i.key), SEMUA_KEY, 'daftar kategori berubah')
+  for (const item of hasil.items) {
+    assert.ok(item.tautan, `kategori ${item.key} tidak punya tautan`)
+    assert.match(item.tautan, /^\/admin\//, `tautan ${item.key} bukan halaman admin`)
+    assert.ok(item.tautan_label, `kategori ${item.key} tidak punya label tautan`)
+  }
+  db.close()
+})
+
+test('lembaga lengkap: tidak ada item perlu tindakan', () => {
+  const db = makeDb(); seedLengkap(db)
+  const hasil = hitungKelengkapan(db, TENANT, { today: TODAY })
+  assert.equal(hasil.skor_keseluruhan, 100)
+  assert.equal(hasil.jumlah_perlu_tindakan, 0)
+  assert.deepEqual(hasil.prioritas, [])
+  assert.ok(hasil.items.every(i => i.perlu_tindakan === false), 'tidak boleh ada penanda perlu tindakan')
+  db.close()
+})
+
+test('lembaga baru: semua kategori perlu tindakan dan prioritas urut menaik', () => {
+  const db = makeDb(); seedKosong(db)
+  const hasil = hitungKelengkapan(db, TENANT, { today: TODAY })
+  assert.equal(hasil.skor_keseluruhan, 0)
+  assert.equal(hasil.jumlah_perlu_tindakan, SEMUA_KEY.length)
+  assert.deepEqual(hasil.belum_lengkap.slice().sort(), SEMUA_KEY.slice().sort())
+
+  // prioritas: yang paling tertinggal dulu, dan semua punya tautan siap klik.
+  assert.equal(hasil.prioritas.length, SEMUA_KEY.length)
+  for (let i = 1; i < hasil.prioritas.length; i++) {
+    assert.ok(
+      hasil.prioritas[i - 1].persen <= hasil.prioritas[i].persen,
+      'prioritas tidak urut dari yang paling tertinggal'
+    )
+  }
+  assert.ok(hasil.prioritas.every(p => p.tautan && p.tautan_label), 'prioritas tanpa tautan tidak bisa ditindaklanjuti')
+  db.close()
+})
+
+test('prioritas hanya memuat kategori yang belum 100%', () => {
+  const db = makeDb(); seedLengkap(db)
+  // Rusak satu kategori saja: hapus 1 dari 12 bulan kalender.
+  db.prepare("DELETE FROM kalender_kbm WHERE tenant_id=? AND tanggal LIKE '2026-12%'").run(TENANT)
+  const hasil = hitungKelengkapan(db, TENANT, { today: TODAY })
+  assert.equal(hasil.jumlah_perlu_tindakan, 1)
+  assert.equal(hasil.prioritas[0].key, 'kalender_kbm')
+  assert.equal(hasil.prioritas[0].tautan, '/admin/kalender-kbm')
+  assert.equal(hasil.jumlah_lengkap, SEMUA_KEY.length - 1)
+  db.close()
+})
+
+test('GTK tanpa penugasan mapel memberi tautan tambahan ke halaman pengajar', () => {
+  const db = makeDb(); seedLengkap(db)
+  // Guru ketiga: identitas lengkap tapi tidak ada di tabel pengajar.
+  insert(db, 'gtk', [{ id: 'g3', tenant_id: TENANT, nama: 'Guru Tiga', nip: '333' }])
+  const gtk = itemOf(hitungKelengkapan(db, TENANT, { today: TODAY }), 'data_gtk')
+  assert.ok(Array.isArray(gtk.tindakan_lain), 'tindakan_lain tidak ada')
+  assert.equal(gtk.tindakan_lain[0].tautan, '/admin/pengajar')
+  assert.equal(gtk.tindakan_lain[0].jumlah, 1)
+  db.close()
+})
+
+test('tautan kategori mengarah ke halaman yang benar', () => {
+  const db = makeDb(); seedKosong(db)
+  const hasil = hitungKelengkapan(db, TENANT, { today: TODAY })
+  const peta = Object.fromEntries(hasil.items.map(i => [i.key, i.tautan]))
+  assert.deepEqual(peta, {
+    profil_lembaga: '/admin/settings',
+    data_siswa: '/admin/siswa',
+    data_gtk: '/admin/gtk',
+    data_mapel: '/admin/mapel',
+    data_rombel: '/admin/rombel',
+    kalender_kbm: '/admin/kalender-kbm',
+    jadwal_pelajaran: '/admin/jadwal',
+    penilaian_harian: '/admin/rekap-nilai',
+    rapor: '/admin/rapor',
+    absensi_hari_ini: '/admin/rekap-absensi'
+  })
+  db.close()
+})

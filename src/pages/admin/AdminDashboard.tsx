@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import {
   Users, GraduationCap, BookOpen,
-  ClipboardList, UserCheck, TrendingUp, DollarSign, Layers, DoorOpen, Clock
+  ClipboardList, UserCheck, TrendingUp, DollarSign, Layers, DoorOpen, Clock, Activity, ArrowRight
 } from 'lucide-react'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line } from 'recharts'
 import api from '../../services/api'
@@ -91,55 +91,51 @@ export default function AdminDashboard() {
         ))}
       </div>
 
-      {/* Monitoring Kelengkapan Data */}
-      {kelengkapan && (
-        <Card title="Monitoring Kelengkapan Data Lembaga" icon={<TrendingUp size={18} className="text-indigo-600" />}>
-          <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-            <p className="text-xs text-gray-500">Pantau kelengkapan data wajib lembaga. Semakin hijau semakin lengkap.</p>
-            <div className="flex items-center gap-2">
-              <span className="text-xs text-gray-500">Skor keseluruhan:</span>
-              <span className={`text-lg font-bold ${kelengkapan.skor_keseluruhan >= 75 ? 'text-emerald-600' : kelengkapan.skor_keseluruhan >= 50 ? 'text-amber-600' : 'text-red-600'}`}>{kelengkapan.skor_keseluruhan}%</span>
-            </div>
-          </div>
-          <div className="space-y-2.5">
-            {kelengkapan.items?.map((item: any) => {
-              const color = item.persen >= 100 ? 'bg-emerald-500' : item.persen >= 75 ? 'bg-blue-500' : item.persen >= 25 ? 'bg-amber-500' : 'bg-red-500'
-              const textColor = item.persen >= 100 ? 'text-emerald-700' : item.persen >= 75 ? 'text-blue-700' : item.persen >= 25 ? 'text-amber-700' : 'text-red-700'
-              const bgColor = item.persen >= 100 ? 'bg-emerald-50' : item.persen >= 75 ? 'bg-blue-50' : item.persen >= 25 ? 'bg-amber-50' : 'bg-red-50'
-              return (
-                <div key={item.key} className={`rounded-xl p-3 ${bgColor}`}>
-                  <div className="flex items-center justify-between mb-1.5">
-                    <div className="flex items-center gap-2 min-w-0">
-                      <span className="text-sm font-medium text-gray-800">{item.label}</span>
-                      <span className={`text-xs font-semibold ${textColor}`}>{item.filled}/{item.total}</span>
-                    </div>
-                    <span className={`text-xs font-bold ${textColor}`}>{item.persen}%</span>
-                  </div>
-                  <div className="w-full bg-gray-200 rounded-full h-2">
-                    <div className={`${color} rounded-full h-2 transition-all duration-500`} style={{ width: `${Math.min(item.persen, 100)}%` }} />
-                  </div>
-                  {item.detail && <p className="mt-1 text-[11px] text-gray-500">{item.detail}</p>}
+      {/* Ringkasan kelengkapan data — rincian + tautan tindakan ada di menu Monitoring Data */}
+      {kelengkapan && (() => {
+        const skor = kelengkapan.skor_keseluruhan || 0
+        const belum = kelengkapan.jumlah_perlu_tindakan ?? (kelengkapan.items || []).filter((i: any) => i.persen < 100).length
+        const total = kelengkapan.jumlah_item || (kelengkapan.items || []).length
+        const lengkap = kelengkapan.jumlah_lengkap ?? (total - belum)
+        const warna = skor >= 75 ? 'text-emerald-600' : skor >= 50 ? 'text-amber-600' : 'text-red-600'
+        const bar = skor >= 75 ? 'bg-emerald-500' : skor >= 50 ? 'bg-amber-500' : 'bg-red-500'
+        const prioritas = (kelengkapan.prioritas || [])[0]
+        return (
+          <Card
+            title="Kelengkapan Data Lembaga"
+            icon={<Activity size={18} className="text-indigo-600" />}
+            action={
+              <Link to="/admin/monitoring" className="text-xs font-medium text-primary hover:underline whitespace-nowrap">
+                Lihat monitoring →
+              </Link>
+            }
+          >
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="min-w-0 flex-1">
+                <div className="flex items-baseline gap-2">
+                  <span className={`text-2xl font-bold ${warna}`}>{skor}%</span>
+                  <span className="text-xs text-gray-500">{lengkap}/{total} komponen sudah lengkap</span>
                 </div>
-              )
-            })}
-          </div>
-          <div className="mt-4">
-            <ResponsiveContainer width="100%" height={Math.max(200, (kelengkapan.items?.length || 0) * 35 + 40)}>
-              <BarChart data={kelengkapan.items} layout="vertical" margin={{ top: 5, right: 30, left: 5, bottom: 5 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                <XAxis type="number" domain={[0, 100]} tick={{ fontSize: 11 }} unit="%" />
-                <YAxis type="category" dataKey="label" width={130} tick={{ fontSize: 11 }} />
-                <Tooltip formatter={(v: any) => [`${v}%`, 'Kelengkapan']} />
-                <Bar dataKey="persen" name="Kelengkapan" radius={[0, 4, 4, 0]}>
-                  {kelengkapan.items?.map((item: any, i: number) => (
-                    <Cell key={i} fill={item.persen >= 100 ? '#10b981' : item.persen >= 75 ? '#3b82f6' : item.persen >= 25 ? '#f59e0b' : '#ef4444'} />
-                  ))}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        </Card>
-      )}
+                <div className="mt-2 h-2 w-full rounded-full bg-gray-100 overflow-hidden">
+                  <div className={`h-full ${bar} transition-all duration-500`} style={{ width: `${Math.min(skor, 100)}%` }} />
+                </div>
+                <p className="mt-2 text-xs text-gray-500">
+                  {belum > 0
+                    ? `${belum} komponen perlu dilengkapi${prioritas ? ` — paling tertinggal: ${prioritas.label} (${prioritas.persen}%)` : ''}`
+                    : 'Semua komponen data wajib sudah lengkap'}
+                </p>
+              </div>
+              <Link
+                to="/admin/monitoring"
+                className="inline-flex shrink-0 items-center justify-center gap-1.5 rounded-lg bg-primary px-3 py-2 text-sm font-medium text-white transition active:scale-95"
+              >
+                Buka Monitoring Data
+                <ArrowRight size={14} />
+              </Link>
+            </div>
+          </Card>
+        )
+      })()}
 
       <Card title="Pemantauan Guru Masuk Kelas" icon={<DoorOpen size={18} className="text-emerald-600" />}>
         <div className="mb-3 grid grid-cols-3 gap-2 text-center text-xs">

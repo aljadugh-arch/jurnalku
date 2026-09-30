@@ -127,20 +127,32 @@ export default function MobileAdminDashboard({ stats, kelengkapan }: Props) {
               </div>
               <span className={`rounded-full px-3 py-1 text-xs font-bold ${kelengkapan.skor_keseluruhan >= 75 ? 'bg-emerald-50 text-emerald-700' : kelengkapan.skor_keseluruhan >= 50 ? 'bg-amber-50 text-amber-700' : 'bg-red-50 text-red-700'}`}>{kelengkapan.skor_keseluruhan ?? 0}%</span>
             </div>
-            <div className="space-y-2.5">
-              {(kelengkapan.items || []).map((item: any) => (
-                <div key={item.key}>
-                  <div className="flex items-center justify-between text-[11px]">
-                    <span className="font-medium text-slate-700 dark:text-gray-200">{item.label}</span>
-                    <span className={`font-semibold ${item.persen >= 100 ? 'text-emerald-600' : item.persen >= 75 ? 'text-blue-600' : item.persen >= 25 ? 'text-amber-600' : 'text-red-600'}`}>{item.persen}%</span>
-                  </div>
-                  <div className="mt-1 h-1.5 w-full rounded-full bg-slate-100 dark:bg-gray-800">
-                    <div className={`h-1.5 rounded-full ${item.persen >= 100 ? 'bg-emerald-500' : item.persen >= 75 ? 'bg-blue-500' : item.persen >= 25 ? 'bg-amber-500' : 'bg-red-500'}`} style={{ width: `${Math.min(item.persen, 100)}%` }} />
-                  </div>
-                  {item.detail && <p className="mt-0.5 text-[10px] text-slate-400">{item.detail}</p>}
-                </div>
-              ))}
+            <div className="h-1.5 w-full rounded-full bg-slate-100 dark:bg-gray-800">
+              <div
+                className={`h-1.5 rounded-full ${kelengkapan.skor_keseluruhan >= 75 ? 'bg-emerald-500' : kelengkapan.skor_keseluruhan >= 50 ? 'bg-amber-500' : 'bg-red-500'}`}
+                style={{ width: `${Math.min(kelengkapan.skor_keseluruhan ?? 0, 100)}%` }}
+              />
             </div>
+            {/* Yang paling tertinggal saja — rincian penuh di menu Monitoring Data */}
+            {(kelengkapan.prioritas || []).slice(0, 3).map((p: any) => (
+              <Link
+                key={p.key}
+                to={p.tautan || '/admin/monitoring'}
+                className="mt-2 flex items-center justify-between gap-2 rounded-xl bg-slate-50 px-3 py-2 active:scale-[0.99] dark:bg-gray-800"
+              >
+                <span className="min-w-0">
+                  <span className="block truncate text-[11px] font-medium text-slate-700 dark:text-gray-200">{p.label}</span>
+                  {p.detail && <span className="block truncate text-[10px] text-slate-400">{p.detail}</span>}
+                </span>
+                <span className={`shrink-0 text-[11px] font-bold ${p.persen === 0 ? 'text-red-600' : 'text-amber-600'}`}>{p.persen}%</span>
+              </Link>
+            ))}
+            <Link
+              to="/admin/monitoring"
+              className="mt-3 flex w-full items-center justify-center gap-1.5 rounded-xl bg-primary px-3 py-2 text-xs font-medium text-white active:scale-95"
+            >
+              Lihat semua di Monitoring Data
+            </Link>
           </section>
         )}
       </main>

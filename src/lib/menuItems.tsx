@@ -17,6 +17,7 @@ export interface MenuItem {
 // Admin/operator/TU: urut sesuai alur input data — master data dulu, operasional, lalu pengaturan.
 export const adminMenuItems: MenuItem[] = [
   { label: 'Dashboard', icon: <LayoutDashboard size={20} />, path: '/admin' },
+  { label: 'Monitoring Data', icon: <Activity size={20} />, path: '/admin/monitoring' },
   { label: 'Posting', icon: <FileText size={20} />, path: '/admin/posting' },
   { label: 'Data Siswa', icon: <GraduationCap size={20} />, path: '/admin/siswa' },
   { label: 'Data GTK', icon: <Users size={20} />, path: '/admin/gtk' },
@@ -155,6 +156,7 @@ export const bendaharaMenuItems: MenuItem[] = [
 // Kepala Madrasah/Sekolah = pimpinan, tetap punya ceklok sendiri karena masuk kategori GTK.
 export const kepalaMenuItems: MenuItem[] = [
   { label: 'Dashboard', icon: <LayoutDashboard size={20} />, path: '/admin' },
+  { label: 'Monitoring Data', icon: <Activity size={20} />, path: '/admin/monitoring' },
   { label: 'Posting', icon: <FileText size={20} />, path: '/admin/posting' },
   { label: 'Ceklok & Rekap', icon: <MapPin size={20} />, path: '/admin/ceklok' },
   { label: 'Absensi Saya', icon: <UserCheck size={20} />, path: '/admin/absensi-saya' },

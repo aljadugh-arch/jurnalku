@@ -17,6 +17,7 @@ import type { User } from './types'
 // Lazy-loaded pages — setiap halaman jadi chunk terpisah
 const AdminDashboard = lazy(() => import('./pages/admin/AdminDashboard'))
 const DataSiswaPage = lazy(() => import('./pages/admin/DataSiswaPage'))
+const MonitoringDataPage = lazy(() => import('./pages/admin/MonitoringDataPage'))
 const DataGTKPage = lazy(() => import('./pages/admin/DataGTKPage'))
 const MapelPage = lazy(() => import('./pages/admin/MapelPage'))
 const RombelPage = lazy(() => import('./pages/admin/RombelPage'))
@@ -191,6 +192,7 @@ export default function App() {
           </ProtectedRoute>
         }>
           <Route index element={<AdminIndexRoute />} />
+          <Route path="monitoring" element={<MonitoringDataPage />} />
           <Route path="siswa" element={<DataSiswaPage />} />
           <Route path="gtk" element={<DataGTKPage />} />
           <Route path="mapel" element={<MapelPage />} />
