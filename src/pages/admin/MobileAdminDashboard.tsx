@@ -14,9 +14,9 @@ import MobileHeader from '../../components/MobileHeader'
 import MobileMenuSheet from '../../components/MobileMenuSheet'
 
 
-interface Props { stats: any; loading?: boolean }
+interface Props { stats: any; loading?: boolean; kelengkapan?: any }
 
-export default function MobileAdminDashboard({ stats }: Props) {
+export default function MobileAdminDashboard({ stats, kelengkapan }: Props) {
   const navigate = useNavigate()
   const [menuOpen, setMenuOpen] = useState(false)
   const [todaySchedules, setTodaySchedules] = useState<any[]>([])
@@ -117,6 +117,32 @@ export default function MobileAdminDashboard({ stats }: Props) {
             <LineChart data={chartData} margin={{ top: 5, right: 8, left: -28, bottom: 0 }}><CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" /><XAxis dataKey="hari" tick={{ fontSize: 10 }} /><YAxis tick={{ fontSize: 9 }} /><Tooltip /><Line type="monotone" dataKey="guru_hadir" name="Guru Hadir" stroke="#0ea5e9" strokeWidth={3} dot={{ r: 3 }} /></LineChart>
           </ResponsiveContainer>
         </section>
+
+        {kelengkapan && (
+          <section className="rounded-3xl bg-white p-4 shadow-sm dark:bg-gray-900">
+            <div className="mb-3 flex items-start justify-between">
+              <div>
+                <h2 className="text-sm font-bold text-slate-900 dark:text-white">Kelengkapan Data Lembaga</h2>
+                <p className="text-[11px] text-slate-400">{kelengkapan.jumlah_lengkap ?? 0} dari {kelengkapan.jumlah_item ?? 0} kategori lengkap</p>
+              </div>
+              <span className={`rounded-full px-3 py-1 text-xs font-bold ${kelengkapan.skor_keseluruhan >= 75 ? 'bg-emerald-50 text-emerald-700' : kelengkapan.skor_keseluruhan >= 50 ? 'bg-amber-50 text-amber-700' : 'bg-red-50 text-red-700'}`}>{kelengkapan.skor_keseluruhan ?? 0}%</span>
+            </div>
+            <div className="space-y-2.5">
+              {(kelengkapan.items || []).map((item: any) => (
+                <div key={item.key}>
+                  <div className="flex items-center justify-between text-[11px]">
+                    <span className="font-medium text-slate-700 dark:text-gray-200">{item.label}</span>
+                    <span className={`font-semibold ${item.persen >= 100 ? 'text-emerald-600' : item.persen >= 75 ? 'text-blue-600' : item.persen >= 25 ? 'text-amber-600' : 'text-red-600'}`}>{item.persen}%</span>
+                  </div>
+                  <div className="mt-1 h-1.5 w-full rounded-full bg-slate-100 dark:bg-gray-800">
+                    <div className={`h-1.5 rounded-full ${item.persen >= 100 ? 'bg-emerald-500' : item.persen >= 75 ? 'bg-blue-500' : item.persen >= 25 ? 'bg-amber-500' : 'bg-red-500'}`} style={{ width: `${Math.min(item.persen, 100)}%` }} />
+                  </div>
+                  {item.detail && <p className="mt-0.5 text-[10px] text-slate-400">{item.detail}</p>}
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
       </main>
       <MobileMenuSheet open={menuOpen} onClose={() => setMenuOpen(false)} />
     </div>

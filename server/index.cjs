@@ -8934,6 +8934,19 @@ app.get('/api/dashboard/stats', DASHBOARD_ROLES, (req, res) => {
   })
 })
 
+// ==================== DASHBOARD KELENGKAPAN ====================
+// Logika perhitungan ada di server/dashboard-kelengkapan.cjs agar bisa diuji
+// runtime dengan database in-memory. Endpoint ini hanya menjembatani HTTP.
+const { hitungKelengkapan } = require('./dashboard-kelengkapan.cjs')
+app.get('/api/dashboard/kelengkapan', DASHBOARD_ROLES, (req, res) => {
+  try {
+    res.json(hitungKelengkapan(db, req.tenantId))
+  } catch (error) {
+    console.error('[dashboard/kelengkapan]', error.message)
+    res.status(500).json({ error: 'Gagal menghitung kelengkapan data', detail: error.message })
+  }
+})
+
 // ==================== WA GATEWAY ====================
 const WAGateway = require('./wa-gateway.cjs')
 const waGateway = new WAGateway(db)

@@ -30,6 +30,7 @@ export default function AdminDashboard() {
   const [stats, setStats] = useState<any>(null)
   const [classMonitor, setClassMonitor] = useState<any>({ sessions: [], summary: { aktif: 0, selesai: 0, terlambat: 0, total: 0 } })
   const [monitoring, setMonitoring] = useState<any>(null)
+  const [kelengkapan, setKelengkapan] = useState<any>(null)
   const [attendanceOverview, setAttendanceOverview] = useState<any>(null)
   const [attendanceDate, setAttendanceDate] = useState(todayJakarta)
   const [loading, setLoading] = useState(true)
@@ -43,6 +44,7 @@ export default function AdminDashboard() {
     const loadMonitoring = () => api.get('/admin/monitoring').then(res => setMonitoring(res.data)).catch(() => {})
     loadClassMonitor()
     loadMonitoring()
+    api.get('/dashboard/kelengkapan').then(res => setKelengkapan(res.data)).catch(() => {})
     const timer = window.setInterval(loadClassMonitor, 30000)
     return () => window.clearInterval(timer)
   }, [])
@@ -74,7 +76,7 @@ export default function AdminDashboard() {
 
   return (
     <>
-      <MobileAdminDashboard stats={stats} loading={loading} />
+      <MobileAdminDashboard stats={stats} loading={loading} kelengkapan={kelengkapan} />
 
       <div className="hidden lg:block space-y-3">
         <PageHeader title="Dashboard" subtitle="Ringkasan data sekolah/madrasah hari ini" />
@@ -88,6 +90,56 @@ export default function AdminDashboard() {
           </Link>
         ))}
       </div>
+
+      {/* Monitoring Kelengkapan Data */}
+      {kelengkapan && (
+        <Card title="Monitoring Kelengkapan Data Lembaga" icon={<TrendingUp size={18} className="text-indigo-600" />}>
+          <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <p className="text-xs text-gray-500">Pantau kelengkapan data wajib lembaga. Semakin hijau semakin lengkap.</p>
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-gray-500">Skor keseluruhan:</span>
+              <span className={`text-lg font-bold ${kelengkapan.skor_keseluruhan >= 75 ? 'text-emerald-600' : kelengkapan.skor_keseluruhan >= 50 ? 'text-amber-600' : 'text-red-600'}`}>{kelengkapan.skor_keseluruhan}%</span>
+            </div>
+          </div>
+          <div className="space-y-2.5">
+            {kelengkapan.items?.map((item: any) => {
+              const color = item.persen >= 100 ? 'bg-emerald-500' : item.persen >= 75 ? 'bg-blue-500' : item.persen >= 25 ? 'bg-amber-500' : 'bg-red-500'
+              const textColor = item.persen >= 100 ? 'text-emerald-700' : item.persen >= 75 ? 'text-blue-700' : item.persen >= 25 ? 'text-amber-700' : 'text-red-700'
+              const bgColor = item.persen >= 100 ? 'bg-emerald-50' : item.persen >= 75 ? 'bg-blue-50' : item.persen >= 25 ? 'bg-amber-50' : 'bg-red-50'
+              return (
+                <div key={item.key} className={`rounded-xl p-3 ${bgColor}`}>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <span className="text-sm font-medium text-gray-800">{item.label}</span>
+                      <span className={`text-xs font-semibold ${textColor}`}>{item.filled}/{item.total}</span>
+                    </div>
+                    <span className={`text-xs font-bold ${textColor}`}>{item.persen}%</span>
+                  </div>
+                  <div className="w-full bg-gray-200 rounded-full h-2">
+                    <div className={`${color} rounded-full h-2 transition-all duration-500`} style={{ width: `${Math.min(item.persen, 100)}%` }} />
+                  </div>
+                  {item.detail && <p className="mt-1 text-[11px] text-gray-500">{item.detail}</p>}
+                </div>
+              )
+            })}
+          </div>
+          <div className="mt-4">
+            <ResponsiveContainer width="100%" height={Math.max(200, (kelengkapan.items?.length || 0) * 35 + 40)}>
+              <BarChart data={kelengkapan.items} layout="vertical" margin={{ top: 5, right: 30, left: 5, bottom: 5 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                <XAxis type="number" domain={[0, 100]} tick={{ fontSize: 11 }} unit="%" />
+                <YAxis type="category" dataKey="label" width={130} tick={{ fontSize: 11 }} />
+                <Tooltip formatter={(v: any) => [`${v}%`, 'Kelengkapan']} />
+                <Bar dataKey="persen" name="Kelengkapan" radius={[0, 4, 4, 0]}>
+                  {kelengkapan.items?.map((item: any, i: number) => (
+                    <Cell key={i} fill={item.persen >= 100 ? '#10b981' : item.persen >= 75 ? '#3b82f6' : item.persen >= 25 ? '#f59e0b' : '#ef4444'} />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </Card>
+      )}
 
       <Card title="Pemantauan Guru Masuk Kelas" icon={<DoorOpen size={18} className="text-emerald-600" />}>
         <div className="mb-3 grid grid-cols-3 gap-2 text-center text-xs">
