@@ -26,7 +26,7 @@ const { setupPortalCashless, registerPortalRoutes, registerKantinRoutes, selectP
 const waQueue = require('./wa-queue.cjs')
 const notificationMonitor = require('./notification-monitor.cjs')
 const ExcelJS = require('exceljs')
-const { generateRaporForRombel, refreshGeneratedRapor, loadBobot, pickBobot, BOBOT_DEFAULT } = require('./rapor-grade-service.cjs')
+const { generateRaporForRombel, refreshGeneratedRapor, loadBobot, pickBobot, BOBOT_DEFAULT, computeRaporLive } = require('./rapor-grade-service.cjs')
 const { createRdmClient, buildSasImportItems, bobotRdmKeJurnalku } = require('./rdm-sas-connector.cjs')
 const { getAuthorizedLedgerRombels, getLedgerRows, createLedgerWorkbook, createLedgerPdf } = require('./ledger-service.cjs')
 const {
@@ -7446,7 +7446,22 @@ app.get('/api/rapor', authMiddleware, (req, res) => {
   if (jenis === 'sumatif') { sql += " AND r.jenis IN ('sts','sas')" }
   else if (jenis) { sql += ' AND r.jenis = ?'; params.push(jenis) }
   sql += ' ORDER BY m.nama'
-  res.json(db.prepare(sql).all(...params))
+  const rows = db.prepare(sql).all(...params)
+  // Fallback on-the-fly: bila tabel rapor belum ter-materialisasi (belum pernah
+  // di-generate), hitung nilai langsung dari penilaian_harian + asesmen supaya
+  // pratinjau tetap tampil tanpa langkah "generate".
+  if (rows.length === 0 && siswa_id && tahun_ajaran && semester && jenis && jenis !== 'sumatif') {
+    const s = db.prepare('SELECT id, rombel_id, nama, nis FROM siswa WHERE id=? AND tenant_id=?').get(siswa_id, req.tenantId)
+    if (s) {
+      const live = computeRaporLive(db, { tenantId: req.tenantId, siswaId: siswa_id, rombelId: s.rombel_id, tahunAjaran: tahun_ajaran, semester, jenis })
+      return res.json(live.rows.map(r => ({
+        siswa_id, siswa_nama: s.nama, nis: s.nis, mapel_id: r.mapel_id, mapel_nama: r.mapel_nama,
+        nilai_akhir: r.nilai_akhir, nilai_sts: r.nilai_sts, nilai_sas: r.nilai_sas, kkm: r.kkm,
+        predikat: '', deskripsi: '', tahun_ajaran, semester, jenis,
+      })))
+    }
+  }
+  res.json(rows)
 })
 
 // Data non-akademik yang melengkapi satu lembar rapor. Semua lookup wajib
@@ -7512,7 +7527,7 @@ app.get('/api/rapor/export/pdf', authMiddleware, async (req, res) => {
     const renderOpts = { tenantId: req.tenantId, siswaId: siswa_id, tahunAjaran: tahun_ajaran, semester, jenis, uploadDir: UPLOAD_DIR, bagian: bagianPdf }
     const doc = format === 'mtsplus' ? await createRaporMtsplusPdf(db, renderOpts) : await createRaporSiswaPdf(db, renderOpts)
     if (!doc) return res.status(404).json({ error: 'Siswa tidak ditemukan' })
-    if (doc.error === 'RAPOR_NOT_GENERATED') return res.status(409).json({ error: 'Rapor belum digenerate. Klik Generate terlebih dahulu.' })
+    if (doc.error === 'RAPOR_NOT_GENERATED') return res.status(409).json({ error: 'Belum ada nilai untuk siswa ini pada periode tersebut. Input/import nilai dulu.' })
     res.setHeader('Content-Type', 'application/pdf')
     res.setHeader('Content-Disposition', `attachment; filename="${bagianPdf === 'lengkap' ? 'rapor' : bagianPdf}-${siswa_id}-${semester}.pdf"`)
     doc.pipe(res)
@@ -7550,7 +7565,7 @@ app.get('/api/rapor/export/pdf-bulk', authMiddleware, async (req, res) => {
     })
     if (!doc) return res.status(404).json({ error: 'Tidak ada siswa aktif dengan rapor yang bisa dicetak' })
     const { dicetak, dilewati } = doc.meta || { dicetak: 0, dilewati: 0 }
-    if (dicetak === 0) return res.status(409).json({ error: `Tidak ada rapor yang bisa dicetak (${dilewati} siswa belum digenerate). Generate rapor per rombel dulu.` })
+    if (dicetak === 0) return res.status(409).json({ error: `Tidak ada rapor yang bisa dicetak (${dilewati} siswa belum punya nilai). Input/import nilai dulu.` })
     const fnameBagian = bagianPdf === 'lengkap' ? 'rapor' : bagianPdf
     res.setHeader('Content-Type', 'application/pdf')
     res.setHeader('Content-Disposition', `attachment; filename=\"${fnameBagian}-mtsplus-${rombel_id ? 'rombel-' + rombel_id : 'semua'}-${semester}.pdf\"`)

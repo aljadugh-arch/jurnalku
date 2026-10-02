@@ -258,7 +258,7 @@ export default function RaporPage() {
   const exportPdf = async (bagian: BagianCetak = 'lengkap') => {
     if (!selectedSiswa) { setMsg('✗ Pilih siswa terlebih dahulu'); return }
     if (bagian === 'nilai' || bagian === 'lengkap') {
-      if (rapor.length === 0) { setMsg('✗ Rapor belum digenerate. Klik Generate terlebih dahulu.'); return }
+      if (rapor.length === 0) { setMsg('✗ Belum ada nilai untuk siswa ini. Input/import nilai dulu.'); return }
     }
     if (foundationTenantId) return setMsg('✗ Export PDF hanya untuk data lembaga sendiri')
     const label = { cover: 'Cover', identitas: 'Identitas', nilai: 'Nilai', lengkap: 'Rapor' }[bagian]
@@ -546,7 +546,7 @@ export default function RaporPage() {
       )}
 
       {kurikulum === 'merdeka' && !selectedSiswa && <div className="card py-16 text-center print:hidden"><FileText className="w-12 h-12 text-gray-300 mx-auto mb-3" /><p className="text-gray-500">Pilih kelas dan siswa untuk melihat rapor.</p></div>}
-      {kurikulum === 'merdeka' && selectedSiswa && !loading && rapor.length === 0 && <div className="card py-12 text-center print:hidden"><p className="text-gray-500">Nilai rapor belum tersedia. Klik Generate setelah nilai harian dan asesmen diisi. Cover dan identitas siswa tetap bisa dicetak lewat menu Cetak.</p></div>}
+      {kurikulum === 'merdeka' && selectedSiswa && !loading && rapor.length === 0 && <div className="card py-12 text-center print:hidden"><p className="text-gray-500">Belum ada nilai untuk siswa ini pada periode tersebut. Input/import nilai harian atau asesmen dulu. Cover dan identitas siswa tetap bisa dicetak lewat menu Cetak.</p></div>}
       {kurikulum === 'k13' && !selectedSiswa && <div className="card py-16 text-center print:hidden"><FileText className="w-12 h-12 text-gray-300 mx-auto mb-3" /><p className="text-gray-500">Pilih kelas dan siswa, lalu isi nilai akhir per mapel dan sikap. Klik "Cetak K-13" untuk unduh PDF.</p></div>}
 
       {kurikulum === 'merdeka' && selectedSiswa && tampilPratinjau && <div id="rapor-print" className="space-y-6 print:space-y-0">

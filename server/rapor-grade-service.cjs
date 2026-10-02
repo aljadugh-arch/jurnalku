@@ -309,6 +309,63 @@ function refreshGeneratedRapor(db, options) {
   })()
 }
 
+// Hitung rapor SATU siswa SECARA LANGSUNG dari penilaian_harian + asesmen
+// (nilai_sts/sas di tabel rapor) TANPA baris rapor ter-materialisasi. Dipakai
+// layanan cetak supaya rapor bisa dicetak tanpa langkah "generate" manual —
+// hasil identik dengan generateRaporForRombel untuk sumber data yang sama.
+function computeRaporLive(db, { tenantId, siswaId, rombelId, tahunAjaran, semester, jenis }) {
+  const { from, to } = semesterRange(tahunAjaran, semester)
+  const { dailyFor, asesmenFor } = makeStatements(db, { tenantId, from, to })
+  const bobotRows = loadBobot(db, tenantId)
+
+  const mapelIds = db.prepare(`
+    SELECT DISTINCT mapel_id FROM penilaian_harian
+      WHERE siswa_id=? AND tenant_id=? AND tanggal BETWEEN ? AND ?
+    UNION
+    SELECT DISTINCT mapel_id FROM rapor
+      WHERE siswa_id=? AND tenant_id=? AND tahun_ajaran=? AND semester=?
+  `).all(siswaId, tenantId, from, to, siswaId, tenantId, tahunAjaran, semester).map(r => r.mapel_id)
+
+  const rows = []
+  for (const mapelId of mapelIds) {
+    const m = db.prepare('SELECT nama, kelompok FROM mapel WHERE id=? AND tenant_id=?').get(mapelId, tenantId)
+    if (!m) continue
+    const computed = computeNilai({
+      daily: dailyFor(siswaId, mapelId),
+      sts: asesmenFor(siswaId, mapelId, tahunAjaran, semester, 'sts')?.nilai,
+      sas: asesmenFor(siswaId, mapelId, tahunAjaran, semester, 'sas')?.nilai,
+      jenis,
+      bobot: pickBobot(bobotRows, { rombelId, mapelId }, jenis === 'rapor_sas' ? 'sas' : 'sts'),
+    })
+    rows.push({
+      mapel_id: mapelId, mapel_nama: m.nama, mapel_kelompok: m.kelompok,
+      nilai_akhir: computed.akhir, nilai_sts: computed.sts, nilai_sas: computed.sas, kkm: 70,
+    })
+  }
+  rows.sort((a, b) =>
+    String(a.mapel_kelompok || 'wajib').localeCompare(String(b.mapel_kelompok || 'wajib')) ||
+    String(a.mapel_nama).localeCompare(String(b.mapel_nama))
+  )
+  const jumlah = rows.reduce((s, r) => s + r.nilai_akhir, 0)
+  const rata = rows.length ? jumlah / rows.length : 0
+  return { rows, jumlah, rata }
+}
+
+// Peringkat seluruh siswa aktif satu rombel berdasarkan rata-rata nilai akhir
+// yang dihitung langsung (bukan dari tabel rapor). Return array terurut
+// [{siswa_id, rata}], index 0 = nilai tertinggi.
+function computeRombelRanking(db, { tenantId, rombelId, tahunAjaran, semester, jenis }) {
+  const siswaRows = db.prepare(`SELECT id FROM siswa WHERE tenant_id=? AND rombel_id=? AND COALESCE(status,'aktif')='aktif'`)
+    .all(tenantId, rombelId)
+  const ranked = []
+  for (const s of siswaRows) {
+    const live = computeRaporLive(db, { tenantId, siswaId: s.id, rombelId, tahunAjaran, semester, jenis })
+    ranked.push({ siswa_id: s.id, rata: live.rata })
+  }
+  ranked.sort((a, b) => b.rata - a.rata)
+  return ranked
+}
+
 module.exports = {
   generateRaporForRombel,
   refreshGeneratedRapor,
@@ -319,4 +376,6 @@ module.exports = {
   loadBobot,
   makeStatements,
   BOBOT_DEFAULT,
+  computeRaporLive,
+  computeRombelRanking,
 }

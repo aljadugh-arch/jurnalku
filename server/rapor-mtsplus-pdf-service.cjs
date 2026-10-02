@@ -11,6 +11,7 @@ const PDFDocument = require('pdfkit')
 const QRCode = require('qrcode')
 const { getTenantSettings } = require('./tenant-settings.cjs')
 const { terbilang, nilaiKeAbjad, semesterRange } = require('./rapor-k13-service.cjs')
+const { computeRaporLive, computeRombelRanking } = require('./rapor-grade-service.cjs')
 const path = require('path')
 const fs = require('fs')
 
@@ -91,15 +92,13 @@ async function loadStudentData(db, { tenantId, siswaId, tahunAjaran, semester, j
 
   const settings = getTenantSettings(db, tenantId) || {}
 
-  const rapor = db.prepare(`
-    SELECT r.*, m.nama AS mapel_nama, m.kelompok AS mapel_kelompok
-    FROM rapor r LEFT JOIN mapel m ON r.mapel_id = m.id AND m.tenant_id = r.tenant_id
-    WHERE r.tenant_id=? AND r.siswa_id=? AND r.tahun_ajaran=? AND r.semester=? AND r.jenis=?
-    ORDER BY COALESCE(m.kelompok,'wajib'), m.nama
-  `).all(tenantId, siswaId, tahunAjaran, semester, jenis)
+  // Hitung nilai rapor SECARA LANGSUNG dari penilaian_harian + asesmen, tanpa
+  // butuh baris rapor ter-materialisasi (tidak ada langkah "generate" manual).
+  const { from, to } = semesterRange(semester, tahunAjaran)
+  const live = computeRaporLive(db, { tenantId, siswaId, rombelId: siswa.rombel_id, tahunAjaran, semester, jenis })
+  const rapor = live.rows
   if (rapor.length === 0) return { error: 'RAPOR_NOT_GENERATED' }
 
-  const { from, to } = semesterRange(semester, tahunAjaran)
   const absensiRows = db.prepare(`SELECT lower(status) AS status, COUNT(DISTINCT tanggal) AS jumlah
     FROM absensi_siswa WHERE siswa_id=? AND tenant_id=? AND tanggal>=? AND tanggal<=? GROUP BY lower(status)`)
     .all(siswaId, tenantId, from, to)
@@ -125,9 +124,10 @@ async function loadStudentData(db, { tenantId, siswaId, tahunAjaran, semester, j
     .all(from, to, siswaId, tenantId)
     .map(row => ({ ...row, nilai: row.total_pertemuan ? Math.round((row.hadir / row.total_pertemuan) * 100) : null }))
 
-  const jumlahNilai = rapor.reduce((sum, r) => sum + (Number(r.nilai_akhir) || 0), 0)
-  const rataAkhir = rapor.length ? jumlahNilai / rapor.length : 0
-  const rank = hitungRank(db, tenantId, siswa.rombel_id, tahunAjaran, semester, jenis, siswaId)
+  const jumlahNilai = live.jumlah
+  const rataAkhir = live.rata
+  const ranking = computeRombelRanking(db, { tenantId, rombelId: siswa.rombel_id, tahunAjaran, semester, jenis })
+  const rank = { rank: ranking.findIndex(r => r.siswa_id === siswaId) + 1, totalSiswa: ranking.length }
 
   const qrDataUrl = await QRCode.toDataURL(`Rapor - ${siswa.nama} - Kepsek: ${settings.kepala_sekolah || '-'} - Diverifikasi digital`)
   const qrBuffer = Buffer.from(qrDataUrl.split(',')[1], 'base64')

@@ -21,6 +21,10 @@ function buildTestDb() {
     CREATE TABLE rapor (id TEXT PRIMARY KEY, tenant_id TEXT, siswa_id TEXT, mapel_id TEXT, tahun_ajaran TEXT,
       semester TEXT, jenis TEXT, nilai_harian INTEGER, nilai_sts INTEGER, nilai_sas INTEGER,
       nilai_akhir INTEGER, predikat TEXT);
+    CREATE TABLE rapor_bobot (tenant_id TEXT, rombel_id TEXT, mapel_id TEXT, sts_harian REAL, sts_sts REAL, sts_sas REAL,
+      sas_harian REAL, sas_sts REAL, sas_sas REAL);
+    CREATE TABLE penilaian_harian (id TEXT PRIMARY KEY, siswa_id TEXT, mapel_id TEXT, tenant_id TEXT, tanggal TEXT,
+      pengetahuan INTEGER, keaktifan INTEGER, sikap INTEGER);
     CREATE TABLE rapor_pelengkap (tenant_id TEXT, siswa_id TEXT, tahun_ajaran TEXT, semester TEXT, jenis TEXT,
       prestasi TEXT, catatan_wali_kelas TEXT, tanggapan_orang_tua TEXT, keputusan TEXT, tanggal_pembagian TEXT);
     CREATE TABLE catatan_kepribadian (siswa_id TEXT, tahun_ajaran TEXT, semester TEXT, tenant_id TEXT,
@@ -46,9 +50,17 @@ function buildTestDb() {
       'Bapak Ibu', 'r1', '', 'Islam', 'Anak Kandung', 1, 'SDN 1 Uji',
       'Ayah Uji','Ibu Uji','Wiraswasta','Ibu Rumah Tangga','', '')`).run()
   db.prepare(`INSERT INTO mapel (id, tenant_id, nama) VALUES ('m1','t1','Matematika'), ('m2','t1','IPA')`).run()
+  // Baris rapor ter-materialisasi (dipakai renderer RDM bawaan).
   db.prepare(`INSERT INTO rapor (id, tenant_id, siswa_id, mapel_id, tahun_ajaran, semester, jenis, nilai_harian, nilai_sts, nilai_sas, nilai_akhir, predikat)
     VALUES ('rp1','t1','s1','m1','2026/2027','ganjil','rapor_sts',80,85,0,82,'B'),
            ('rp2','t1','s1','m2','2026/2027','ganjil','rapor_sts',75,78,0,76,'B')`).run()
+  // Baris asesmen STS (dipakai hitung on-the-fly renderer mtsplus).
+  db.prepare(`INSERT INTO rapor (id, tenant_id, siswa_id, mapel_id, tahun_ajaran, semester, jenis, nilai_harian, nilai_sts, nilai_sas, nilai_akhir, predikat)
+    VALUES ('as1','t1','s1','m1','2026/2027','ganjil','sts',NULL,85,0,0,NULL),
+           ('as2','t1','s1','m2','2026/2027','ganjil','sts',NULL,78,0,0,NULL)`).run()
+  db.prepare(`INSERT INTO penilaian_harian (id, siswa_id, mapel_id, tenant_id, tanggal, pengetahuan, keaktifan, sikap)
+    VALUES ('ph1','s1','m1','t1','2026-08-01',80,75,80),
+           ('ph2','s1','m2','t1','2026-08-02',75,70,75)`).run()
   db.prepare(`INSERT INTO rapor_pelengkap (tenant_id, siswa_id, tahun_ajaran, semester, jenis, prestasi, catatan_wali_kelas, tanggal_pembagian)
     VALUES ('t1','s1','2026/2027','ganjil','rapor_sts','[{"jenis":"Akademik","keterangan":"Juara 1 OSN"}]','Terus semangat belajar','15 Desember 2026')`).run()
   db.prepare(`INSERT INTO catatan_kepribadian (siswa_id, tahun_ajaran, semester, tenant_id, sikap_spiritual, sikap_sosial, kelakuan, kedisiplinan, updated_at)
@@ -91,10 +103,12 @@ test('createRaporSiswaPdf menghasilkan dokumen PDF valid untuk siswa dengan data
   db.close()
 })
 
-test('createRaporSiswaPdf mengembalikan status rapor kosong ketika belum digenerate', async () => {
+test('createRaporSiswaPdf mengembalikan status rapor kosong ketika tidak ada nilai sama sekali', async () => {
   const db = buildTestDb()
+  db.prepare(`INSERT INTO siswa (id, tenant_id, nis, nisn, nama, jenis_kelamin, rombel_id, status)
+    VALUES ('s3','t1','1003','0033','Siswa Kosong','L','r1','aktif')`).run()
   const doc = await createRaporSiswaPdf(db, {
-    tenantId: 't1', siswaId: 's1', tahunAjaran: '2026/2027', semester: 'ganjil', jenis: 'rapor_sas', uploadDir: '/tmp/nonexistent-uploads',
+    tenantId: 't1', siswaId: 's3', tahunAjaran: '2026/2027', semester: 'ganjil', jenis: 'rapor_sts', uploadDir: '/tmp/nonexistent-uploads',
   })
   assert.deepEqual(doc, { error: 'RAPOR_NOT_GENERATED' })
   db.close()
@@ -203,9 +217,12 @@ test('createRaporMtsplusPdfBulk menggabungkan banyak siswa jadi satu PDF', async
   // Tambah siswa ke-2 (rombel sama) + nilai rapor agar ikut tercetak.
   db.prepare(`INSERT INTO siswa (id, tenant_id, nis, nisn, nama, jenis_kelamin, rombel_id, status)
     VALUES ('s2','t1','1002','0022','Siswa Dua','P','r1','aktif')`).run()
-  db.prepare(`INSERT INTO rapor (id, tenant_id, siswa_id, mapel_id, tahun_ajaran, semester, jenis, nilai_akhir, predikat)
-    VALUES ('rp3','t1','s2','m1','2026/2027','ganjil','rapor_sts',88,'A'),
-           ('rp4','t1','s2','m2','2026/2027','ganjil','rapor_sts',90,'A')`).run()
+  db.prepare(`INSERT INTO rapor (id, tenant_id, siswa_id, mapel_id, tahun_ajaran, semester, jenis, nilai_sts, nilai_sas, nilai_akhir)
+    VALUES ('as3','t1','s2','m1','2026/2027','ganjil','sts',88,0,0),
+           ('as4','t1','s2','m2','2026/2027','ganjil','sts',90,0,0)`).run()
+  db.prepare(`INSERT INTO penilaian_harian (id, siswa_id, mapel_id, tenant_id, tanggal, pengetahuan, keaktifan, sikap)
+    VALUES ('ph3','s2','m1','t1','2026-08-01',88,80,85),
+           ('ph4','s2','m2','t1','2026-08-02',90,85,88)`).run()
 
   const doc = await createRaporMtsplusPdfBulk(db, {
     tenantId: 't1', rombelId: 'r1', tahunAjaran: '2026/2027', semester: 'ganjil', jenis: 'rapor_sts', uploadDir: '/tmp/nonexistent-uploads',

@@ -1,6 +1,7 @@
 const PDFDocument = require('pdfkit')
 const QRCode = require('qrcode')
 const { getTenantSettings } = require('./tenant-settings.cjs')
+const { computeRaporLive } = require('./rapor-grade-service.cjs')
 const path = require('path')
 const fs = require('fs')
 
@@ -206,14 +207,12 @@ async function createRaporSiswaPdf(db, options) {
 
   const settings = getTenantSettings(db, tenantId) || {}
 
-  const rapor = db.prepare(`
-    SELECT r.*, m.nama AS mapel_nama, m.kelompok AS mapel_kelompok
-    FROM rapor r LEFT JOIN mapel m ON r.mapel_id = m.id AND m.tenant_id = r.tenant_id
-    WHERE r.tenant_id=? AND r.siswa_id=? AND r.tahun_ajaran=? AND r.semester=? AND r.jenis=?
-    ORDER BY COALESCE(m.kelompok,'wajib'), m.nama
-  `).all(tenantId, siswaId, tahunAjaran, semester, jenis)
-  // Hanya bagian nilai/lengkap yang butuh rapor sudah digenerate; sampul dan
-  // identitas tetap bisa dicetak dari data siswa saja.
+  // Hitung nilai rapor SECARA LANGSUNG dari penilaian_harian + asesmen, tanpa
+  // butuh baris rapor ter-materialisasi (tidak ada langkah "generate" manual).
+  const live = computeRaporLive(db, { tenantId, siswaId, rombelId: siswa.rombel_id, tahunAjaran, semester, jenis })
+  const rapor = live.rows.map(r => ({ ...r, deskripsi: '' }))
+  // Hanya bagian nilai/lengkap yang butuh nilai; sampul dan identitas tetap bisa
+  // dicetak dari data siswa saja.
   if (butuhNilai && rapor.length === 0) return { error: 'RAPOR_NOT_GENERATED' }
 
   const { from, to } = semesterRange(tahunAjaran, semester)
@@ -265,8 +264,8 @@ async function createRaporSiswaPdf(db, options) {
     for (const row of rows) materiByMapel.set(row.mapel_id, row.materi)
   } catch { /* jurnal_mengajar belum ada di fixture lama */ }
 
-  const rataAkhir = rapor.length ? Math.round(rapor.reduce((sum, r) => sum + (Number(r.nilai_akhir) || 0), 0) / rapor.length) : 0
-  const jumlahNilai = rapor.reduce((sum, r) => sum + (Number(r.nilai_akhir) || 0), 0)
+  const rataAkhir = rapor.length ? Math.round(live.rata) : 0
+  const jumlahNilai = live.jumlah
 
   const qrDataUrl = await QRCode.toDataURL(`Rapor - ${siswa.nama} - Kepsek: ${settings.kepala_sekolah || '-'} - Diverifikasi digital`)
   const qrBuffer = Buffer.from(qrDataUrl.split(',')[1], 'base64')
