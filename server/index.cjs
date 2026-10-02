@@ -38,6 +38,7 @@ const { monitorStatus, sanitizeExamForMonitor } = require('./exam-proctor.cjs')
 const { buatPemeriksaOrigin } = require('./cors-origin.cjs')
 const { migrateRaporUniqueIndex } = require('./rapor-unique-index.cjs')
 const { createRaporSiswaPdf, normalizeBagian: normalizeBagianRapor, BAGIAN_VALID: BAGIAN_RAPOR_VALID } = require('./rapor-siswa-pdf-service.cjs')
+const { createRaporMtsplusPdf } = require('./rapor-mtsplus-pdf-service.cjs')
 const { createKtsPdf, CARD_W: KTS_W, CARD_H: KTS_H } = require('./kts-pdf-service.cjs')
 const { createRaporK13Pdf, createK13LedgerPdf } = require('./rapor-k13-pdf-service.cjs')
 const { getK13RaporData, getPeringkatK13, getK13Ledger, normalizeK13Nilai } = require('./rapor-k13-service.cjs')
@@ -7494,8 +7495,10 @@ app.get('/api/rapor/ringkasan', authMiddleware, (req, res) => {
 // Rapor siswa siap-cetak (PDF server-side, sampul + identitas + capaian hasil belajar).
 // Reuse validasi & scope akses persis /api/rapor/ringkasan di atas.
 app.get('/api/rapor/export/pdf', authMiddleware, async (req, res) => {
-  const { siswa_id, tahun_ajaran, semester, jenis = 'rapor_sts', bagian } = req.query
+  const { siswa_id, tahun_ajaran, semester, jenis = 'rapor_sts', bagian, format = 'rdm' } = req.query
   if (!siswa_id || !tahun_ajaran || !semester) return res.status(400).json({ error: 'siswa_id, tahun_ajaran, semester wajib' })
+  // format: 'rdm' (bawaan, desain RDM) atau 'mtsplus' (alternatif, mirip rapor.mtsplussd7.cc.cd).
+  if (format !== 'rdm' && format !== 'mtsplus') return res.status(400).json({ error: "format harus 'rdm' atau 'mtsplus'" })
   // bagian: cover (sampul), identitas (biodata siswa), nilai (capaian hasil
   // belajar), lengkap (ketiganya). Tanpa bagian = lengkap (kompatibel mundur).
   if (bagian !== undefined && bagian !== '' && !BAGIAN_RAPOR_VALID.includes(String(bagian).trim().toLowerCase())) {
@@ -7506,7 +7509,8 @@ app.get('/api/rapor/export/pdf', authMiddleware, async (req, res) => {
   if (validationError) return res.status(400).json({ error: validationError })
   if (isTeacherContext(req) && !teacherCanAccessStudent(req, siswa_id)) return res.status(404).json({ error: 'Siswa tidak ditemukan' })
   try {
-    const doc = await createRaporSiswaPdf(db, { tenantId: req.tenantId, siswaId: siswa_id, tahunAjaran: tahun_ajaran, semester, jenis, uploadDir: UPLOAD_DIR, bagian: bagianPdf })
+    const renderOpts = { tenantId: req.tenantId, siswaId: siswa_id, tahunAjaran: tahun_ajaran, semester, jenis, uploadDir: UPLOAD_DIR, bagian: bagianPdf }
+    const doc = format === 'mtsplus' ? await createRaporMtsplusPdf(db, renderOpts) : await createRaporSiswaPdf(db, renderOpts)
     if (!doc) return res.status(404).json({ error: 'Siswa tidak ditemukan' })
     if (doc.error === 'RAPOR_NOT_GENERATED') return res.status(409).json({ error: 'Rapor belum digenerate. Klik Generate terlebih dahulu.' })
     res.setHeader('Content-Type', 'application/pdf')

@@ -2,6 +2,7 @@ const test = require('node:test')
 const assert = require('node:assert/strict')
 const Database = require('better-sqlite3')
 const { createRaporSiswaPdf, coverLayout, faseFromTingkat, buildCapaianKompetensi } = require('../server/rapor-siswa-pdf-service.cjs')
+const { createRaporMtsplusPdf } = require('../server/rapor-mtsplus-pdf-service.cjs')
 
 // Bangun DB in-memory minimal yang meniru skema produksi (kolom yang dipakai
 // createRaporSiswaPdf saja) agar test tidak bergantung pada file DB nyata.
@@ -15,7 +16,7 @@ function buildTestDb() {
     CREATE TABLE siswa (id TEXT PRIMARY KEY, tenant_id TEXT, nis TEXT, nisn TEXT, nama TEXT,
       jenis_kelamin TEXT, tempat_lahir TEXT, tanggal_lahir TEXT, alamat TEXT, no_hp TEXT, nama_ortu TEXT,
       rombel_id TEXT, foto TEXT, agama TEXT, status_keluarga TEXT, anak_ke INTEGER, asal_sekolah TEXT,
-      nama_ayah TEXT, nama_ibu TEXT, kerja_ayah TEXT, kerja_ibu TEXT, nama_wali TEXT, kerja_wali TEXT);
+      nama_ayah TEXT, nama_ibu TEXT, kerja_ayah TEXT, kerja_ibu TEXT, nama_wali TEXT, kerja_wali TEXT, status TEXT DEFAULT 'aktif');
     CREATE TABLE mapel (id TEXT PRIMARY KEY, tenant_id TEXT, kode TEXT, nama TEXT, kelompok TEXT DEFAULT 'wajib');
     CREATE TABLE rapor (id TEXT PRIMARY KEY, tenant_id TEXT, siswa_id TEXT, mapel_id TEXT, tahun_ajaran TEXT,
       semester TEXT, jenis TEXT, nilai_harian INTEGER, nilai_sts INTEGER, nilai_sas INTEGER,
@@ -161,5 +162,38 @@ test('rapor dengan kelompok mapel berbeda tetap menghasilkan PDF (baris kelompok
   doc.end()
   await done
   assert.equal(Buffer.concat(chunks).subarray(0, 4).toString(), '%PDF')
+  db.close()
+})
+
+test('createRaporMtsplusPdf menghasilkan 3 bagian (cover/identitas/nilai) untuk lengkap', async () => {
+  const db = buildTestDb()
+  const halaman = (pdf) => (pdf.toString('latin1').match(/\/Type\s*\/Page[^s]/g) || []).length
+  const lengkap = await createRaporMtsplusPdf(db, {
+    tenantId: 't1', siswaId: 's1', tahunAjaran: '2026/2027', semester: 'ganjil', jenis: 'rapor_sts', uploadDir: '/tmp/nonexistent-uploads',
+  })
+  assert.ok(lengkap, 'doc harus dihasilkan')
+  const chunks = []
+  lengkap.on('data', c => chunks.push(c))
+  const done = new Promise(resolve => lengkap.on('end', resolve))
+  lengkap.end()
+  await done
+  const buf = Buffer.concat(chunks)
+  assert.equal(buf.subarray(0, 4).toString(), '%PDF')
+  assert.equal(halaman(buf), 3, 'lengkap harus 3 halaman (cover, identitas, nilai)')
+
+  const cover = await createRaporMtsplusPdf(db, {
+    tenantId: 't1', siswaId: 's1', tahunAjaran: '2026/2027', semester: 'ganjil', jenis: 'rapor_sts', uploadDir: '/tmp/nonexistent-uploads', bagian: 'cover',
+  })
+  const c2 = []
+  cover.on('data', c => c2.push(c))
+  const d2 = new Promise(resolve => cover.on('end', resolve))
+  cover.end()
+  await d2
+  assert.equal(halaman(Buffer.concat(c2)), 1, 'bagian cover harus 1 halaman')
+
+  const kosong = await createRaporMtsplusPdf(db, {
+    tenantId: 't1', siswaId: 'tidak-ada', tahunAjaran: '2026/2027', semester: 'ganjil', jenis: 'rapor_sts', uploadDir: '/tmp/nonexistent-uploads',
+  })
+  assert.equal(kosong, null, 'siswa tidak ditemukan -> null')
   db.close()
 })

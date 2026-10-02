@@ -49,6 +49,8 @@ export default function RaporPage() {
   const [cetakOpen, setCetakOpen] = useState(false)
   const [cetakBagian, setCetakBagian] = useState<BagianCetak>('lengkap')
   const [k13CetakOpen, setK13CetakOpen] = useState(false)
+  // Layout cetak rapor (Kurikulum Merdeka): 'rdm' (bawaan) atau 'mtsplus' (alternatif).
+  const [raporFormat, setRaporFormat] = useState<'rdm' | 'mtsplus'>('rdm')
   const [mapelList, setMapelList] = useState<any[]>([])
   const [bobotMapel, setBobotMapel] = useState('')
   const [bobot, setBobot] = useState<any>(null)
@@ -262,7 +264,7 @@ export default function RaporPage() {
     const label = { cover: 'Cover', identitas: 'Identitas', nilai: 'Nilai', lengkap: 'Rapor' }[bagian]
     try {
       const response = await api.get('/rapor/export/pdf', {
-        params: { siswa_id: selectedSiswa, tahun_ajaran: tahunAjaran, semester, jenis, bagian },
+        params: { siswa_id: selectedSiswa, tahun_ajaran: tahunAjaran, semester, jenis, bagian, format: raporFormat },
         responseType: 'blob',
       })
       const url = window.URL.createObjectURL(new Blob([response.data], { type: 'application/pdf' }))
@@ -367,6 +369,13 @@ export default function RaporPage() {
               <button onClick={() => setCetakOpen(!cetakOpen)} aria-haspopup="menu" aria-expanded={cetakOpen} className="btn-primary flex items-center gap-2"><Printer className="w-4 h-4" />Cetak</button>
               {cetakOpen && (
                 <div role="menu" className="absolute right-0 z-20 mt-2 w-64 overflow-hidden rounded-lg border border-gray-200 bg-white shadow-lg">
+                  <div className="px-3 py-2 border-b border-gray-100">
+                    <p className="text-[11px] font-medium text-gray-500 mb-1">Layout cetak</p>
+                    <div className="flex rounded-lg border border-gray-300 overflow-hidden">
+                      <button onClick={() => setRaporFormat('rdm')} className={`flex-1 px-2 py-1 text-xs font-medium ${raporFormat === 'rdm' ? 'bg-primary text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>RDM</button>
+                      <button onClick={() => setRaporFormat('mtsplus')} className={`flex-1 px-2 py-1 text-xs font-medium ${raporFormat === 'mtsplus' ? 'bg-primary text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>MTs Plus</button>
+                    </div>
+                  </div>
                   {CETAK_MENU.map(item => (
                     <button
                       key={item.bagian}
