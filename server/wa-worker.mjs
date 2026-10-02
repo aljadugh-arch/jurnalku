@@ -2,7 +2,7 @@ import Database from 'better-sqlite3'
 import path from 'node:path'
 import fs from 'node:fs'
 import pino from 'pino'
-import makeWASocket, { DisconnectReason, useMultiFileAuthState, fetchLatestBaileysVersion } from '@whiskeysockets/baileys'
+import makeWASocket, { DisconnectReason, useMultiFileAuthState, fetchLatestBaileysVersion, jidDecode, isLidUser } from '@whiskeysockets/baileys'
 import dotenv from 'dotenv'
 import queue from './wa-queue.cjs'
 import workerUtils from './wa-worker-utils.cjs'
@@ -31,9 +31,21 @@ async function connect(tenantId){
     for (const m of messages) {
       try {
         if (m.key.fromMe) continue
-        const jid = String(m.key.remoteJid || '')
-        if (jid.endsWith('@g.us') || jid.endsWith('@broadcast') || jid.includes('@status')) continue
-        const phone = jid.split('@')[0]
+        const rawJid = String(m.key.remoteJid || '')
+        const participant = String(m.key.participant || '')
+        const jid = rawJid
+        if (jid.endsWith('@g.us') || jid.endsWith('@broadcast') || jid.includes('@status') || jid.endsWith('@newsletter')) continue
+        // Resolve nomor HP: WhatsApp Web/Desktop (perangkat tertaut) melaporkan
+        // remoteJid sebagai LID (...@lid), bukan nomor. Petakan lid -> nomor via
+        // signalRepository.lidMapping bila tersedia.
+        let phone = jid.split('@')[0]
+        if (isLidUser(jid)) {
+          try {
+            const pn = await sock.signalRepository.lidMapping.getPNForLID(jid)
+            if (pn) phone = jidDecode(pn)?.user || pn.split(':')[0].split('@')[0]
+            log.info({ tenantId, lid: rawJid, resolvedPhone: phone }, 'WA CS bot lid resolved')
+          } catch (e) { log.error({ tenantId, lid: rawJid, err: String(e.message || e).slice(0, 200) }, 'WA CS bot lid resolve failed') }
+        }
         const text = m.message?.conversation || m.message?.extendedTextMessage?.text || m.message?.imageMessage?.caption || ''
         if (!text) continue
         // Bot CS hanya aktif bila tenant mengaktifkannya.
