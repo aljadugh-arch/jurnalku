@@ -3837,8 +3837,12 @@ app.post('/api/kegiatan-khusus', ADMIN, (req, res) => {
 })
 
 app.delete('/api/kegiatan-khusus/:id', ADMIN, (req, res) => {
-  db.prepare('DELETE FROM kegiatan_khusus WHERE id = ? AND tenant_id=?').run(req.params.id, req.tenantId)
+  // Hapus anak (absensi_kegiatan) DULU, lalu induk (kegiatan_khusus) — foreign_keys
+  // ON menolak menghapus induk yang masih direferensi baris anak.
+  const keg = db.prepare('SELECT id FROM kegiatan_khusus WHERE id = ? AND tenant_id=?').get(req.params.id, req.tenantId)
+  if (!keg) return res.status(404).json({ error: 'Kegiatan tidak ditemukan' })
   db.prepare('DELETE FROM absensi_kegiatan WHERE kegiatan_id = ? AND tenant_id = ?').run(req.params.id, req.tenantId)
+  db.prepare('DELETE FROM kegiatan_khusus WHERE id = ? AND tenant_id=?').run(req.params.id, req.tenantId)
   res.json({ success: true })
 })
 
