@@ -13,6 +13,7 @@ import { useSettingsStore } from '../../stores/settingsStore'
 interface Jadwal {
   id: string; mapel_id: string; rombel_id: string; gtk_id: string; hari: string; jam_mulai: string; jam_selesai: string; ruangan: string; template_id?: string | null; jenis_kegiatan?: string; nama_kegiatan?: string
   mapel_nama?: string; gtk_nama?: string; rombel_nama?: string; guru_valid: boolean | number
+  guru_piket?: string; piket?: Array<{ gtk_id: string; nama: string }>
 }
 
 const SEMUA_HARI = ['senin', 'selasa', 'rabu', 'kamis', 'jumat', 'sabtu', 'minggu'] as const
@@ -56,7 +57,7 @@ export default function JadwalPage() {
   }, [settings])
   const hari = useMemo(() => SEMUA_HARI.filter(h => !hariLibur.includes(h)), [hariLibur])
   const jamPelajaran = useMemo(() => generateJamPelajaran(jenjang, 10, '07:00', [4, 6], durasiOverride || undefined), [jenjang, durasiOverride])
-  const [form, setForm] = useState({ mapel_id: '', rombel_id: '', gtk_id: '', hari: 'senin', jam_mulai: '07:00', jam_selesai: '07:45', ruangan: '', template_id: '', jenis_kegiatan: 'mapel', nama_kegiatan: '' })
+  const [form, setForm] = useState({ mapel_id: '', rombel_id: '', gtk_id: '', hari: 'senin', jam_mulai: '07:00', jam_selesai: '07:45', ruangan: '', template_id: '', jenis_kegiatan: 'mapel', nama_kegiatan: '', piket_ids: [] as string[] })
   const mapelReguler = useMemo(() => mapels.filter(m => m.kelompok !== 'kegiatan'), [mapels])
   const mapelKegiatan = useMemo(() => mapels.filter(m => m.kelompok === 'kegiatan'), [mapels])
 
@@ -145,12 +146,14 @@ export default function JadwalPage() {
     return sorted.map((s, i) => ({ ke: s.standardKe || i + 1, ...s }))
   }, [jamPelajaran, jadwal, jenjang])
 
-  const resetForm = () => setForm({ mapel_id: '', rombel_id: '', gtk_id: '', hari: hari[0] || 'senin', jam_mulai: jamPelajaran[0]?.mulai || '07:00', jam_selesai: jamPelajaran[0]?.selesai || '07:45', ruangan: '', template_id: '', jenis_kegiatan: 'mapel', nama_kegiatan: '' })
+  const resetForm = () => setForm({ mapel_id: '', rombel_id: '', gtk_id: '', hari: hari[0] || 'senin', jam_mulai: jamPelajaran[0]?.mulai || '07:00', jam_selesai: jamPelajaran[0]?.selesai || '07:45', ruangan: '', template_id: '', jenis_kegiatan: 'mapel', nama_kegiatan: '', piket_ids: [] })
 
   const openAdd = () => { setEditId(null); resetForm(); setShowForm(true) }
   const openEdit = (slot: Jadwal) => {
     setEditId(slot.id)
-    setForm({ mapel_id: slot.mapel_id, rombel_id: slot.rombel_id, gtk_id: slot.gtk_id, hari: slot.hari, jam_mulai: slot.jam_mulai, jam_selesai: slot.jam_selesai, ruangan: slot.ruangan || '', template_id: slot.template_id || '', jenis_kegiatan: slot.jenis_kegiatan || 'mapel', nama_kegiatan: slot.nama_kegiatan || '' })
+    let piketIds: string[] = []
+    try { piketIds = (slot.piket || []).map(p => p.gtk_id) } catch {}
+    setForm({ mapel_id: slot.mapel_id, rombel_id: slot.rombel_id, gtk_id: slot.gtk_id, hari: slot.hari, jam_mulai: slot.jam_mulai, jam_selesai: slot.jam_selesai, ruangan: slot.ruangan || '', template_id: slot.template_id || '', jenis_kegiatan: slot.jenis_kegiatan || 'mapel', nama_kegiatan: slot.nama_kegiatan || '', piket_ids: piketIds })
     setShowForm(true)
   }
 
@@ -606,6 +609,7 @@ export default function JadwalPage() {
                           </div>
                           <p className="text-sm font-medium text-gray-800 truncate">{j.jenis_kegiatan === 'mapel' ? (j.mapel_nama || '-') : (j.nama_kegiatan || '-')}</p>
                           <p className={`text-xs truncate ${j.jenis_kegiatan === 'mapel' && !j.guru_valid ? 'font-bold text-red-700' : 'text-gray-500'}`}>{j.jenis_kegiatan === 'mapel' && !j.guru_valid ? 'Guru belum valid' : (j.gtk_nama || '-')}</p>
+                          {!!j.piket?.length && <p className="text-[10px] text-amber-700 font-medium truncate">Piket: {j.piket.map(p => p.nama).join(', ')}</p>}
                         </div>
                       ))}
                     </div>
@@ -685,6 +689,7 @@ export default function JadwalPage() {
                           <div className={`rounded-lg p-2 group relative border ${slot.jenis_kegiatan !== 'mapel' || slot.guru_valid ? 'bg-primary/5 border-primary/20' : 'bg-red-50 border-red-300'}`}>
                             <p className="text-xs font-medium text-primary">{slot.jenis_kegiatan === 'mapel' ? (slot.mapel_nama || mapels.find(m => m.id === slot.mapel_id)?.nama) : slot.nama_kegiatan}</p>
                             {slot.jenis_kegiatan === 'mapel' && <p className={`text-[10px] ${slot.guru_valid ? 'text-gray-500' : 'font-bold text-red-700'}`}>{slot.guru_valid ? slot.gtk_nama : 'Guru belum valid'}</p>}
+                            {!!slot.piket?.length && <p className="text-[10px] text-amber-700 font-medium">Piket: {slot.piket.map(p => p.nama).join(', ')}</p>}
                             <p className="text-[10px] text-gray-400">{slot.ruangan}</p>
                             <div className="absolute top-1 right-1 flex gap-1 opacity-0 group-hover:opacity-100">
                               <button onClick={() => openEdit(slot)} className="p-1 text-primary hover:bg-primary/10 rounded"><Pencil size={12} /></button>
@@ -723,6 +728,7 @@ export default function JadwalPage() {
                         <div className="min-w-0 flex-1">
                           <p className="text-sm font-medium text-gray-800 break-words">{slot!.mapel_nama || mapels.find(m => m.id === slot!.mapel_id)?.nama}</p>
                           <p className={`text-xs break-words ${slot!.guru_valid ? 'text-gray-500' : 'font-bold text-red-700'}`}>{slot!.guru_valid ? slot!.gtk_nama : 'Guru belum valid'}{slot!.ruangan ? ' • ' + slot!.ruangan : ''}</p>
+                          {!!slot!.piket?.length && <p className="text-[10px] text-amber-700 font-medium">Piket: {slot!.piket.map(p => p.nama).join(', ')}</p>}
                         </div>
                         <button onClick={() => openEdit(slot!)} className="shrink-0 p-1 text-primary hover:bg-primary/10 rounded"><Pencil size={14} /></button>
                         <button onClick={() => handleDelete(slot!.id)} className="shrink-0 p-1 text-red-500 hover:bg-red-50 rounded"><Trash2 size={14} /></button>
@@ -797,6 +803,25 @@ export default function JadwalPage() {
                   <p className="text-[11px] text-blue-600 mt-1">Guru Kelas rombel ini — dapat mengajar semua mapel umum tanpa harus cocok bidang studi.</p>
                 )}
               </div>
+              {form.jenis_kegiatan === 'mapel' && form.gtk_id && (
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">Guru Piket (maks {2}, opsional)</label>
+                  <div className="grid grid-cols-2 gap-1.5 max-h-44 overflow-y-auto border rounded-lg p-2">
+                    {gtks.filter(g => g.id !== form.gtk_id).map(g => {
+                      const checked = form.piket_ids.includes(g.id)
+                      const disabled = !checked && form.piket_ids.length >= 2
+                      const toggle = () => setForm(f => ({ ...f, piket_ids: checked ? f.piket_ids.filter(id => id !== g.id) : [...f.piket_ids, g.id] }))
+                      return (
+                        <label key={g.id} className={`flex items-center gap-2 px-2 py-1.5 rounded text-xs cursor-pointer ${checked ? 'bg-primary/10 text-primary' : disabled ? 'opacity-40' : 'hover:bg-gray-50'}`}>
+                          <input type="checkbox" checked={checked} disabled={disabled} onChange={toggle} className="w-3.5 h-3.5 shrink-0" />
+                          <span className="truncate">{g.nama}{g.kode_guru ? ` (${g.kode_guru})` : ''}</span>
+                        </label>
+                      )
+                    })}
+                  </div>
+                  <p className="text-[11px] text-gray-400 mt-1">Guru piket ikut masuk kelas, tampil di jadwal & monitoring (tidak membuat jurnal/absensi sendiri).</p>
+                </div>
+              )}
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1">Template Jadwal (opsional)</label>
                 <select value={form.template_id} onChange={e => setForm({...form, template_id: e.target.value})} className="w-full px-3 py-2 border rounded-lg text-sm">

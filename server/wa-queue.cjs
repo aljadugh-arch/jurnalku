@@ -135,4 +135,80 @@ function queueDueSchedules(db,{tenantId,date,time}) {
   }
   return out
 }
-module.exports={setupWA,normalizePhone,enqueue,claimNext,render,honorificTeacherName,queueWaliAttendance,queueDueTeachers,queueDueSchedules,isWhitelisted,shouldSuppress}
+function queueFinanceReports(db,{tenantId,date,time,force=false}) {
+  const out={queued:0,skipped:0,missing:0}
+  if (shouldSuppress(db, tenantId, date)) return {...out, reason:'holiday'}
+  const conf=db.prepare('SELECT * FROM notif_settings WHERE tenant_id=?').get(tenantId)
+  if(!conf?.notif_keuangan_wali)return out
+  // Hanya kirim pada hari & jam yang diatur. Scheduler jalan tiap menit,
+  // jadi cukup cocokkan jam tepat (HH:MM) supaya tiap periode terkirim sekali.
+  if(!time || !/^\d{2}:\d{2}/.test(String(time)))return {...out,reason:'invalid_time'}
+  const dayNames=['minggu','senin','selasa','rabu','kamis','jumat','sabtu']
+  const dayName=dayNames[new Date(`${date}T12:00:00Z`).getUTCDay()]
+  const dayOfMonth=Number(String(date).slice(8,10))
+  const frekuensi=String(conf.keuangan_frekuensi||'bulanan').toLowerCase()
+  const hari=String(conf.keuangan_hari||'').trim().toLowerCase()
+  const jam=String(conf.keuangan_jam||'08:00')
+  if(!force){
+    if(String(time).slice(0,5)!==jam)return out
+    if(frekuensi==='mingguan'){
+      if(!hari||dayName!==hari)return out
+    }else{
+      const target=Number(hari)
+      if(!Number.isInteger(target)||target<1||target>28||dayOfMonth!==target)return out
+    }
+  }
+  const school=getTenantSettings(db, tenantId, 'nama_lembaga')
+  const lembaga=school?.nama_lembaga||'Sekolah'
+  const template=String(conf.template_keuangan_wali||'').trim()
+    || 'Assalamualaikum {nama_ortu}, berikut ringkasan keuangan ananda {nama}:\n{tagihan}\n\nSaldo tabungan: {saldo_tabungan}\n\n- {lembaga}'
+  // Pasangan (wali -> siswa). Wali = akun role wali_murid yang tertaut via
+  // user_students, atau fallback user wali_murid dengan nis yang sama.
+  const links=db.prepare(`SELECT u.id AS user_id,u.nama AS user_nama,u.phone,l.student_id
+    FROM user_students l JOIN users u ON u.id=l.user_id AND u.tenant_id=l.tenant_id
+    WHERE l.tenant_id=? AND u.role='wali_murid'`).all(tenantId)
+  const seen=new Set()
+  const pairs=[]
+  for(const l of links){ const k=l.user_id+':'+l.student_id; if(seen.has(k))continue; seen.add(k); pairs.push(l) }
+  // Fallback: user wali_murid tanpa user_students tapi nis == siswa.nis.
+  const fallback=db.prepare(`SELECT u.id AS user_id,u.nama AS user_nama,u.phone,s.id AS student_id
+    FROM users u JOIN siswa s ON s.nis=u.nis AND s.tenant_id=u.tenant_id
+    WHERE u.tenant_id=? AND u.role='wali_murid'`).all(tenantId)
+  for(const l of fallback){ const k=l.user_id+':'+l.student_id; if(seen.has(k))continue; seen.add(k); pairs.push(l) }
+
+  const unpaidStmt=db.prepare(`SELECT j.nama AS jenis,t.nominal,t.bulan,t.tahun FROM tagihan t JOIN jenis_tagihan j ON j.id=t.jenis_tagihan_id AND j.tenant_id=t.tenant_id WHERE t.siswa_id=? AND t.tenant_id=? AND t.status='belum_bayar' ORDER BY t.tahun DESC,t.bulan DESC`)
+  const saldoStmt=db.prepare('SELECT saldo_akhir FROM tabungan WHERE siswa_id=? AND tenant_id=? ORDER BY created_at DESC LIMIT 1')
+  const paidStmt=db.prepare(`SELECT j.nama AS jenis,t.nominal FROM tagihan t JOIN jenis_tagihan j ON j.id=t.jenis_tagihan_id AND j.tenant_id=t.tenant_id WHERE t.siswa_id=? AND t.tenant_id=? AND t.status='lunas' AND substr(COALESCE(t.tanggal_bayar,''),1,7)=? ORDER BY t.tanggal_bayar DESC`)
+  const rupiah=n=>'Rp'+(Number(n)||0).toLocaleString('id-ID')
+
+  for(const pair of pairs){
+    const s=db.prepare('SELECT * FROM siswa WHERE id=? AND tenant_id=?').get(pair.student_id,tenantId)
+    if(!s)continue
+    const phone=s.no_hp||pair.phone
+    if(!normalizePhone(phone)){out.missing++;continue}
+    const unpaid=unpaidStmt.all(s.id,tenantId)
+    const totalUnpaid=unpaid.reduce((sum,r)=>sum+Number(r.nominal||0),0)
+    const saldo=Number(saldoStmt.get(s.id,tenantId)?.saldo_akhir||0)
+    const paid=paidStmt.all(s.id,tenantId,date.slice(0,7))
+    const lines=[]
+    if(unpaid.length){
+      lines.push(`Tagihan belum dibayar (total ${rupiah(totalUnpaid)}):`)
+      for(const t of unpaid.slice(0,8)) lines.push(`- ${t.jenis} (${t.bulan||''} ${t.tahun||''}): ${rupiah(t.nominal)}`)
+      if(unpaid.length>8) lines.push(`... dan ${unpaid.length-8} tagihan lainnya`)
+    }else{
+      lines.push('Tidak ada tagihan belum dibayar.')
+    }
+    if(paid.length){
+      lines.push(`Pembayaran bulan ini:`)
+      for(const p of paid.slice(0,8)) lines.push(`- ${p.jenis}: ${rupiah(p.nominal)}`)
+    }
+    const namaOrtu=s.nama_ortu||pair.user_nama||'Bapak/Ibu'
+    const message=render(template,{nama_ortu:namaOrtu,nama:s.nama,tagihan:lines.join('\n'),pembayaran:paid.map(p=>`${p.jenis}: ${rupiah(p.nominal)}`).join(', '),saldo_tabungan:rupiah(saldo),lembaga})
+    const periodKey=frekuensi==='mingguan'?`W${date}`:`M${date.slice(0,7)}`
+    const r=enqueue(db,{tenantId,phone,message,key:`keuangan:${s.id}:${periodKey}`,targetType:'siswa',targetId:s.id})
+    if(r.queued)out.queued++;else out.skipped++
+  }
+  return out
+}
+
+module.exports={setupWA,normalizePhone,enqueue,claimNext,render,honorificTeacherName,queueWaliAttendance,queueDueTeachers,queueDueSchedules,queueFinanceReports,isWhitelisted,shouldSuppress}

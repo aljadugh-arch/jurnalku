@@ -45,7 +45,7 @@ export default function AdminDashboard() {
     loadClassMonitor()
     loadMonitoring()
     api.get('/dashboard/kelengkapan').then(res => setKelengkapan(res.data)).catch(() => {})
-    const timer = window.setInterval(loadClassMonitor, 30000)
+    const timer = window.setInterval(() => { loadClassMonitor(); loadMonitoring() }, 30000)
     return () => window.clearInterval(timer)
   }, [])
 
@@ -177,6 +177,31 @@ export default function AdminDashboard() {
             <Badge tone="blue">{task.deadline ? `Batas ${task.deadline}` : 'Tanpa batas'}</Badge>
           </div>)}
         </div>}
+      </Card>
+
+      <Card title="Kelas Belum Absen Masuk & Pulang" icon={<UserCheck size={18} className="text-amber-600" />}>
+        {!(monitoring?.rombel_attendance?.length > 0) ? (
+          <p className="py-4 text-center text-sm text-gray-400">Belum ada data rombel / absensi hari ini</p>
+        ) : (
+          <div className="space-y-2">
+            {monitoring.rombel_attendance.map((r: any) => {
+              const lengkap = r.belum_masuk === 0 && r.belum_pulang === 0
+              return (
+                <div key={r.rombel_id} className="flex items-center justify-between gap-3 rounded-xl border border-gray-100 p-3">
+                  <div className="min-w-0">
+                    <p className="font-semibold text-gray-800">{r.rombel_nama}</p>
+                    <p className="text-xs text-gray-500">Masuk {r.masuk}/{r.total} · Pulang {r.pulang}/{r.total}</p>
+                  </div>
+                  <div className="flex shrink-0 gap-1.5">
+                    {r.belum_masuk > 0 && <Badge tone="yellow">Belum masuk {r.belum_masuk}</Badge>}
+                    {r.belum_pulang > 0 && <Badge tone="red">Belum pulang {r.belum_pulang}</Badge>}
+                    {lengkap && <Badge tone="green">Lengkap</Badge>}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        )}
       </Card>
 
       <Card title="Rekap Kehadiran Siswa" icon={<UserCheck size={18} className="text-primary" />}>

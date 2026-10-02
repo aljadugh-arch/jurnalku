@@ -29,7 +29,7 @@ export default function SettingsPage() {
     nama_lembaga: '', alamat: '', telepon: '', email: '',
     kepala_sekolah: '', npsn: '', nsm: '', kota_cetak: '', yayasan_nama: '',
     theme: 'light', primary_color: '#1e40af', accent_color: '#059669', sidebar_color: '#1e293b',
-    geo_latitude: '', geo_longitude: '', geo_radius: '200', jenjang: '', hari_libur: [] as string[],
+    geo_latitude: '', geo_longitude: '', geo_radius: '200', jenjang: '', hari_libur: [] as string[], kbm_auto_aktif: false,
     bg_size: 'cover', bg_position: 'center', bg_repeat: 'no-repeat', bg_blur: 0,
     pwa_enabled: false, pwa_name: '', pwa_theme_color: '#1e40af', pwa_bg_color: '#ffffff',
     dashboard_quick_menus: defaultAdminDashboardShortcutKeys as string[]
@@ -84,6 +84,7 @@ export default function SettingsPage() {
         theme: s.theme || 'light', primary_color: s.primary_color || '#1e40af', accent_color: s.accent_color || '#059669', sidebar_color: s.sidebar_color || '#1e293b',
         geo_latitude: s.geo_latitude || '', geo_longitude: s.geo_longitude || '', geo_radius: s.geo_radius || '200', jenjang: s.jenjang || '',
         hari_libur: (() => { try { return JSON.parse(s.hari_libur || '[]') } catch { return [] } })(),
+        kbm_auto_aktif: s.kbm_auto_aktif === true || s.kbm_auto_aktif === 1,
         bg_size: s.bg_size || 'cover', bg_position: s.bg_position || 'center',
         bg_repeat: s.bg_repeat || 'no-repeat', bg_blur: s.bg_blur || 0,
         pwa_enabled: s.pwa_enabled === true || s.pwa_enabled === 1,
@@ -308,6 +309,14 @@ export default function SettingsPage() {
                 </label>
               ))}
             </div>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-600 mb-2">KBM Otomatis Aktif</label>
+            <label className="flex items-center gap-2 text-sm">
+              <input type="checkbox" checked={form.kbm_auto_aktif} onChange={e => setForm({...form, kbm_auto_aktif: e.target.checked})} className="w-4 h-4" />
+              Anggap KBM aktif setiap hari non-libur (tanpa perlu isi Kalender KBM per tanggal)
+            </label>
+            <p className="text-xs text-gray-400 mt-1">Cocok untuk lembaga yang hari efektifnya = semua hari kecuali hari libur yang dicentang di atas (mis. hanya Ahad/Minggu).</p>
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-600 mb-1">Alamat</label>

@@ -43,6 +43,7 @@ const { getCategoryRecap } = require('./attendance-recap.cjs')
 const { buildRekapRange, getPeriodicAttendanceRecap, deduplicateAttendance } = require('./attendance-periodic-recap.cjs')
 const { isDriveFolderUrl } = require('./library-config.cjs')
 const { getLateDashboard } = require('./dashboard-late.cjs')
+const { normalizePiketIds, attachPiketNames, MAKS_GURU_PIKET } = require('./jadwal-piket.cjs')
 const { registerRoutes: registerBackupRestoreRoutes, LIMITS: BACKUP_LIMITS } = require('./backup-restore.cjs')
 const { registerFinanceExcelRoutes } = require('./finance-excel.cjs')
 const { FEATURE_KEYS, addMonthsIso, accessForTenant, featureForPath, normalizeFeatureSelection, generateUnlockCode, hashUnlockCode, setupSubscriptionTables } = require('./subscription.cjs')
@@ -1332,6 +1333,7 @@ for (const col of [
   ['settings', 'background', "TEXT DEFAULT ''"],
   ['settings', 'jenjang', "TEXT DEFAULT ''"],
   ['settings', 'hari_libur', "TEXT DEFAULT '[]'"],
+  ['settings', 'kbm_auto_aktif', "INTEGER DEFAULT 0"],
   ['settings', 'bg_size', "TEXT DEFAULT 'cover'"],
   ['settings', 'bg_position', "TEXT DEFAULT 'center'"],
   ['settings', 'bg_repeat', "TEXT DEFAULT 'no-repeat'"],
@@ -1379,7 +1381,8 @@ for (const col of [
     ['jurnal_mengajar', 'signature_type', 'TEXT'],
     ['jurnal_mengajar', 'signature_path', 'TEXT'],
     ['sesi_kelas_guru', 'jadwal_source', "TEXT DEFAULT 'reguler'"],
-    ['template_jadwal', 'durasi_menit', 'INTEGER DEFAULT 40']
+    ['template_jadwal', 'durasi_menit', 'INTEGER DEFAULT 40'],
+    ['jadwal', 'guru_piket', "TEXT DEFAULT '[]'"]
     ]) {
   try { db.prepare(`ALTER TABLE ${col[0]} ADD COLUMN ${col[1]} ${col[2]}`).run() } catch {}
 }
@@ -2806,8 +2809,9 @@ app.get('/api/geocode/search', async (req, res) => {
 })
 
 app.put('/api/settings', ADMIN, (req, res) => {
-  const { nama_lembaga, alamat, telepon, email, theme, primary_color, accent_color, sidebar_color, geo_latitude, geo_longitude, geo_radius, jenjang, hari_libur, bg_size, bg_position, bg_repeat, bg_blur, pwa_enabled, pwa_name, pwa_theme_color, pwa_bg_color, dashboard_quick_menus, kepala_sekolah, npsn, nsm, kota_cetak } = req.body
+  const { nama_lembaga, alamat, telepon, email, theme, primary_color, accent_color, sidebar_color, geo_latitude, geo_longitude, geo_radius, jenjang, hari_libur, kbm_auto_aktif, bg_size, bg_position, bg_repeat, bg_blur, pwa_enabled, pwa_name, pwa_theme_color, pwa_bg_color, dashboard_quick_menus, kepala_sekolah, npsn, nsm, kota_cetak } = req.body
   const id = canonicalSettingsId(req.tenantId)
+  const kbm_auto = kbm_auto_aktif ? 1 : 0
   const bg_size_v = bg_size || 'cover'
   const bg_position_v = bg_position || 'center'
   const bg_repeat_v = bg_repeat || 'no-repeat'
@@ -2817,10 +2821,10 @@ app.put('/api/settings', ADMIN, (req, res) => {
   const normalizedQuickMenus = [...new Set(dashboard_quick_menus.filter(item => typeof item === 'string' && allowedQuickMenus.has(item)))]
   if (normalizedQuickMenus.length < 1 || normalizedQuickMenus.length > allowedQuickMenus.size) return res.status(400).json({ error: 'Pilih minimal 1 pintasan dashboard yang valid. Anda memilih: ' + normalizedQuickMenus.length })
   const quickMenus = JSON.stringify(normalizedQuickMenus)
-  db.prepare(`INSERT INTO settings (id, tenant_id, nama_lembaga, alamat, telepon, email, theme, primary_color, accent_color, sidebar_color, geo_latitude, geo_longitude, geo_radius, jenjang, hari_libur, bg_size, bg_position, bg_repeat, bg_blur, pwa_enabled, pwa_name, pwa_theme_color, pwa_bg_color, dashboard_quick_menus, kepala_sekolah, npsn, nsm, kota_cetak, updated_at)
-    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,datetime('now'))
-    ON CONFLICT(id) DO UPDATE SET tenant_id=excluded.tenant_id, nama_lembaga=excluded.nama_lembaga, alamat=excluded.alamat, telepon=excluded.telepon, email=excluded.email, theme=excluded.theme, primary_color=excluded.primary_color, accent_color=excluded.accent_color, sidebar_color=excluded.sidebar_color, geo_latitude=excluded.geo_latitude, geo_longitude=excluded.geo_longitude, geo_radius=excluded.geo_radius, jenjang=excluded.jenjang, hari_libur=excluded.hari_libur, bg_size=excluded.bg_size, bg_position=excluded.bg_position, bg_repeat=excluded.bg_repeat, bg_blur=excluded.bg_blur, pwa_enabled=excluded.pwa_enabled, pwa_name=excluded.pwa_name, pwa_theme_color=excluded.pwa_theme_color, pwa_bg_color=excluded.pwa_bg_color, dashboard_quick_menus=excluded.dashboard_quick_menus, kepala_sekolah=excluded.kepala_sekolah, npsn=excluded.npsn, nsm=excluded.nsm, kota_cetak=excluded.kota_cetak, updated_at=datetime('now')`)
-    .run(id, req.tenantId, nama_lembaga, alamat, telepon, email, theme, primary_color, accent_color, sidebar_color, geo_latitude || null, geo_longitude || null, geo_radius || 200, jenjang || '', JSON.stringify(hari_libur || []), bg_size_v, bg_position_v, bg_repeat_v, bg_blur_v, pwa_enabled ? 1 : 0, pwa_name || '', pwa_theme_color || '#1e40af', pwa_bg_color || '#ffffff', quickMenus, kepala_sekolah || '', npsn || '', nsm || '', kota_cetak || '')
+  db.prepare(`INSERT INTO settings (id, tenant_id, nama_lembaga, alamat, telepon, email, theme, primary_color, accent_color, sidebar_color, geo_latitude, geo_longitude, geo_radius, jenjang, hari_libur, kbm_auto_aktif, bg_size, bg_position, bg_repeat, bg_blur, pwa_enabled, pwa_name, pwa_theme_color, pwa_bg_color, dashboard_quick_menus, kepala_sekolah, npsn, nsm, kota_cetak, updated_at)
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,datetime('now'))
+    ON CONFLICT(id) DO UPDATE SET tenant_id=excluded.tenant_id, nama_lembaga=excluded.nama_lembaga, alamat=excluded.alamat, telepon=excluded.telepon, email=excluded.email, theme=excluded.theme, primary_color=excluded.primary_color, accent_color=excluded.accent_color, sidebar_color=excluded.sidebar_color, geo_latitude=excluded.geo_latitude, geo_longitude=excluded.geo_longitude, geo_radius=excluded.geo_radius, jenjang=excluded.jenjang, hari_libur=excluded.hari_libur, kbm_auto_aktif=excluded.kbm_auto_aktif, bg_size=excluded.bg_size, bg_position=excluded.bg_position, bg_repeat=excluded.bg_repeat, bg_blur=excluded.bg_blur, pwa_enabled=excluded.pwa_enabled, pwa_name=excluded.pwa_name, pwa_theme_color=excluded.pwa_theme_color, pwa_bg_color=excluded.pwa_bg_color, dashboard_quick_menus=excluded.dashboard_quick_menus, kepala_sekolah=excluded.kepala_sekolah, npsn=excluded.npsn, nsm=excluded.nsm, kota_cetak=excluded.kota_cetak, updated_at=datetime('now')`)
+    .run(id, req.tenantId, nama_lembaga, alamat, telepon, email, theme, primary_color, accent_color, sidebar_color, geo_latitude || null, geo_longitude || null, geo_radius || 200, jenjang || '', JSON.stringify(hari_libur || []), kbm_auto, bg_size_v, bg_position_v, bg_repeat_v, bg_blur_v, pwa_enabled ? 1 : 0, pwa_name || '', pwa_theme_color || '#1e40af', pwa_bg_color || '#ffffff', quickMenus, kepala_sekolah || '', npsn || '', nsm || '', kota_cetak || '')
   res.json({ success: true, dashboard_quick_menus: JSON.parse(quickMenus) })
 })
 
@@ -4030,21 +4034,23 @@ function jadwalUntukRombelHari(rombelId, tenantId, hari, examTemplateId) {
 
 function jadwalUntukTenantHari(tenantId, hari, examTemplateId) {
   if (examTemplateId) {
-    return db.prepare(`SELECT j.*, m.nama as mapel_nama, r.nama as rombel_nama, g.nama as guru_nama, g.nama as gtk_nama,
+    const rows = db.prepare(`SELECT j.*, m.nama as mapel_nama, r.nama as rombel_nama, g.nama as guru_nama, g.nama as gtk_nama,
       CASE WHEN g.id IS NULL THEN 0 ELSE 1 END as guru_valid
       FROM jadwal_ujian j LEFT JOIN mapel m ON j.mapel_id=m.id AND m.tenant_id=j.tenant_id
       LEFT JOIN rombel r ON j.rombel_id=r.id AND r.tenant_id=j.tenant_id
       LEFT JOIN gtk g ON j.gtk_id=g.id AND g.tenant_id=j.tenant_id
       WHERE j.tenant_id=? AND lower(j.hari)=? AND j.template_id=?
       ORDER BY j.jam_mulai, r.nama, m.nama`).all(tenantId, hari, examTemplateId)
+    return attachPiketNames(db, rows)
   }
-  return db.prepare(`SELECT j.*, m.nama as mapel_nama, r.nama as rombel_nama, g.nama as guru_nama, g.nama as gtk_nama,
+  const rows = db.prepare(`SELECT j.*, m.nama as mapel_nama, r.nama as rombel_nama, g.nama as guru_nama, g.nama as gtk_nama,
     CASE WHEN g.id IS NULL THEN 0 ELSE 1 END as guru_valid
     FROM jadwal j LEFT JOIN mapel m ON j.mapel_id=m.id AND m.tenant_id=j.tenant_id
     LEFT JOIN rombel r ON j.rombel_id=r.id AND r.tenant_id=j.tenant_id
     LEFT JOIN gtk g ON j.gtk_id=g.id AND g.tenant_id=j.tenant_id
     WHERE j.tenant_id=? AND lower(j.hari)=?
     ORDER BY j.jam_mulai, r.nama, m.nama`).all(tenantId, hari)
+  return attachPiketNames(db, rows)
 }
 
 app.get('/api/guru/dashboard', authMiddleware, (req, res) => {
@@ -5094,7 +5100,13 @@ if (!existNotif) db.prepare("INSERT INTO notif_settings (id) VALUES ('main')").r
 for (const [name, definition] of [
   ['notif_jadwal_guru', 'INTEGER DEFAULT 0'],
   ['template_jadwal_guru', "TEXT DEFAULT 'Assalamualaikum {nama_guru}, sekarang waktunya mengajar {mapel} di rombel {rombel}, pukul {jam_mulai}-{jam_selesai} pada {tanggal}. - {lembaga}'"],
-  ['tenant_id', 'TEXT']
+  ['tenant_id', 'TEXT'],
+  // Laporan keuangan otomatis ke wali murid (tabungan, tagihan & pembayaran).
+  ['notif_keuangan_wali', 'INTEGER DEFAULT 0'],
+  ['keuangan_frekuensi', "TEXT DEFAULT 'bulanan'"],
+  ['keuangan_hari', "TEXT DEFAULT ''"],
+  ['keuangan_jam', "TEXT DEFAULT '08:00'"],
+  ['template_keuangan_wali', "TEXT DEFAULT 'Assalamualaikum {nama_ortu}, berikut ringkasan keuangan ananda {nama}:\n{tagihan}\n\nSaldo tabungan: {saldo_tabungan}\n\n- {lembaga}'"]
 ]) if (!db.prepare('PRAGMA table_info(notif_settings)').all().some(c => c.name === name)) db.exec(`ALTER TABLE notif_settings ADD COLUMN ${name} ${definition}`)
 
 app.get('/api/notif-settings', authMiddleware, (req, res) => {
@@ -5102,9 +5114,9 @@ app.get('/api/notif-settings', authMiddleware, (req, res) => {
 })
 
 app.put('/api/notif-settings', ADMIN, (req, res) => {
-  const { absensi_siswa_ke_wali, guru_belum_ceklok, batas_ceklok_guru, template_absensi_wali, template_guru_ceklok, notif_jadwal_guru, template_jadwal_guru } = req.body
-  db.prepare("UPDATE notif_settings SET absensi_siswa_ke_wali=?, guru_belum_ceklok=?, batas_ceklok_guru=?, template_absensi_wali=?, template_guru_ceklok=?, notif_jadwal_guru=?, template_jadwal_guru=? WHERE tenant_id=?")
-    .run(absensi_siswa_ke_wali ? 1 : 0, guru_belum_ceklok ? 1 : 0, batas_ceklok_guru || '07:30', template_absensi_wali || '', template_guru_ceklok || '', notif_jadwal_guru ? 1 : 0, template_jadwal_guru || '', req.tenantId)
+  const { absensi_siswa_ke_wali, guru_belum_ceklok, batas_ceklok_guru, template_absensi_wali, template_guru_ceklok, notif_jadwal_guru, template_jadwal_guru, notif_keuangan_wali, keuangan_frekuensi, keuangan_hari, keuangan_jam, template_keuangan_wali } = req.body
+  db.prepare("UPDATE notif_settings SET absensi_siswa_ke_wali=?, guru_belum_ceklok=?, batas_ceklok_guru=?, template_absensi_wali=?, template_guru_ceklok=?, notif_jadwal_guru=?, template_jadwal_guru=?, notif_keuangan_wali=?, keuangan_frekuensi=?, keuangan_hari=?, keuangan_jam=?, template_keuangan_wali=? WHERE tenant_id=?")
+    .run(absensi_siswa_ke_wali ? 1 : 0, guru_belum_ceklok ? 1 : 0, batas_ceklok_guru || '07:30', template_absensi_wali || '', template_guru_ceklok || '', notif_jadwal_guru ? 1 : 0, template_jadwal_guru || '', notif_keuangan_wali ? 1 : 0, keuangan_frekuensi || 'bulanan', keuangan_hari || '', keuangan_jam || '08:00', template_keuangan_wali || '', req.tenantId)
   res.json({ success: true })
 })
 
@@ -5122,6 +5134,13 @@ app.delete('/api/notif-whitelist/:id', ADMIN, (req, res) => {
 })
 app.post('/api/notif/jadwal-guru', STAFF, (req, res) => {
   res.json({ success: true, ...waQueue.queueDueSchedules(db, { tenantId: req.tenantId, date: todayJakarta(), time: timeJakarta() }) })
+})
+
+// Test kirim laporan keuangan ke wali murid (mengabaikan jadwal hari/jam, hanya untuk uji).
+app.post('/api/notif/keuangan-wali', ADMIN, (req, res) => {
+  const conf = db.prepare('SELECT * FROM notif_settings WHERE tenant_id=?').get(req.tenantId)
+  if (!conf?.notif_keuangan_wali) return res.status(400).json({ error: 'Notifikasi keuangan belum diaktifkan' })
+  res.json({ success: true, ...waQueue.queueFinanceReports(db, { tenantId: req.tenantId, date: todayJakarta(), time: timeJakarta(), force: true }) })
 })
 
 // ==================== NOTIFIKASI WA OTOMATIS ====================
@@ -5171,8 +5190,17 @@ function isHolidayDate(tanggal, tenantId) {
   }
   return false
 }
+// KBM otomatis aktif: bila tenant menyalakan setelan ini, KBM dianggap aktif pada
+// setiap hari non-libur tanpa perlu entri kalender_kbm per tanggal. Dipakai untuk
+// lembaga yang hari efektifnya = semua hari kecuali hari libur (mis. hanya Ahad/Minggu).
+function kbmAutoActiveFor(tenantId) {
+  const settings = getTenantSettings(db, tenantId, 'kbm_auto_aktif')
+  return Number(settings?.kbm_auto_aktif) === 1
+}
+
 function assertKbmActive(req, tanggal) {
   if (isHolidayDate(tanggal, req.tenantId)) throw new Error('Hari libur: absensi nonaktif')
+  if (kbmAutoActiveFor(req.tenantId)) return
   const row = db.prepare("SELECT id FROM kalender_kbm WHERE tenant_id=? AND tanggal=? AND jenis IN ('kbm_aktif','ujian','kegiatan_lain') LIMIT 1").get(req.tenantId, tanggal)
   if (!row) throw new Error('KBM belum diaktifkan di Kalender KBM untuk tanggal ini')
 }
@@ -5191,8 +5219,10 @@ app.get('/api/kalender-kbm', authMiddleware, (req, res) => {
 
 app.get('/api/kalender-kbm/status', authMiddleware, (req, res) => {
   const tanggal = req.query.tanggal || todayJakarta()
-  const aktif = !!db.prepare("SELECT id FROM kalender_kbm WHERE tenant_id=? AND tanggal=? AND jenis IN ('kbm_aktif','ujian','kegiatan_lain') LIMIT 1").get(req.tenantId, tanggal)
-  res.json({ tanggal, aktif: !isHolidayDate(tanggal, req.tenantId) && aktif, libur: isHolidayDate(tanggal, req.tenantId) })
+  const libur = isHolidayDate(tanggal, req.tenantId)
+  const adaEntri = !!db.prepare("SELECT id FROM kalender_kbm WHERE tenant_id=? AND tanggal=? AND jenis IN ('kbm_aktif','ujian','kegiatan_lain') LIMIT 1").get(req.tenantId, tanggal)
+  const aktif = !libur && (adaEntri || kbmAutoActiveFor(req.tenantId))
+  res.json({ tanggal, aktif, libur })
 })
 
 app.post('/api/kalender-kbm', ADMIN, (req, res) => {
@@ -5336,6 +5366,7 @@ app.get('/api/jadwal', authMiddleware, (req, res) => {
   sql += ' ORDER BY j.hari, j.jam_mulai'
   let rows = db.prepare(sql).all(...params)
   if (gtk_id && !rows.length) rows = pengajarAsJadwal(gtk_id, req.tenantId)
+  attachPiketNames(db, rows)
   res.json(gtk_id ? rows.map(titleHari) : rows)
 })
 
@@ -5353,16 +5384,19 @@ app.post('/api/jadwal/import', ADMIN, (req, res) => {
 })
 
 app.post('/api/jadwal', ADMIN, (req, res) => {
-  const { mapel_id, rombel_id, gtk_id, hari, jam_mulai, jam_selesai, ruangan, template_id, jenis_kegiatan, nama_kegiatan } = req.body
+  const { mapel_id, rombel_id, gtk_id, hari, jam_mulai, jam_selesai, ruangan, template_id, jenis_kegiatan, nama_kegiatan, piket_ids } = req.body
   const jenis = jenis_kegiatan || 'mapel'
+  const piket = normalizePiketIds(db, { gtk_id, piket_ids, tenant_id: req.tenantId })
+  if (piket.error) return res.status(400).json({ error: piket.error })
+  const guruPiketJson = JSON.stringify(piket.ids)
   const overlap = '((j.jam_mulai < ? AND j.jam_selesai > ?) OR (j.jam_mulai < ? AND j.jam_selesai > ?) OR (j.jam_mulai >= ? AND j.jam_selesai <= ?))'
   const ovParams = [jam_selesai, jam_mulai, jam_selesai, jam_mulai, jam_mulai, jam_selesai]
   if (!rombel_id && jenis !== 'kegiatan' && jenis !== 'istirahat') return res.status(400).json({ error: 'Rombel wajib dipilih.' })
   if (!rombel_id) {
     const targets = db.prepare('SELECT id FROM rombel WHERE tenant_id=?').all(req.tenantId)
     if (!targets.length) return res.status(400).json({ error: 'Belum ada rombel.' })
-    const insert = db.prepare('INSERT INTO jadwal (id, mapel_id, rombel_id, gtk_id, hari, jam_mulai, jam_selesai, ruangan, template_id, jenis_kegiatan, nama_kegiatan, tenant_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)')
-    db.transaction(() => targets.forEach(r => insert.run(uuidv4(), mapel_id || null, r.id, gtk_id || null, hari, jam_mulai, jam_selesai, ruangan, template_id || null, jenis, nama_kegiatan || '', req.tenantId)))()
+    const insert = db.prepare('INSERT INTO jadwal (id, mapel_id, rombel_id, gtk_id, hari, jam_mulai, jam_selesai, ruangan, template_id, jenis_kegiatan, nama_kegiatan, guru_piket, tenant_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)')
+    db.transaction(() => targets.forEach(r => insert.run(uuidv4(), mapel_id || null, r.id, gtk_id || null, hari, jam_mulai, jam_selesai, ruangan, template_id || null, jenis, nama_kegiatan || '', guruPiketJson, req.tenantId)))()
     return res.json({ created: targets.length })
   }
   // 1. Anti-tabrakan GURU (guru tidak bisa 2 kelas sekaligus)
@@ -5399,7 +5433,7 @@ app.post('/api/jadwal', ADMIN, (req, res) => {
   }
   const id = uuidv4()
   try {
-    db.prepare('INSERT INTO jadwal (id, mapel_id, rombel_id, gtk_id, hari, jam_mulai, jam_selesai, ruangan, template_id, jenis_kegiatan, nama_kegiatan, tenant_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)').run(id, mapel_id || null, rombel_id, gtk_id || null, hari, jam_mulai, jam_selesai, ruangan, template_id || null, jenis, nama_kegiatan || '', req.tenantId)
+    db.prepare('INSERT INTO jadwal (id, mapel_id, rombel_id, gtk_id, hari, jam_mulai, jam_selesai, ruangan, template_id, jenis_kegiatan, nama_kegiatan, guru_piket, tenant_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)').run(id, mapel_id || null, rombel_id, gtk_id || null, hari, jam_mulai, jam_selesai, ruangan, template_id || null, jenis, nama_kegiatan || '', guruPiketJson, req.tenantId)
     if (jenis === 'mapel') ensurePengajarFromJadwal({ gtk_id, mapel_id, rombel_id, tenant_id: req.tenantId })
     res.json({ id })
   } catch (e) {
@@ -5505,8 +5539,11 @@ app.post('/api/jadwal/generate', ADMIN, (req, res) => {
 })
 
 app.put('/api/jadwal/:id', ADMIN, (req, res) => {
-  const { mapel_id, rombel_id, gtk_id, hari, jam_mulai, jam_selesai, ruangan, template_id, jenis_kegiatan, nama_kegiatan } = req.body
+  const { mapel_id, rombel_id, gtk_id, hari, jam_mulai, jam_selesai, ruangan, template_id, jenis_kegiatan, nama_kegiatan, piket_ids } = req.body
   const jenis = jenis_kegiatan || 'mapel'
+  const piket = normalizePiketIds(db, { gtk_id, piket_ids, tenant_id: req.tenantId })
+  if (piket.error) return res.status(400).json({ error: piket.error })
+  const guruPiketJson = JSON.stringify(piket.ids)
   const jadwalId = req.params.id
   const overlap = '((j.jam_mulai < ? AND j.jam_selesai > ?) OR (j.jam_mulai < ? AND j.jam_selesai > ?) OR (j.jam_mulai >= ? AND j.jam_selesai <= ?))'
   const ovParams = [jam_selesai, jam_mulai, jam_selesai, jam_mulai, jam_mulai, jam_selesai]
@@ -5533,8 +5570,8 @@ app.put('/api/jadwal/:id', ADMIN, (req, res) => {
   if (jenis === 'mapel' && !gtk_id) return res.status(400).json({ error: 'Guru wajib dipilih untuk mapel.' })
   if (jenis === 'istirahat' && (!nama_kegiatan || nama_kegiatan.trim().length < 2)) return res.status(400).json({ error: 'Nama istirahat wajib diisi (min 2 karakter).' })
   if (jenis === 'kegiatan' && (!nama_kegiatan || nama_kegiatan.trim().length < 2)) return res.status(400).json({ error: 'Nama kegiatan wajib diisi (min 2 karakter).' })
-  const result = db.prepare('UPDATE jadwal SET mapel_id=?, rombel_id=?, gtk_id=?, hari=?, jam_mulai=?, jam_selesai=?, ruangan=?, template_id=?, jenis_kegiatan=?, nama_kegiatan=? WHERE id=? AND tenant_id=?')
-    .run(mapel_id || null, rombel_id, gtk_id, hari, jam_mulai, jam_selesai, ruangan, template_id || null, jenis, nama_kegiatan || '', jadwalId, req.tenantId)
+  const result = db.prepare('UPDATE jadwal SET mapel_id=?, rombel_id=?, gtk_id=?, hari=?, jam_mulai=?, jam_selesai=?, ruangan=?, template_id=?, jenis_kegiatan=?, nama_kegiatan=?, guru_piket=? WHERE id=? AND tenant_id=?')
+    .run(mapel_id || null, rombel_id, gtk_id, hari, jam_mulai, jam_selesai, ruangan, template_id || null, jenis, nama_kegiatan || '', guruPiketJson, jadwalId, req.tenantId)
   if (result.changes === 0) return res.status(404).json({ error: 'Jadwal tidak ditemukan' })
   if (jenis === 'mapel') ensurePengajarFromJadwal({ gtk_id, mapel_id, rombel_id, tenant_id: req.tenantId })
   res.json({ success: true })
@@ -9156,6 +9193,8 @@ setInterval(async () => {
         waQueue.queueDueTeachers(db, { tenantId: t.id, date, time })
         // Notif jadwal guru (hanya hari kerja)
         waQueue.queueDueSchedules(db, { tenantId: t.id, date, time })
+        // Laporan keuangan otomatis ke wali murid (mingguan/bulanan)
+        waQueue.queueFinanceReports(db, { tenantId: t.id, date, time })
       } catch {}
     }
   } catch {}

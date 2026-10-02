@@ -13,6 +13,11 @@ export default function NotifSettingsPage() {
     template_guru_ceklok: '',
     notif_jadwal_guru: false,
     template_jadwal_guru: '',
+    notif_keuangan_wali: false,
+    keuangan_frekuensi: 'bulanan',
+    keuangan_hari: '',
+    keuangan_jam: '08:00',
+    template_keuangan_wali: '',
   })
   const [saving, setSaving] = useState(false)
   const [testing, setTesting] = useState(false)
@@ -33,6 +38,11 @@ export default function NotifSettingsPage() {
         template_guru_ceklok: d.template_guru_ceklok || '',
         notif_jadwal_guru: !!d.notif_jadwal_guru,
         template_jadwal_guru: d.template_jadwal_guru || '',
+        notif_keuangan_wali: !!d.notif_keuangan_wali,
+        keuangan_frekuensi: d.keuangan_frekuensi || 'bulanan',
+        keuangan_hari: d.keuangan_hari || '',
+        keuangan_jam: d.keuangan_jam || '08:00',
+        template_keuangan_wali: d.template_keuangan_wali || '',
       })
     })
     // Peringatan dini: pengingat jadwal guru hanya terbit bila lembaga punya
@@ -181,6 +191,70 @@ export default function NotifSettingsPage() {
         )}
         <textarea value={settings.template_jadwal_guru} onChange={e => setSettings({...settings, template_jadwal_guru: e.target.value})} rows={3} className="w-full px-3 py-2 border rounded-lg text-sm" placeholder="{nama_guru}, {mapel}, {rombel}, {jam_mulai}, {jam_selesai}, {tanggal}, {lembaga}" />
         <button onClick={handleTestJadwalGuru} className="px-4 py-2 bg-primary text-white rounded-lg text-sm">Test Notif Jadwal Sekarang</button>
+      </div>
+
+      {/* Notif Laporan Keuangan -> Wali Murid */}
+      <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100 space-y-4">
+        <div className="flex items-start justify-between mb-2">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 bg-emerald-100 rounded-lg flex items-center justify-center">
+              <Bell size={20} className="text-emerald-600" />
+            </div>
+            <div>
+              <h3 className="font-semibold text-gray-800">Notifikasi Laporan Keuangan ke Wali Murid</h3>
+              <p className="text-xs text-gray-500 mt-0.5">Kirim WA ringkasan tabungan, tagihan & pembayaran siswa secara terjadwal</p>
+            </div>
+          </div>
+          <label className="relative inline-flex items-center cursor-pointer">
+            <input type="checkbox" checked={settings.notif_keuangan_wali} onChange={e => setSettings({...settings, notif_keuangan_wali: e.target.checked})} className="sr-only peer" />
+            <div className="w-11 h-6 bg-gray-200 peer-focus:ring-4 peer-focus:ring-primary/20 rounded-full peer peer-checked:after:translate-x-full peer-checked:bg-emerald-600 after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all"></div>
+          </label>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div>
+            <label className="block text-xs font-medium text-gray-500 mb-1">Frekuensi</label>
+            <select value={settings.keuangan_frekuensi} onChange={e => setSettings({...settings, keuangan_frekuensi: e.target.value, keuangan_hari: ''})} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm">
+              <option value="mingguan">Mingguan</option>
+              <option value="bulanan">Bulanan</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-500 mb-1">{settings.keuangan_frekuensi === 'mingguan' ? 'Hari Kirim' : 'Tanggal Kirim'}</label>
+            {settings.keuangan_frekuensi === 'mingguan' ? (
+              <select value={settings.keuangan_hari} onChange={e => setSettings({...settings, keuangan_hari: e.target.value})} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm">
+                <option value="">-- Pilih --</option>
+                {['senin','selasa','rabu','kamis','jumat','sabtu','minggu'].map(d => <option key={d} value={d} className="capitalize">{d.charAt(0).toUpperCase()+d.slice(1)}</option>)}
+              </select>
+            ) : (
+              <select value={settings.keuangan_hari} onChange={e => setSettings({...settings, keuangan_hari: e.target.value})} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm">
+                <option value="">-- Pilih --</option>
+                {Array.from({ length: 28 }, (_, i) => i + 1).map(d => <option key={d} value={d}>Tanggal {d}</option>)}
+              </select>
+            )}
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-500 mb-1">Jam Kirim</label>
+            <input type="time" value={settings.keuangan_jam} onChange={e => setSettings({...settings, keuangan_jam: e.target.value})} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" />
+          </div>
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-gray-500 mb-1">Template Pesan</label>
+          <textarea value={settings.template_keuangan_wali} onChange={e => setSettings({...settings, template_keuangan_wali: e.target.value})} rows={5} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" placeholder="{nama_ortu}, {nama}, {tagihan}, {pembayaran}, {saldo_tabungan}, {lembaga}" />
+          <p className="text-xs text-gray-400 mt-1">Variable: {'{nama_ortu}'}, {'{nama}'}, {'{tagihan}'}, {'{pembayaran}'}, {'{saldo_tabungan}'}, {'{lembaga}'}</p>
+        </div>
+        <button
+          onClick={async () => {
+            if (!settings.notif_keuangan_wali) return toast.error('Aktifkan dulu notifikasi keuangan')
+            setTesting(true)
+            try {
+              const r = await api.post('/notif/keuangan-wali')
+              toast.success(`Laporan keuangan diantrekan ke ${r.data.queued || 0} wali murid`)
+            } catch (err: any) { toast.error(err.response?.data?.error || 'Gagal uji kirim') }
+            finally { setTesting(false) }
+          }}
+          disabled={testing}
+          className="px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm disabled:opacity-50"
+        >Test Kirim Sekarang</button>
       </div>
 
       <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100 space-y-4">

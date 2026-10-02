@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useRef, Fragment } from 'react'
 import { escapeHtml } from '../../utils/escapeHtml'
 import { Download, FileSpreadsheet, Users, GraduationCap } from 'lucide-react'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
@@ -12,6 +12,26 @@ import { tenantExportFilename, tenantIdentity } from '../../utils/tenantExport'
 function PercentageBadge({ row }: { row: any }) {
   const percentage = row.total > 0 ? Math.round(row.hadir / row.total * 100) : 0
   return <span className={`px-2 py-1 rounded-full text-xs font-medium ${percentage >= 90 ? 'bg-green-100 text-green-700' : percentage >= 75 ? 'bg-yellow-100 text-yellow-700' : 'bg-red-100 text-red-700'}`}>{percentage}%</span>
+}
+
+// Kelompokkan baris rekap berdasarkan rombel (urutan pertama kali muncul).
+// Siswa tanpa rombel dikelompokkan terpisah di akhir sebagai "Tanpa Rombel".
+function groupByRombel(data: any[]) {
+  const groups: { rombel: string; items: any[] }[] = []
+  const index = new Map<string, number>()
+  for (const row of data) {
+    const rombel = String(row.rombel_nama || '').trim() || 'Tanpa Rombel'
+    let gi = index.get(rombel)
+    if (gi == null) { gi = groups.length; index.set(rombel, gi); groups.push({ rombel, items: [] }) }
+    groups[gi].items.push(row)
+  }
+  // Tanpa Rombel selalu di akhir.
+  groups.sort((a, b) => {
+    if (a.rombel === 'Tanpa Rombel') return 1
+    if (b.rombel === 'Tanpa Rombel') return -1
+    return a.rombel.localeCompare(b.rombel, 'id')
+  })
+  return groups
 }
 
 function SiswaRecapTable({ data }: { data: any[] }) {
@@ -32,17 +52,24 @@ function SiswaRecapTable({ data }: { data: any[] }) {
           </tr></thead>
           <tbody className="divide-y divide-gray-100">
             {data.length === 0 && <tr><td colSpan={9} className="px-4 py-8 text-center text-gray-400">Belum ada data absensi siswa untuk periode ini</td></tr>}
-            {data.map((siswa: any, i: number) => <tr key={siswa.id || i} className="hover:bg-gray-50">
-              <td className="px-4 py-3 text-gray-600">{i + 1}</td>
-              <td className="px-4 py-3 font-medium text-gray-800">{siswa.nama}</td>
-              <td className="px-4 py-3 text-gray-600 text-xs">{siswa.nis || '-'}</td>
-              <td className="px-4 py-3 text-gray-600">{siswa.rombel_nama || '-'}</td>
-              <td className="px-4 py-3 text-center font-medium text-blue-600">{siswa.hadir}</td>
-              <td className="px-4 py-3 text-center font-medium text-yellow-600">{siswa.sakit}</td>
-              <td className="px-4 py-3 text-center font-medium text-purple-600">{siswa.izin}</td>
-              <td className="px-4 py-3 text-center font-medium text-red-600">{siswa.alpha}</td>
-              <td className="px-4 py-3 text-center"><PercentageBadge row={siswa} /></td>
-            </tr>)}
+            {groupByRombel(data).map(group => (
+              <Fragment key={group.rombel}>
+                <tr className="bg-slate-100/80">
+                  <td colSpan={9} className="px-4 py-2 text-sm font-semibold text-slate-700">{group.rombel} <span className="text-xs font-normal text-slate-500">({group.items.length} siswa)</span></td>
+                </tr>
+                {group.items.map((siswa: any, i: number) => <tr key={siswa.id || i} className="hover:bg-gray-50">
+                  <td className="px-4 py-3 text-gray-600">{i + 1}</td>
+                  <td className="px-4 py-3 font-medium text-gray-800">{siswa.nama}</td>
+                  <td className="px-4 py-3 text-gray-600 text-xs">{siswa.nis || '-'}</td>
+                  <td className="px-4 py-3 text-gray-600">{siswa.rombel_nama || '-'}</td>
+                  <td className="px-4 py-3 text-center font-medium text-blue-600">{siswa.hadir}</td>
+                  <td className="px-4 py-3 text-center font-medium text-yellow-600">{siswa.sakit}</td>
+                  <td className="px-4 py-3 text-center font-medium text-purple-600">{siswa.izin}</td>
+                  <td className="px-4 py-3 text-center font-medium text-red-600">{siswa.alpha}</td>
+                  <td className="px-4 py-3 text-center"><PercentageBadge row={siswa} /></td>
+                </tr>)}
+              </Fragment>
+            ))}
           </tbody>
         </table>
       </div>
@@ -177,25 +204,76 @@ export default function RekapAbsensiPage() {
 
   const exportExcel = () => {
     const isCategory = category !== 'kehadiran'
-    const header = isCategory
-      ? ['No', 'Nama', 'NIS/NISN', 'Rombel', 'Kegiatan/Mapel', 'Hadir', 'Sakit', 'Izin', 'Alpha', 'Lain', 'Total', '% Hadir']
-      : tab === 'siswa'
-        ? ['No', 'Nama', 'NIS', 'Rombel', 'Hadir', 'Sakit', 'Izin', 'Alpha', '% Hadir']
-        : ['No', 'Nama GTK', 'NIP', 'Jabatan', 'Mata Pelajaran Diampu', 'Jumlah JTM', 'Jumlah Kehadiran', 'Sakit', 'Izin', 'Alpha', '% Hadir']
-    const rows = data.map((d: any, i: number) => isCategory
-      ? [i + 1, d.nama, d.nisn || d.nis || '', d.rombel_nama || '', d.kegiatan_nama || '', d.hadir, d.sakit, d.izin, d.alpha, d.lain, d.total, d.total > 0 ? Math.round(d.hadir / d.total * 100) + '%' : '0%']
-      : tab === 'siswa'
-        ? [i + 1, d.nama, d.nis || '', d.rombel_nama || '', d.hadir, d.sakit, d.izin, d.alpha, d.total > 0 ? Math.round(d.hadir / d.total * 100) + '%' : '0%']
-        : [i + 1, d.nama, d.nip || '', d.jabatan || '', (d.mapel_list || []).join(', '), d.jml_jtm, d.jumlah_kehadiran, d.sakit, d.izin, d.alpha, d.total > 0 ? Math.round(d.hadir / d.total * 100) + '%' : '0%'])
-    const ws = XLSX.utils.aoa_to_sheet([
-      [`Rekapitulasi Absensi ${categoryLabel}`],
-      [tenant.name],
-      tenant.address ? [tenant.address] : [],
-      [`Periode: ${reportPeriod.label || `${reportPeriod.from} s/d ${reportPeriod.to}`}`],
-      [],
-      header,
-      ...rows,
-    ])
+    // Rentang tanggal identik dengan exportPDF supaya layout Excel mengikuti PDF.
+    const dates = (() => {
+      const a = mode === 'bulanan' || mode === 'semester' ? reportPeriod.from : from
+      const b = mode === 'bulanan' || mode === 'semester' ? reportPeriod.to : to
+      const out: string[] = []
+      let cursor = a
+      while (cursor <= b) { out.push(cursor); cursor = addDaysWib(cursor, 1) }
+      return out
+    })()
+    const periodeText = `${reportPeriod.label || `${reportPeriod.from} s/d ${reportPeriod.to}`}`
+    const dayHeaders = dates.map(d => Number(d.slice(8, 10)))
+    const aoa: any[][] = []
+
+    if (category === 'kehadiran') {
+      // Layout MATRIKS mengikuti export PDF (per-tanggal + total SAKIT/IZIN/ALFA/HADIR).
+      const isSiswa = tab === 'siswa'
+      aoa.push(['REKAPITULASI ABSENSI ' + (isSiswa ? 'SISWA' : 'GTK')])
+      aoa.push([tenant.name])
+      if (tenant.address) aoa.push([tenant.address])
+      aoa.push(['Periode: ' + periodeText])
+      aoa.push([])
+      const header = ['NO', 'NAMA LENGKAP', isSiswa ? 'NISN/NIS' : 'NIP', ...dayHeaders, 'SAKIT', 'IZIN', 'ALFA', 'HADIR']
+      aoa.push(header)
+      const pushRow = (row: any, i: number) => {
+        const map = row.per_tanggal || {}
+        aoa.push([
+          i + 1,
+          row.nama || '',
+          isSiswa ? (row.nisn || row.nis || '') : (row.nip || ''),
+          ...dates.map(x => map[x] || ''),
+          row.sakit || 0, row.izin || 0, row.alpha || 0, row.hadir || 0,
+        ])
+      }
+      if (isSiswa) {
+        for (const group of groupByRombel(data)) {
+          aoa.push(['', group.rombel + ` (${group.items.length} siswa)`])
+          group.items.forEach((d, i) => pushRow(d, i))
+        }
+      } else {
+        data.forEach((d: any, i: number) => pushRow(d, i))
+      }
+      const ws = XLSX.utils.aoa_to_sheet(aoa)
+      // Merge baris judul selebar tabel.
+      const totalCols = header.length
+      const merges = [{ s: { r: 0, c: 0 }, e: { r: 0, c: totalCols - 1 } }, { s: { r: 1, c: 0 }, e: { r: 1, c: totalCols - 1 } }]
+      if (tenant.address) merges.push({ s: { r: 2, c: 0 }, e: { r: 2, c: totalCols - 1 } })
+      ws['!merges'] = merges
+      ws['!cols'] = [{ wch: 5 }, { wch: 26 }, { wch: 14 }, ...dates.map(() => ({ wch: 4 })), { wch: 8 }, { wch: 8 }, { wch: 8 }, { wch: 8 }]
+      const wb = XLSX.utils.book_new()
+      XLSX.utils.book_append_sheet(wb, ws, 'Rekap')
+      wb.Props = { Title: `Rekapitulasi Absensi ${categoryLabel}`, Subject: `Periode ${reportPeriod.label}`, Author: tenant.name, Company: tenant.name }
+      XLSX.writeFile(wb, tenantExportFilename(`Rekap_Absensi_${category}`, tenant.name, reportPeriod.from, 'xlsx'))
+      toast.success('Excel diunduh')
+      return
+    }
+
+    // Kategori non-kehadiran: kolom datar, dikelompokkan per rombel.
+    const header = ['No', 'Nama', 'NIS/NISN', 'Rombel', 'Kegiatan/Mapel', 'Hadir', 'Sakit', 'Izin', 'Alpha', 'Lain', 'Total', '% Hadir']
+    const rows = (d: any, i: number) => [i + 1, d.nama, d.nisn || d.nis || '', d.rombel_nama || '', d.kegiatan_nama || '', d.hadir, d.sakit, d.izin, d.alpha, d.lain, d.total, d.total > 0 ? Math.round(d.hadir / d.total * 100) + '%' : '0%']
+    aoa.push([`Rekapitulasi Absensi ${categoryLabel}`])
+    aoa.push([tenant.name])
+    if (tenant.address) aoa.push([tenant.address])
+    aoa.push([`Periode: ${periodeText}`])
+    aoa.push([])
+    aoa.push(header)
+    for (const group of groupByRombel(data)) {
+      aoa.push(['', group.rombel + ` (${group.items.length} siswa)`])
+      group.items.forEach((d, i) => aoa.push(rows(d, i)))
+    }
+    const ws = XLSX.utils.aoa_to_sheet(aoa)
     ws['!cols'] = header.map(() => ({ wch: 15 }))
     const wb = XLSX.utils.book_new()
     XLSX.utils.book_append_sheet(wb, ws, 'Rekap')
@@ -219,14 +297,19 @@ export default function RekapAbsensiPage() {
     })()
     const periodeText = `${fmt(reportPeriod.from)} s/d ${fmt(reportPeriod.to)}`
     const dayHeaders = dates.map(d => `<th class="tgl">${Number(d.slice(8,10))}</th>`).join('')
-    const rows = data.map((d: any, i: number) => {
+    const cell = (d: any, i: number) => {
       const map = d.per_tanggal || {}
       const dayCells = dates.map(x => `<td>${escapeHtml(map[x] || '')}</td>`).join('')
       return `<tr><td>${i+1}</td><td class="nama">${escapeHtml(d.nama || '')}</td><td>${escapeHtml(d.nisn || d.nis || d.nip || '')}</td>${dayCells}<td>${d.sakit || 0}</td><td>${d.izin || 0}</td><td>${d.alpha || 0}</td><td>${d.hadir || 0}</td></tr>`
-    }).join('')
+    }
+    const totalCols = 7 + dates.length
+    const rows = (tab === 'siswa'
+      ? groupByRombel(data).map(group => `<tr class="rombel"><td colspan="${totalCols}">${escapeHtml(group.rombel)} (${group.items.length} siswa)</td></tr>` + group.items.map((d, i) => cell(d, i)).join('')).join('')
+      : data.map((d: any, i: number) => cell(d, i)).join('')
+    )
     const title = tenantExportFilename(`Rekap_Absensi_${category}`, tenant.name, reportPeriod.from, 'pdf').replace(/\.pdf$/, '')
     const logo = tenant.logo ? `<img src="${escapeHtml(tenant.logo)}" alt="Logo ${escapeHtml(tenant.name)}" onerror="this.style.display='none'">` : ''
-    printWindow.document.write(`<!DOCTYPE html><html><head><title>${escapeHtml(title)}</title><meta name="author" content="${escapeHtml(tenant.name)}"><style>@page{size:landscape;margin:7mm}body{font-family:Arial,sans-serif;font-size:9px;color:#000}.kop{display:flex;align-items:center;justify-content:center;gap:12px;border-bottom:2px solid #000;padding-bottom:7px;margin-bottom:6px}.kop img{width:58px;height:58px;object-fit:contain}.kop-text{text-align:center}.kop-text h2,.kop-text h3{margin:1px 0}h2,h3{text-align:center;margin:1px 0}.meta{display:flex;gap:12px;margin:8px 0;font-weight:bold}.hl{background:#ffeb3b;padding:2px 14px}table{border-collapse:collapse;width:100%;font-size:8px}th,td{border:1px solid #000;text-align:center;padding:2px}.nama{text-align:left;min-width:170px}.tgl{width:18px}.total{background:#e5e7eb;font-weight:bold}.s{background:#22c55e}.i{background:#38bdf8}.a{background:#ef4444;color:#fff}.h{background:#d1d5db}.foot{margin-top:8px;font-size:8px;display:flex;justify-content:space-between}</style></head><body><div class="kop">${logo}<div class="kop-text"><h2>${escapeHtml(tenant.name)}</h2>${tenant.address ? `<div>${escapeHtml(tenant.address)}</div>` : ''}<h3>REKAPITULASI ABSENSI ${who}</h3><h3>SEMESTER GANJIL TP. ${new Date().getFullYear()}/${new Date().getFullYear()+1}</h3></div></div><div class="meta"><div>PERIODE: <span class="hl">${escapeHtml(periodeText)}</span></div><div>KELAS: <span class="hl">${tab==='siswa'?'SEMUA KELAS':'GTK'}</span></div></div><table><thead><tr><th rowspan="2">NO</th><th rowspan="2">NAMA LENGKAP</th><th rowspan="2">NISN/NIS</th><th colspan="${dates.length}">TANGGAL</th><th colspan="4" class="total">TOTAL</th></tr><tr>${dayHeaders}<th class="s">SAKIT</th><th class="i">IZIN</th><th class="a">ALFA</th><th class="h">HADIR</th></tr></thead><tbody>${rows}</tbody></table><div class="foot"><div>Kode: H=Hadir, S=Sakit, I=Izin, A=Alfa</div><div>Dicetak: ${new Date().toLocaleString('id-ID')}</div></div><script>setTimeout(()=>window.print(),500)<\/script></body></html>`)
+    printWindow.document.write(`<!DOCTYPE html><html><head><title>${escapeHtml(title)}</title><meta name="author" content="${escapeHtml(tenant.name)}"><style>@page{size:landscape;margin:7mm}body{font-family:Arial,sans-serif;font-size:9px;color:#000}.kop{display:flex;align-items:center;justify-content:center;gap:12px;border-bottom:2px solid #000;padding-bottom:7px;margin-bottom:6px}.kop img{width:58px;height:58px;object-fit:contain}.kop-text{text-align:center}.kop-text h2,.kop-text h3{margin:1px 0}h2,h3{text-align:center;margin:1px 0}.meta{display:flex;gap:12px;margin:8px 0;font-weight:bold}.hl{background:#ffeb3b;padding:2px 14px}table{border-collapse:collapse;width:100%;font-size:8px}th,td{border:1px solid #000;text-align:center;padding:2px}.nama{text-align:left;min-width:170px}.rombel td{background:#e2e8f0;font-weight:bold;text-align:left}.tgl{width:18px}.total{background:#e5e7eb;font-weight:bold}.s{background:#22c55e}.i{background:#38bdf8}.a{background:#ef4444;color:#fff}.h{background:#d1d5db}.foot{margin-top:8px;font-size:8px;display:flex;justify-content:space-between}</style></head><body><div class="kop">${logo}<div class="kop-text"><h2>${escapeHtml(tenant.name)}</h2>${tenant.address ? `<div>${escapeHtml(tenant.address)}</div>` : ''}<h3>REKAPITULASI ABSENSI ${who}</h3><h3>SEMESTER GANJIL TP. ${new Date().getFullYear()}/${new Date().getFullYear()+1}</h3></div></div><div class="meta"><div>PERIODE: <span class="hl">${escapeHtml(periodeText)}</span></div><div>KELAS: <span class="hl">${tab==='siswa'?'SEMUA KELAS':'GTK'}</span></div></div><table><thead><tr><th rowspan="2">NO</th><th rowspan="2">NAMA LENGKAP</th><th rowspan="2">NISN/NIS</th><th colspan="${dates.length}">TANGGAL</th><th colspan="4" class="total">TOTAL</th></tr><tr>${dayHeaders}<th class="s">SAKIT</th><th class="i">IZIN</th><th class="a">ALFA</th><th class="h">HADIR</th></tr></thead><tbody>${rows}</tbody></table><div class="foot"><div>Kode: H=Hadir, S=Sakit, I=Izin, A=Alfa</div><div>Dicetak: ${new Date().toLocaleString('id-ID')}</div></div><script>setTimeout(()=>window.print(),500)<\/script></body></html>`)
     printWindow.document.close()
   }
 
