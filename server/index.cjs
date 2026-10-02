@@ -39,6 +39,8 @@ const { buatPemeriksaOrigin } = require('./cors-origin.cjs')
 const { migrateRaporUniqueIndex } = require('./rapor-unique-index.cjs')
 const { createRaporSiswaPdf, normalizeBagian: normalizeBagianRapor, BAGIAN_VALID: BAGIAN_RAPOR_VALID } = require('./rapor-siswa-pdf-service.cjs')
 const { createKtsPdf, CARD_W: KTS_W, CARD_H: KTS_H } = require('./kts-pdf-service.cjs')
+const { createRaporK13Pdf } = require('./rapor-k13-pdf-service.cjs')
+const { getK13RaporData, getPeringkatK13, normalizeK13Nilai } = require('./rapor-k13-service.cjs')
 const { getCategoryRecap } = require('./attendance-recap.cjs')
 const { buildRekapRange, getPeriodicAttendanceRecap, deduplicateAttendance } = require('./attendance-periodic-recap.cjs')
 const { isDriveFolderUrl } = require('./library-config.cjs')
@@ -1231,6 +1233,26 @@ try {
     if (!raporBiodataCols.includes(col)) db.exec(`ALTER TABLE siswa ADD COLUMN ${col} ${type}`)
   }
 } catch (e) { console.error('[migrate] siswa biodata rapor failed', e.message) }
+
+// Rapor K-13 (klasik): nilai akhir per mapel + sikap wali kelas, terpisah dari
+// rapor Kurikulum Merdeka (nilai_sts/sas, capaian). Keduanya berdampingan.
+try {
+  db.exec(`CREATE TABLE IF NOT EXISTS rapor_k13 (
+    id TEXT PRIMARY KEY, siswa_id TEXT NOT NULL, mapel_id TEXT NOT NULL,
+    tahun_ajaran TEXT NOT NULL, semester TEXT NOT NULL, nilai INTEGER DEFAULT 0,
+    predikat TEXT, kkm INTEGER DEFAULT 75, deskripsi TEXT,
+    tenant_id TEXT DEFAULT 'default', updated_at TEXT,
+    UNIQUE(tenant_id, siswa_id, mapel_id, tahun_ajaran, semester)
+  )`)
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_rapor_k13_siswa ON rapor_k13(tenant_id, siswa_id, tahun_ajaran, semester)`)
+  db.exec(`CREATE TABLE IF NOT EXISTS sikap_k13 (
+    id TEXT PRIMARY KEY, siswa_id TEXT NOT NULL, tahun_ajaran TEXT NOT NULL, semester TEXT NOT NULL,
+    kelakuan TEXT, kerajinan TEXT, kerapian TEXT, kebersihan TEXT, kedisiplinan TEXT, ketaatan TEXT,
+    catatan TEXT, ekstrakurikuler TEXT,
+    tenant_id TEXT DEFAULT 'default', updated_at TEXT,
+    UNIQUE(tenant_id, siswa_id, tahun_ajaran, semester)
+  )`)
+} catch (e) { console.error('[migrate] rapor_k13/sikap_k13 failed', e.message) }
 
 
 // Migrasi: kolom UNIQUE global (nip/nis/kode) peninggalan pra-multi-tenant bikin
@@ -7896,6 +7918,97 @@ function ledgerRequest(req, res) {
   const { from, to } = semesterRange(tahun_ajaran, semester)
   return { rombel, tahun_ajaran, semester, jenis, from, to }
 }
+
+// ==================== RAPOR K-13 (KLASIK) ====================
+// Nilai akhir per mapel + sikap wali kelas; alternatif berdampingan dengan rapor KM.
+function k13CurrentPeriod() {
+  const d = new Date()
+  const y = d.getFullYear(), m = d.getMonth() + 1
+  return { tahun_ajaran: m >= 7 ? `${y}/${y + 1}` : `${y - 1}/${y}`, semester: m >= 7 ? 'ganjil' : 'genap' }
+}
+
+app.get('/api/rapor-k13', authMiddleware, (req, res) => {
+  const cp = k13CurrentPeriod()
+  const siswa_id = req.query.siswa_id
+  const semester = String(req.query.semester || cp.semester)
+  const tahun_ajaran = String(req.query.tahun_ajaran || cp.tahun_ajaran)
+  if (!siswa_id) return res.status(400).json({ error: 'siswa_id wajib' })
+  res.json(getK13RaporData(db, req.tenantId, { siswaId: siswa_id, semester, tahunAjaran: tahun_ajaran }))
+})
+
+app.put('/api/rapor-k13/nilai', STAFF, (req, res) => {
+  const { siswa_id, semester, tahun_ajaran, data } = req.body || {}
+  if (!siswa_id || !Array.isArray(data)) return res.status(400).json({ error: 'siswa_id dan data[] wajib' })
+  if (!db.prepare('SELECT 1 FROM siswa WHERE id=? AND tenant_id=?').get(siswa_id, req.tenantId)) return res.status(404).json({ error: 'Siswa tidak ditemukan' })
+  const ins = db.prepare(`INSERT INTO rapor_k13 (id,siswa_id,mapel_id,tahun_ajaran,semester,nilai,predikat,kkm,deskripsi,tenant_id,updated_at)
+    VALUES (?,?,?,?,?,?,?,?,?,?,datetime('now'))
+    ON CONFLICT(tenant_id,siswa_id,mapel_id,tahun_ajaran,semester)
+    DO UPDATE SET nilai=excluded.nilai,predikat=excluded.predikat,kkm=excluded.kkm,deskripsi=excluded.deskripsi,updated_at=datetime('now')`)
+  let count = 0
+  for (const row of data) {
+    if (!row?.mapel_id) continue
+    const n = normalizeK13Nilai(row)
+    ins.run(uuidv4(), siswa_id, row.mapel_id, tahun_ajaran, semester, n.nilai, n.predikat, n.kkm, n.deskripsi, req.tenantId)
+    count++
+  }
+  res.json({ count })
+})
+
+app.get('/api/rapor-k13/sikap', authMiddleware, (req, res) => {
+  const cp = k13CurrentPeriod()
+  const siswa_id = req.query.siswa_id
+  const semester = String(req.query.semester || cp.semester)
+  const tahun_ajaran = String(req.query.tahun_ajaran || cp.tahun_ajaran)
+  if (!siswa_id) return res.status(400).json({ error: 'siswa_id wajib' })
+  const row = db.prepare('SELECT * FROM sikap_k13 WHERE siswa_id=? AND tenant_id=? AND tahun_ajaran=? AND semester=?').get(siswa_id, req.tenantId, tahun_ajaran, semester)
+  res.json(row || null)
+})
+
+app.put('/api/rapor-k13/sikap', STAFF, (req, res) => {
+  const { siswa_id, semester, tahun_ajaran } = req.body || {}
+  if (!siswa_id) return res.status(400).json({ error: 'siswa_id wajib' })
+  if (!db.prepare('SELECT 1 FROM siswa WHERE id=? AND tenant_id=?').get(siswa_id, req.tenantId)) return res.status(404).json({ error: 'Siswa tidak ditemukan' })
+  const allowed = ['kelakuan', 'kerajinan', 'kerapian', 'kebersihan', 'kedisiplinan', 'ketaatan', 'catatan', 'ekstrakurikuler']
+  const vals = {}
+  for (const k of allowed) vals[k] = req.body?.[k] != null ? String(req.body[k]) : null
+  const existing = db.prepare('SELECT id FROM sikap_k13 WHERE siswa_id=? AND tenant_id=? AND tahun_ajaran=? AND semester=?').get(siswa_id, req.tenantId, tahun_ajaran, semester)
+  if (existing) db.prepare(`UPDATE sikap_k13 SET kelakuan=?,kerajinan=?,kerapian=?,kebersihan=?,kedisiplinan=?,ketaatan=?,catatan=?,ekstrakurikuler=?,updated_at=datetime('now') WHERE id=?`)
+    .run(vals.kelakuan, vals.kerajinan, vals.kerapian, vals.kebersihan, vals.kedisiplinan, vals.ketaatan, vals.catatan, vals.ekstrakurikuler, existing.id)
+  else db.prepare(`INSERT INTO sikap_k13 (id,siswa_id,tahun_ajaran,semester,kelakuan,kerajinan,kerapian,kebersihan,kedisiplinan,ketaatan,catatan,ekstrakurikuler,tenant_id,updated_at)
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,datetime('now'))`)
+    .run(uuidv4(), siswa_id, tahun_ajaran, semester, vals.kelakuan, vals.kerajinan, vals.kerapian, vals.kebersihan, vals.kedisiplinan, vals.ketaatan, vals.catatan, vals.ekstrakurikuler, req.tenantId)
+  res.json({ success: true, ...vals })
+})
+
+app.get('/api/rapor-k13/pdf', authMiddleware, async (req, res) => {
+  const cp = k13CurrentPeriod()
+  const { siswa_id, rombel_id } = req.query
+  const semester = String(req.query.semester || cp.semester)
+  const tahun_ajaran = String(req.query.tahun_ajaran || cp.tahun_ajaran)
+  const settings = getTenantSettings(db, req.tenantId) || {}
+  const list = []
+  if (siswa_id) {
+    const data = getK13RaporData(db, req.tenantId, { siswaId: siswa_id, semester, tahunAjaran: tahun_ajaran })
+    if (!data.siswa) return res.status(404).json({ error: 'Siswa tidak ditemukan' })
+    const rombelId = data.siswa.rombel_id
+    const peringkat = rombelId ? getPeringkatK13(db, req.tenantId, { rombelId, semester, tahunAjaran: tahun_ajaran }) : { rows: [], total: 0 }
+    const rank = peringkat.rows.find(r => r.id === siswa_id)
+    list.push({ ...data, rank: rank?.rank || 0, totalSiswa: peringkat.total })
+  } else if (rombel_id) {
+    const siswaRows = db.prepare("SELECT id, rombel_id FROM siswa WHERE rombel_id=? AND tenant_id=? AND COALESCE(status,'aktif')='aktif' ORDER BY nama").all(rombel_id, req.tenantId)
+    const peringkat = getPeringkatK13(db, req.tenantId, { rombelId: rombel_id, semester, tahunAjaran: tahun_ajaran })
+    for (const s of siswaRows) {
+      const data = getK13RaporData(db, req.tenantId, { siswaId: s.id, semester, tahunAjaran: tahun_ajaran })
+      const rank = peringkat.rows.find(r => r.id === s.id)
+      list.push({ ...data, rank: rank?.rank || 0, totalSiswa: peringkat.total })
+    }
+  }
+  if (!list.length) return res.status(400).json({ error: 'siswa_id atau rombel_id wajib' })
+  const pdf = await createRaporK13Pdf({ studentList: list, settings, uploadDir: UPLOAD_DIR })
+  res.setHeader('Content-Type', 'application/pdf')
+  res.setHeader('Content-Disposition', 'attachment; filename="rapor-k13.pdf"')
+  res.send(pdf)
+})
 
 app.get('/api/rapor/ledger/rombel', LEDGER, (req, res) => {
   const gtk = req.user.role === 'wali_kelas' ? resolveGtkForUser(req.user.id, req.tenantId) : null
