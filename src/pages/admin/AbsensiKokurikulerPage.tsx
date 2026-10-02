@@ -106,12 +106,13 @@ export default function AbsensiKokurikulerPage() {
                 <th className="text-left px-4 py-3 font-medium text-gray-600">NIS</th>
                 <th className="text-left px-4 py-3 font-medium text-gray-600">Nama</th>
                 <th className="text-center px-4 py-3 font-medium text-gray-600">Hadir</th>
+                <th className="text-center px-4 py-3 font-medium text-gray-600">Izin</th>
                 <th className="text-center px-4 py-3 font-medium text-gray-600">Sakit</th>
                 <th className="text-center px-4 py-3 font-medium text-gray-600">Alpha</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
-              {siswaList.length === 0 && <tr><td colSpan={6} className="px-4 py-8 text-center text-gray-400">Tidak ada data siswa</td></tr>}
+              {siswaList.length === 0 && <tr><td colSpan={7} className="px-4 py-8 text-center text-gray-400">Tidak ada data siswa</td></tr>}
               {siswaList.map((s, i) => (
                 <tr key={s.id} className="hover:bg-gray-50">
                   <td className="px-4 py-3 text-gray-600">{i + 1}</td>
@@ -119,6 +120,9 @@ export default function AbsensiKokurikulerPage() {
                   <td className="px-4 py-3 font-medium text-gray-800">{s.nama}</td>
                   <td className="px-4 py-3 text-center">
                     <button onClick={() => setStatus(s.id, 'hadir')} className={`p-1.5 rounded-full ${(absensi[s.id] || 'hadir') === 'hadir' ? 'bg-green-100 text-green-700' : 'text-gray-300 hover:text-green-500'}`}><CheckCircle size={20} /></button>
+                  </td>
+                  <td className="px-4 py-3 text-center">
+                    <button onClick={() => setStatus(s.id, 'izin')} className={`p-1.5 rounded-full ${absensi[s.id] === 'izin' ? 'bg-blue-100 text-blue-700' : 'text-gray-300 hover:text-blue-500'}`}><Clock size={20} /></button>
                   </td>
                   <td className="px-4 py-3 text-center">
                     <button onClick={() => setStatus(s.id, 'sakit')} className={`p-1.5 rounded-full ${absensi[s.id] === 'sakit' ? 'bg-yellow-100 text-yellow-700' : 'text-gray-300 hover:text-yellow-500'}`}><Clock size={20} /></button>

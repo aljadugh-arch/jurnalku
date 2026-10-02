@@ -62,3 +62,25 @@ test('category recap rejects unknown category', () => {
   assert.throws(() => getCategoryRecap(db, 't1', 'unknown', '2026-09-01', '2026-09-30'), /Kategori absensi tidak valid/)
   db.close()
 })
+
+test('category recap filters by rombel when rombelId is supplied', () => {
+  const db = fixture()
+  // Tambah rombel kedua + siswa di tenant yang sama untuk menguji pemfilteran nyata.
+  db.exec(`INSERT INTO rombel VALUES ('r1b','t1','VII-B');`)
+  db.exec(`INSERT INTO siswa VALUES ('s3','t1','Citra','004','N004','r1b','aktif');`)
+  db.exec(`INSERT INTO absensi_mapel VALUES ('am4','t1','s3','2026-09-01','hadir','m1','j1');`)
+
+  const all = getCategoryRecap(db, 't1', 'mapel', '2026-09-01', '2026-09-30')
+  assert.equal(all.detail.some(row => row.id === 's1'), true)
+  assert.equal(all.detail.some(row => row.id === 's3'), true)
+
+  const onlyR1 = getCategoryRecap(db, 't1', 'mapel', '2026-09-01', '2026-09-30', 'r1')
+  assert.equal(onlyR1.detail.some(row => row.id === 's1'), true)
+  assert.equal(onlyR1.detail.some(row => row.id === 's3'), false)
+  assert.equal(onlyR1.detail.some(row => row.id === 'sx'), false)
+
+  const emptyRombel = getCategoryRecap(db, 't1', 'mapel', '2026-09-01', '2026-09-30', 'r1b')
+  assert.equal(emptyRombel.detail.some(row => row.id === 's3'), true)
+  assert.equal(emptyRombel.detail.some(row => row.id === 's1'), false)
+  db.close()
+})

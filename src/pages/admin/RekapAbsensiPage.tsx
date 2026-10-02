@@ -145,7 +145,13 @@ export default function RekapAbsensiPage() {
   })
   const [category, setCategory] = useState<'kehadiran' | 'mapel' | 'kokurikuler' | 'ekskul' | 'jamaah' | 'kegiatan_lain'>('kehadiran')
   const [categoryData, setCategoryData] = useState<any>({ summary: { total: 0, hadir: 0, sakit: 0, izin: 0, alpha: 0, lain: 0 }, detail: [] })
+  const [rombels, setRombels] = useState<any[]>([])
+  const [filterRombel, setFilterRombel] = useState('')
   const recapRequestId = useRef(0)
+
+  useEffect(() => {
+    api.get('/rombel').then(r => setRombels(r.data)).catch(() => setRombels([]))
+  }, [])
 
   const reportRange = useCallback(() => {
     if (mode === 'bulanan') {
@@ -163,16 +169,16 @@ export default function RekapAbsensiPage() {
   const loadCategoryRecap = useCallback(async () => {
     try {
       const range = reportRange()
-      const res = await api.get('/rekap-absensi/kategori', { params: { kategori: category, ...range } })
+      const res = await api.get('/rekap-absensi/kategori', { params: { kategori: category, rombel_id: filterRombel, ...range } })
       setCategoryData(res.data)
     } catch { setCategoryData({ summary: { total: 0, hadir: 0, sakit: 0, izin: 0, alpha: 0, lain: 0 }, detail: [] }) }
-  }, [reportRange, category])
+  }, [reportRange, category, filterRombel])
 
   const loadRekap = useCallback(async () => {
     const requestId = ++recapRequestId.current
     try {
       const apiMode = mode === 'harian' ? 'daily' : mode === 'mingguan' ? 'weekly' : mode === 'bulanan' ? 'monthly' : 'semester'
-      const params: Record<string, string> = { tipe: tab, mode: apiMode }
+      const params: Record<string, string> = { tipe: tab, mode: apiMode, rombel_id: filterRombel }
       if (mode === 'harian') params.tanggal = from
       if (mode === 'mingguan') params.mulai = from
       if (mode === 'bulanan') params.bulan = bulan
@@ -185,7 +191,7 @@ export default function RekapAbsensiPage() {
       setBreakdown(res.data.breakdown || { granularity: 'record', items: [] })
       setReportPeriod({ from: res.data.from, to: res.data.to, label: res.data.label || '' })
     } catch { /* empty */ }
-  }, [bulan, tab, mode, from, to, tahunAjaran, semester])
+  }, [bulan, tab, mode, from, to, tahunAjaran, semester, filterRombel])
 
   useEffect(() => { void loadRekap() }, [loadRekap])
   useEffect(() => { if (category !== 'kehadiran') void loadCategoryRecap() }, [category, loadCategoryRecap])
@@ -351,6 +357,12 @@ export default function RekapAbsensiPage() {
           </>}
         </div>
         <select value={mode} onChange={e => setMode(e.target.value as any)} className="px-3 py-2 border rounded-lg text-sm"><option value="harian">Harian</option><option value="mingguan">Mingguan</option><option value="bulanan">Bulanan</option><option value="semester">Semester</option></select>
+        {(category !== 'kehadiran' || tab === 'siswa') && (
+          <select value={filterRombel} onChange={e => setFilterRombel(e.target.value)} className="px-3 py-2 border rounded-lg text-sm">
+            <option value="">Semua Rombel</option>
+            {rombels.map(r => <option key={r.id} value={r.id}>{r.nama}</option>)}
+          </select>
+        )}
         {mode === 'bulanan' && <input type="month" value={bulan} onChange={e => setBulan(e.target.value)} className="px-3 py-2 border rounded-lg text-sm" />}
         {mode === 'harian' && <input type="date" value={from} onChange={e => { setFrom(e.target.value); setTo(e.target.value) }} className="px-3 py-2 border rounded-lg text-sm" />}
         {mode === 'mingguan' && <input type="date" value={from} onChange={e => setFrom(e.target.value)} className="px-3 py-2 border rounded-lg text-sm" />}

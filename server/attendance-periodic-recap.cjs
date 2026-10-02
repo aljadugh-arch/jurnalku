@@ -173,7 +173,7 @@ function scheduleForRange(db, tenantId, from, to) {
   return expanded
 }
 
-function getPeriodicAttendanceRecap(db, tenantId, entityType, range) {
+function getPeriodicAttendanceRecap(db, tenantId, entityType, range, rombelId = '') {
   if (!range || range.error) throw new Error(range?.error || 'Rentang rekap tidak valid')
   if (!['siswa', 'gtk'].includes(entityType)) throw new Error('tipe harus siswa atau gtk')
   const dates = daysBetween(range.from, range.to)
@@ -182,8 +182,8 @@ function getPeriodicAttendanceRecap(db, tenantId, entityType, range) {
   const entities = isStudent
     ? db.prepare(`SELECT s.id,s.nama,s.nis,s.nisn,s.rombel_id,r.nama rombel_nama FROM siswa s
         LEFT JOIN rombel r ON r.id=s.rombel_id AND r.tenant_id=s.tenant_id
-        WHERE s.tenant_id=? AND COALESCE(s.status,'aktif')='aktif'
-        ORDER BY CASE WHEN r.id IS NULL THEN 1 ELSE 0 END,r.nama,s.nama`).all(tenantId)
+        WHERE s.tenant_id=? AND (?='' OR s.rombel_id=?) AND COALESCE(s.status,'aktif')='aktif'
+        ORDER BY CASE WHEN r.id IS NULL THEN 1 ELSE 0 END,r.nama,s.nama`).all(tenantId, rombelId, rombelId)
     : db.prepare(`SELECT g.id,g.nama,g.nip,g.jabatan FROM gtk g WHERE g.tenant_id=?
         AND COALESCE(g.status_kepegawaian,'')!='Nonaktif' ORDER BY g.nama`).all(tenantId)
   const records = isStudent

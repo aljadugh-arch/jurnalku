@@ -4658,6 +4658,46 @@ app.get('/api/jamaah/rekap', authMiddleware, (req, res) => {
   res.json({ mulai: mulai || '', selesai: selesai || '', minimal_hadir: min, rows })
 })
 
+// ==================== JAMAAH ABSENSI STATUS (hadir/izin/sakit/alpha) ====================
+// Input status kehadiran harian jamaah per sesi + tanggal, disimpan di absensi_kegiatan
+// (kegiatan_id => jamaah_sesi.id) sehingga masuk rekap kategori "jamaah".
+app.get('/api/jamaah/sesi', authMiddleware, (req, res) => {
+  res.json(db.prepare('SELECT id,nama,mulai,selesai,minimal_hadir FROM jamaah_sesi WHERE tenant_id=? ORDER BY COALESCE(mulai,created_at) DESC').all(req.tenantId))
+})
+app.post('/api/jamaah/sesi-baru', ADMIN, (req, res) => {
+  const { nama, mulai, selesai } = req.body
+  if (!nama || !String(nama).trim()) return res.status(400).json({ error: 'Nama sesi wajib diisi' })
+  const id = uuidv4()
+  db.prepare('INSERT INTO jamaah_sesi (id,nama,mulai,selesai,minimal_hadir,tenant_id) VALUES (?,?,?,?,?,?)').run(id, String(nama).trim(), mulai || '', selesai || '', 10, req.tenantId)
+  res.json({ id })
+})
+app.get('/api/jamaah/absensi', authMiddleware, (req, res) => {
+  const { sesi_id, tanggal } = req.query
+  if (!sesi_id) return res.json([])
+  const sesi = db.prepare('SELECT id FROM jamaah_sesi WHERE id=? AND tenant_id=?').get(sesi_id, req.tenantId)
+  if (!sesi) return res.json([])
+  let sql = 'SELECT ak.siswa_id,ak.tanggal,ak.status,ak.keterangan FROM absensi_kegiatan ak WHERE ak.kegiatan_id=? AND ak.tenant_id=?'
+  const params = [sesi_id, req.tenantId]
+  if (tanggal) { sql += ' AND ak.tanggal=?'; params.push(tanggal) }
+  res.json(db.prepare(sql).all(...params))
+})
+app.post('/api/jamaah/absensi', ADMIN, (req, res) => {
+  const { sesi_id, tanggal, data } = req.body
+  if (!sesi_id || !tanggal || !Array.isArray(data)) return res.status(400).json({ error: 'sesi_id, tanggal, data[] wajib' })
+  const sesi = db.prepare('SELECT id FROM jamaah_sesi WHERE id=? AND tenant_id=?').get(sesi_id, req.tenantId)
+  if (!sesi) return res.status(400).json({ error: 'Sesi jamaah tidak ditemukan' })
+  const valid = new Set(['hadir', 'izin', 'sakit', 'alpha'])
+  if (data.some(d => !d.siswa_id || !valid.has(d.status))) return res.status(400).json({ error: 'Status harus hadir/izin/sakit/alpha' })
+  let count = 0
+  for (const d of data) {
+    const exists = db.prepare('SELECT id FROM absensi_kegiatan WHERE siswa_id=? AND kegiatan_id=? AND tanggal=? AND tenant_id=?').get(d.siswa_id, sesi_id, tanggal, req.tenantId)
+    if (exists) db.prepare('UPDATE absensi_kegiatan SET status=?, keterangan=? WHERE id=? AND tenant_id=?').run(d.status, d.keterangan || '', exists.id, req.tenantId)
+    else db.prepare('INSERT INTO absensi_kegiatan (id,siswa_id,kegiatan_id,tanggal,status,keterangan,tenant_id) VALUES (?,?,?,?,?,?,?)').run(uuidv4(), d.siswa_id, sesi_id, tanggal, d.status, d.keterangan || '', req.tenantId)
+    count++
+  }
+  res.json({ count })
+})
+
 
 // ==================== JAMAAH REKAP MANUAL ====================
 db.exec(`CREATE TABLE IF NOT EXISTS jamaah_rekap_manual (
@@ -5163,8 +5203,9 @@ app.get('/api/rekap-absensi', authMiddleware, (req, res) => {
   if (!['siswa', 'gtk'].includes(tipe)) return res.status(400).json({ error: 'Parameter tipe harus siswa atau gtk' })
   const range = buildRekapRange(req.query)
   if (range.error) return res.status(400).json({ error: range.error })
+  const rombelId = String(req.query.rombel_id || '').trim()
   try {
-    return res.json(getPeriodicAttendanceRecap(db, req.tenantId, tipe, range))
+    return res.json(getPeriodicAttendanceRecap(db, req.tenantId, tipe, range, rombelId))
   } catch (error) {
     return res.status(400).json({ error: error.message })
   }
@@ -5173,8 +5214,9 @@ app.get('/api/rekap-absensi', authMiddleware, (req, res) => {
 app.get('/api/rekap-absensi/kategori', authMiddleware, (req, res) => {
   const { kategori = 'mapel', mulai, selesai } = req.query
   if (!mulai || !selesai) return res.status(400).json({ error: 'Parameter mulai dan selesai wajib diisi' })
+  const rombelId = String(req.query.rombel_id || '').trim()
   try {
-    return res.json(getCategoryRecap(db, req.tenantId, kategori, mulai, selesai))
+    return res.json(getCategoryRecap(db, req.tenantId, kategori, mulai, selesai, rombelId))
   } catch (error) {
     return res.status(400).json({ error: error.message })
   }
@@ -5222,7 +5264,7 @@ app.get('/api/kalender-kbm/status', authMiddleware, (req, res) => {
   const libur = isHolidayDate(tanggal, req.tenantId)
   const adaEntri = !!db.prepare("SELECT id FROM kalender_kbm WHERE tenant_id=? AND tanggal=? AND jenis IN ('kbm_aktif','ujian','kegiatan_lain') LIMIT 1").get(req.tenantId, tanggal)
   const aktif = !libur && (adaEntri || kbmAutoActiveFor(req.tenantId))
-  res.json({ tanggal, aktif, libur })
+  res.json({ tanggal, aktif: aktif, libur: libur })
 })
 
 app.post('/api/kalender-kbm', ADMIN, (req, res) => {

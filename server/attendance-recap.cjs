@@ -23,7 +23,9 @@ function aggregate(rows) {
   return result
 }
 
-function getCategoryRecap(db, tenantId, category, from, to) {
+function getCategoryRecap(db, tenantId, category, from, to, rombelId = '') {
+  const rombelFilter = ` AND (?= '' OR s.rombel_id = ?)`
+  const rombelParams = [rombelId, rombelId]
   const categories = {
     mapel: {
       available: () => tableExists(db, 'absensi_mapel'),
@@ -32,7 +34,7 @@ function getCategoryRecap(db, tenantId, category, from, to) {
         FROM siswa s LEFT JOIN rombel r ON r.id=s.rombel_id AND r.tenant_id=s.tenant_id
         LEFT JOIN absensi_mapel am ON am.siswa_id=s.id AND am.tenant_id=s.tenant_id AND am.tanggal BETWEEN ? AND ?
         LEFT JOIN mapel m ON m.id=am.mapel_id AND m.tenant_id=am.tenant_id
-        WHERE s.tenant_id=? AND COALESCE(s.status,'aktif')='aktif' GROUP BY s.id,m.id ORDER BY r.nama,s.nama,m.nama`,
+        WHERE s.tenant_id=?${rombelFilter} AND COALESCE(s.status,'aktif')='aktif' GROUP BY s.id,m.id ORDER BY r.nama,s.nama,m.nama`,
     },
     ekskul: {
       available: () => tableExists(db, 'absensi_ekskul'),
@@ -41,7 +43,7 @@ function getCategoryRecap(db, tenantId, category, from, to) {
         FROM siswa s LEFT JOIN rombel r ON r.id=s.rombel_id AND r.tenant_id=s.tenant_id
         LEFT JOIN absensi_ekskul ae ON ae.siswa_id=s.id AND ae.tenant_id=s.tenant_id AND ae.tanggal BETWEEN ? AND ?
         LEFT JOIN ekskul e ON e.id=ae.ekskul_id AND e.tenant_id=ae.tenant_id
-        WHERE s.tenant_id=? AND COALESCE(s.status,'aktif')='aktif' GROUP BY s.id,e.id ORDER BY r.nama,s.nama,e.nama`,
+        WHERE s.tenant_id=?${rombelFilter} AND COALESCE(s.status,'aktif')='aktif' GROUP BY s.id,e.id ORDER BY r.nama,s.nama,e.nama`,
     },
     jamaah: {
       available: () => tableExists(db, 'absensi_kegiatan') && tableExists(db, 'jamaah_sesi'),
@@ -50,7 +52,7 @@ function getCategoryRecap(db, tenantId, category, from, to) {
         FROM siswa s LEFT JOIN rombel r ON r.id=s.rombel_id AND r.tenant_id=s.tenant_id
         LEFT JOIN absensi_kegiatan a ON a.siswa_id=s.id AND a.tenant_id=s.tenant_id AND a.tanggal BETWEEN ? AND ?
         LEFT JOIN jamaah_sesi j ON j.id=a.kegiatan_id AND j.tenant_id=a.tenant_id
-        WHERE s.tenant_id=? AND j.id IS NOT NULL GROUP BY s.id,j.id ORDER BY r.nama,s.nama,j.nama`,
+        WHERE s.tenant_id=?${rombelFilter} AND j.id IS NOT NULL GROUP BY s.id,j.id ORDER BY r.nama,s.nama,j.nama`,
     },
     kokurikuler: {
       available: () => tableExists(db, 'absensi_kegiatan') && tableExists(db, 'kegiatan_khusus'),
@@ -59,7 +61,7 @@ function getCategoryRecap(db, tenantId, category, from, to) {
         FROM siswa s LEFT JOIN rombel r ON r.id=s.rombel_id AND r.tenant_id=s.tenant_id
         LEFT JOIN absensi_kegiatan a ON a.siswa_id=s.id AND a.tenant_id=s.tenant_id AND a.tanggal BETWEEN ? AND ?
         LEFT JOIN kegiatan_khusus k ON k.id=a.kegiatan_id AND k.tenant_id=a.tenant_id AND lower(k.jenis)='kokurikuler'
-        WHERE s.tenant_id=? AND k.id IS NOT NULL GROUP BY s.id,k.id ORDER BY r.nama,s.nama,k.nama`,
+        WHERE s.tenant_id=?${rombelFilter} AND k.id IS NOT NULL GROUP BY s.id,k.id ORDER BY r.nama,s.nama,k.nama`,
     },
     kegiatan_lain: {
       available: () => tableExists(db, 'absensi_kegiatan') && tableExists(db, 'kegiatan_khusus'),
@@ -68,13 +70,13 @@ function getCategoryRecap(db, tenantId, category, from, to) {
         FROM siswa s LEFT JOIN rombel r ON r.id=s.rombel_id AND r.tenant_id=s.tenant_id
         LEFT JOIN absensi_kegiatan a ON a.siswa_id=s.id AND a.tenant_id=s.tenant_id AND a.tanggal BETWEEN ? AND ?
         LEFT JOIN kegiatan_khusus k ON k.id=a.kegiatan_id AND k.tenant_id=a.tenant_id AND lower(k.jenis)<>'kokurikuler'
-        WHERE s.tenant_id=? AND k.id IS NOT NULL GROUP BY s.id,k.id ORDER BY r.nama,s.nama,k.nama`,
+        WHERE s.tenant_id=?${rombelFilter} AND k.id IS NOT NULL GROUP BY s.id,k.id ORDER BY r.nama,s.nama,k.nama`,
     },
   }
   const config = categories[category]
   if (!config) throw new Error('Kategori absensi tidak valid')
   if (!config.available()) return { category, from, to, summary: EMPTY(), detail: [] }
-  const detail = db.prepare(config.detail).all(from, to, tenantId).map(row => {
+  const detail = db.prepare(config.detail).all(from, to, tenantId, ...rombelParams).map(row => {
     const normalized = { ...row }
     for (const key of ['total', ...STATUS_KEYS]) normalized[key] = Number(row[key] || 0)
     return normalized
@@ -86,7 +88,7 @@ function getCategoryRecap(db, tenantId, category, from, to) {
       LEFT JOIN tahfidz_absensi ta ON ta.siswa_id=s.id AND ta.tenant_id=s.tenant_id
       LEFT JOIN tahfidz_pertemuan tp ON tp.id=ta.pertemuan_id AND tp.tenant_id=ta.tenant_id AND tp.tanggal BETWEEN ? AND ?
       LEFT JOIN tahfidz_kelompok tk ON tk.id=tp.kelompok_id AND tk.tenant_id=tp.tenant_id
-      WHERE s.tenant_id=? AND COALESCE(s.status,'aktif')='aktif' GROUP BY s.id,tk.id ORDER BY r.nama,s.nama,tk.nama`).all(from, to, tenantId).map(row => {
+      WHERE s.tenant_id=?${rombelFilter} AND COALESCE(s.status,'aktif')='aktif' GROUP BY s.id,tk.id ORDER BY r.nama,s.nama,tk.nama`).all(from, to, tenantId, ...rombelParams).map(row => {
         const normalized = { ...row }
         for (const key of ['total', ...STATUS_KEYS]) normalized[key] = Number(row[key] || 0)
         return normalized
