@@ -15,6 +15,7 @@ export default function NotifSettingsPage() {
     template_jadwal_guru: '',
     notif_ekskul_guru: false,
     template_ekskul_guru: '',
+    notif_cs_bot: false,
     notif_keuangan_wali: false,
     keuangan_frekuensi: 'bulanan',
     keuangan_hari: '',
@@ -42,6 +43,7 @@ export default function NotifSettingsPage() {
         template_jadwal_guru: d.template_jadwal_guru || '',
         notif_ekskul_guru: !!d.notif_ekskul_guru,
         template_ekskul_guru: d.template_ekskul_guru || '',
+        notif_cs_bot: !!d.notif_cs_bot,
         notif_keuangan_wali: !!d.notif_keuangan_wali,
         keuangan_frekuensi: d.keuangan_frekuensi || 'bulanan',
         keuangan_hari: d.keuangan_hari || '',
@@ -217,6 +219,26 @@ export default function NotifSettingsPage() {
         </div>
         <textarea value={settings.template_ekskul_guru} onChange={e => setSettings({...settings, template_ekskul_guru: e.target.value})} rows={2} className="w-full px-3 py-2 border rounded-lg text-sm" placeholder="{nama_guru}, {ekskul}, {jam_mulai}, {jam_selesai}, {tanggal}, {lembaga}" />
         <button onClick={handleTestEkskulGuru} className="px-4 py-2 bg-violet-600 text-white rounded-lg text-sm">Test Notif Ekskul Sekarang</button>
+      </div>
+
+      {/* Bot CS WhatsApp -> jawab otomatis pesan masuk sesuai peran */}
+      <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100 space-y-4">
+        <div className="flex items-start justify-between mb-2">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 bg-sky-100 rounded-lg flex items-center justify-center">
+              <MessageSquare size={20} className="text-sky-600" />
+            </div>
+            <div>
+              <h3 className="font-semibold text-gray-800">Bot CS WhatsApp</h3>
+              <p className="text-xs text-gray-500 mt-0.5">Jawab otomatis pesan masuk: wali murid lihat tagihan/tabungan/nilai/absensi/jadwal anak, guru lihat jadwal mengajarnya</p>
+            </div>
+          </div>
+          <label className="relative inline-flex items-center cursor-pointer">
+            <input type="checkbox" checked={settings.notif_cs_bot} onChange={e => setSettings({...settings, notif_cs_bot: e.target.checked})} className="sr-only peer" />
+            <div className="w-11 h-6 bg-gray-200 peer-focus:ring-4 peer-focus:ring-sky/20 rounded-full peer peer-checked:after:translate-x-full peer-checked:bg-sky-600 after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all"></div>
+          </label>
+        </div>
+        <p className="text-xs text-gray-500">Kata kunci yang dikenali: <span className="font-mono">menu/halo, jadwal, nilai, tagihan, tabungan, absensi, info</span>. Hanya nomor terdaftar (guru/wali) yang mendapat data pribadi; nomor asing hanya menerima info lembaga.</p>
       </div>
 
       {/* Notif Laporan Keuangan -> Wali Murid */}

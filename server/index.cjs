@@ -5185,6 +5185,7 @@ for (const [name, definition] of [
   ['template_jadwal_guru', "TEXT DEFAULT 'Assalamualaikum {nama_guru}, sekarang waktunya mengajar {mapel} di rombel {rombel}, pukul {jam_mulai}-{jam_selesai} pada {tanggal}. - {lembaga}'"],
   ['notif_ekskul_guru', 'INTEGER DEFAULT 0'],
   ['template_ekskul_guru', "TEXT DEFAULT 'Assalamualaikum {nama_guru}, pengingat jadwal {ekskul} pukul {jam_mulai}-{jam_selesai} pada {tanggal}. - {lembaga}'"],
+  ['notif_cs_bot', 'INTEGER DEFAULT 0'],
   ['tenant_id', 'TEXT'],
   // Laporan keuangan otomatis ke wali murid (tabungan, tagihan & pembayaran).
   ['notif_keuangan_wali', 'INTEGER DEFAULT 0'],
@@ -5199,9 +5200,9 @@ app.get('/api/notif-settings', authMiddleware, (req, res) => {
 })
 
 app.put('/api/notif-settings', ADMIN, (req, res) => {
-  const { absensi_siswa_ke_wali, guru_belum_ceklok, batas_ceklok_guru, template_absensi_wali, template_guru_ceklok, notif_jadwal_guru, template_jadwal_guru, notif_ekskul_guru, template_ekskul_guru, notif_keuangan_wali, keuangan_frekuensi, keuangan_hari, keuangan_jam, template_keuangan_wali } = req.body
-  db.prepare("UPDATE notif_settings SET absensi_siswa_ke_wali=?, guru_belum_ceklok=?, batas_ceklok_guru=?, template_absensi_wali=?, template_guru_ceklok=?, notif_jadwal_guru=?, template_jadwal_guru=?, notif_ekskul_guru=?, template_ekskul_guru=?, notif_keuangan_wali=?, keuangan_frekuensi=?, keuangan_hari=?, keuangan_jam=?, template_keuangan_wali=? WHERE tenant_id=?")
-    .run(absensi_siswa_ke_wali ? 1 : 0, guru_belum_ceklok ? 1 : 0, batas_ceklok_guru || '07:30', template_absensi_wali || '', template_guru_ceklok || '', notif_jadwal_guru ? 1 : 0, template_jadwal_guru || '', notif_ekskul_guru ? 1 : 0, template_ekskul_guru || '', notif_keuangan_wali ? 1 : 0, keuangan_frekuensi || 'bulanan', keuangan_hari || '', keuangan_jam || '08:00', template_keuangan_wali || '', req.tenantId)
+  const { absensi_siswa_ke_wali, guru_belum_ceklok, batas_ceklok_guru, template_absensi_wali, template_guru_ceklok, notif_jadwal_guru, template_jadwal_guru, notif_ekskul_guru, template_ekskul_guru, notif_cs_bot, notif_keuangan_wali, keuangan_frekuensi, keuangan_hari, keuangan_jam, template_keuangan_wali } = req.body
+  db.prepare("UPDATE notif_settings SET absensi_siswa_ke_wali=?, guru_belum_ceklok=?, batas_ceklok_guru=?, template_absensi_wali=?, template_guru_ceklok=?, notif_jadwal_guru=?, template_jadwal_guru=?, notif_ekskul_guru=?, template_ekskul_guru=?, notif_cs_bot=?, notif_keuangan_wali=?, keuangan_frekuensi=?, keuangan_hari=?, keuangan_jam=?, template_keuangan_wali=? WHERE tenant_id=?")
+    .run(absensi_siswa_ke_wali ? 1 : 0, guru_belum_ceklok ? 1 : 0, batas_ceklok_guru || '07:30', template_absensi_wali || '', template_guru_ceklok || '', notif_jadwal_guru ? 1 : 0, template_jadwal_guru || '', notif_ekskul_guru ? 1 : 0, template_ekskul_guru || '', notif_cs_bot ? 1 : 0, notif_keuangan_wali ? 1 : 0, keuangan_frekuensi || 'bulanan', keuangan_hari || '', keuangan_jam || '08:00', template_keuangan_wali || '', req.tenantId)
   res.json({ success: true })
 })
 

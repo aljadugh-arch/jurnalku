@@ -6,6 +6,7 @@ import makeWASocket, { DisconnectReason, useMultiFileAuthState, fetchLatestBaile
 import dotenv from 'dotenv'
 import queue from './wa-queue.cjs'
 import workerUtils from './wa-worker-utils.cjs'
+import csBot from './wa-cs-bot.cjs'
 
 dotenv.config({ path: path.join(import.meta.dirname, '.env') })
 const dbPath = process.env.DB_PATH ? path.resolve(import.meta.dirname, process.env.DB_PATH) : path.join(import.meta.dirname, 'jurnalku.db')
@@ -25,6 +26,27 @@ async function connect(tenantId){
   const version=await resolveVersion()
   const sock=makeWASocket({version,auth:state,logger:log.child({tenantId}),printQRInTerminal:false}); sockets.set(tenantId,sock); session(tenantId,'connecting')
   sock.ev.on('creds.update',saveCreds)
+  sock.ev.on('messages.upsert', async ({messages, type}) => {
+    if (type !== 'notify') return
+    for (const m of messages) {
+      try {
+        if (m.key.fromMe) continue
+        const jid = String(m.key.remoteJid || '')
+        if (jid.endsWith('@g.us') || jid.endsWith('@broadcast') || jid.includes('@status')) continue
+        const phone = jid.split('@')[0]
+        const text = m.message?.conversation || m.message?.extendedTextMessage?.text || m.message?.imageMessage?.caption || ''
+        if (!text) continue
+        // Bot CS hanya aktif bila tenant mengaktifkannya.
+        const conf = db.prepare('SELECT notif_cs_bot FROM notif_settings WHERE tenant_id=?').get(tenantId)
+        if (!conf?.notif_cs_bot) continue
+        const reply = csBot.handleIncoming(db, { tenantId, phone, text })
+        if (reply) {
+          await sock.sendMessage(jid, { text: reply })
+          log.info({ tenantId, phone, inbound: String(text).slice(0, 60) }, 'WA CS bot replied')
+        }
+      } catch (e) { log.error({ tenantId, err: String(e.message || e).slice(0, 300) }, 'WA CS bot inbound failed') }
+    }
+  })
   sock.ev.on('connection.update',({connection,lastDisconnect,qr})=>{
     if(qr)session(tenantId,'qr',{qr}) // QR stored for admin endpoint; never logged
     if(connection==='open'){retryAfter.delete(tenantId);session(tenantId,'connected',{phone:sock.user?.id?.split(':')[0]})}
