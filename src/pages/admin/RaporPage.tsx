@@ -47,6 +47,13 @@ export default function RaporPage() {
   const [bobotOpen, setBobotOpen] = useState(false)
   const [bobotSaving, setBobotSaving] = useState(false)
   const [bobotMsg, setBobotMsg] = useState('')
+  // Kurikulum aktif: 'merdeka' (bawaan, KM) atau 'k13' (klasik).
+  const [kurikulum, setKurikulum] = useState<'merdeka' | 'k13'>('merdeka')
+  // State editor K-13.
+  const [k13Nilai, setK13Nilai] = useState<Record<string, number>>({})
+  const [k13Kkm, setK13Kkm] = useState<Record<string, number>>({})
+  const [k13Sikap, setK13Sikap] = useState<Record<string, string>>({})
+  const [k13Loading, setK13Loading] = useState(false)
 
   useEffect(() => { loadRombel(); loadSettings() }, [foundationTenantId])
   useEffect(() => { setSelectedSiswa(''); setRapor([]); setRingkasan(null); if (selectedRombel) loadSiswa() }, [selectedRombel, foundationTenantId])
@@ -124,6 +131,66 @@ export default function RaporPage() {
       }
     } catch (e) { console.error(e); setMsg('✗ Gagal memuat data rapor') }
     finally { setLoading(false) }
+  }
+
+  // ===== Editor Rapor K-13 =====
+  const loadK13 = async () => {
+    if (!selectedSiswa) { setK13Nilai({}); setK13Kkm({}); setK13Sikap({}); return }
+    setK13Loading(true)
+    try {
+      const { data } = await api.get('/rapor-k13', { params: { siswa_id: selectedSiswa, tahun_ajaran: tahunAjaran, semester } })
+      const nilaiMap: Record<string, number> = {}
+      const kkmMap: Record<string, number> = {}
+      ;(data.mapel || []).forEach((m: any) => { nilaiMap[m.id] = m.nilai ?? 0; kkmMap[m.id] = m.kkm ?? 75 })
+      setK13Nilai(nilaiMap)
+      setK13Kkm(kkmMap)
+      setK13Sikap(data.sikap || {})
+    } catch (e) { console.error(e); setMsg('✗ Gagal memuat rapor K-13') }
+    finally { setK13Loading(false) }
+  }
+  useEffect(() => { if (kurikulum === 'k13') loadK13() }, [selectedSiswa, tahunAjaran, semester, kurikulum])
+
+  const saveK13Nilai = async () => {
+    if (!selectedSiswa) return
+    setSaving(true); setMsg('')
+    try {
+      const data = mapelList.map(m => ({ mapel_id: m.id, nilai: k13Nilai[m.id] ?? 0, kkm: k13Kkm[m.id] ?? 75 }))
+      const { data: r } = await api.put('/rapor-k13/nilai', { siswa_id: selectedSiswa, tahun_ajaran: tahunAjaran, semester, data })
+      setMsg(`✓ ${r.count} nilai tersimpan`)
+    } catch (e: any) { setMsg(`✗ ${e.response?.data?.error || 'Gagal menyimpan nilai K-13'}`) }
+    finally { setSaving(false) }
+  }
+
+  const saveK13Sikap = async () => {
+    if (!selectedSiswa) return
+    setSaving(true); setMsg('')
+    try {
+      await api.put('/rapor-k13/sikap', { siswa_id: selectedSiswa, tahun_ajaran: tahunAjaran, semester, ...k13Sikap })
+      setMsg('✓ Sikap tersimpan')
+    } catch (e: any) { setMsg(`✗ ${e.response?.data?.error || 'Gagal menyimpan sikap'}`) }
+    finally { setSaving(false) }
+  }
+
+  const exportK13Pdf = async () => {
+    if (!selectedSiswa) { setMsg('✗ Pilih siswa terlebih dahulu'); return }
+    try {
+      const response = await api.get('/rapor-k13/pdf', {
+        params: { siswa_id: selectedSiswa, tahun_ajaran: tahunAjaran, semester },
+        responseType: 'blob',
+      })
+      const url = window.URL.createObjectURL(new Blob([response.data], { type: 'application/pdf' }))
+      const link = document.createElement('a')
+      link.href = url
+      link.setAttribute('download', `rapor-k13-${siswa?.nama || selectedSiswa}-${tahunAjaran}-${semester}.pdf`)
+      document.body.appendChild(link); link.click(); link.parentNode?.removeChild(link)
+      window.URL.revokeObjectURL(url)
+      setMsg('✓ Rapor K-13 siap cetak (PDF)')
+    } catch (e: any) {
+      let pesan = 'Gagal download PDF'
+      const data = e.response?.data
+      if (data instanceof Blob) { try { pesan = JSON.parse(await data.text()).error || pesan } catch {} } else if (data?.error) pesan = data.error
+      setMsg(`✗ ${pesan}`)
+    }
   }
   const handleGenerate = async () => {
     if (!selectedRombel) return setMsg('Pilih kelas dulu')
@@ -227,8 +294,15 @@ export default function RaporPage() {
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between print:hidden">
         <div><h1 className="text-2xl font-display font-bold text-gray-800">Rapor Siswa</h1><p className="text-sm text-gray-500 mt-1">Rapor akademik dan perkembangan peserta didik</p></div>
         <div className="flex flex-wrap items-center gap-2">
-          {selectedSiswa && !foundationTenantId && <button onClick={savePelengkap} disabled={saving} className="btn-secondary flex items-center gap-2"><Save className="w-4 h-4" />{saving ? 'Menyimpan...' : 'Simpan Pelengkap'}</button>}
-          {selectedSiswa && !foundationTenantId && (
+          <div className="flex rounded-lg border border-gray-300 overflow-hidden">
+            <button onClick={() => setKurikulum('merdeka')} className={`px-3 py-1.5 text-sm font-medium ${kurikulum === 'merdeka' ? 'bg-primary text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>Kurikulum Merdeka</button>
+            <button onClick={() => setKurikulum('k13')} className={`px-3 py-1.5 text-sm font-medium ${kurikulum === 'k13' ? 'bg-primary text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>K-13</button>
+          </div>
+          {selectedSiswa && !foundationTenantId && kurikulum === 'merdeka' && <button onClick={savePelengkap} disabled={saving} className="btn-secondary flex items-center gap-2"><Save className="w-4 h-4" />{saving ? 'Menyimpan...' : 'Simpan Pelengkap'}</button>}
+          {selectedSiswa && !foundationTenantId && kurikulum === 'k13' && (
+            <button onClick={exportK13Pdf} className="btn-primary flex items-center gap-2"><Printer className="w-4 h-4" />Cetak K-13</button>
+          )}
+          {selectedSiswa && !foundationTenantId && kurikulum === 'merdeka' && (
             <div className="relative">
               <button onClick={() => setCetakOpen(!cetakOpen)} aria-haspopup="menu" aria-expanded={cetakOpen} className="btn-primary flex items-center gap-2"><Printer className="w-4 h-4" />Cetak</button>
               {cetakOpen && (
@@ -258,13 +332,57 @@ export default function RaporPage() {
           <Select label="Siswa" value={selectedSiswa} onChange={setSelectedSiswa} options={siswaList.map(s => ({ value: s.id, label: s.nama }))} placeholder="Pilih Siswa" disabled={!selectedRombel} />
           <Field label="Tahun Ajaran"><input value={tahunAjaran} onChange={e => setTahunAjaran(e.target.value)} className="input" /></Field>
           <Select label="Semester" value={semester} onChange={setSemester} options={[{ value: 'ganjil', label: 'Ganjil' }, { value: 'genap', label: 'Genap' }]} />
-          <Field label="Jenis Rapor"><select value={jenis} onChange={e => setJenis(e.target.value as any)} className="input"><option value="rapor_sts">Rapor STS (Tengah Semester)</option><option value="rapor_sas">Rapor SAS (Akhir Semester)</option></select></Field>
-          <div className="flex items-end"><button onClick={handleGenerate} disabled={loading || !selectedRombel || !!foundationTenantId} className="btn-primary w-full flex justify-center items-center gap-2"><Zap className="w-4 h-4" />{loading ? 'Memproses...' : 'Generate'}</button></div>
+          {kurikulum === 'merdeka' && <Field label="Jenis Rapor"><select value={jenis} onChange={e => setJenis(e.target.value as any)} className="input"><option value="rapor_sts">Rapor STS (Tengah Semester)</option><option value="rapor_sas">Rapor SAS (Akhir Semester)</option></select></Field>}
+          {kurikulum === 'merdeka' && <div className="flex items-end"><button onClick={handleGenerate} disabled={loading || !selectedRombel || !!foundationTenantId} className="btn-primary w-full flex justify-center items-center gap-2"><Zap className="w-4 h-4" />{loading ? 'Memproses...' : 'Generate'}</button></div>}
         </div>
         {msg && <p className={`mt-3 text-sm ${msg.startsWith('✓') ? 'text-green-600' : 'text-red-600'}`}>{msg}</p>}
       </div>
 
-      {!foundationTenantId && (
+      {kurikulum === 'k13' && selectedSiswa && !foundationTenantId && (
+        <div className="card p-5 print:hidden space-y-6">
+          <h2 className="font-semibold text-gray-800">Editor Rapor K-13</h2>
+          {k13Loading ? <p className="text-sm text-gray-400">Memuat nilai...</p> : (
+            <>
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <h3 className="text-sm font-medium text-gray-700">Nilai Akhir per Mata Pelajaran</h3>
+                  <button onClick={saveK13Nilai} disabled={saving || mapelList.length === 0} className="btn-primary flex items-center gap-2 text-sm"><Save className="w-4 h-4" />{saving ? 'Menyimpan...' : 'Simpan Nilai'}</button>
+                </div>
+                {mapelList.length === 0 ? <p className="text-sm text-gray-400">Belum ada mata pelajaran. Tambahkan di menu Mapel.</p> : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead><tr className="bg-gray-100"><Th align="left">Mata Pelajaran</Th><Th>Nilai (0-100)</Th><Th>KKM</Th><Th>Predikat</Th></tr></thead>
+                      <tbody>{mapelList.map(m => <tr key={m.id} className="border-t">
+                        <Td align="left">{m.nama}</Td>
+                        <Td><input type="number" min={0} max={100} value={k13Nilai[m.id] ?? 0} onChange={e => setK13Nilai({ ...k13Nilai, [m.id]: Number(e.target.value) || 0 })} className="input w-20 text-center" /></Td>
+                        <Td><input type="number" min={0} max={100} value={k13Kkm[m.id] ?? 75} onChange={e => setK13Kkm({ ...k13Kkm, [m.id]: Number(e.target.value) || 0 })} className="input w-20 text-center" /></Td>
+                        <Td bold>{k13Predikat(k13Nilai[m.id] ?? 0)}</Td>
+                      </tr>)}</tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <h3 className="text-sm font-medium text-gray-700">Sikap Wali Kelas & Catatan</h3>
+                  <button onClick={saveK13Sikap} disabled={saving} className="btn-secondary flex items-center gap-2 text-sm"><Save className="w-4 h-4" />Simpan Sikap</button>
+                </div>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                  {[['kelakuan', 'Kelakuan'], ['kerajinan', 'Kerajinan'], ['kerapian', 'Kerapian'], ['kebersihan', 'Kebersihan'], ['kedisiplinan', 'Kedisiplinan'], ['ketaatan', 'Ketaatan']].map(([key, label]) => (
+                    <Field key={key} label={label}><select value={k13Sikap[key] || ''} onChange={e => setK13Sikap({ ...k13Sikap, [key]: e.target.value })} className="input"><option value="">-</option>{['A', 'B', 'C', 'D', 'E'].map(g => <option key={g} value={g}>{g}</option>)}</select></Field>
+                  ))}
+                </div>
+                <div className="grid gap-3 mt-3">
+                  <TextArea label="Catatan Wali Kelas" value={k13Sikap.catatan || ''} onChange={(v: string) => setK13Sikap({ ...k13Sikap, catatan: v })} />
+                  <Field label="Ekstrakurikuler (mis. Pramuka: A, Drumband: B)"><input value={k13Sikap.ekstrakurikuler || ''} onChange={e => setK13Sikap({ ...k13Sikap, ekstrakurikuler: e.target.value })} className="input" placeholder="Pramuka: A, Drumband: B" /></Field>
+                </div>
+              </div>
+            </>
+          )}
+        </div>
+      )}
+
+      {kurikulum === 'merdeka' && !foundationTenantId && (
         <div className="card p-5 print:hidden">
           <button type="button" onClick={() => setBobotOpen(!bobotOpen)} className="flex w-full items-center justify-between text-left">
             <span className="font-semibold text-gray-800">Bobot Nilai Rapor</span>
@@ -312,7 +430,7 @@ export default function RaporPage() {
         </div>
       )}
 
-      {selectedSiswa && !foundationTenantId && (
+      {kurikulum === 'merdeka' && selectedSiswa && !foundationTenantId && (
         <div className="card p-5 print:hidden space-y-4">
           <h2 className="font-semibold text-gray-800">Data Pelengkap Rapor</h2>
           <div className="grid sm:grid-cols-2 gap-4">
@@ -330,10 +448,11 @@ export default function RaporPage() {
         </div>
       )}
 
-      {!selectedSiswa && <div className="card py-16 text-center print:hidden"><FileText className="w-12 h-12 text-gray-300 mx-auto mb-3" /><p className="text-gray-500">Pilih kelas dan siswa untuk melihat rapor.</p></div>}
-      {selectedSiswa && !loading && rapor.length === 0 && <div className="card py-12 text-center print:hidden"><p className="text-gray-500">Nilai rapor belum tersedia. Klik Generate setelah nilai harian dan asesmen diisi. Cover dan identitas siswa tetap bisa dicetak lewat menu Cetak.</p></div>}
+      {kurikulum === 'merdeka' && !selectedSiswa && <div className="card py-16 text-center print:hidden"><FileText className="w-12 h-12 text-gray-300 mx-auto mb-3" /><p className="text-gray-500">Pilih kelas dan siswa untuk melihat rapor.</p></div>}
+      {kurikulum === 'merdeka' && selectedSiswa && !loading && rapor.length === 0 && <div className="card py-12 text-center print:hidden"><p className="text-gray-500">Nilai rapor belum tersedia. Klik Generate setelah nilai harian dan asesmen diisi. Cover dan identitas siswa tetap bisa dicetak lewat menu Cetak.</p></div>}
+      {kurikulum === 'k13' && !selectedSiswa && <div className="card py-16 text-center print:hidden"><FileText className="w-12 h-12 text-gray-300 mx-auto mb-3" /><p className="text-gray-500">Pilih kelas dan siswa, lalu isi nilai akhir per mapel dan sikap. Klik "Cetak K-13" untuk unduh PDF.</p></div>}
 
-      {selectedSiswa && tampilPratinjau && <div id="rapor-print" className="space-y-6 print:space-y-0">
+      {kurikulum === 'merdeka' && selectedSiswa && tampilPratinjau && <div id="rapor-print" className="space-y-6 print:space-y-0">
         {tampilCover && <section className="report-page relative bg-white rounded-xl shadow-sm border-2 border-black p-6 sm:p-12 text-center flex flex-col items-center justify-center print:p-0">
           <div className="absolute inset-2 border border-black pointer-events-none" />
           {settings.logo && <img src={settings.logo} alt="Logo lembaga" className="w-28 h-28 object-contain mb-8" onError={e => { (e.target as HTMLImageElement).style.display = 'none' }} />}
@@ -400,6 +519,14 @@ function descriptionFor(row: any) {
   if (score >= 80) return `Menguasai kompetensi ${row.mapel_nama || ''} dengan baik.`
   if (score >= 70) return `Cukup menguasai kompetensi dan perlu penguatan pada beberapa materi.`
   return `Perlu bimbingan dan latihan lanjutan untuk meningkatkan penguasaan kompetensi.`
+}
+function k13Predikat(nilai: number) {
+  const n = Number(nilai) || 0
+  if (n >= 90) return 'A'
+  if (n >= 80) return 'B'
+  if (n >= 70) return 'C'
+  if (n >= 60) return 'D'
+  return 'E'
 }
 function Field({ label, children }: any) { return <div><label className="block text-sm font-medium text-gray-700 mb-1">{label}</label>{children}</div> }
 // Bobot disimpan sebagai pecahan 0..1; ditampilkan sebagai persen agar mudah diisi.
