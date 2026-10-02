@@ -83,6 +83,7 @@ export const adminMenuItems: MenuItem[] = [
   { label: 'REST API Developer', icon: <Code2 size={20} />, path: '/admin/developer-api' },
   { label: 'Manajemen Pengguna', icon: <UserCheck size={20} />, path: '/admin/users' },
   { label: 'Manajemen Lembaga', icon: <Globe size={20} />, path: '/admin/tenants' },
+  { label: 'Integrasi Se-Yayasan', icon: <Users size={20} />, path: '/admin/foundation-sync' },
   { label: 'Backup & Restore', icon: <DatabaseBackup size={20} />, path: '/admin/backup-restore' },
   { label: 'Kelola Website', icon: <Globe size={20} />, path: '/admin/website-lembaga', external: 'https://fazacloud.my.id' },
   {

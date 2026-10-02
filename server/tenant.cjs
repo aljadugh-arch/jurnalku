@@ -438,6 +438,7 @@ function registerTenantRoutes(app, db, authMiddleware, uuidv4, SUPER) {
     if (!foundationId) return res.json([])
     if (!['admin', 'super_admin', 'operator', 'kepala'].includes(req.user.role)) return res.status(403).json({ error: 'Forbidden' })
     const tenants = db.prepare('SELECT id, slug, nama, domain_custom, aktif FROM tenants WHERE foundation_id=? AND aktif=1 ORDER BY nama').all(foundationId)
+      .map(t => ({ ...t, is_self: t.id === req.tenantId }))
     res.json(tenants)
   })
 
