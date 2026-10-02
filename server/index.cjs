@@ -8168,7 +8168,7 @@ app.get('/api/rapor-k13/ledger/pdf', authMiddleware, async (req, res) => {
   if (!rombel) return res.status(404).json({ error: 'Rombel tidak ditemukan' })
   const settings = getTenantSettings(db, req.tenantId) || {}
   const ledger = getK13Ledger(db, req.tenantId, { rombelId: rombel_id, semester, tahunAjaran: tahun_ajaran, jenisKelamin })
-  const pdf = await createK13LedgerPdf({ ledger, settings, rombelNama: rombel.nama, semester, tahunAjaran })
+  const pdf = await createK13LedgerPdf({ ledger, settings, rombelNama: rombel.nama, semester, tahunAjaran: tahun_ajaran })
   res.setHeader('Content-Type', 'application/pdf')
   res.setHeader('Content-Disposition', 'attachment; filename="legger-k13.pdf"')
   res.send(pdf)
