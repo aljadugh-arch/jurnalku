@@ -417,11 +417,23 @@ export default function RaporPage() {
       <style>{`@media print { @page { size: A4 portrait; margin: 0; } body { print-color-adjust: exact; -webkit-print-color-adjust: exact; } #rapor-print { margin: 0 !important; } .report-page { box-sizing: border-box; width: 210mm; height: 297mm; min-height: 297mm; margin: 0 !important; padding: 14mm !important; overflow: hidden; box-shadow: none !important; border: 0 !important; border-radius: 0 !important; break-after: page; page-break-after: always; } .report-page:last-child { break-after: auto; page-break-after: auto; } }`}</style>
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between print:hidden">
         <div><h1 className="text-2xl font-display font-bold text-gray-800">Rapor Siswa</h1><p className="text-sm text-gray-500 mt-1">Rapor akademik dan perkembangan peserta didik</p></div>
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="flex rounded-lg border border-gray-300 overflow-hidden">
-            <button onClick={() => setKurikulum('merdeka')} className={`px-3 py-1.5 text-sm font-medium ${kurikulum === 'merdeka' ? 'bg-primary text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>Kurikulum Merdeka</button>
-            <button onClick={() => setKurikulum('k13')} className={`px-3 py-1.5 text-sm font-medium ${kurikulum === 'k13' ? 'bg-primary text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>K-13</button>
+        <div className="flex flex-wrap items-end gap-3">
+          <div>
+            <span className="block text-[11px] font-medium text-gray-500 mb-1">Kurikulum</span>
+            <div className="flex rounded-lg border border-gray-300 overflow-hidden">
+              <button onClick={() => setKurikulum('merdeka')} className={`px-3 py-1.5 text-sm font-medium whitespace-nowrap ${kurikulum === 'merdeka' ? 'bg-primary text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>Kurikulum Merdeka</button>
+              <button onClick={() => setKurikulum('k13')} className={`px-3 py-1.5 text-sm font-medium whitespace-nowrap ${kurikulum === 'k13' ? 'bg-primary text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>K-13</button>
+            </div>
           </div>
+          {!foundationTenantId && kurikulum === 'merdeka' && (
+            <div>
+              <span className="block text-[11px] font-medium text-gray-500 mb-1">Layout Cetak</span>
+              <div className="flex rounded-lg border border-gray-300 overflow-hidden" title="Layout cetak rapor Kurikulum Merdeka">
+                <button onClick={() => setRaporFormat('rdm')} className={`px-3 py-1.5 text-sm font-medium whitespace-nowrap ${raporFormat === 'rdm' ? 'bg-primary text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>Layout RDM</button>
+                <button onClick={() => setRaporFormat('mtsplus')} className={`px-3 py-1.5 text-sm font-medium whitespace-nowrap ${raporFormat === 'mtsplus' ? 'bg-primary text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>Layout MTs Plus</button>
+              </div>
+            </div>
+          )}
           {selectedSiswa && !foundationTenantId && kurikulum === 'merdeka' && <button onClick={savePelengkap} disabled={saving} className="btn-secondary flex items-center gap-2"><Save className="w-4 h-4" />{saving ? 'Menyimpan...' : 'Simpan Pelengkap'}</button>}
           {selectedSiswa && !foundationTenantId && kurikulum === 'k13' && (
             <>
@@ -446,30 +458,17 @@ export default function RaporPage() {
               </div>
             </>
           )}
-          {!foundationTenantId && kurikulum === 'merdeka' && (
-            <div className="flex rounded-lg border border-gray-300 overflow-hidden" title="Layout cetak rapor">
-              <button onClick={() => setRaporFormat('rdm')} className={`px-2.5 py-1.5 text-xs font-medium ${raporFormat === 'rdm' ? 'bg-primary text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>Layout RDM</button>
-              <button onClick={() => setRaporFormat('mtsplus')} className={`px-2.5 py-1.5 text-xs font-medium ${raporFormat === 'mtsplus' ? 'bg-primary text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>Layout MTs Plus</button>
-            </div>
-          )}
           {selectedRombel && !foundationTenantId && kurikulum === 'merdeka' && raporFormat === 'mtsplus' && (
-            <button onClick={() => void exportPdfBulk('lengkap')} disabled={!selectedRombel} title="Cetak seluruh siswa di kelas ini jadi satu PDF" className="btn-secondary flex items-center gap-2"><Printer className="w-4 h-4" />Cetak Massal (Kelas)</button>
+            <button onClick={() => void exportPdfBulk('lengkap')} disabled={!selectedRombel} title="Cetak seluruh siswa di kelas ini jadi satu PDF" className="btn-secondary flex items-center gap-2 whitespace-nowrap"><Printer className="w-4 h-4" />Cetak Massal (Kelas)</button>
           )}
           {!foundationTenantId && kurikulum === 'merdeka' && raporFormat === 'mtsplus' && (
-            <button onClick={() => void exportPdfBulkAll('lengkap')} title="Cetak seluruh siswa semua kelas jadi satu PDF" className="btn-secondary flex items-center gap-2"><Printer className="w-4 h-4" />Cetak Semua Kelas</button>
+            <button onClick={() => void exportPdfBulkAll('lengkap')} title="Cetak seluruh siswa semua kelas jadi satu PDF" className="btn-secondary flex items-center gap-2 whitespace-nowrap"><Printer className="w-4 h-4" />Cetak Semua Kelas</button>
           )}
           {selectedSiswa && !foundationTenantId && kurikulum === 'merdeka' && (
             <div className="relative">
               <button onClick={() => setCetakOpen(!cetakOpen)} aria-haspopup="menu" aria-expanded={cetakOpen} className="btn-primary flex items-center gap-2"><Printer className="w-4 h-4" />Cetak</button>
               {cetakOpen && (
                 <div role="menu" className="absolute right-0 z-20 mt-2 w-64 overflow-hidden rounded-lg border border-gray-200 bg-white shadow-lg">
-                  <div className="px-3 py-2 border-b border-gray-100">
-                    <p className="text-[11px] font-medium text-gray-500 mb-1">Layout cetak</p>
-                    <div className="flex rounded-lg border border-gray-300 overflow-hidden">
-                      <button onClick={() => setRaporFormat('rdm')} className={`flex-1 px-2 py-1 text-xs font-medium ${raporFormat === 'rdm' ? 'bg-primary text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>RDM</button>
-                      <button onClick={() => setRaporFormat('mtsplus')} className={`flex-1 px-2 py-1 text-xs font-medium ${raporFormat === 'mtsplus' ? 'bg-primary text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>MTs Plus</button>
-                    </div>
-                  </div>
                   {CETAK_MENU.map(item => (
                     <button
                       key={item.bagian}
