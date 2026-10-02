@@ -587,6 +587,88 @@ function registerTenantRoutes(app, db, authMiddleware, uuidv4, SUPER) {
     const nilai = db.prepare(sql).all(...params)
     res.json(nilai)
   })
+
+  // Cross-tenant: keuangan (tagihan + saldo tabungan) se-yayasan (read-only).
+  app.get('/api/foundation/keuangan', authMiddleware, (req, res) => {
+    const userFoundationId = db.prepare('SELECT foundation_id FROM tenants WHERE id = ?').get(req.tenantId)?.foundation_id
+    if (!userFoundationId) return res.status(403).json({ error: 'Tenant tidak tergabung dalam yayasan' })
+    if (!['admin', 'super_admin', 'operator', 'kepala', 'bendahara'].includes(req.user.role)) return res.status(403).json({ error: 'Forbidden' })
+
+    const targetTenants = db.prepare('SELECT id FROM tenants WHERE foundation_id = ? AND aktif = 1').all(userFoundationId).map(t => t.id)
+    if (!targetTenants.length) return res.json({ tagihan: [], saldo: [] })
+    const placeholders = targetTenants.map(() => '?').join(',')
+
+    const tagihan = db.prepare(`
+      SELECT t.*, s.nama siswa_nama, s.nis, j.nama jenis_nama, tn.nama tenant_nama
+      FROM tagihan t
+      JOIN siswa s ON t.siswa_id = s.id AND s.tenant_id = t.tenant_id
+      JOIN jenis_tagihan j ON j.id = t.jenis_tagihan_id AND j.tenant_id = t.tenant_id
+      JOIN tenants tn ON t.tenant_id = tn.id
+      WHERE t.tenant_id IN (${placeholders}) AND t.status = 'belum_bayar'
+      ORDER BY tn.nama, s.nama, t.tahun DESC, t.bulan DESC
+    `).all(...targetTenants)
+
+    const saldo = db.prepare(`
+      SELECT s.nama siswa_nama, s.nis, tn.nama tenant_nama,
+        (SELECT saldo_akhir FROM tabungan tb WHERE tb.siswa_id = s.id AND tb.tenant_id = s.tenant_id ORDER BY tb.created_at DESC LIMIT 1) saldo
+      FROM siswa s JOIN tenants tn ON s.tenant_id = tn.id
+      WHERE s.tenant_id IN (${placeholders}) AND COALESCE(s.status,'aktif')='aktif'
+      ORDER BY tn.nama, s.nama
+    `).all(...targetTenants)
+
+    res.json({ tagihan, saldo })
+  })
+
+  // Sinkron pilihan: tarik siswa dari lembaga lain se-yayasan ke lembaga ini,
+  // tanpa perlu input ulang satu per satu. Rombel dipetakan berdasarkan nama
+  // (dibuat bila belum ada). NIS/NIK yang bentrok di lembaga tujuan dilewati.
+  app.post('/api/foundation/sync/siswa', authMiddleware, (req, res) => {
+    const userFoundationId = db.prepare('SELECT foundation_id FROM tenants WHERE id = ?').get(req.tenantId)?.foundation_id
+    if (!userFoundationId) return res.status(403).json({ error: 'Tenant tidak tergabung dalam yayasan' })
+    if (!['admin', 'super_admin'].includes(req.user.role)) return res.status(403).json({ error: 'Hanya admin yang boleh sinkron siswa' })
+
+    const sourceTenantId = String(req.body?.source_tenant_id || '')
+    const siswaIds = Array.isArray(req.body?.siswa_ids) ? req.body.siswa_ids.map(String) : []
+    if (!sourceTenantId || !siswaIds.length) return res.status(400).json({ error: 'source_tenant_id dan siswa_ids wajib' })
+    const foundationTenantIds = db.prepare('SELECT id FROM tenants WHERE foundation_id = ? AND aktif = 1').all(userFoundationId).map(t => t.id)
+    if (!foundationTenantIds.includes(sourceTenantId)) return res.status(403).json({ error: 'Tenant sumber tidak dalam yayasan yang sama' })
+
+    const target = req.tenantId
+    const getRombel = (nama, tingkat, tahunAjaran) => {
+      let r = db.prepare('SELECT id FROM rombel WHERE tenant_id=? AND nama=? LIMIT 1').get(target, nama)
+      if (r) return r.id
+      const id = db.prepare("SELECT lower(hex(randomblob(16))) AS id").get().id
+      db.prepare('INSERT INTO rombel (id, nama, tingkat, tahun_ajaran, tenant_id) VALUES (?,?,?,?,?)').run(id, nama, tingkat || '', tahunAjaran || '2026/2027', target)
+      return id
+    }
+    const rombelMap = new Map()
+    for (const r of db.prepare('SELECT id, nama, tingkat, tahun_ajaran FROM rombel WHERE tenant_id=?').all(sourceTenantId)) {
+      rombelMap.set(r.id, getRombel(r.nama, r.tingkat, r.tahun_ajaran))
+    }
+
+    const cols = db.prepare('PRAGMA table_info(siswa)').all().map(c => c.name).filter(c => !['id', 'created_at'].includes(c))
+    const sourceRows = db.prepare(`SELECT * FROM siswa WHERE tenant_id=? AND id IN (${siswaIds.map(() => '?').join(',')})`).all(sourceTenantId, ...siswaIds)
+    if (!sourceRows.length) return res.status(404).json({ error: 'Tidak ada siswa yang cocok di tenant sumber' })
+
+    const nisExists = db.prepare('SELECT 1 FROM siswa WHERE tenant_id=? AND nis=?')
+    const nikExists = db.prepare('SELECT 1 FROM siswa WHERE tenant_id=? AND nik=? AND nik IS NOT NULL AND nik != \'\'')
+    const insert = db.prepare(`INSERT INTO siswa (${['id', ...cols].join(',')}) VALUES (${['id', ...cols].map(() => '?').join(',')})`)
+
+    let imported = 0, skippedNis = 0, skippedNik = 0
+    const run = db.transaction(() => {
+      for (const row of sourceRows) {
+        if (row.nis && nisExists.get(target, row.nis)) { skippedNis++; continue }
+        if (row.nik && nikExists.get(target, row.nik)) { skippedNik++; continue }
+        const id = db.prepare("SELECT lower(hex(randomblob(16))) AS id").get().id
+        const values = [id, ...cols.map(c => c === 'tenant_id' ? target : c === 'rombel_id' ? (row.rombel_id ? (rombelMap.get(row.rombel_id) || null) : null) : row[c])]
+        insert.run(...values)
+        imported++
+      }
+      return { imported, skippedNis, skippedNik }
+    })
+    const result = run()
+    res.json({ success: true, ...result })
+  })
 }
 
 module.exports = { setupTenantTables, tenantMiddleware, tenantQuery, registerTenantRoutes, BASE_DOMAIN, BASE_DOMAINS }
