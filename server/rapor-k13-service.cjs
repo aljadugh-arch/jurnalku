@@ -140,4 +140,28 @@ function getPeringkatK13(db, tenantId, { rombelId, semester, tahunAjaran }) {
   return { rows: rows.map(r => ({ ...r, rank: rankBy.get(r.id) || 0 })), total }
 }
 
-module.exports = { terbilang, nilaiKeAbjad, hitungPeringkat, getK13RaporData, getPeringkatK13, semesterRange, predikatK13, normalizeK13Nilai, emptyK13 }
+// Kumpulan data legger K-13 (grid nilai per siswa per mapel) untuk satu rombel.
+function getK13Ledger(db, tenantId, { rombelId, semester, tahunAjaran, jenisKelamin = '' }) {
+  const mapel = db.prepare(`SELECT DISTINCT m.id, m.nama FROM jadwal j JOIN mapel m ON m.id=j.mapel_id
+    WHERE j.rombel_id=? AND j.tenant_id=? AND j.jenis_kegiatan='mapel' ORDER BY m.nama`).all(rombelId, tenantId)
+  const siswa = db.prepare(`SELECT s.id, s.nama, s.nis, s.jenis_kelamin FROM siswa s
+    WHERE s.rombel_id=? AND s.tenant_id=? AND COALESCE(s.status,'aktif')='aktif'
+    AND (?='' OR UPPER(s.jenis_kelamin)=?)
+    ORDER BY s.nama`).all(rombelId, tenantId, jenisKelamin.toUpperCase(), jenisKelamin.toUpperCase())
+  const nilaiRows = db.prepare(`SELECT siswa_id, mapel_id, nilai FROM rapor_k13 WHERE tenant_id=? AND tahun_ajaran=? AND semester=?`)
+    .all(tenantId, tahunAjaran, semester)
+  const nilaiMap = new Map()
+  for (const n of nilaiRows) nilaiMap.set(`${n.siswa_id}\0${n.mapel_id}`, Number(n.nilai) || 0)
+  const rows = siswa.map(s => {
+    const nilai = {}
+    let total = 0
+    for (const m of mapel) { const v = nilaiMap.get(`${s.id}\0${m.id}`) || 0; nilai[m.id] = v; total += v }
+    const rata = mapel.length ? total / mapel.length : 0
+    return { ...s, nilai, total, rata }
+  })
+  rows.sort((a, b) => b.rata - a.rata)
+  rows.forEach((r, i) => { r.rank = i + 1 })
+  return { mapel, rows, jmlSiswa: rows.length }
+}
+
+module.exports = { terbilang, nilaiKeAbjad, hitungPeringkat, getK13RaporData, getPeringkatK13, getK13Ledger, semesterRange, predikatK13, normalizeK13Nilai, emptyK13 }

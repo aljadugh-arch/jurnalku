@@ -39,8 +39,8 @@ const { buatPemeriksaOrigin } = require('./cors-origin.cjs')
 const { migrateRaporUniqueIndex } = require('./rapor-unique-index.cjs')
 const { createRaporSiswaPdf, normalizeBagian: normalizeBagianRapor, BAGIAN_VALID: BAGIAN_RAPOR_VALID } = require('./rapor-siswa-pdf-service.cjs')
 const { createKtsPdf, CARD_W: KTS_W, CARD_H: KTS_H } = require('./kts-pdf-service.cjs')
-const { createRaporK13Pdf } = require('./rapor-k13-pdf-service.cjs')
-const { getK13RaporData, getPeringkatK13, normalizeK13Nilai } = require('./rapor-k13-service.cjs')
+const { createRaporK13Pdf, createK13LedgerPdf } = require('./rapor-k13-pdf-service.cjs')
+const { getK13RaporData, getPeringkatK13, getK13Ledger, normalizeK13Nilai } = require('./rapor-k13-service.cjs')
 const { getCategoryRecap } = require('./attendance-recap.cjs')
 const { buildRekapRange, getPeriodicAttendanceRecap, deduplicateAttendance } = require('./attendance-periodic-recap.cjs')
 const { isDriveFolderUrl } = require('./library-config.cjs')
@@ -7991,6 +7991,7 @@ app.get('/api/rapor-k13/pdf', authMiddleware, async (req, res) => {
   const { siswa_id, rombel_id } = req.query
   const semester = String(req.query.semester || cp.semester)
   const tahun_ajaran = String(req.query.tahun_ajaran || cp.tahun_ajaran)
+  const jenisKelamin = String(req.query.jenis_kelamin || '').trim().toUpperCase()
   const settings = getTenantSettings(db, req.tenantId) || {}
   const list = []
   if (siswa_id) {
@@ -8001,7 +8002,9 @@ app.get('/api/rapor-k13/pdf', authMiddleware, async (req, res) => {
     const rank = peringkat.rows.find(r => r.id === siswa_id)
     list.push({ ...data, rank: rank?.rank || 0, totalSiswa: peringkat.total })
   } else if (rombel_id) {
-    const siswaRows = db.prepare("SELECT id, rombel_id FROM siswa WHERE rombel_id=? AND tenant_id=? AND COALESCE(status,'aktif')='aktif' ORDER BY nama").all(rombel_id, req.tenantId)
+    const jkWhere = jenisKelamin ? " AND UPPER(s.jenis_kelamin)=?" : ''
+    const siswaRows = db.prepare(`SELECT id, rombel_id FROM siswa WHERE rombel_id=? AND tenant_id=? AND COALESCE(status,'aktif')='aktif'${jkWhere} ORDER BY nama`)
+      .all(...(jenisKelamin ? [rombel_id, req.tenantId, jenisKelamin] : [rombel_id, req.tenantId]))
     const peringkat = getPeringkatK13(db, req.tenantId, { rombelId: rombel_id, semester, tahunAjaran: tahun_ajaran })
     for (const s of siswaRows) {
       const data = getK13RaporData(db, req.tenantId, { siswaId: s.id, semester, tahunAjaran: tahun_ajaran })
@@ -8013,6 +8016,23 @@ app.get('/api/rapor-k13/pdf', authMiddleware, async (req, res) => {
   const pdf = await createRaporK13Pdf({ studentList: list, settings, uploadDir: UPLOAD_DIR })
   res.setHeader('Content-Type', 'application/pdf')
   res.setHeader('Content-Disposition', 'attachment; filename="rapor-k13.pdf"')
+  res.send(pdf)
+})
+
+app.get('/api/rapor-k13/ledger/pdf', authMiddleware, async (req, res) => {
+  const cp = k13CurrentPeriod()
+  const rombel_id = String(req.query.rombel_id || '')
+  if (!rombel_id) return res.status(400).json({ error: 'rombel_id wajib' })
+  const semester = String(req.query.semester || cp.semester)
+  const tahun_ajaran = String(req.query.tahun_ajaran || cp.tahun_ajaran)
+  const jenisKelamin = String(req.query.jenis_kelamin || '').trim()
+  const rombel = db.prepare('SELECT id, nama FROM rombel WHERE id=?').get(rombel_id)
+  if (!rombel) return res.status(404).json({ error: 'Rombel tidak ditemukan' })
+  const settings = getTenantSettings(db, req.tenantId) || {}
+  const ledger = getK13Ledger(db, req.tenantId, { rombelId: rombel_id, semester, tahunAjaran: tahun_ajaran, jenisKelamin })
+  const pdf = await createK13LedgerPdf({ ledger, settings, rombelNama: rombel.nama, semester, tahunAjaran })
+  res.setHeader('Content-Type', 'application/pdf')
+  res.setHeader('Content-Disposition', 'attachment; filename="legger-k13.pdf"')
   res.send(pdf)
 })
 

@@ -54,6 +54,7 @@ export default function RaporPage() {
   const [k13Kkm, setK13Kkm] = useState<Record<string, number>>({})
   const [k13Sikap, setK13Sikap] = useState<Record<string, string>>({})
   const [k13Loading, setK13Loading] = useState(false)
+  const [k13Jk, setK13Jk] = useState('')
 
   useEffect(() => { loadRombel(); loadSettings() }, [foundationTenantId])
   useEffect(() => { setSelectedSiswa(''); setRapor([]); setRingkasan(null); if (selectedRombel) loadSiswa() }, [selectedRombel, foundationTenantId])
@@ -192,6 +193,32 @@ export default function RaporPage() {
       setMsg(`✗ ${pesan}`)
     }
   }
+
+  const downloadBlob = (blob: Blob, filename: string) => {
+    const url = window.URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url; link.setAttribute('download', filename)
+    document.body.appendChild(link); link.click(); link.parentNode?.removeChild(link)
+    window.URL.revokeObjectURL(url)
+  }
+
+  const exportK13Legger = async (bagian: 'legger' | 'rapor' = 'legger') => {
+    if (bagian === 'rapor') { await exportK13Pdf(); return }
+    if (!selectedRombel) { setMsg('✗ Pilih kelas terlebih dahulu'); return }
+    try {
+      const response = await api.get('/rapor-k13/ledger/pdf', {
+        params: { rombel_id: selectedRombel, tahun_ajaran: tahunAjaran, semester, jenis_kelamin: k13Jk },
+        responseType: 'blob',
+      })
+      downloadBlob(new Blob([response.data], { type: 'application/pdf' }), `legger-k13-${tahunAjaran}-${semester}.pdf`)
+      setMsg('✓ Legger K-13 siap cetak (PDF)')
+    } catch (e: any) {
+      let pesan = 'Gagal download legger'
+      const data = e.response?.data
+      if (data instanceof Blob) { try { pesan = JSON.parse(await data.text()).error || pesan } catch {} } else if (data?.error) pesan = data.error
+      setMsg(`✗ ${pesan}`)
+    }
+  }
   const handleGenerate = async () => {
     if (!selectedRombel) return setMsg('Pilih kelas dulu')
     if (foundationTenantId) return setMsg('✗ Generate rapor hanya untuk data lembaga sendiri')
@@ -300,7 +327,10 @@ export default function RaporPage() {
           </div>
           {selectedSiswa && !foundationTenantId && kurikulum === 'merdeka' && <button onClick={savePelengkap} disabled={saving} className="btn-secondary flex items-center gap-2"><Save className="w-4 h-4" />{saving ? 'Menyimpan...' : 'Simpan Pelengkap'}</button>}
           {selectedSiswa && !foundationTenantId && kurikulum === 'k13' && (
-            <button onClick={exportK13Pdf} className="btn-primary flex items-center gap-2"><Printer className="w-4 h-4" />Cetak K-13</button>
+            <>
+              <button onClick={() => exportK13Legger('legger')} disabled={!selectedRombel} className="btn-secondary flex items-center gap-2"><Printer className="w-4 h-4" />Legger</button>
+              <button onClick={exportK13Pdf} className="btn-primary flex items-center gap-2"><Printer className="w-4 h-4" />Cetak K-13</button>
+            </>
           )}
           {selectedSiswa && !foundationTenantId && kurikulum === 'merdeka' && (
             <div className="relative">
@@ -332,6 +362,7 @@ export default function RaporPage() {
           <Select label="Siswa" value={selectedSiswa} onChange={setSelectedSiswa} options={siswaList.map(s => ({ value: s.id, label: s.nama }))} placeholder="Pilih Siswa" disabled={!selectedRombel} />
           <Field label="Tahun Ajaran"><input value={tahunAjaran} onChange={e => setTahunAjaran(e.target.value)} className="input" /></Field>
           <Select label="Semester" value={semester} onChange={setSemester} options={[{ value: 'ganjil', label: 'Ganjil' }, { value: 'genap', label: 'Genap' }]} />
+          {kurikulum === 'k13' && <Select label="Jenis Kelamin" value={k13Jk} onChange={setK13Jk} options={[{ value: '', label: 'Semua' }, { value: 'L', label: 'Laki-laki' }, { value: 'P', label: 'Perempuan' }]} />}
           {kurikulum === 'merdeka' && <Field label="Jenis Rapor"><select value={jenis} onChange={e => setJenis(e.target.value as any)} className="input"><option value="rapor_sts">Rapor STS (Tengah Semester)</option><option value="rapor_sas">Rapor SAS (Akhir Semester)</option></select></Field>}
           {kurikulum === 'merdeka' && <div className="flex items-end"><button onClick={handleGenerate} disabled={loading || !selectedRombel || !!foundationTenantId} className="btn-primary w-full flex justify-center items-center gap-2"><Zap className="w-4 h-4" />{loading ? 'Memproses...' : 'Generate'}</button></div>}
         </div>

@@ -201,4 +201,71 @@ async function createRaporK13Pdf({ studentList, settings = {}, uploadDir }) {
   return done
 }
 
-module.exports = { createRaporK13Pdf }
+// Legger nilai K-13: A4 landscape, grid per siswa (baris) x mapel (kolom),
+// meniru legger.ejs rapor-app (18 mapel tetap di sana; di sini mapel dinamis).
+async function createK13LedgerPdf({ ledger, settings = {}, rombelNama, semester, tahunAjaran }) {
+  const mapel = Array.isArray(ledger?.mapel) ? ledger.mapel : []
+  const rows = Array.isArray(ledger?.rows) ? ledger.rows : []
+  const LAND = { w: 841.89, h: 595.28 }
+  const doc = new PDFDocument({ size: [LAND.w, LAND.h], margin: 0, autoFirstPage: false })
+  const chunks = []
+  doc.on('data', c => chunks.push(c))
+  const done = new Promise((resolve, reject) => { doc.on('end', () => resolve(Buffer.concat(chunks))); doc.on('error', reject) })
+  doc.addPage({ size: [LAND.w, LAND.h], margin: 0 })
+
+  // Kop
+  doc.font('Helvetica-Bold').fontSize(14).fillColor('#000')
+    .text('LEGGER HASIL BELAJAR PESERTA DIDIK', 30, 30, { width: LAND.w - 60, align: 'center' })
+  doc.fontSize(11).text(`${upper(safe(settings.nama_lembaga))} - Tahun Ajaran ${safe(tahunAjaran)}`, 30, 50, { width: LAND.w - 60, align: 'center' })
+  doc.font('Helvetica').fontSize(9)
+    .text(`Kelas: ${safe(rombelNama)}    Semester: ${upper(safe(semester))}`, 30, 66, { width: LAND.w - 60, align: 'center' })
+
+  // Tabel
+  const colW = Math.min(40, (LAND.w - 60 - 130 - 50 - 50 - 20) / Math.max(1, mapel.length))
+  const nameW = 130
+  const startX = 30
+  const startY = 86
+  const rowH = 14
+  let ty = startY
+
+  // Header baris 1
+  doc.font('Helvetica-Bold').fontSize(7.5)
+  doc.text('Rank', startX, ty, { width: 30, align: 'center' })
+  doc.text('Nama Peserta Didik', startX + 30, ty, { width: nameW, align: 'left' })
+  const mapelStartX = startX + 30 + nameW
+  let mx = mapelStartX
+  for (const m of mapel) { doc.text(m.nama, mx, ty, { width: colW, align: 'center' }); mx += colW }
+  doc.text('JML', mx, ty, { width: 50, align: 'center' })
+  doc.text('RATA', mx + 50, ty, { width: 50, align: 'center' })
+  ty += rowH
+  doc.moveTo(startX, ty).lineTo(LAND.w - 30, ty).lineWidth(0.5).stroke('#000')
+
+  doc.font('Helvetica').fontSize(7)
+  for (const r of rows) {
+    if (ty > LAND.h - 80) { doc.addPage({ size: [LAND.w, LAND.h], margin: 0 }); ty = 40 }
+    doc.text(String(r.rank || ''), startX, ty + 3, { width: 30, align: 'center' })
+    doc.font('Helvetica-Bold').text(safe(r.nama), startX + 30, ty + 3, { width: nameW, align: 'left', lineBreak: false }).font('Helvetica')
+    mx = mapelStartX
+    for (const m of mapel) { const v = r.nilai?.[m.id]; doc.text(v ? String(v) : '-', mx, ty + 3, { width: colW, align: 'center' }); mx += colW }
+    doc.font('Helvetica-Bold').text(String(r.total || 0), mx, ty + 3, { width: 50, align: 'center' })
+    doc.text((r.rata ?? 0).toFixed(1), mx + 50, ty + 3, { width: 50, align: 'center' }).font('Helvetica')
+    doc.moveTo(startX, ty + rowH).lineTo(LAND.w - 30, ty + rowH).lineWidth(0.3).stroke('#000')
+    ty += rowH
+  }
+
+  // TTD
+  const tyy = Math.max(ty + 30, LAND.h - 100)
+  doc.font('Helvetica').fontSize(9).fillColor('#000')
+  doc.text('Kepala Madrasah,', startX, tyy, { width: 180, align: 'center' })
+  doc.text(`${safe(settings.kota_cetak)}, ${safe(tahunAjaran)}`, LAND.w - 30 - 180, tyy, { width: 180, align: 'center' })
+  doc.text('Wali Kelas,', LAND.w - 30 - 180, tyy + 18, { width: 180, align: 'center' })
+  doc.moveTo(startX + 40, tyy + 55).lineTo(startX + 140, tyy + 55).stroke('#000')
+  doc.moveTo(LAND.w - 170, tyy + 55).lineTo(LAND.w - 70, tyy + 55).stroke('#000')
+  doc.font('Helvetica-Bold').fontSize(8)
+  doc.text(upper(safe(settings.kepala_sekolah)), startX, tyy + 58, { width: 180, align: 'center', underline: true })
+
+  doc.end()
+  return done
+}
+
+module.exports = { createRaporK13Pdf, createK13LedgerPdf }

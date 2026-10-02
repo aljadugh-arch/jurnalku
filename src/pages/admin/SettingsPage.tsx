@@ -19,14 +19,14 @@ const KTS_FIELD_LABEL: Record<string, string> = {
 
 const KTS_DEFAULT_LAYOUT: KtsLayout = {
   depan: {
-    foto: { x: 14, y: 46, w: 48, h: 64 },
-    nama: { x: 72, y: 48 },
-    nisn: { x: 72, y: 68 },
-    jk: { x: 72, y: 82 },
-    ttl: { x: 72, y: 96 },
-    alamat: { x: 72, y: 110 },
-    ttd: { x: 128, y: 136 },
-    qr: { x: 200, y: 126 },
+    foto: { x: 11, y: 53, w: 50, h: 67 },
+    nama: { x: 71, y: 54 },
+    nisn: { x: 71, y: 67 },
+    jk: { x: 71, y: 74 },
+    ttl: { x: 71, y: 78 },
+    alamat: { x: 71, y: 82 },
+    ttd: { x: 128, y: 120 },
+    qr: { x: 200, y: 112 },
   },
   belakang: {
     qr: { x: 182, y: 96 },

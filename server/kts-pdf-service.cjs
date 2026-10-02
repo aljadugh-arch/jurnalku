@@ -8,22 +8,21 @@ const QRCode = require('qrcode')
 const CARD_W = 85.6 / 25.4 * 72   // 242.65 pt
 const CARD_H = 54 / 25.4 * 72     // 153.07 pt
 
-// Posisi default (poin pt, relatif kartu CR80). Diukur dari template default
-// public/kts-depan.png & kts-belakang.png (1011x639 px) + deskripsi layout:
-//   depan  : header/kop y≈0-170px (0-41pt), foto kiri x≈47-256px (11-61pt),
-//            biodata kanan x>260px (62pt), footer TTD y≈568px (136pt).
-//   belakang: header y≈0-95px, isi visi/misi y≈166-392px, QR kanan.
-// Setiap field {x,y} bisa diseret bebas di editor Pengaturan.
+// Posisi default (poin pt, relatif kartu CR80 242.65x153.07 pt). Diukur dari PNG
+// template 1011x639 px (1px≈0.24pt):
+//   depan  : header/kop y=0-170px (0-41pt); foto kiri x=47-256px (11-61pt),
+//            y=222-501px (53-120pt); biodata kanan x≥295px (71pt) dengan baris
+//            y=227/280/310/324/340px (54/67/74/78/82pt); footer TTD y≈500px (120pt).
 const DEFAULT_KTS_LAYOUT = {
   depan: {
-    foto:   { x: 14, y: 46, w: 48, h: 64 },
-    nama:   { x: 72, y: 48 },
-    nisn:   { x: 72, y: 68 },
-    jk:     { x: 72, y: 82 },
-    ttl:    { x: 72, y: 96 },
-    alamat: { x: 72, y: 110 },
-    ttd:    { x: 128, y: 136 },
-    qr:     { x: 200, y: 126 },
+    foto:   { x: 11, y: 53, w: 50, h: 67 },
+    nama:   { x: 71, y: 54 },
+    nisn:   { x: 71, y: 67 },
+    jk:     { x: 71, y: 74 },
+    ttl:    { x: 71, y: 78 },
+    alamat: { x: 71, y: 82 },
+    ttd:    { x: 128, y: 120 },
+    qr:     { x: 200, y: 112 },
   },
   belakang: {
     qr:     { x: 182, y: 96 },

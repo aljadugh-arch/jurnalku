@@ -2,8 +2,8 @@
 const test = require('node:test')
 const assert = require('node:assert/strict')
 const Database = require('better-sqlite3')
-const { terbilang, nilaiKeAbjad, hitungPeringkat, getK13RaporData, getPeringkatK13, predikatK13, normalizeK13Nilai, semesterRange } = require('../server/rapor-k13-service.cjs')
-const { createRaporK13Pdf } = require('../server/rapor-k13-pdf-service.cjs')
+const { terbilang, nilaiKeAbjad, hitungPeringkat, getK13RaporData, getPeringkatK13, getK13Ledger, predikatK13, normalizeK13Nilai, semesterRange } = require('../server/rapor-k13-service.cjs')
+const { createRaporK13Pdf, createK13LedgerPdf } = require('../server/rapor-k13-pdf-service.cjs')
 
 test('terbilang: angka 0-999 -> huruf Indonesia', () => {
   assert.equal(terbilang(0), 'Nol')
@@ -93,5 +93,34 @@ test('createRaporK13Pdf menghasilkan PDF 3 halaman per siswa', async () => {
   const pdf = await createRaporK13Pdf({ studentList: [{ ...data, rank: 1, totalSiswa: 1 }], settings: { nama_lembaga: 'MTs Contoh', nsm: '121', npsn: '700', kota_cetak: 'Tuban', kepala_sekolah: 'Kepsek' }, uploadDir: '/tmp/no-k13' })
   assert.ok(pdf.subarray(0, 5).toString() === '%PDF-')
   assert.ok(pdf.length > 3000)
+  db.close()
+})
+
+test('getK13Ledger mengumpulkan grid nilai per mapel + total/rata/rank', () => {
+  const db = fixture()
+  db.exec(`CREATE TABLE jadwal (id TEXT, rombel_id TEXT, mapel_id TEXT, tenant_id TEXT, jenis_kegiatan TEXT);`)
+  db.exec(`INSERT INTO jadwal VALUES ('j1','r1','m1','t1','mapel'),('j2','r1','m2','t1','mapel');`)
+  db.exec(`INSERT INTO siswa VALUES ('s2','t1','Budi','2','002','L','Tuban','2011-02-02','Jl','081','Ibu','r1','aktif','Islam','Bpk B','Ibu B','Tani','Guru','Wali B','Tani','MI B','Anak Kandung',2);`)
+  db.exec(`INSERT INTO rapor_k13 VALUES ('rk3','s2','m1','2025/2026','ganjil',70,'C',75,'','t1'),('rk4','s2','m2','2025/2026','ganjil',80,'B',75,'','t1');`)
+  const all = getK13Ledger(db, 't1', { rombelId: 'r1', semester: 'ganjil', tahunAjaran: '2025/2026' })
+  assert.equal(all.mapel.length, 2)
+  assert.equal(all.jmlSiswa, 2)
+  assert.equal(all.rows[0].rank, 1)
+  assert.equal(all.rows.every(r => r.total > 0 && r.rata > 0), true)
+  // Filter jenis kelamin perempuan -> hanya Ani.
+  const perempuan = getK13Ledger(db, 't1', { rombelId: 'r1', semester: 'ganjil', tahunAjaran: '2025/2026', jenisKelamin: 'P' })
+  assert.equal(perempuan.jmlSiswa, 1)
+  assert.equal(perempuan.rows[0].nama, 'Ani')
+  db.close()
+})
+
+test('createK13LedgerPdf menghasilkan PDF landscape', async () => {
+  const db = fixture()
+  db.exec(`CREATE TABLE jadwal (id TEXT, rombel_id TEXT, mapel_id TEXT, tenant_id TEXT, jenis_kegiatan TEXT);`)
+  db.exec(`INSERT INTO jadwal VALUES ('j1','r1','m1','t1','mapel'),('j2','r1','m2','t1','mapel');`)
+  const ledger = getK13Ledger(db, 't1', { rombelId: 'r1', semester: 'ganjil', tahunAjaran: '2025/2026' })
+  const pdf = await createK13LedgerPdf({ ledger, settings: { nama_lembaga: 'MTs Contoh', kepala_sekolah: 'Kepsek', kota_cetak: 'Tuban' }, rombelNama: 'VII-A', semester: 'ganjil', tahunAjaran: '2025/2026' })
+  assert.ok(pdf.subarray(0, 5).toString() === '%PDF-')
+  assert.ok(pdf.length > 1500)
   db.close()
 })
