@@ -38,7 +38,7 @@ const { monitorStatus, sanitizeExamForMonitor } = require('./exam-proctor.cjs')
 const { buatPemeriksaOrigin } = require('./cors-origin.cjs')
 const { migrateRaporUniqueIndex } = require('./rapor-unique-index.cjs')
 const { createRaporSiswaPdf, normalizeBagian: normalizeBagianRapor, BAGIAN_VALID: BAGIAN_RAPOR_VALID } = require('./rapor-siswa-pdf-service.cjs')
-const { createKtsPdf } = require('./kts-pdf-service.cjs')
+const { createKtsPdf, CARD_W: KTS_W, CARD_H: KTS_H } = require('./kts-pdf-service.cjs')
 const { getCategoryRecap } = require('./attendance-recap.cjs')
 const { buildRekapRange, getPeriodicAttendanceRecap, deduplicateAttendance } = require('./attendance-periodic-recap.cjs')
 const { isDriveFolderUrl } = require('./library-config.cjs')
@@ -2889,10 +2889,19 @@ app.post('/api/settings/kts-template', ADMIN, ktsUpload.fields([
 app.put('/api/settings/kts-layout', ADMIN, (req, res) => {
   const layout = req.body?.layout
   if (!layout || typeof layout !== 'object') return res.status(400).json({ error: 'layout wajib berupa object' })
-  const clean = {}
+  const clamp = (value, max) => {
+    const n = Number(value)
+    const base = Number.isFinite(n) ? n : 0
+    return Math.round(Math.max(0, Math.min(max, base)))
+  }
+  const clean = { depan: {}, belakang: {} }
   for (const side of ['depan', 'belakang']) {
-    const v = layout[side] || {}
-    clean[side] = { nama: Number(v.nama) || 0, nis: Number(v.nis) || 0, qr: Number(v.qr) || 0 }
+    for (const field of ['nama', 'nis', 'qr']) {
+      const raw = layout[side]?.[field]
+      // Terima {x, y} object ATAU angka legacy (dianggap posisi Y).
+      const obj = raw && typeof raw === 'object' ? raw : { x: undefined, y: raw }
+      clean[side][field] = { x: clamp(obj.x ?? 0, KTS_W), y: clamp(obj.y ?? 0, KTS_H) }
+    }
   }
   const id = canonicalSettingsId(req.tenantId)
   db.prepare(`INSERT INTO settings (id,tenant_id,kts_layout,updated_at) VALUES (?,?,?,datetime('now'))

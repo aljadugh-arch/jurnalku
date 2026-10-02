@@ -3,7 +3,38 @@ import { AlertTriangle, Save, Trash2, Smartphone, BookOpen } from 'lucide-react'
 import toast from 'react-hot-toast'
 import api from '../../services/api'
 
-const CARD_PREVIEW_H = 145
+const KTS_W_PT = 85.6 / 25.4 * 72   // lebar kartu CR80 dalam poin (pt)
+const KTS_H_PT = 54 / 25.4 * 72     // tinggi kartu CR80 dalam poin (pt)
+
+type KtsField = 'nama' | 'nis' | 'qr'
+type KtsSide = 'depan' | 'belakang'
+type KtsPoint = { x: number; y: number }
+type KtsLayout = Record<KtsSide, Record<KtsField, KtsPoint>>
+
+const KTS_DEFAULT_LAYOUT: KtsLayout = {
+  depan: { nama: { x: 12, y: 12 }, nis: { x: 12, y: 24 }, qr: { x: KTS_W_PT - 48, y: 9 } },
+  belakang: { nama: { x: 0, y: 0 }, nis: { x: 0, y: 0 }, qr: { x: 0, y: 0 } },
+}
+
+const clampPt = (v: number, max: number) => Math.max(0, Math.min(max, Number.isFinite(Number(v)) ? Number(v) : 0))
+
+// Normalisasi layout tersimpan: {x,y} object = bebas; angka legacy = posisi Y.
+function normalizeKtsLayout(raw: any): KtsLayout {
+  const out = JSON.parse(JSON.stringify(KTS_DEFAULT_LAYOUT))
+  for (const side of ['depan', 'belakang'] as const) {
+    for (const field of ['nama', 'nis', 'qr'] as const) {
+      const dflt = KTS_DEFAULT_LAYOUT[side][field]
+      const v = raw?.[side]?.[field]
+      if (v && typeof v === 'object' && ('x' in v || 'y' in v)) {
+        out[side][field] = { x: clampPt(v.x ?? dflt.x, KTS_W_PT), y: clampPt(v.y ?? dflt.y, KTS_H_PT) }
+      } else if (Number.isFinite(Number(v))) {
+        out[side][field] = { x: dflt.x, y: clampPt(Number(v), KTS_H_PT) }
+      }
+    }
+  }
+  return out
+}
+
 import { applyTheme } from '../../lib/applyTheme'
 import { clearLocalTheme } from '../../stores/themeStore'
 import { useSettingsStore } from '../../stores/settingsStore'
@@ -42,8 +73,7 @@ export default function SettingsPage() {
   const [background, setBackground] = useState('')
   const [kemenagLogo, setKemenagLogo] = useState('')
   const [kts, setKts] = useState({ depan: '', belakang: '' })
-  const [ktsLayout, setKtsLayout] = useState({ depan: { nama: 12, nis: 24, qr: 9 }, belakang: { nama: 0, nis: 0, qr: 0 } })
-  const [ktsDrag, setKtsDrag] = useState<{ side: 'depan' | 'belakang'; field: 'nama' | 'nis' | 'qr' } | null>(null)
+  const [ktsLayout, setKtsLayout] = useState<KtsLayout>(() => JSON.parse(JSON.stringify(KTS_DEFAULT_LAYOUT)))
   const [jam, setJam] = useState({
     sesi_masuk_mulai: '06:00', sesi_masuk_selesai: '07:30',
     sesi_pulang_mulai: '13:00', sesi_pulang_selesai: '15:00',
@@ -77,7 +107,7 @@ export default function SettingsPage() {
       setBackground(s.background || '')
       setKemenagLogo(s.logo_kemenag || '')
       setKts({ depan: s.kts_depan || '', belakang: s.kts_belakang || '' })
-      try { if (s.kts_layout) setKtsLayout(v => ({ ...v, ...JSON.parse(s.kts_layout) })) } catch {}
+      try { if (s.kts_layout) setKtsLayout(normalizeKtsLayout(JSON.parse(s.kts_layout))) } catch {}
       setForm({
         nama_lembaga: s.nama_lembaga || '', alamat: s.alamat || '', telepon: s.telepon || '', email: s.email || '',
         kepala_sekolah: s.kepala_sekolah || '', npsn: s.npsn || '', nsm: s.nsm || '', kota_cetak: s.kota_cetak || '', yayasan_nama: s.yayasan_nama || '',
@@ -221,14 +251,27 @@ export default function SettingsPage() {
     catch (e: any) { toast.error(e.response?.data?.error || 'Gagal menyimpan posisi KTS') }
   }
 
-  const moveKtsField = (side: 'depan' | 'belakang', field: 'nama' | 'nis' | 'qr', y: number) => {
-    setKtsLayout(v => ({ ...v, [side]: { ...v[side], [field]: Math.max(0, Math.min(145, Math.round(y))) } }))
+  const moveKtsField = (side: KtsSide, field: KtsField, x: number, y: number) => {
+    setKtsLayout(v => ({ ...v, [side]: { ...v[side], [field]: { x: clampPt(x, KTS_W_PT), y: clampPt(y, KTS_H_PT) } } }))
   }
 
-  const handleKtsDrag = (e: PointerEvent<HTMLDivElement>, side: 'depan' | 'belakang', field: 'nama' | 'nis' | 'qr') => {
-    const rect = e.currentTarget.parentElement?.getBoundingClientRect()
-    if (!rect) return
-    moveKtsField(side, field, (e.clientY - rect.top) * (CARD_PREVIEW_H / rect.height))
+  // Seret bebas (sumbu X & Y): pointerdown memulai, pointermove menggeser, pointerup mengakhiri.
+  const beginKtsDrag = (e: PointerEvent<HTMLDivElement>, side: KtsSide, field: KtsField) => {
+    e.preventDefault()
+    const container = e.currentTarget.parentElement
+    if (!container) return
+    const rect = container.getBoundingClientRect()
+    const apply = (clientX: number, clientY: number) => {
+      moveKtsField(side, field, (clientX - rect.left) / rect.width * KTS_W_PT, (clientY - rect.top) / rect.height * KTS_H_PT)
+    }
+    apply(e.clientX, e.clientY)
+    const onMove = (ev: globalThis.PointerEvent) => apply(ev.clientX, ev.clientY)
+    const onUp = () => {
+      window.removeEventListener('pointermove', onMove)
+      window.removeEventListener('pointerup', onUp)
+    }
+    window.addEventListener('pointermove', onMove)
+    window.addEventListener('pointerup', onUp)
   }
 
   const resetKts = async (side: 'depan' | 'belakang') => {
@@ -464,9 +507,9 @@ export default function SettingsPage() {
               <p className="text-[11px] text-gray-500 mt-3">Editor posisi: seret label ke lokasi cetak pada template.</p>
               <div className="relative mt-2 w-full aspect-[85.6/54] overflow-hidden rounded-lg border bg-gray-50 select-none">
                 {kts[side] && <img src={kts[side]} alt="" className="absolute inset-0 w-full h-full object-fill opacity-70" />}
-                {(['nama', 'nis', 'qr'] as const).map(field => <div key={field} role="button" tabIndex={0} onPointerDown={e => handleKtsDrag(e, side, field)} style={{ top: `${Number(ktsLayout[side][field]) / CARD_PREVIEW_H * 100}%` }} className="absolute left-2 cursor-ns-resize rounded bg-indigo-600/90 px-2 py-1 text-[10px] text-white shadow">{field === 'nama' ? 'Nama Siswa' : field === 'nis' ? 'NIS / Rombel' : 'QR'}</div>)}
+                {(['nama', 'nis', 'qr'] as const).map(field => <div key={field} role="button" tabIndex={0} onPointerDown={e => beginKtsDrag(e, side, field)} style={{ left: `${ktsLayout[side][field].x / KTS_W_PT * 100}%`, top: `${ktsLayout[side][field].y / KTS_H_PT * 100}%` }} className="absolute cursor-move touch-none rounded bg-indigo-600/90 px-2 py-1 text-[10px] text-white shadow">{field === 'nama' ? 'Nama Siswa' : field === 'nis' ? 'NIS / Rombel' : 'QR'}</div>)}
               </div>
-              <div className="flex flex-wrap gap-2 mt-2 text-[11px] text-gray-500">{(['nama', 'nis', 'qr'] as const).map(field => <label key={field} className="flex items-center gap-1">{field.toUpperCase()}<input type="number" min="0" max="145" value={ktsLayout[side][field]} onChange={e => moveKtsField(side, field, Number(e.target.value))} className="w-14 border rounded px-1 py-0.5" /></label>)}</div>
+              <div className="flex flex-wrap gap-2 mt-2 text-[11px] text-gray-500">{(['nama', 'nis', 'qr'] as const).map(field => <label key={field} className="flex items-center gap-1">{field.toUpperCase()}<span className="text-slate-400">X</span><input type="number" min="0" max={Math.round(KTS_W_PT)} value={Math.round(ktsLayout[side][field].x)} onChange={e => moveKtsField(side, field, Number(e.target.value), ktsLayout[side][field].y)} className="w-12 border rounded px-1 py-0.5" /><span className="text-slate-400">Y</span><input type="number" min="0" max={Math.round(KTS_H_PT)} value={Math.round(ktsLayout[side][field].y)} onChange={e => moveKtsField(side, field, ktsLayout[side][field].x, Number(e.target.value))} className="w-12 border rounded px-1 py-0.5" /></label>)}</div>
               <div className="flex flex-wrap gap-2 mt-3">
                 <label className="px-3 py-2 bg-primary text-white rounded-lg text-xs cursor-pointer">Unggah {side}<input type="file" accept="image/png,image/jpeg,image/webp" className="hidden" onChange={e => { handleKtsChange(side, e.target.files?.[0]); e.target.value = '' }} /></label>
                 {kts[side] && <button type="button" onClick={() => resetKts(side)} className="px-3 py-2 border border-red-300 text-red-600 rounded-lg text-xs">Reset ke default</button>}
