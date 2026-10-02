@@ -13,6 +13,8 @@ export default function NotifSettingsPage() {
     template_guru_ceklok: '',
     notif_jadwal_guru: false,
     template_jadwal_guru: '',
+    notif_ekskul_guru: false,
+    template_ekskul_guru: '',
     notif_keuangan_wali: false,
     keuangan_frekuensi: 'bulanan',
     keuangan_hari: '',
@@ -38,6 +40,8 @@ export default function NotifSettingsPage() {
         template_guru_ceklok: d.template_guru_ceklok || '',
         notif_jadwal_guru: !!d.notif_jadwal_guru,
         template_jadwal_guru: d.template_jadwal_guru || '',
+        notif_ekskul_guru: !!d.notif_ekskul_guru,
+        template_ekskul_guru: d.template_ekskul_guru || '',
         notif_keuangan_wali: !!d.notif_keuangan_wali,
         keuangan_frekuensi: d.keuangan_frekuensi || 'bulanan',
         keuangan_hari: d.keuangan_hari || '',
@@ -67,6 +71,7 @@ export default function NotifSettingsPage() {
   const addWhitelist = async () => { try { await api.post('/notif-whitelist', whiteForm); const r = await api.get('/notif-whitelist'); setWhitelist(r.data); setWhiteForm({ target_type: 'phone', phone: '', target_id: '', reason: '' }); toast.success('Whitelist ditambah') } catch { toast.error('Gagal whitelist') } }
   const delWhitelist = async (id: string) => { try { await api.delete('/notif-whitelist/' + id); setWhitelist(whitelist.filter(w => w.id !== id)) } catch { toast.error('Gagal hapus') } }
   const handleTestJadwalGuru = async () => { setTesting(true); try { const r = await api.post('/notif/jadwal-guru'); toast.success(`Antrean notif jadwal: ${r.data.queued || 0}`) } catch { toast.error('Gagal test jadwal') } finally { setTesting(false) } }
+  const handleTestEkskulGuru = async () => { setTesting(true); try { const r = await api.post('/notif/ekskul-guru'); toast.success(`Antrean notif ekskul: ${r.data.queued || 0}`) } catch (e: any) { toast.error(e.response?.data?.error || 'Gagal test ekskul') } finally { setTesting(false) } }
 
   const handleTestGuruCeklok = async () => {
     setTesting(true)
@@ -191,6 +196,27 @@ export default function NotifSettingsPage() {
         )}
         <textarea value={settings.template_jadwal_guru} onChange={e => setSettings({...settings, template_jadwal_guru: e.target.value})} rows={3} className="w-full px-3 py-2 border rounded-lg text-sm" placeholder="{nama_guru}, {mapel}, {rombel}, {jam_mulai}, {jam_selesai}, {tanggal}, {lembaga}" />
         <button onClick={handleTestJadwalGuru} className="px-4 py-2 bg-primary text-white rounded-lg text-sm">Test Notif Jadwal Sekarang</button>
+      </div>
+
+      {/* Notif Jadwal Ekskul/Peminatan -> Guru Pembina */}
+      <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100 space-y-4">
+        <div className="flex items-start justify-between mb-2">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 bg-violet-100 rounded-lg flex items-center justify-center">
+              <Bell size={20} className="text-violet-600" />
+            </div>
+            <div>
+              <h3 className="font-semibold text-gray-800">Notifikasi Jadwal Ekskul / Peminatan</h3>
+              <p className="text-xs text-gray-500 mt-0.5">Kirim WA pengingat ke guru pembina 5 menit sebelum jadwal ekskul/peminatan dimulai</p>
+            </div>
+          </div>
+          <label className="relative inline-flex items-center cursor-pointer">
+            <input type="checkbox" checked={settings.notif_ekskul_guru} onChange={e => setSettings({...settings, notif_ekskul_guru: e.target.checked})} className="sr-only peer" />
+            <div className="w-11 h-6 bg-gray-200 peer-focus:ring-4 peer-focus:ring-violet/20 rounded-full peer peer-checked:after:translate-x-full peer-checked:bg-violet-600 after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all"></div>
+          </label>
+        </div>
+        <textarea value={settings.template_ekskul_guru} onChange={e => setSettings({...settings, template_ekskul_guru: e.target.value})} rows={2} className="w-full px-3 py-2 border rounded-lg text-sm" placeholder="{nama_guru}, {ekskul}, {jam_mulai}, {jam_selesai}, {tanggal}, {lembaga}" />
+        <button onClick={handleTestEkskulGuru} className="px-4 py-2 bg-violet-600 text-white rounded-lg text-sm">Test Notif Ekskul Sekarang</button>
       </div>
 
       {/* Notif Laporan Keuangan -> Wali Murid */}

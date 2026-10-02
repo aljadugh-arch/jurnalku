@@ -135,6 +135,36 @@ function queueDueSchedules(db,{tenantId,date,time}) {
   }
   return out
 }
+function queueDueEkskul(db,{tenantId,date,time}) {
+  const out={queued:0,skipped:0,missing:0}
+  if (shouldSuppress(db, tenantId, date)) return {...out, reason:'holiday'}
+  const conf=db.prepare('SELECT * FROM notif_settings WHERE tenant_id=?').get(tenantId)
+  if(!conf?.notif_ekskul_guru)return out
+  if(!time || !/^\d{2}:\d{2}$/.test(String(time))) return {...out,reason:'invalid_time'}
+  const day=['Minggu','Senin','Selasa','Rabu','Kamis','Jumat','Sabtu'][new Date(`${date}T12:00:00Z`).getUTCDay()]
+  const active=db.prepare('SELECT 1 FROM tahun_ajaran WHERE tenant_id=? AND aktif=1 AND (? BETWEEN tanggal_mulai AND tanggal_selesai) LIMIT 1').get(tenantId,date)
+  if(!active)return out
+  const school=getTenantSettings(db, tenantId, 'nama_lembaga')
+  // Ekskul/peminatan yang punya pembina (guru) dan jadwal hari ini.
+  const rows=db.prepare(`SELECT e.id,e.nama ekskul,e.jam_mulai,e.jam_selesai,e.pembina_id,g.nama nama_guru,g.no_hp,g.jenis_kelamin
+    FROM ekskul e JOIN gtk g ON g.id=e.pembina_id AND g.tenant_id=e.tenant_id AND g.status='aktif'
+    WHERE e.tenant_id=? AND lower(COALESCE(e.hari,''))=lower(?) ORDER BY e.jam_mulai`).all(tenantId,day)
+  for(const x of rows){
+    const start = String(x.jam_mulai || '')
+    const firstMinutes = /^\d{2}:\d{2}$/.test(start) ? Number(start.slice(0,2))*60+Number(start.slice(3,5)) : null
+    const tickMinutes = Number(String(time).slice(0,2))*60+Number(String(time).slice(3,5))
+    if (!Number.isFinite(tickMinutes)) { out.skipped++; continue }
+    if (firstMinutes != null && (tickMinutes < firstMinutes - 5 || tickMinutes > firstMinutes + 5)) { out.skipped++; continue }
+    if(!normalizePhone(x.no_hp)){out.missing++;continue}
+    const namaGuru = honorificTeacherName(x.nama_guru, x.jenis_kelamin)
+    const defaultTemplate='Assalamu’alaikum {nama_guru}. Pengingat jadwal {ekskul} pukul {jam_mulai}–{jam_selesai} pada {tanggal}. — {lembaga}'
+    const message=render(String(conf.template_ekskul_guru||'').trim()||defaultTemplate,{...x,nama_guru:namaGuru,tanggal:date,lembaga:school?.nama_lembaga||'Sekolah'})
+    const r=enqueue(db,{tenantId,phone:x.no_hp,message,key:`ekskul-guru:${x.pembina_id}:${x.id}:${date}:${x.jam_mulai}`,targetType:'gtk',targetId:x.pembina_id})
+    if (r.queued) out.queued++
+    else out.skipped++
+  }
+  return out
+}
 function queueFinanceReports(db,{tenantId,date,time,force=false}) {
   const out={queued:0,skipped:0,missing:0}
   if (shouldSuppress(db, tenantId, date)) return {...out, reason:'holiday'}
@@ -211,4 +241,4 @@ function queueFinanceReports(db,{tenantId,date,time,force=false}) {
   return out
 }
 
-module.exports={setupWA,normalizePhone,enqueue,claimNext,render,honorificTeacherName,queueWaliAttendance,queueDueTeachers,queueDueSchedules,queueFinanceReports,isWhitelisted,shouldSuppress}
+module.exports={setupWA,normalizePhone,enqueue,claimNext,render,honorificTeacherName,queueWaliAttendance,queueDueTeachers,queueDueSchedules,queueDueEkskul,queueFinanceReports,isWhitelisted,shouldSuppress}
