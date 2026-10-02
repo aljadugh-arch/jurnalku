@@ -42,7 +42,7 @@ const { createRaporMtsplusPdf, createRaporMtsplusPdfBulk } = require('./rapor-mt
 const { createKtsPdf, CARD_W: KTS_W, CARD_H: KTS_H } = require('./kts-pdf-service.cjs')
 const { createRaporK13Pdf, createK13LedgerPdf } = require('./rapor-k13-pdf-service.cjs')
 const { getK13RaporData, getPeringkatK13, getK13Ledger, normalizeK13Nilai } = require('./rapor-k13-service.cjs')
-const { parseCsv, parseExcelBuffer, buildImportPreview, clampNilai } = require('./nilai-import-service.cjs')
+const { parseCsv, parseExcelBuffer, parseExcelBufferAll, buildImportPreview, clampNilai, fetchGoogleSheets } = require('./nilai-import-service.cjs')
 const { getCategoryRecap } = require('./attendance-recap.cjs')
 const { buildRekapRange, getPeriodicAttendanceRecap, deduplicateAttendance } = require('./attendance-periodic-recap.cjs')
 const { isDriveFolderUrl } = require('./library-config.cjs')
@@ -7792,25 +7792,36 @@ app.post('/api/rapor/asesmen', STAFF, (req, res) => {
   })
 })
 
-// POST /api/rapor/import/preview — parse CSV/Excel/Google Sheets (csv_text) lalu
-// cocokkan NIS/NISN -> siswa dan header kolom -> mapel. Preview-only, tidak menulis.
+// POST /api/rapor/import/preview — parse CSV/Excel/Google Sheets (csv_text/sheet_url)
+// lalu cocokkan NIS/NISN -> siswa dan header kolom -> mapel. Preview-only, tidak menulis.
 app.post('/api/rapor/import/preview', STAFF, upload.single('file'), async (req, res) => {
   try {
-    let headers, rows
+    const sheetUrl = String((req.body && req.body.sheet_url) || '').trim()
     const csvText = (req.body && (req.body.csv_text || req.body.sheets_csv || '')) || ''
-    if (req.file) {
+    let sheets = []
+    if (sheetUrl) {
+      sheets = await fetchGoogleSheets(sheetUrl)
+    } else if (req.file) {
       const buf = require('fs').readFileSync(req.file.path)
       const isXlsx = /\.(xlsx|xls)$/i.test(req.file.originalname || '') || req.file.mimetype === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-      if (isXlsx) { ({ headers, rows } = await parseExcelBuffer(buf)) }
-      else { ({ headers, rows } = await parseCsv(buf.toString('utf8').replace(/^\uFEFF/, ''))) }
+      if (isXlsx) { sheets = await parseExcelBufferAll(buf) }
+      else { sheets = [{ nama: '', ...parseCsv(buf.toString('utf8').replace(/^\uFEFF/, '')) }] }
     } else if (csvText) {
-      ({ headers, rows } = parseCsv(csvText.replace(/^\uFEFF/, '')))
+      sheets = [{ nama: '', ...parseCsv(csvText.replace(/^\uFEFF/, '')) }]
     } else {
-      return res.status(400).json({ error: 'Unggah file (CSV/Excel) atau isi csv_text/sheets_csv' })
+      return res.status(400).json({ error: 'Unggah file (CSV/Excel), isi csv_text, atau beri sheet_url (Google Sheets)' })
     }
-    if (!headers.length || !rows.length) return res.status(400).json({ error: 'Tidak ada baris data yang bisa dibaca' })
-    const preview = buildImportPreview(db, req.tenantId, { headers, rows })
-    res.json({ success: true, headers, total_baris: rows.length, items: preview.items, tidak_cocok: preview.tidakCocok, jumlah_cocok: preview.total, jumlah_tidak_cocok: preview.tidakCocok.length })
+    if (!sheets.length) return res.status(400).json({ error: 'Tidak ada sheet berisi data yang terbaca' })
+    const allItems = [], allTidakCocok = [], sheetPreviews = []
+    for (const sh of sheets) {
+      const { headers, rows } = sh
+      if (!headers.length || !rows.length) continue
+      const preview = buildImportPreview(db, req.tenantId, { headers, rows })
+      sheetPreviews.push({ nama: sh.nama || 'Tab', total_baris: rows.length, jumlah_cocok: preview.total, jumlah_tidak_cocok: preview.tidakCocok.length })
+      allItems.push(...preview.items)
+      allTidakCocok.push(...preview.tidakCocok.map(t => ({ ...t, sheet: sh.nama || 'Tab' })))
+    }
+    res.json({ success: true, sheets: sheetPreviews, items: allItems, tidak_cocok: allTidakCocok, jumlah_cocok: allItems.length, jumlah_tidak_cocok: allTidakCocok.length })
   } catch (error) {
     res.status(400).json({ error: error.message })
   }

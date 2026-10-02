@@ -135,6 +135,10 @@ async function parseExcelBuffer(buffer) {
   await wb.xlsx.load(buffer)
   const ws = wb.worksheets[0]
   if (!ws) return { headers: [], rows: [] }
+  return worksheetToMatrix(ws)
+}
+
+function worksheetToMatrix(ws) {
   const matrix = []
   ws.eachRow({ includeEmpty: false }, (row) => {
     const cells = []
@@ -151,4 +155,49 @@ async function parseExcelBuffer(buffer) {
   return { headers, rows }
 }
 
-module.exports = { parseCsv, parseExcelBuffer, analyzeColumns, buildImportPreview, clampNilai }
+// Parse SEMUA sheet .xlsx menjadi array [{ nama, headers, rows }].
+async function parseExcelBufferAll(buffer) {
+  const ExcelJS = require('exceljs')
+  const wb = new ExcelJS.Workbook()
+  await wb.xlsx.load(buffer)
+  return wb.worksheets.filter(ws => ws.rowCount > 0).map(ws => ({ nama: ws.name, ...worksheetToMatrix(ws) }))
+}
+
+// Ambil ID spreadsheet dari URL Google Sheets (docs.google.com/spreadsheets/d/<id>/...).
+function sheetIdFromUrl(url) {
+  const m = String(url || '').match(/\/spreadsheets\/d\/([a-zA-Z0-9_-]+)/)
+  return m ? m[1] : null
+}
+
+// Ambil gid (tab) bila ada di URL; null bila memakai tab pertama / seluruhnya.
+function gidFromUrl(url) {
+  const m = String(url || '').match(/[?&#]gid=(\d+)/)
+  return m ? m[1] : null
+}
+
+// Ambil isi Google Sheets publik ("siapa saja dengan link dapat melihat").
+// URL dipastikan milik docs.google.com — host di-rekonstruksi, bukan di-fetch
+// mentah, sehingga tidak ada permukaan SSRF ke target sewenang-wenang.
+// Return: array [{ nama, headers, rows }] (gviz = 1 tab; export xlsx = semua tab).
+async function fetchGoogleSheets(url) {
+  const id = sheetIdFromUrl(url)
+  if (!id) throw new Error('URL tidak valid: ID spreadsheet tidak ditemukan')
+  const gid = gidFromUrl(url)
+  if (gid) {
+    const csvUrl = `https://docs.google.com/spreadsheets/d/${id}/gviz/tq?tqx=out:csv&gid=${gid}`
+    const resp = await fetch(csvUrl, { redirect: 'manual' })
+    if (resp.status !== 200) throw new Error(`Google Sheet tidak bisa diakses (HTTP ${resp.status}). Pastikan sudah di-share "siapa saja dengan link dapat melihat".`)
+    const text = await resp.text()
+    const { headers, rows } = parseCsv(text)
+    return [{ nama: 'Tab', headers, rows }]
+  }
+  const xlsxUrl = `https://docs.google.com/spreadsheets/d/${id}/export?format=xlsx`
+  const resp = await fetch(xlsxUrl, { redirect: 'manual' })
+  if (resp.status !== 200) throw new Error(`Google Sheet tidak bisa diakses (HTTP ${resp.status}). Pastikan sudah di-share "siapa saja dengan link dapat melihat".`)
+  const buf = Buffer.from(await resp.arrayBuffer())
+  const sheets = await parseExcelBufferAll(buf)
+  if (!sheets.length) throw new Error('Tidak ada sheet berisi data yang terbaca')
+  return sheets
+}
+
+module.exports = { parseCsv, parseExcelBuffer, parseExcelBufferAll, analyzeColumns, buildImportPreview, clampNilai, fetchGoogleSheets, sheetIdFromUrl, gidFromUrl }

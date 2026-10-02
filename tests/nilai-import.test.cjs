@@ -2,7 +2,7 @@
 const test = require('node:test')
 const assert = require('node:assert/strict')
 const Database = require('better-sqlite3')
-const { parseCsv, analyzeColumns, buildImportPreview, clampNilai } = require('../server/nilai-import-service.cjs')
+const { parseCsv, analyzeColumns, buildImportPreview, clampNilai, sheetIdFromUrl, gidFromUrl, parseExcelBufferAll } = require('../server/nilai-import-service.cjs')
 
 function fixture() {
   const db = new Database(':memory:')
@@ -66,4 +66,32 @@ test('clampNilai membatasi 0-100 dan membulatkan', () => {
   assert.equal(clampNilai(150), 100)
   assert.equal(clampNilai(-5), 0)
   assert.equal(clampNilai(78.6), 79)
+})
+
+test('sheetIdFromUrl/gidFromUrl: parse URL Google Sheets', () => {
+  const u = 'https://docs.google.com/spreadsheets/d/abc123XYZ-_-09/edit#gid=1234567890'
+  assert.equal(sheetIdFromUrl(u), 'abc123XYZ-_-09')
+  assert.equal(gidFromUrl(u), '1234567890')
+  assert.equal(sheetIdFromUrl('https://docs.google.com/spreadsheets/d/xyz/edit'), 'xyz')
+  assert.equal(gidFromUrl('https://docs.google.com/spreadsheets/d/xyz/edit'), null)
+  assert.equal(sheetIdFromUrl('https://example.com/not-a-sheet'), null)
+})
+
+test('parseExcelBufferAll: baca semua sheet xlsx', async () => {
+  const ExcelJS = require('exceljs')
+  const wb = new ExcelJS.Workbook()
+  const s1 = wb.addWorksheet('VII-A')
+  s1.addRow(['NIS', 'Matematika'])
+  s1.addRow(['101', '85'])
+  const s2 = wb.addWorksheet('VIII-A')
+  s2.addRow(['NIS', 'IPA'])
+  s2.addRow(['102', '90'])
+  const buf = await wb.xlsx.writeBuffer()
+  const sheets = await parseExcelBufferAll(Buffer.from(buf))
+  assert.equal(sheets.length, 2)
+  assert.equal(sheets[0].nama, 'VII-A')
+  assert.deepEqual(sheets[0].headers, ['NIS', 'Matematika'])
+  assert.equal(sheets[0].rows[0].Matematika, '85')
+  assert.equal(sheets[1].nama, 'VIII-A')
+  assert.equal(sheets[1].rows[0].IPA, '90')
 })

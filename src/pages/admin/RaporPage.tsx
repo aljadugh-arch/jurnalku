@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import api from '../../services/api'
-import { FileText, Printer, Save, Zap } from 'lucide-react'
+import { FileText, Printer, Save, Zap, FileSpreadsheet, Link2, Download } from 'lucide-react'
 import FoundationTenantPicker from '../../components/FoundationTenantPicker'
 import { QRCodeSVG } from 'qrcode.react'
 import { thumbUrl } from '../../lib/thumbUrl'
@@ -67,6 +67,13 @@ export default function RaporPage() {
   const [k13Sikap, setK13Sikap] = useState<Record<string, string>>({})
   const [k13Loading, setK13Loading] = useState(false)
   const [k13Jk, setK13Jk] = useState('')
+  // Impor nilai (Google Sheets / CSV / Excel) — hybrid dengan input akun guru.
+  const [importOpen, setImportOpen] = useState(false)
+  const [sheetUrl, setSheetUrl] = useState('')
+  const [importJenis, setImportJenis] = useState<'sts' | 'sas' | 'harian'>('sts')
+  const [importLoading, setImportLoading] = useState(false)
+  const [importPreview, setImportPreview] = useState<any>(null)
+  const [csvText, setCsvText] = useState('')
 
   useEffect(() => { loadRombel(); loadSettings() }, [foundationTenantId])
   useEffect(() => { setSelectedSiswa(''); setRapor([]); setRingkasan(null); if (selectedRombel) loadSiswa() }, [selectedRombel, foundationTenantId])
@@ -313,6 +320,57 @@ export default function RaporPage() {
     }
   }
 
+  // Cetak SEMUA kelas/tenant (tanpa rombel) jadi SATU PDF.
+  const exportPdfBulkAll = async (bagian: BagianCetak = 'lengkap') => {
+    if (foundationTenantId) return setMsg('✗ Cetak massal hanya untuk data lembaga sendiri')
+    if (raporFormat !== 'mtsplus') return setMsg('✗ Cetak massal tersedia pada layout "MTs Plus"')
+    setMsg('⏳ Membuat PDF seluruh siswa…')
+    try {
+      const response = await api.get('/rapor/export/pdf-bulk', {
+        params: { tahun_ajaran: tahunAjaran, semester, jenis, bagian },
+        responseType: 'blob',
+        timeout: 300000,
+      })
+      downloadBlob(new Blob([response.data], { type: 'application/pdf' }), `rapor-${bagian}-mtsplus-semua-${tahunAjaran}-${semester}.pdf`)
+      setMsg('✓ PDF seluruh siswa siap cetak (satu file)')
+    } catch (e: any) {
+      let pesan = 'Gagal membuat PDF massal'
+      const data = e.response?.data
+      if (data instanceof Blob) {
+        try { pesan = JSON.parse(await data.text()).error || pesan } catch { /* biarkan */ }
+      } else if (data?.error) pesan = data.error
+      setMsg(`✗ ${pesan}`)
+    }
+  }
+
+  // Pratinjau impor dari Google Sheets / CSV / Excel (server yang parse & cocokkan).
+  const handleImportPreview = async (source: 'sheet' | 'csv', csvText?: string) => {
+    if (foundationTenantId) return setMsg('✗ Impor nilai hanya untuk data lembaga sendiri')
+    setImportLoading(true); setImportPreview(null); setMsg('')
+    try {
+      const payload: any = { jenis: importJenis }
+      if (source === 'sheet') payload.sheet_url = sheetUrl
+      else payload.csv_text = csvText
+      const { data } = await api.post('/rapor/import/preview', payload)
+      setImportPreview(data)
+      setMsg(`✓ Preview: ${data.jumlah_cocok} nilai cocok, ${data.jumlah_tidak_cocok} tidak dikenali`)
+    } catch (e: any) { setMsg(`✗ ${e.response?.data?.error || 'Gagal memproses sumber nilai'}`) }
+    finally { setImportLoading(false) }
+  }
+
+  // Terapkan hasil preview ke DB (STS/SAS ke tabel rapor, harian ke penilaian_harian).
+  const handleImportApply = async () => {
+    if (!importPreview?.items?.length) return setMsg('✗ Tidak ada item valid untuk diimpor')
+    setImportLoading(true); setMsg('')
+    try {
+      const { data } = await api.post('/rapor/import/apply', { jenis: importJenis, tahun_ajaran: tahunAjaran, semester, items: importPreview.items })
+      setMsg(`✓ ${data.message}`)
+      setImportPreview(null); setSheetUrl('')
+      if (selectedSiswa) await loadRapor()
+    } catch (e: any) { setMsg(`✗ ${e.response?.data?.error || 'Gagal mengimpor nilai'}`) }
+    finally { setImportLoading(false) }
+  }
+
   const siswa = ringkasan?.siswa || siswaList.find(s => s.id === selectedSiswa)
   const rombel = rombelList.find(r => r.id === selectedRombel)
   const rataAkhir = rapor.length ? Math.round(rapor.reduce((sum, row) => sum + (Number(row.nilai_akhir) || 0), 0) / rapor.length) : 0
@@ -388,8 +446,17 @@ export default function RaporPage() {
               </div>
             </>
           )}
+          {!foundationTenantId && kurikulum === 'merdeka' && (
+            <div className="flex rounded-lg border border-gray-300 overflow-hidden" title="Layout cetak rapor">
+              <button onClick={() => setRaporFormat('rdm')} className={`px-2.5 py-1.5 text-xs font-medium ${raporFormat === 'rdm' ? 'bg-primary text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>Layout RDM</button>
+              <button onClick={() => setRaporFormat('mtsplus')} className={`px-2.5 py-1.5 text-xs font-medium ${raporFormat === 'mtsplus' ? 'bg-primary text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>Layout MTs Plus</button>
+            </div>
+          )}
           {selectedRombel && !foundationTenantId && kurikulum === 'merdeka' && raporFormat === 'mtsplus' && (
             <button onClick={() => void exportPdfBulk('lengkap')} disabled={!selectedRombel} title="Cetak seluruh siswa di kelas ini jadi satu PDF" className="btn-secondary flex items-center gap-2"><Printer className="w-4 h-4" />Cetak Massal (Kelas)</button>
+          )}
+          {!foundationTenantId && kurikulum === 'merdeka' && raporFormat === 'mtsplus' && (
+            <button onClick={() => void exportPdfBulkAll('lengkap')} title="Cetak seluruh siswa semua kelas jadi satu PDF" className="btn-secondary flex items-center gap-2"><Printer className="w-4 h-4" />Cetak Semua Kelas</button>
           )}
           {selectedSiswa && !foundationTenantId && kurikulum === 'merdeka' && (
             <div className="relative">
@@ -430,7 +497,6 @@ export default function RaporPage() {
           <Select label="Semester" value={semester} onChange={setSemester} options={[{ value: 'ganjil', label: 'Ganjil' }, { value: 'genap', label: 'Genap' }]} />
           {kurikulum === 'k13' && <Select label="Jenis Kelamin" value={k13Jk} onChange={setK13Jk} options={[{ value: '', label: 'Semua' }, { value: 'L', label: 'Laki-laki' }, { value: 'P', label: 'Perempuan' }]} />}
           {kurikulum === 'merdeka' && <Field label="Jenis Rapor"><select value={jenis} onChange={e => setJenis(e.target.value as any)} className="input"><option value="rapor_sts">Rapor STS (Tengah Semester)</option><option value="rapor_sas">Rapor SAS (Akhir Semester)</option></select></Field>}
-          {kurikulum === 'merdeka' && <div className="flex items-end"><button onClick={handleGenerate} disabled={loading || !selectedRombel || !!foundationTenantId} className="btn-primary w-full flex justify-center items-center gap-2"><Zap className="w-4 h-4" />{loading ? 'Memproses...' : 'Generate'}</button></div>}
         </div>
         {msg && <p className={`mt-3 text-sm ${msg.startsWith('✓') ? 'text-green-600' : 'text-red-600'}`}>{msg}</p>}
       </div>
@@ -481,10 +547,13 @@ export default function RaporPage() {
 
       {kurikulum === 'merdeka' && !foundationTenantId && (
         <div className="card p-5 print:hidden">
-          <button type="button" onClick={() => setBobotOpen(!bobotOpen)} className="flex w-full items-center justify-between text-left">
-            <span className="font-semibold text-gray-800">Bobot Nilai Rapor</span>
-            <span className="text-sm text-gray-500">{bobotOpen ? 'Sembunyikan' : 'Atur'} {bobot && `· STS ${pct(bobot.sts?.harian)}/${pct(bobot.sts?.sts)}${bobot.sts?.sas ? `/${pct(bobot.sts.sas)}` : ''}`}</span>
-          </button>
+          <div className="flex w-full items-center justify-between gap-3">
+            <button type="button" onClick={() => setBobotOpen(!bobotOpen)} className="flex flex-1 items-center justify-between text-left">
+              <span className="font-semibold text-gray-800">Bobot Nilai Rapor</span>
+              <span className="text-sm text-gray-500">{bobotOpen ? 'Sembunyikan' : 'Atur'} {bobot && `· STS ${pct(bobot.sts?.harian)}/${pct(bobot.sts?.sts)}${bobot.sts?.sas ? `/${pct(bobot.sts.sas)}` : ''}`}</span>
+            </button>
+            <button onClick={handleGenerate} disabled={loading || !selectedRombel} title="Hitung & simpan nilai akhir ke tabel untuk Ledger/Rekap (cetak rapor tidak membutuhkannya)" className="btn-secondary flex items-center gap-2 text-xs"><Zap className="w-4 h-4" />{loading ? 'Memproses...' : 'Simpan ke Ledger'}</button>
+          </div>
           {bobotOpen && (
             <div className="mt-4 space-y-4">
               <p className="text-sm text-gray-500">
@@ -520,6 +589,53 @@ export default function RaporPage() {
                       <Td>{pct(r.sas_harian)} / {pct(r.sas_sts)} / {pct(r.sas_sas)}</Td>
                     </tr>)}</tbody>
                   </table>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {kurikulum === 'merdeka' && !foundationTenantId && (
+        <div className="card p-5 print:hidden">
+          <button type="button" onClick={() => setImportOpen(!importOpen)} className="flex w-full items-center justify-between text-left">
+            <span className="font-semibold text-gray-800 flex items-center gap-2"><FileSpreadsheet className="w-4 h-4" />Impor Nilai (Google Sheets / CSV)</span>
+            <span className="text-sm text-gray-500">{importOpen ? 'Sembunyikan' : 'Buka'}</span>
+          </button>
+          {importOpen && (
+            <div className="mt-4 space-y-4">
+              <p className="text-sm text-gray-500">Input nilai massal lewat Google Sheets publik (&quot;siapa saja dengan link dapat melihat&quot;) atau tempel CSV. Kolom identitas (NIS/NISN/Nama) lalu kolom nilai per mapel, atau format panjang NIS/Mapel/Nilai. Admin & guru bisa mengisi; hasil sama.</p>
+              <div className="grid sm:grid-cols-2 gap-4">
+                <Field label="Jenis Nilai">
+                  <select value={importJenis} onChange={e => setImportJenis(e.target.value as any)} className="input">
+                    <option value="sts">STS (Tengah Semester)</option>
+                    <option value="sas">SAS (Akhir Semester)</option>
+                    <option value="harian">Nilai Harian</option>
+                  </select>
+                </Field>
+                <Field label="URL Google Sheets">
+                  <input value={sheetUrl} onChange={e => setSheetUrl(e.target.value)} placeholder="https://docs.google.com/spreadsheets/d/…" className="input" />
+                </Field>
+              </div>
+              <div className="flex gap-2 flex-wrap">
+                <button onClick={() => void handleImportPreview('sheet')} disabled={importLoading || !sheetUrl.trim()} className="btn-primary flex items-center gap-2"><Link2 className="w-4 h-4" />{importLoading ? 'Memproses…' : 'Pratinjau Google Sheets'}</button>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Atau tempel CSV</label>
+                <textarea value={csvText} onChange={e => setCsvText(e.target.value)} rows={4} placeholder="NIS;Matematika;IPA\n101;85;78" className="input resize-y font-mono text-xs" />
+                <div className="mt-2"><button onClick={() => void handleImportPreview('csv', csvText)} disabled={importLoading || !csvText.trim()} className="btn-secondary flex items-center gap-2"><FileSpreadsheet className="w-4 h-4" />Pratinjau CSV</button></div>
+              </div>
+              {importPreview && (
+                <div className="space-y-3">
+                  {importPreview.sheets?.length > 0 && <div className="flex flex-wrap gap-2">{importPreview.sheets.map((s: any, i: number) => <span key={i} className="text-xs bg-gray-100 rounded px-2 py-1">{s.nama}: {s.jumlah_cocok} cocok / {s.jumlah_tidak_cocok} gagal</span>)}</div>}
+                  <p className="text-sm">{importPreview.jumlah_cocok} nilai cocok, {importPreview.jumlah_tidak_cocok} tidak dikenali.</p>
+                  {importPreview.tidak_cocok?.length > 0 && (
+                    <div className="max-h-40 overflow-y-auto text-xs text-red-600 space-y-1">
+                      {importPreview.tidak_cocok.slice(0, 50).map((t: any, i: number) => <p key={i}>• {t.ident || '-'} / {t.mapel || '-'}: {t.alasan}</p>)}
+                      {importPreview.tidak_cocok.length > 50 && <p>… dan {importPreview.tidak_cocok.length - 50} lainnya</p>}
+                    </div>
+                  )}
+                  <button onClick={handleImportApply} disabled={importLoading || !importPreview?.items?.length} className="btn-primary flex items-center gap-2"><Download className="w-4 h-4" />Terapkan Impor ({importPreview.items?.length || 0} nilai)</button>
                 </div>
               )}
             </div>
