@@ -13,9 +13,10 @@ const fs = require('node:fs')
 const path = require('node:path')
 
 const GEMINI_TTS_MODEL = process.env.GEMINI_TTS_MODEL || 'gemini-2.5-flash-preview-tts'
-// "Puck" = voice pria dengan nada upbeat/ramah — cocok untuk pengumuman
-// absensi ("Azzam masuk") yang perlu terdengar positif & natural.
-const DEFAULT_VOICE = process.env.GEMINI_TTS_VOICE || 'Puck'
+// "Zephyr" = voice PEREMPUAN natural (jalur legacy Gemini TTS; tidak dipakai
+// lagi oleh /api/tts/announce yang kini memakai Edge TTS GadisNeural). Disamakan
+// female agar kalau diaktifkan lagi tetap konsisten dengan suara perempuan.
+const DEFAULT_VOICE = process.env.GEMINI_TTS_VOICE || 'Zephyr'
 
 class TtsRateLimitError extends Error {
   constructor(message, retryAfterMs = 0) {

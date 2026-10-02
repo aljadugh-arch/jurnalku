@@ -31,9 +31,13 @@ const execFileAsync = util.promisify(execFile)
 // Override via env kalau path instalasi berbeda di server lain.
 const EDGE_TTS_BIN = process.env.EDGE_TTS_BIN || '/opt/jurnalku-edge-tts/venv/bin/edge-tts'
 const FFMPEG_BIN = process.env.FFMPEG_BIN || 'ffmpeg'
-// Voice FEMALE Bahasa Indonesia (Microsoft Edge neural). Ganti ke
-// id-ID-ArdiNeural (male) via env EDGE_TTS_VOICE bila suatu saat dibutuhkan lagi.
+// Voice FEMALE Bahasa Indonesia (Microsoft Edge neural) — SATU suara untuk
+// SEMUA tenant supaya pengumuman konsisten. id-ID-GadisNeural adalah voice
+// perempuan Indonesia terbaru/standar di Edge TTS.
 const DEFAULT_VOICE = process.env.EDGE_TTS_VOICE || 'id-ID-GadisNeural'
+// Versi cache: naikkan untuk memaksa regenerasi semua audio lama (mis. yang
+// masih robotic espeak) menjadi suara perempuan tunggal di atas.
+const CACHE_VERSION = 'v1-female'
 const CACHE_DIR_NAME = 'tts_local_cache'
 const GEN_TIMEOUT_MS = 8000
 
@@ -43,8 +47,10 @@ function cacheDirFor(uploadDir) {
   return dir
 }
 
+// Kunci cache menyertakan voice + versi, sehingga perubahan suara membuat file
+// cache lama (suara beda) dianggap miss dan digenerate ulang dengan suara baru.
 function cacheKey(tenantId, text) {
-  return crypto.createHash('sha256').update(`${tenantId}|${text}`).digest('hex')
+  return crypto.createHash('sha256').update(`${tenantId}|${DEFAULT_VOICE}|${CACHE_VERSION}|${text}`).digest('hex')
 }
 
 function isUsableCacheFile(filePath) {
@@ -99,10 +105,11 @@ async function generateViaEdgeTts(text, outputPath) {
 }
 
 /**
- * Fallback offline: espeak (robotic tapi selalu tersedia tanpa internet).
+ * Fallback offline: espeak dengan formant female (+f3) supaya tetap perempuan,
+ * bukan suara robotic laki-laki yang bikin pengumuman tidak konsisten.
  */
 async function generateViaEspeak(text, outputPath) {
-  await execFileAsync('espeak', ['-l', 'id', '-w', outputPath, text], { timeout: GEN_TIMEOUT_MS })
+  await execFileAsync('espeak', ['-v', 'id+f3', '-w', outputPath, text], { timeout: GEN_TIMEOUT_MS })
 }
 
 /**

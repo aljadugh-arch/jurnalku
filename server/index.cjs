@@ -2916,13 +2916,19 @@ app.put('/api/settings/kts-layout', ADMIN, (req, res) => {
     const base = Number.isFinite(n) ? n : 0
     return Math.round(Math.max(0, Math.min(max, base)))
   }
+  const FIELD_SETS = {
+    depan: ['foto', 'nama', 'nisn', 'jk', 'ttl', 'alamat', 'ttd', 'qr'],
+    belakang: ['qr'],
+  }
   const clean = { depan: {}, belakang: {} }
   for (const side of ['depan', 'belakang']) {
-    for (const field of ['nama', 'nis', 'qr']) {
+    for (const field of FIELD_SETS[side]) {
       const raw = layout[side]?.[field]
       // Terima {x, y} object ATAU angka legacy (dianggap posisi Y).
       const obj = raw && typeof raw === 'object' ? raw : { x: undefined, y: raw }
-      clean[side][field] = { x: clamp(obj.x ?? 0, KTS_W), y: clamp(obj.y ?? 0, KTS_H) }
+      const out = { x: clamp(obj.x ?? 0, KTS_W), y: clamp(obj.y ?? 0, KTS_H) }
+      if (field === 'foto') { out.w = clamp(obj.w ?? 48, KTS_W); out.h = clamp(obj.h ?? 64, KTS_H) }
+      clean[side][field] = out
     }
   }
   const id = canonicalSettingsId(req.tenantId)
@@ -4463,7 +4469,7 @@ app.post('/api/siswa/generate-kts', STAFF, async (req, res) => {
     return res.status(400).json({ error: 'siswa_ids wajib berupa array 1-500 siswa' })
   }
   const ids = [...new Set(siswa_ids.map(String).filter(Boolean))]
-  const siswaList = db.prepare(`SELECT s.id, s.nis, s.nisn, s.nama, s.rombel_id, s.jenis_kelamin, s.tempat_lahir, s.tanggal_lahir, s.alamat,
+  const siswaList = db.prepare(`SELECT s.id, s.nis, s.nisn, s.nama, s.rombel_id, s.jenis_kelamin, s.tempat_lahir, s.tanggal_lahir, s.alamat, s.foto,
     r.nama as rombel_nama
     FROM siswa s LEFT JOIN rombel r ON r.id=s.rombel_id AND r.tenant_id=s.tenant_id
     WHERE s.tenant_id=? AND s.id IN (${ids.map(() => '?').join(',')}) AND s.status='aktif'`).all(req.tenantId, ...ids)
@@ -4471,7 +4477,7 @@ app.post('/api/siswa/generate-kts', STAFF, async (req, res) => {
   const qrMap = new Map()
   db.prepare(`SELECT siswa_id, token FROM qr_siswa_identifiers WHERE tenant_id=? AND siswa_id IN (${ids.map(() => '?').join(',')})`).all(req.tenantId, ...ids)
     .forEach(row => qrMap.set(row.siswa_id, row.token))
-  const settings = getTenantSettings(db, req.tenantId, 'nama_lembaga, kts_depan, kts_belakang, kts_layout') || {}
+  const settings = getTenantSettings(db, req.tenantId, 'nama_lembaga, kepala_sekolah, kts_depan, kts_belakang, kts_layout') || {}
   const cards = siswaList.map(s => ({ ...s, qr_token: qrMap.get(s.id) || s.id }))
   try {
     const pdf = await createKtsPdf({ siswaList: cards, settings, uploadDir: UPLOAD_DIR })

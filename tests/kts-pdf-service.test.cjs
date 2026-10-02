@@ -14,17 +14,20 @@ test('normalizeKtsLayout menerima {x,y} bebas dan menolak nilai di luar batas ka
   const free = normalizeKtsLayout(JSON.stringify({ depan: { nama: { x: 100, y: 50 } } }))
   assert.equal(free.depan.nama.x, 100)
   assert.equal(free.depan.nama.y, 50)
-  assert.equal(free.depan.nis.x, DEFAULT_KTS_LAYOUT.depan.nis.x)
+  assert.equal(free.depan.nisn.x, DEFAULT_KTS_LAYOUT.depan.nisn.x)
+  // Foto membawa w/h.
+  assert.equal(free.depan.foto.w, DEFAULT_KTS_LAYOUT.depan.foto.w)
   // Nilai negatif / melebihi batas dikunci ke dalam rentang kartu.
   const clamped = normalizeKtsLayout(JSON.stringify({ depan: { qr: { x: -10, y: 99999 } } }))
   assert.equal(clamped.depan.qr.x, 0)
   assert.equal(clamped.depan.qr.y, CARD_H)
 })
 
-test('normalizeKtsLayout membaca format legacy (angka = posisi Y, X default)', () => {
+test('normalizeKtsLayout membaca format legacy (nama/nis/qr, angka = posisi Y)', () => {
   const legacy = normalizeKtsLayout(JSON.stringify({ depan: { nama: 40, nis: 55 } }))
   assert.deepEqual(legacy.depan.nama, { x: DEFAULT_KTS_LAYOUT.depan.nama.x, y: 40 })
-  assert.deepEqual(legacy.depan.nis, { x: DEFAULT_KTS_LAYOUT.depan.nis.x, y: 55 })
+  assert.deepEqual(legacy.depan.nisn, { x: DEFAULT_KTS_LAYOUT.depan.nisn.x, y: 55 })
   // Field yang tidak tersedia memakai default penuh.
   assert.deepEqual(legacy.depan.qr, DEFAULT_KTS_LAYOUT.depan.qr)
+  assert.deepEqual(legacy.belakang.qr, DEFAULT_KTS_LAYOUT.belakang.qr)
 })

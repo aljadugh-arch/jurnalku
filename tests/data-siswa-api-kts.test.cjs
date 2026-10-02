@@ -13,7 +13,9 @@ test('API siswa menerima filter jenis kelamin L/P secara tenant-scoped', () => {
 
 test('KTS memakai artwork depan dan belakang masing-masing tanpa menukar sisi', () => {
   const source = fs.readFileSync('server/kts-pdf-service.cjs', 'utf8')
-  assert.match(source, /\['depan', front\], \['belakang', back\]/)
-  assert.match(source, /doc\.image\(bg, 0, 0/)
-  assert.match(source, /doc\.fontSize\(7\).*text\(String\(siswa\.nama/)
+  assert.match(source, /const frontBg = resolveUpload\(uploadDir, settings\.kts_depan\)/)
+  assert.match(source, /const backBg = resolveUpload\(uploadDir, settings\.kts_belakang\)/)
+  assert.match(source, /doc\.image\(frontBg, 0, 0/)
+  assert.match(source, /doc\.image\(backBg, 0, 0/)
+  assert.match(source, /siswa\.nama/)
 })
