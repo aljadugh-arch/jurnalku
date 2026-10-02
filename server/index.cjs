@@ -41,6 +41,7 @@ const { createRaporSiswaPdf, normalizeBagian: normalizeBagianRapor, BAGIAN_VALID
 const { createKtsPdf, CARD_W: KTS_W, CARD_H: KTS_H } = require('./kts-pdf-service.cjs')
 const { createRaporK13Pdf, createK13LedgerPdf } = require('./rapor-k13-pdf-service.cjs')
 const { getK13RaporData, getPeringkatK13, getK13Ledger, normalizeK13Nilai } = require('./rapor-k13-service.cjs')
+const { parseCsv, parseExcelBuffer, buildImportPreview, clampNilai } = require('./nilai-import-service.cjs')
 const { getCategoryRecap } = require('./attendance-recap.cjs')
 const { buildRekapRange, getPeriodicAttendanceRecap, deduplicateAttendance } = require('./attendance-periodic-recap.cjs')
 const { isDriveFolderUrl } = require('./library-config.cjs')
@@ -7733,6 +7734,72 @@ app.post('/api/rapor/asesmen', STAFF, (req, res) => {
   })
 })
 
+// POST /api/rapor/import/preview — parse CSV/Excel/Google Sheets (csv_text) lalu
+// cocokkan NIS/NISN -> siswa dan header kolom -> mapel. Preview-only, tidak menulis.
+app.post('/api/rapor/import/preview', STAFF, upload.single('file'), async (req, res) => {
+  try {
+    let headers, rows
+    const csvText = (req.body && (req.body.csv_text || req.body.sheets_csv || '')) || ''
+    if (req.file) {
+      const buf = require('fs').readFileSync(req.file.path)
+      const isXlsx = /\.(xlsx|xls)$/i.test(req.file.originalname || '') || req.file.mimetype === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+      if (isXlsx) { ({ headers, rows } = await parseExcelBuffer(buf)) }
+      else { ({ headers, rows } = await parseCsv(buf.toString('utf8').replace(/^\uFEFF/, ''))) }
+    } else if (csvText) {
+      ({ headers, rows } = parseCsv(csvText.replace(/^\uFEFF/, '')))
+    } else {
+      return res.status(400).json({ error: 'Unggah file (CSV/Excel) atau isi csv_text/sheets_csv' })
+    }
+    if (!headers.length || !rows.length) return res.status(400).json({ error: 'Tidak ada baris data yang bisa dibaca' })
+    const preview = buildImportPreview(db, req.tenantId, { headers, rows })
+    res.json({ success: true, headers, total_baris: rows.length, items: preview.items, tidak_cocok: preview.tidakCocok, jumlah_cocok: preview.total, jumlah_tidak_cocok: preview.tidakCocok.length })
+  } catch (error) {
+    res.status(400).json({ error: error.message })
+  }
+})
+
+// POST /api/rapor/import/apply — tulis hasil preview (STS/SAS ke tabel rapor,
+// harian ke penilaian_harian) + hitung ulang rapor dalam transaksi yang sama.
+app.post('/api/rapor/import/apply', STAFF, (req, res) => {
+  const { jenis, tahun_ajaran, semester, items } = req.body || {}
+  if (!['sts', 'sas', 'harian'].includes(jenis)) return res.status(400).json({ error: "jenis harus 'sts', 'sas', atau 'harian'" })
+  if (!isStr(tahun_ajaran) || !semester || !Array.isArray(items) || !items.length) return res.status(400).json({ error: 'tahun_ajaran, semester, dan items wajib' })
+  const maps = new Map()
+  for (const m of db.prepare('SELECT id FROM mapel WHERE tenant_id=? OR tenant_id IS NULL').all(req.tenantId)) maps.set(m.id, true)
+
+  const trx = db.transaction(() => {
+    let count = 0, skipped = 0, raporUpdated = 0
+    const pairs = new Map()
+    for (const it of items.slice(0, 2000)) {
+      const sid = String(it.siswa_id || '').trim()
+      const mid = String(it.mapel_id || '').trim()
+      const nilai = clampNilai(Number(it.nilai))
+      if (!sid || !mid || !maps.has(mid) || !Number.isFinite(Number(it.nilai))) { skipped++; continue }
+      const siswa = db.prepare("SELECT id FROM siswa WHERE id=? AND tenant_id=? AND COALESCE(status,'aktif')='aktif'").get(sid, req.tenantId)
+      if (!siswa) { skipped++; continue }
+
+      if (jenis === 'harian') {
+        db.prepare(`INSERT INTO penilaian_harian (id, jurnal_id, siswa_id, mapel_id, tanggal, sikap, keaktifan, pengetahuan, catatan, tenant_id)
+          VALUES (?,NULL,?,?,date('now'),0,0,?,'import',?)`).run(uuidv4(), sid, mid, nilai, req.tenantId)
+      } else {
+        const col = jenis === 'sas' ? 'nilai_sas' : 'nilai_sts'
+        db.prepare(`INSERT INTO rapor (id, siswa_id, mapel_id, tahun_ajaran, semester, jenis, ${col}, kkm, tenant_id, created_at, updated_at)
+          VALUES (?,?,?,?,?,?,?,70,?,datetime('now'),datetime('now'))
+          ON CONFLICT(tenant_id, siswa_id, mapel_id, tahun_ajaran, semester, jenis) DO UPDATE SET ${col}=excluded.${col}, updated_at=datetime('now')`)
+          .run(uuidv4(), sid, mid, tahun_ajaran, semester, jenis, nilai, req.tenantId)
+      }
+      pairs.set(`${sid}:${mid}`, { siswaId: sid, mapelId: mid })
+      count++
+    }
+    for (const p of pairs.values()) {
+      raporUpdated += refreshRaporSetelahNilaiBerubah({ tenantId: req.tenantId, siswaId: p.siswaId, mapelId: p.mapelId, tahunAjaran: tahun_ajaran, semester })
+    }
+    return { count, skipped, raporUpdated }
+  })
+  const r = trx()
+  res.json({ success: true, count: r.count, skipped: r.skipped, rapor_updated: r.raporUpdated, message: `${r.count} nilai ${jenis.toUpperCase()} diimpor${r.skipped ? `, ${r.skipped} dilewati` : ''}` })
+})
+
 // POST /api/rapor/rdm/sas — tarik SAS RDM lalu cocokkan ke siswa Jurnalku.
 // Default preview-only; tulis ke Jurnalku hanya jika commit=true dan admin.
 app.post('/api/rapor/rdm/options', STAFF, async (req, res) => {
@@ -7992,6 +8059,7 @@ app.get('/api/rapor-k13/pdf', authMiddleware, async (req, res) => {
   const semester = String(req.query.semester || cp.semester)
   const tahun_ajaran = String(req.query.tahun_ajaran || cp.tahun_ajaran)
   const jenisKelamin = String(req.query.jenis_kelamin || '').trim().toUpperCase()
+  const bagian = ['cover', 'identitas', 'nilai'].includes(req.query.bagian) ? req.query.bagian : null
   const settings = getTenantSettings(db, req.tenantId) || {}
   const list = []
   if (siswa_id) {
@@ -8013,9 +8081,10 @@ app.get('/api/rapor-k13/pdf', authMiddleware, async (req, res) => {
     }
   }
   if (!list.length) return res.status(400).json({ error: 'siswa_id atau rombel_id wajib' })
-  const pdf = await createRaporK13Pdf({ studentList: list, settings, uploadDir: UPLOAD_DIR })
+  const pdf = await createRaporK13Pdf({ studentList: list, settings, uploadDir: UPLOAD_DIR, bagian })
+  const fname = bagian ? `rapor-k13-${bagian}.pdf` : 'rapor-k13.pdf'
   res.setHeader('Content-Type', 'application/pdf')
-  res.setHeader('Content-Disposition', 'attachment; filename="rapor-k13.pdf"')
+  res.setHeader('Content-Disposition', `attachment; filename="${fname}"`)
   res.send(pdf)
 })
 
