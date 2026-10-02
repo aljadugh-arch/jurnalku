@@ -96,6 +96,25 @@ test('createRaporK13Pdf menghasilkan PDF 3 halaman per siswa', async () => {
   db.close()
 })
 
+test('createRaporK13Pdf menghormati bagian cover/identitas/nilai', async () => {
+  const db = fixture()
+  const data = getK13RaporData(db, 't1', { siswaId: 's1', semester: 'ganjil', tahunAjaran: '2025/2026' })
+  const base = {
+    studentList: [{ ...data, rank: 1, totalSiswa: 1 }],
+    settings: { nama_lembaga: 'MTs Contoh', nsm: '121', npsn: '700', kota_cetak: 'Tuban', kepala_sekolah: 'Kepsek' },
+    uploadDir: '/tmp/no-k13',
+  }
+  const halaman = (pdf) => (pdf.toString('latin1').match(/\/Type\s*\/Page[^s]/g) || []).length
+  // Tanpa bagian (null) -> dokumen utuh 3 halaman.
+  assert.equal(halaman(await createRaporK13Pdf(base)), 3)
+  for (const bagian of ['cover', 'identitas', 'nilai']) {
+    const pdf = await createRaporK13Pdf({ ...base, bagian })
+    assert.ok(pdf.subarray(0, 5).toString() === '%PDF-')
+    assert.equal(halaman(pdf), 1, `bagian ${bagian} harus 1 halaman`)
+  }
+  db.close()
+})
+
 test('getK13Ledger mengumpulkan grid nilai per mapel + total/rata/rank', () => {
   const db = fixture()
   db.exec(`CREATE TABLE jadwal (id TEXT, rombel_id TEXT, mapel_id TEXT, tenant_id TEXT, jenis_kegiatan TEXT);`)

@@ -49,7 +49,7 @@ function drawSiswaInfo(doc, s, semester, tahunAjaran) {
   doc.text(`Semester   : ${safe(semester)} (${safe(tahunAjaran)})`, A4.w / 2, y + 14)
 }
 
-async function createRaporK13Pdf({ studentList, settings = {}, uploadDir }) {
+async function createRaporK13Pdf({ studentList, settings = {}, uploadDir, bagian = null }) {
   const list = Array.isArray(studentList) ? studentList : []
   if (!list.length) throw new Error('Tidak ada siswa untuk rapor')
   const doc = new PDFDocument({ size: [A4.w, A4.h], margin: 0, autoFirstPage: false })
@@ -65,9 +65,11 @@ async function createRaporK13Pdf({ studentList, settings = {}, uploadDir }) {
     const ketidakhadiran = item.ketidakhadiran || { sakit: 0, izin: 0, alpa: 0 }
     const rank = item.rank
     const totalSiswa = item.totalSiswa
+    const showBagian = (b) => (bagian == null || bagian === b)
 
     // ===== COVER =====
-    doc.addPage({ size: [A4.w, A4.h], margin: 0 })
+    if (showBagian('cover')) {
+      doc.addPage({ size: [A4.w, A4.h], margin: 0 })
     doc.rect(30, 30, A4.w - 60, A4.h - 60).lineWidth(3).stroke('#000')
     doc.rect(34, 34, A4.w - 68, A4.h - 68).lineWidth(1).stroke('#000')
     if (logoPath) { try { doc.image(logoPath, A4.w / 2 - 30, 110, { fit: [60, 60] }) } catch {} }
@@ -83,9 +85,11 @@ async function createRaporK13Pdf({ studentList, settings = {}, uploadDir }) {
     doc.fontSize(13).text(`${safe(s.nis)} / ${safe(s.nisn)}`, 95, namaBoxY + 98)
     doc.font('Helvetica-Bold').fillColor('#000').fontSize(16).text(upper(settings.nama_lembaga || ''), 40, 470, { width: A4.w - 80, align: 'center' })
     doc.fontSize(11).text(NAMA_INSTANSI, 40, 494, { width: A4.w - 80, align: 'center' })
+    }
 
     // ===== IDENTITAS =====
-    doc.addPage({ size: [A4.w, A4.h], margin: 0 })
+    if (showBagian('identitas')) {
+      doc.addPage({ size: [A4.w, A4.h], margin: 0 })
     drawHeader(doc, settings, logoPath)
     doc.fontSize(13).fillColor('#000').text('IDENTITAS PESERTA DIDIK', 40, 130, { width: A4.w - 80, align: 'center' })
     const biodata = [
@@ -121,9 +125,11 @@ async function createRaporK13Pdf({ studentList, settings = {}, uploadDir }) {
     doc.text('Kepala Madrasah', A4.w - 230, by + 26, { width: 190, align: 'center' })
     doc.moveTo(A4.w - 200, by + 80).lineTo(A4.w - 40, by + 80).stroke('#000')
     doc.font('Helvetica-Bold').text(upper(safe(settings.kepala_sekolah)), A4.w - 230, by + 86, { width: 190, align: 'center', underline: true })
+    }
 
     // ===== NILAI =====
-    doc.addPage({ size: [A4.w, A4.h], margin: 0 })
+    if (showBagian('nilai')) {
+      doc.addPage({ size: [A4.w, A4.h], margin: 0 })
     drawHeader(doc, settings, logoPath)
     doc.fontSize(13).fillColor('#000').text('CAPAIAN HASIL BELAJAR', 40, 130, { width: A4.w - 80, align: 'center' })
     drawSiswaInfo(doc, s, item.semester || 'Ganjil', item.tahunAjaran || '')
@@ -195,6 +201,7 @@ async function createRaporK13Pdf({ studentList, settings = {}, uploadDir }) {
     doc.font('Helvetica-Bold').fontSize(8)
     doc.text(upper(safe(item.waliKelas?.nama || item.waliKelas || '')) || '..............................', A4.w - 200, ty + 64, { width: 160, align: 'center', underline: true })
     doc.text(upper(safe(settings.kepala_sekolah)), A4.w / 2 - 100, ty + 64, { width: 200, align: 'center', underline: true })
+    }
   }
 
   doc.end()

@@ -21,6 +21,15 @@ const CETAK_MENU: Array<{ bagian: BagianCetak; label: string; deskripsi: string 
   { bagian: 'lengkap', label: 'Cetak Lengkap', deskripsi: 'Cover + identitas + nilai' },
 ]
 
+// Menu cetak K-13 mengikuti bagian yang didukung backend (/api/rapor-k13/pdf):
+// cover, identitas, nilai. 'lengkap' = tanpa param bagian (dokumen utuh).
+const K13_MENU: Array<{ bagian: BagianCetak; label: string; deskripsi: string }> = [
+  { bagian: 'cover', label: 'Cetak Cover', deskripsi: 'Sampul rapor K-13 (A4)' },
+  { bagian: 'identitas', label: 'Cetak Identitas Siswa', deskripsi: 'Biodata peserta didik' },
+  { bagian: 'nilai', label: 'Cetak Rapor/Nilai Siswa', deskripsi: 'Capaian hasil belajar' },
+  { bagian: 'lengkap', label: 'Cetak Lengkap', deskripsi: 'Cover + identitas + nilai' },
+]
+
 export default function RaporPage() {
   const [rombelList, setRombelList] = useState<any[]>([])
   const [siswaList, setSiswaList] = useState<any[]>([])
@@ -39,6 +48,7 @@ export default function RaporPage() {
   const [foundationTenantId, setFoundationTenantId] = useState<string | null>(null)
   const [cetakOpen, setCetakOpen] = useState(false)
   const [cetakBagian, setCetakBagian] = useState<BagianCetak>('lengkap')
+  const [k13CetakOpen, setK13CetakOpen] = useState(false)
   const [mapelList, setMapelList] = useState<any[]>([])
   const [bobotMapel, setBobotMapel] = useState('')
   const [bobot, setBobot] = useState<any>(null)
@@ -172,20 +182,23 @@ export default function RaporPage() {
     finally { setSaving(false) }
   }
 
-  const exportK13Pdf = async () => {
+  const exportK13Pdf = async (bagian: BagianCetak = 'lengkap') => {
     if (!selectedSiswa) { setMsg('✗ Pilih siswa terlebih dahulu'); return }
+    const label = { cover: 'Cover', identitas: 'Identitas', nilai: 'Nilai', lengkap: 'Rapor' }[bagian]
     try {
+      const params: Record<string, string> = { siswa_id: selectedSiswa, tahun_ajaran: tahunAjaran, semester }
+      if (bagian !== 'lengkap') params.bagian = bagian
       const response = await api.get('/rapor-k13/pdf', {
-        params: { siswa_id: selectedSiswa, tahun_ajaran: tahunAjaran, semester },
+        params,
         responseType: 'blob',
       })
       const url = window.URL.createObjectURL(new Blob([response.data], { type: 'application/pdf' }))
       const link = document.createElement('a')
       link.href = url
-      link.setAttribute('download', `rapor-k13-${siswa?.nama || selectedSiswa}-${tahunAjaran}-${semester}.pdf`)
+      link.setAttribute('download', `rapor-k13-${label}-${siswa?.nama || selectedSiswa}-${tahunAjaran}-${semester}.pdf`)
       document.body.appendChild(link); link.click(); link.parentNode?.removeChild(link)
       window.URL.revokeObjectURL(url)
-      setMsg('✓ Rapor K-13 siap cetak (PDF)')
+      setMsg(`✓ Rapor K-13 (${label}) siap cetak (PDF)`)
     } catch (e: any) {
       let pesan = 'Gagal download PDF'
       const data = e.response?.data
@@ -329,7 +342,24 @@ export default function RaporPage() {
           {selectedSiswa && !foundationTenantId && kurikulum === 'k13' && (
             <>
               <button onClick={() => exportK13Legger('legger')} disabled={!selectedRombel} className="btn-secondary flex items-center gap-2"><Printer className="w-4 h-4" />Legger</button>
-              <button onClick={exportK13Pdf} className="btn-primary flex items-center gap-2"><Printer className="w-4 h-4" />Cetak K-13</button>
+              <div className="relative">
+                <button onClick={() => setK13CetakOpen(!k13CetakOpen)} aria-haspopup="menu" aria-expanded={k13CetakOpen} className="btn-primary flex items-center gap-2"><Printer className="w-4 h-4" />Cetak K-13</button>
+                {k13CetakOpen && (
+                  <div role="menu" className="absolute right-0 z-20 mt-2 w-64 overflow-hidden rounded-lg border border-gray-200 bg-white shadow-lg">
+                    {K13_MENU.map(item => (
+                      <button
+                        key={item.bagian}
+                        role="menuitem"
+                        onClick={() => { setK13CetakOpen(false); void exportK13Pdf(item.bagian) }}
+                        className="block w-full px-4 py-2 text-left text-sm hover:bg-gray-50"
+                      >
+                        <span className="font-medium text-gray-800">{item.label}</span>
+                        <span className="block text-xs text-gray-500">{item.deskripsi}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
             </>
           )}
           {selectedSiswa && !foundationTenantId && kurikulum === 'merdeka' && (
