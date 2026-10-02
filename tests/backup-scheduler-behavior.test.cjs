@@ -111,13 +111,30 @@ test('startup after scheduled time catches up exactly once that day', async () =
   assert.equal(f.uploads, 1)
 })
 
-test('failure clears claim so a later tick retries', async () => {
+test('failure keeps claim so a tick within 30 minutes does not retry', async () => {
   process.env.GOOGLE_DRIVE_AUTH_MODE = 'oauth2'
   process.env.GOOGLE_DRIVE_OAUTH_CLIENT_FILE = '/tmp/jurnalku-backup-oauth-client.json'
   process.env.GOOGLE_DRIVE_OAUTH_TOKEN_FILE = '/tmp/jurnalku-backup-oauth-token.json'
   const db = makeDb(); db.prepare("DELETE FROM tenants WHERE id='bad'").run(); enable(db, 'good')
-  const f = installFetch(['fail','ok']); const s = scheduler(db, '2026-09-11T16:00:00.000Z', f)
-  await s.automaticBackupTick(); await s.automaticBackupTick()
+  const f = installFetch(['fail', 'ok'])
+  let current = Date.parse('2026-09-11T16:00:00.000Z')
+  const app = makeApp()
+  let sequence = 0
+  const result = registerBackupRoutes(app, db, {
+    requireRole: () => (_req, _res, next) => next(), uuid: () => `uuid-${++sequence}`, mediaRoot: '/tmp/none',
+    now: () => new Date(current), resolveAuth: async () => ({ token: 'test-token', auth: { type: 'test' } }),
+  })
+  // tick 1: gagal -> lock 30 menit dipertahankan (bukan di-reset NULL)
+  await result.automaticBackupTick()
+  assert.equal(f.uploads, 1)
+  assert.ok(db.prepare("SELECT run_claimed_at FROM backup_config WHERE tenant_id='good'").get().run_claimed_at, 'claim harus dipertahankan saat gagal')
+  // tick 2: +1 menit, masih dalam jendela lock -> tidak boleh retry (dulu: retry tiap 60s)
+  current += 60 * 1000
+  await result.automaticBackupTick()
+  assert.equal(f.uploads, 1, 'tidak boleh retry dalam 30 menit')
+  // tick 3: +31 menit, lock sudah stale -> retry dan sukses
+  current += 31 * 60 * 1000
+  await result.automaticBackupTick()
   assert.equal(f.uploads, 2)
   assert.equal(db.prepare("SELECT last_run_key FROM backup_config WHERE tenant_id='good'").get().last_run_key, '2026-09-11')
 })

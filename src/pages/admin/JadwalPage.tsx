@@ -4,7 +4,6 @@ import { Plus, Trash2, AlertTriangle, X, Download, FileSpreadsheet, Pencil, Sett
 import toast from 'react-hot-toast'
 import api from '../../services/api'
 import * as XLSX from 'xlsx'
-import ExcelJS from 'exceljs'
 import { generateJamPelajaran, jtmMenit } from '../../lib/jenjang'
 import { pilihGuru, pilihMapel } from '../../lib/jadwalSelection'
 import BulkDeleteButton from '../../components/BulkDeleteButton'
@@ -344,6 +343,7 @@ export default function JadwalPage() {
       const COL_TOTAL = COL_REKAP.hariStart + nHari
       const lastCol = COL_TOTAL // 0-indexed -> total kolom = lastCol+1
 
+      const { default: ExcelJS } = await import('exceljs')
       const wb = new ExcelJS.Workbook()
       const ws = wb.addWorksheet('Master Jadwal', {
         pageSetup: { orientation: 'portrait', fitToPage: true, fitToWidth: 1, fitToHeight: 0, paperSize: 9 }, // A4

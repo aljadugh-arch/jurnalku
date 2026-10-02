@@ -359,7 +359,9 @@ function registerBackupRoutes(app, db, { requireRole, uuid, mediaRoot, now = () 
         await applyRetention(tenant.id, getConfig(tenant.id), backup.token, currentDate)
         db.prepare('UPDATE backup_config SET last_run_key=?,last_run_at=?,run_claimed_at=NULL WHERE tenant_id=?').run(key, claimedAt, tenant.id)
       } catch (error) {
-        db.prepare('UPDATE backup_config SET run_claimed_at=NULL WHERE tenant_id=?').run(tenant.id)
+        // Jangan lepas run_claimed_at saat gagal: pertahankan lock 30 menit
+        // (cek staleBefore) supaya tick 1 menit tidak mencoba ulang tiap 60 detik
+        // — dulu 486 baris error menumpuk dalam sejam saat OAuth token gagal.
         db.prepare('INSERT INTO backup_log (id,tenant_id,filename,drive_file_id,size,status,error) VALUES (?,?,?,?,?,?,?)')
           .run(uuid(), tenant.id, `auto-${key}`, null, 0, 'error', String(error.message || error))
       }
