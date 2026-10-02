@@ -2,7 +2,7 @@ const test = require('node:test')
 const assert = require('node:assert/strict')
 const Database = require('better-sqlite3')
 const { createRaporSiswaPdf, coverLayout, faseFromTingkat, buildCapaianKompetensi } = require('../server/rapor-siswa-pdf-service.cjs')
-const { createRaporMtsplusPdf } = require('../server/rapor-mtsplus-pdf-service.cjs')
+const { createRaporMtsplusPdf, createRaporMtsplusPdfBulk } = require('../server/rapor-mtsplus-pdf-service.cjs')
 
 // Bangun DB in-memory minimal yang meniru skema produksi (kolom yang dipakai
 // createRaporSiswaPdf saja) agar test tidak bergantung pada file DB nyata.
@@ -195,5 +195,33 @@ test('createRaporMtsplusPdf menghasilkan 3 bagian (cover/identitas/nilai) untuk 
     tenantId: 't1', siswaId: 'tidak-ada', tahunAjaran: '2026/2027', semester: 'ganjil', jenis: 'rapor_sts', uploadDir: '/tmp/nonexistent-uploads',
   })
   assert.equal(kosong, null, 'siswa tidak ditemukan -> null')
+  db.close()
+})
+
+test('createRaporMtsplusPdfBulk menggabungkan banyak siswa jadi satu PDF', async () => {
+  const db = buildTestDb()
+  // Tambah siswa ke-2 (rombel sama) + nilai rapor agar ikut tercetak.
+  db.prepare(`INSERT INTO siswa (id, tenant_id, nis, nisn, nama, jenis_kelamin, rombel_id, status)
+    VALUES ('s2','t1','1002','0022','Siswa Dua','P','r1','aktif')`).run()
+  db.prepare(`INSERT INTO rapor (id, tenant_id, siswa_id, mapel_id, tahun_ajaran, semester, jenis, nilai_akhir, predikat)
+    VALUES ('rp3','t1','s2','m1','2026/2027','ganjil','rapor_sts',88,'A'),
+           ('rp4','t1','s2','m2','2026/2027','ganjil','rapor_sts',90,'A')`).run()
+
+  const doc = await createRaporMtsplusPdfBulk(db, {
+    tenantId: 't1', rombelId: 'r1', tahunAjaran: '2026/2027', semester: 'ganjil', jenis: 'rapor_sts', uploadDir: '/tmp/nonexistent-uploads',
+  })
+  assert.ok(doc, 'bulk harus menghasilkan doc untuk rombel dengan siswa')
+  assert.equal(doc.meta.dicetak, 2, '2 siswa tercetak')
+  assert.equal(doc.meta.total, 2, 'total 2 siswa aktif')
+
+  const chunks = []
+  doc.on('data', c => chunks.push(c))
+  const done = new Promise(resolve => doc.on('end', resolve))
+  doc.end()
+  await done
+  const buf = Buffer.concat(chunks)
+  assert.equal(buf.subarray(0, 4).toString(), '%PDF')
+  const halaman = (pdf) => (pdf.toString('latin1').match(/\/Type\s*\/Page[^s]/g) || []).length
+  assert.equal(halaman(buf), 6, '2 siswa x 3 halaman (lengkap) = 6 halaman')
   db.close()
 })

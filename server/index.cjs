@@ -38,7 +38,7 @@ const { monitorStatus, sanitizeExamForMonitor } = require('./exam-proctor.cjs')
 const { buatPemeriksaOrigin } = require('./cors-origin.cjs')
 const { migrateRaporUniqueIndex } = require('./rapor-unique-index.cjs')
 const { createRaporSiswaPdf, normalizeBagian: normalizeBagianRapor, BAGIAN_VALID: BAGIAN_RAPOR_VALID } = require('./rapor-siswa-pdf-service.cjs')
-const { createRaporMtsplusPdf } = require('./rapor-mtsplus-pdf-service.cjs')
+const { createRaporMtsplusPdf, createRaporMtsplusPdfBulk } = require('./rapor-mtsplus-pdf-service.cjs')
 const { createKtsPdf, CARD_W: KTS_W, CARD_H: KTS_H } = require('./kts-pdf-service.cjs')
 const { createRaporK13Pdf, createK13LedgerPdf } = require('./rapor-k13-pdf-service.cjs')
 const { getK13RaporData, getPeringkatK13, getK13Ledger, normalizeK13Nilai } = require('./rapor-k13-service.cjs')
@@ -7520,6 +7520,45 @@ app.get('/api/rapor/export/pdf', authMiddleware, async (req, res) => {
   } catch (e) {
     console.error('[rapor/export/pdf]', e)
     res.status(500).json({ error: 'Gagal membuat PDF rapor' })
+  }
+})
+
+// Cetak MASSAL rapor (format mtsplus): seluruh siswa aktif satu rombel (atau
+// seluruh tenant bila rombel_id kosong) jadi SATU PDF. Mirip fitur cetak-masal
+// rapor.mtsplussd7.cc.cd (/cetak/kelas + /cetak/pdf). Siswa yang rapor-nya
+// belum digenerate dilewati (dihitung), bukan gagalkan seluruh proses.
+app.get('/api/rapor/export/pdf-bulk', authMiddleware, async (req, res) => {
+  const { rombel_id, tahun_ajaran, semester, jenis = 'rapor_sts', bagian } = req.query
+  if (!tahun_ajaran || !semester) return res.status(400).json({ error: 'tahun_ajaran dan semester wajib' })
+  if (bagian !== undefined && bagian !== '' && !BAGIAN_RAPOR_VALID.includes(String(bagian).trim().toLowerCase())) {
+    return res.status(400).json({ error: `bagian harus salah satu dari: ${BAGIAN_RAPOR_VALID.join(', ')}` })
+  }
+  const bagianPdf = normalizeBagianRapor(bagian)
+  const validationError = validateRaporPeriod(tahun_ajaran, semester, jenis)
+  if (validationError) return res.status(400).json({ error: validationError })
+  // Scope: guru hanya boleh cetak rombel yang dia ajar/ampu.
+  if (rombel_id && isTeacherContext(req) && !canManageRaporRombel(req, rombel_id)) {
+    return res.status(404).json({ error: 'Rombel tidak ditemukan' })
+  }
+  if (!rombel_id && isTeacherContext(req)) {
+    return res.status(403).json({ error: 'Guru harus memilih rombel tertentu' })
+  }
+  try {
+    const doc = await createRaporMtsplusPdfBulk(db, {
+      tenantId: req.tenantId, rombelId: rombel_id ? String(rombel_id) : null,
+      tahunAjaran: tahun_ajaran, semester, jenis, uploadDir: UPLOAD_DIR, bagian: bagianPdf,
+    })
+    if (!doc) return res.status(404).json({ error: 'Tidak ada siswa aktif dengan rapor yang bisa dicetak' })
+    const { dicetak, dilewati } = doc.meta || { dicetak: 0, dilewati: 0 }
+    if (dicetak === 0) return res.status(409).json({ error: `Tidak ada rapor yang bisa dicetak (${dilewati} siswa belum digenerate). Generate rapor per rombel dulu.` })
+    const fnameBagian = bagianPdf === 'lengkap' ? 'rapor' : bagianPdf
+    res.setHeader('Content-Type', 'application/pdf')
+    res.setHeader('Content-Disposition', `attachment; filename=\"${fnameBagian}-mtsplus-${rombel_id ? 'rombel-' + rombel_id : 'semua'}-${semester}.pdf\"`)
+    doc.pipe(res)
+    doc.end()
+  } catch (e) {
+    console.error('[rapor/export/pdf-bulk]', e)
+    res.status(500).json({ error: 'Gagal membuat PDF rapor massal' })
   }
 })
 

@@ -289,6 +289,30 @@ export default function RaporPage() {
     }
   }
 
+  // Cetak MASSAL seluruh siswa satu kelas (format mtsplus) jadi SATU PDF.
+  const exportPdfBulk = async (bagian: BagianCetak = 'lengkap') => {
+    if (!selectedRombel) { setMsg('✗ Pilih kelas terlebih dahulu'); return }
+    if (foundationTenantId) return setMsg('✗ Cetak massal hanya untuk data lembaga sendiri')
+    if (raporFormat !== 'mtsplus') return setMsg('✗ Cetak massal tersedia pada layout "MTs Plus"')
+    setMsg('⏳ Membuat PDF massal…')
+    try {
+      const response = await api.get('/rapor/export/pdf-bulk', {
+        params: { rombel_id: selectedRombel, tahun_ajaran: tahunAjaran, semester, jenis, bagian },
+        responseType: 'blob',
+        timeout: 120000,
+      })
+      downloadBlob(new Blob([response.data], { type: 'application/pdf' }), `rapor-${bagian}-mtsplus-${rombel?.nama || selectedRombel}-${tahunAjaran}-${semester}.pdf`)
+      setMsg('✓ PDF massal siap cetak (satu file untuk seluruh kelas)')
+    } catch (e: any) {
+      let pesan = 'Gagal membuat PDF massal'
+      const data = e.response?.data
+      if (data instanceof Blob) {
+        try { pesan = JSON.parse(await data.text()).error || pesan } catch { /* biarkan */ }
+      } else if (data?.error) pesan = data.error
+      setMsg(`✗ ${pesan}`)
+    }
+  }
+
   const siswa = ringkasan?.siswa || siswaList.find(s => s.id === selectedSiswa)
   const rombel = rombelList.find(r => r.id === selectedRombel)
   const rataAkhir = rapor.length ? Math.round(rapor.reduce((sum, row) => sum + (Number(row.nilai_akhir) || 0), 0) / rapor.length) : 0
@@ -363,6 +387,9 @@ export default function RaporPage() {
                 )}
               </div>
             </>
+          )}
+          {selectedRombel && !foundationTenantId && kurikulum === 'merdeka' && raporFormat === 'mtsplus' && (
+            <button onClick={() => void exportPdfBulk('lengkap')} disabled={!selectedRombel} title="Cetak seluruh siswa di kelas ini jadi satu PDF" className="btn-secondary flex items-center gap-2"><Printer className="w-4 h-4" />Cetak Massal (Kelas)</button>
           )}
           {selectedSiswa && !foundationTenantId && kurikulum === 'merdeka' && (
             <div className="relative">

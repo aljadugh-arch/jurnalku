@@ -1,17 +1,16 @@
 // Rapor siswa siap-cetak — LAYOUT ALTERNATIF "MTs Plus" (mirip rapor.mtsplussd7.cc.cd).
-// Dipakai saat admin memilih format "mtsplus" di menu cetak. Struktur:
+// Struktur per siswa:
 //   halaman 1: cover "RAPOR PESERTA DIDIK" + jenis rapor (STS/SAS)
 //   halaman 2: kop + IDENTITAS PESERTA DIDIK (biodata bernomor) + pas foto + TTD
 //   halaman 3: kop + CAPAIAN HASIL BELAJAR (6 kolom: No|Mapel|KKM|Nilai|Huruf|Capaian)
 //              + Penilaian Sikap + Ekstrakurikuler + Ketidakhadiran + Catatan + TTD
-// Layout default (createRaporSiswaPdf) tetap tersedia; keduanya berbagi sumber
-// data yang sama (query identik) supaya isinya konsisten.
+// Mendukung cetak SATU siswa (createRaporMtsplusPdf) dan cetak MASSAL satu kelas/
+// seluruh siswa (createRaporMtsplusPdfBulk) — ratusan siswa jadi satu PDF sekaligus.
 
 const PDFDocument = require('pdfkit')
 const QRCode = require('qrcode')
 const { getTenantSettings } = require('./tenant-settings.cjs')
 const { terbilang, nilaiKeAbjad, semesterRange } = require('./rapor-k13-service.cjs')
-const { buildCapaianKompetensi } = require('./rapor-siswa-pdf-service.cjs')
 const path = require('path')
 const fs = require('fs')
 
@@ -38,8 +37,7 @@ function jenisLabel(jenis) {
   return jenis === 'rapor_sas' ? 'SUMATIF AKHIR SEMESTER (SAS)' : 'SUMATIF TENGAH SEMESTER (STS)'
 }
 
-// Peringkat siswa dalam satu rombel berdasarkan rata-rata nilai akhir pada
-// periode (tahun_ajaran, semester, jenis) yang sama.
+// Peringkat siswa dalam satu rombel berdasarkan rata-rata nilai akhir.
 function hitungRank(db, tenantId, rombelId, tahunAjaran, semester, jenis, siswaId) {
   const rows = db.prepare(`
     SELECT r.siswa_id, AVG(COALESCE(r.nilai_akhir, 0)) AS rata
@@ -54,21 +52,12 @@ function hitungRank(db, tenantId, rombelId, tahunAjaran, semester, jenis, siswaI
   return { rank: idx >= 0 ? idx + 1 : 0, totalSiswa: rows.length }
 }
 
-// Kop surat: logo kemenag (kiri) + nama instansi/lembaga/NSM/NPSN/alamat (tengah)
-// + logo lembaga (kanan), garis bawah. Mengembalikan y setelah kop.
+// Kop surat: logo kemenag (kiri) + instansi/lembaga/NSM/NPSN/alamat (tengah) + logo lembaga.
 function drawKop(doc, settings, logo, y) {
   const W = doc.page.width
   const M = doc.page.margins.left
-  const cx = W / 2
-  const kemenag = logo.kemenagPath
-  const lembagaLogo = logo.lembagaPath
-
-  if (kemenag) {
-    try { doc.image(kemenag, M, y, { fit: [52, 52] }) } catch { /* tanpa logo */ }
-  }
-  if (lembagaLogo) {
-    try { doc.image(lembagaLogo, W - M - 52, y, { fit: [52, 52] }) } catch { /* tanpa logo */ }
-  }
+  if (logo.kemenagPath) { try { doc.image(logo.kemenagPath, M, y, { fit: [52, 52] }) } catch {} }
+  if (logo.lembagaPath) { try { doc.image(logo.lembagaPath, W - M - 52, y, { fit: [52, 52] }) } catch {} }
 
   const tx = M + 60
   const tw = W - 2 * (M + 60)
@@ -89,14 +78,9 @@ function drawKop(doc, settings, logo, y) {
   return ruleY + 8
 }
 
-async function createRaporMtsplusPdf(db, options) {
-  const { tenantId, siswaId, tahunAjaran, semester, jenis, uploadDir } = options
-  const bagian = options.bagian || 'lengkap'
-  const cetakCover = bagian === 'cover' || bagian === 'lengkap'
-  const cetakIdentitas = bagian === 'identitas' || bagian === 'lengkap'
-  const butuhNilai = bagian === 'nilai' || bagian === 'lengkap'
-
-  // ---- Sumber data (query identik dengan renderer RDM) ----
+// Muat seluruh data satu siswa (query identik dengan renderer RDM).
+// Return null (siswa tidak ada), {error:'RAPOR_NOT_GENERATED'}, atau bundle data.
+async function loadStudentData(db, { tenantId, siswaId, tahunAjaran, semester, jenis, uploadDir }) {
   const siswa = db.prepare(`
     SELECT s.*, r.nama AS rombel_nama, r.tingkat, g.nama AS wali_kelas_nama
     FROM siswa s LEFT JOIN rombel r ON s.rombel_id=r.id AND r.tenant_id=s.tenant_id
@@ -113,7 +97,7 @@ async function createRaporMtsplusPdf(db, options) {
     WHERE r.tenant_id=? AND r.siswa_id=? AND r.tahun_ajaran=? AND r.semester=? AND r.jenis=?
     ORDER BY COALESCE(m.kelompok,'wajib'), m.nama
   `).all(tenantId, siswaId, tahunAjaran, semester, jenis)
-  if (butuhNilai && rapor.length === 0) return { error: 'RAPOR_NOT_GENERATED' }
+  if (rapor.length === 0) return { error: 'RAPOR_NOT_GENERATED' }
 
   const { from, to } = semesterRange(semester, tahunAjaran)
   const absensiRows = db.prepare(`SELECT lower(status) AS status, COUNT(DISTINCT tanggal) AS jumlah
@@ -158,7 +142,19 @@ async function createRaporMtsplusPdf(db, options) {
   const kota = safeText(settings.kota_cetak || settings.kota, '')
   const namaKepsek = safeText(settings.kepala_sekolah, '................................................')
 
-  const doc = new PDFDocument({ size: 'A4', margin: 34, bufferPages: true, autoFirstPage: false })
+  return {
+    siswa, settings, rapor, kehadiran, kepribadian, pelengkap, ekstrakurikuler,
+    jumlahNilai, rataAkhir, rank, qrBuffer, fotoPath, logo, tglRapor, kota, namaKepsek,
+    semester, tahunAjaran, jenis,
+  }
+}
+
+// Render halaman satu siswa ke doc (sudah berisi data lengkap dari loadStudentData).
+function renderStudentPages(doc, data, bagian) {
+  const { siswa, settings, rapor, kehadiran, kepribadian, pelengkap, ekstrakurikuler, jumlahNilai, rataAkhir, rank, qrBuffer, fotoPath, logo, tglRapor, kota, namaKepsek, semester, tahunAjaran, jenis } = data
+  const cetakCover = bagian === 'cover' || bagian === 'lengkap'
+  const cetakIdentitas = bagian === 'identitas' || bagian === 'lengkap'
+  const butuhNilai = bagian === 'nilai' || bagian === 'lengkap'
   const W = 595.28
   const H = 841.89
   const M = 34
@@ -169,19 +165,14 @@ async function createRaporMtsplusPdf(db, options) {
     doc.rect(18, 18, W - 36, H - 36).lineWidth(4).strokeColor('black').stroke()
     doc.rect(26, 26, W - 52, H - 52).lineWidth(1).stroke()
 
-    if (logo.kemenagPath) {
-      try { doc.image(logo.kemenagPath, W / 2 - 40, 70, { fit: [80, 80] }) } catch { /* tanpa logo */ }
-    }
-    if (logo.lembagaLogoPath) {
-      try { doc.image(logo.lembagaLogoPath, W / 2 - 30, 160, { fit: [60, 60] }) } catch { /* tanpa logo */ }
-    }
+    if (logo.kemenagPath) { try { doc.image(logo.kemenagPath, W / 2 - 40, 70, { fit: [80, 80] }) } catch {} }
+    if (logo.lembagaPath) { try { doc.image(logo.lembagaPath, W / 2 - 30, 160, { fit: [60, 60] }) } catch {} }
 
     doc.font('Helvetica-Bold').fontSize(22).fillColor('black')
     doc.text('RAPOR PESERTA DIDIK', M, 250, { width: W - 2 * M, align: 'center', characterSpacing: 1 })
     doc.font('Helvetica-Bold').fontSize(14)
     doc.text('Madrasah Tsanawiyah (MTs)', M, 285, { width: W - 2 * M, align: 'center' })
 
-    // Badge jenis rapor (kotak hitam teks putih)
     const jenisTxt = jenisLabel(jenis)
     doc.font('Helvetica-Bold').fontSize(12)
     const badgeW = doc.widthOfString(jenisTxt) + 24
@@ -190,7 +181,6 @@ async function createRaporMtsplusPdf(db, options) {
     doc.rect(badgeX, badgeY, badgeW, 22).fill('#000000')
     doc.fillColor('white').text(jenisTxt, badgeX, badgeY + 5, { width: badgeW, align: 'center' })
 
-    // Kotak nama peserta didik
     const boxY = 390
     doc.rect(W / 2 - 160, boxY, 320, 120).lineWidth(2).strokeColor('black').stroke()
     doc.font('Helvetica').fontSize(11).fillColor('black')
@@ -251,11 +241,9 @@ async function createRaporMtsplusPdf(db, options) {
       y += 20
     }
 
-    // Foto + TTD kepala
     const sigY = Math.max(y + 20, 660)
-    if (fotoPath) {
-      try { doc.image(fotoPath, M + 20, sigY, { fit: [85, 113] }) } catch { /* tanpa foto */ }
-    } else {
+    if (fotoPath) { try { doc.image(fotoPath, M + 20, sigY, { fit: [85, 113] }) } catch {} }
+    else {
       doc.rect(M + 20, sigY, 85, 113).lineWidth(1).stroke()
       doc.font('Helvetica').fontSize(8).text('PAS FOTO\n3 X 4', M + 20, sigY + 45, { width: 85, align: 'center', lineBreak: false })
     }
@@ -263,7 +251,7 @@ async function createRaporMtsplusPdf(db, options) {
     doc.text(`${kota}${kota ? ', ' : ''}${tglRapor}`, W - M - 200, sigY, { width: 190, align: 'center', lineBreak: false })
     doc.font('Helvetica').fontSize(11)
     doc.text('Kepala Madrasah', W - M - 200, sigY + 20, { width: 190, align: 'center', lineBreak: false })
-    if (qrBuffer) { try { doc.image(qrBuffer, W - M - 160, sigY + 40, { fit: [50, 50] }) } catch { /* tanpa QR */ } }
+    if (qrBuffer) { try { doc.image(qrBuffer, W - M - 160, sigY + 40, { fit: [50, 50] }) } catch {} }
     doc.font('Helvetica-Bold').fontSize(11)
     doc.text(namaKepsek.toUpperCase(), W - M - 200, sigY + 95, { width: 190, align: 'center', underline: true, lineBreak: false })
   }
@@ -277,7 +265,6 @@ async function createRaporMtsplusPdf(db, options) {
     doc.text(`CAPAIAN HASIL BELAJAR ${jenisLabel(jenis)}`, M, y + 4, { width: W - 2 * M, align: 'center', underline: true })
     y += 30
 
-    // Info siswa: Nama/NIS-NISN | Kelas/Semester
     doc.font('Helvetica-Bold').fontSize(9)
     doc.text('Nama', M, y, { width: 40, lineBreak: false })
     doc.text(`: ${safeText(siswa.nama).toUpperCase()}`, M + 42, y, { width: 200, lineBreak: false })
@@ -289,7 +276,6 @@ async function createRaporMtsplusPdf(db, options) {
     doc.text(`: ${semester === 'ganjil' ? 'Ganjil' : 'Genap'} (${tahunAjaran})`, W / 2 + 62, y + 14, { width: 150, lineBreak: false })
     y += 34
 
-    // Tabel nilai 6 kolom
     const cols = { no: { x: M, w: 22 }, mapel: { x: M + 22, w: 190 }, kkm: { x: M + 212, w: 32 }, nilai: { x: M + 244, w: 32 }, huruf: { x: M + 276, w: 120 }, capaian: { x: M + 396, w: W - M - 396 } }
     const drawHeader = () => {
       doc.font('Helvetica-Bold').fontSize(8)
@@ -330,7 +316,6 @@ async function createRaporMtsplusPdf(db, options) {
     drawRow('', 'Jumlah Total', '', jumlahNilai, terbilang(jumlahNilai), '', true)
     drawRow('', 'Rata-Rata', '', rataAkhir.toFixed(1), '', `Peringkat: ${rank.rank} dari ${rank.totalSiswa}`, true)
 
-    // Penilaian Sikap Wali Kelas
     y += 4
     const sikap = [
       ['Kelakuan', kepribadian.kelakuan],
@@ -347,7 +332,7 @@ async function createRaporMtsplusPdf(db, options) {
       y += 16
       doc.font('Helvetica').fontSize(8)
       let sx = M
-      sikap.forEach(([label, v], i) => {
+      sikap.forEach(([label, v]) => {
         const cellW = (W - 2 * M) / sikap.length
         doc.rect(sx, y, cellW, 16).lineWidth(0.7).stroke()
         doc.text(label, sx + 3, y + 3, { width: cellW - 6, align: 'left', lineBreak: false })
@@ -360,7 +345,6 @@ async function createRaporMtsplusPdf(db, options) {
       y += 20
     }
 
-    // Ekstrakurikuler + Ketidakhadiran
     const halfW = (W - 2 * M - 10) / 2
     const ex = M
     const ax = M + halfW + 10
@@ -387,7 +371,6 @@ async function createRaporMtsplusPdf(db, options) {
     })
     y = Math.max(y, ey) + 8
 
-    // Catatan Wali Kelas
     doc.font('Helvetica-Bold').fontSize(8)
     doc.rect(M, y, W - 2 * M, 26).lineWidth(1).stroke()
     doc.text('Catatan Wali Kelas:', M + 4, y + 4, { width: W - 2 * M - 8, lineBreak: false })
@@ -395,7 +378,6 @@ async function createRaporMtsplusPdf(db, options) {
     doc.text(`"${safeText(pelengkap.catatan_wali_kelas || kepribadian.catatan_wali_kelas || kepribadian.saran, 'Tingkatkan terus kedisiplinan dan semangat belajarmu.')}"`, M + 4, y + 15, { width: W - 2 * M - 8, lineBreak: false })
     y += 34
 
-    // TTD 3 kolom
     const ttdY = Math.max(y + 20, 700)
     doc.font('Helvetica').fontSize(9)
     doc.text('Mengetahui,\nOrang Tua / Wali', M, ttdY, { width: (W - 2 * M) / 3, align: 'center' })
@@ -403,7 +385,7 @@ async function createRaporMtsplusPdf(db, options) {
 
     doc.font('Helvetica').fontSize(9)
     doc.text('Kepala Madrasah', M + (W - 2 * M) / 3, ttdY, { width: (W - 2 * M) / 3, align: 'center' })
-    if (qrBuffer) { try { doc.image(qrBuffer, M + (W - 2 * M) / 3 + ((W - 2 * M) / 3 - 34) / 2, ttdY + 16, { fit: [34, 34] }) } catch { /* tanpa QR */ } }
+    if (qrBuffer) { try { doc.image(qrBuffer, M + (W - 2 * M) / 3 + ((W - 2 * M) / 3 - 34) / 2, ttdY + 16, { fit: [34, 34] }) } catch {} }
     doc.font('Helvetica-Bold')
     doc.text(namaKepsek.toUpperCase(), M + (W - 2 * M) / 3, ttdY + 52, { width: (W - 2 * M) / 3, align: 'center', underline: true })
 
@@ -412,8 +394,79 @@ async function createRaporMtsplusPdf(db, options) {
     doc.font('Helvetica-Bold')
     doc.text(safeText(siswa.wali_kelas_nama).toUpperCase(), M + 2 * (W - 2 * M) / 3, ttdY + 52, { width: (W - 2 * M) / 3, align: 'center', underline: true })
   }
+}
 
+// Cetak SATU siswa.
+async function createRaporMtsplusPdf(db, options) {
+  const { tenantId, siswaId, tahunAjaran, semester, jenis, uploadDir } = options
+  const bagian = options.bagian || 'lengkap'
+  const butuhNilai = bagian === 'nilai' || bagian === 'lengkap'
+  const data = await loadStudentData(db, { tenantId, siswaId, tahunAjaran, semester, jenis, uploadDir })
+  if (!data) return null
+  if (data.error && butuhNilai) return { error: data.error }
+  // cover/identitas bisa dicetak walau rapor belum digenerate (data error hanya saat butuh nilai)
+  if (data.error && !butuhNilai) {
+    // bangun data minimal untuk cover/identitas
+    return createRaporMtsplusPdfPartial(db, { tenantId, siswaId, tahunAjaran, semester, jenis, uploadDir, bagian })
+  }
+  const doc = new PDFDocument({ size: 'A4', margin: 34, bufferPages: true, autoFirstPage: false })
+  renderStudentPages(doc, data, bagian)
   return doc
 }
 
-module.exports = { createRaporMtsplusPdf, jenisLabel }
+// Cover/identitas tetap bisa dicetak walau nilai belum digenerate.
+async function createRaporMtsplusPdfPartial(db, { tenantId, siswaId, tahunAjaran, semester, jenis, uploadDir, bagian }) {
+  const siswa = db.prepare(`
+    SELECT s.*, r.nama AS rombel_nama, r.tingkat, g.nama AS wali_kelas_nama
+    FROM siswa s LEFT JOIN rombel r ON s.rombel_id=r.id AND r.tenant_id=s.tenant_id
+    LEFT JOIN gtk g ON r.wali_kelas_id=g.id AND g.tenant_id=s.tenant_id
+    WHERE s.id=? AND s.tenant_id=?
+  `).get(siswaId, tenantId)
+  if (!siswa) return null
+  const settings = getTenantSettings(db, tenantId) || {}
+  const qrDataUrl = await QRCode.toDataURL(`Rapor - ${siswa.nama} - Kepsek: ${settings.kepala_sekolah || '-'} - Diverifikasi digital`)
+  const qrBuffer = Buffer.from(qrDataUrl.split(',')[1], 'base64')
+  const kemenagUpload = resolveUploadPath(uploadDir, settings.logo_kemenag)
+  const kemenagPath = kemenagUpload || path.join(__dirname, 'assets', 'kemenag-logo.svg')
+  const data = {
+    siswa, settings, rapor: [], kehadiran: { sakit: 0, izin: 0, alpa: 0 }, kepribadian: {}, pelengkap: {}, ekstrakurikuler: [],
+    jumlahNilai: 0, rataAkhir: 0, rank: { rank: 0, totalSiswa: 0 }, qrBuffer, fotoPath: resolveUploadPath(uploadDir, siswa.foto),
+    logo: { kemenagPath: fs.existsSync(kemenagPath) ? kemenagPath : null, lembagaLogoPath: resolveUploadPath(uploadDir, settings.logo) },
+    tglRapor: new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' }),
+    kota: safeText(settings.kota_cetak || settings.kota, ''), namaKepsek: safeText(settings.kepala_sekolah, '................................................'),
+    semester, tahunAjaran, jenis,
+  }
+  const doc = new PDFDocument({ size: 'A4', margin: 34, bufferPages: true, autoFirstPage: false })
+  renderStudentPages(doc, data, bagian)
+  return doc
+}
+
+// Cetak MASSAL: seluruh siswa aktif dalam satu rombel (atau seluruh tenant bila
+// rombelId kosong) menjadi SATU PDF. Siswa yang belum digenerate dilewati.
+async function createRaporMtsplusPdfBulk(db, options) {
+  const { tenantId, rombelId, tahunAjaran, semester, jenis, uploadDir } = options
+  const bagian = options.bagian || 'lengkap'
+  const butuhNilai = bagian === 'nilai' || bagian === 'lengkap'
+
+  const siswaRows = rombelId
+    ? db.prepare(`SELECT id FROM siswa WHERE tenant_id=? AND rombel_id=? AND COALESCE(status,'aktif')='aktif' ORDER BY nama`)
+        .all(tenantId, rombelId)
+    : db.prepare(`SELECT id FROM siswa WHERE tenant_id=? AND COALESCE(status,'aktif')='aktif' ORDER BY rombel_id, nama`)
+        .all(tenantId)
+
+  const doc = new PDFDocument({ size: 'A4', margin: 34, bufferPages: true, autoFirstPage: false })
+  let dicetak = 0
+  let dilewati = 0
+  for (const row of siswaRows) {
+    const data = await loadStudentData(db, { tenantId, siswaId: row.id, tahunAjaran, semester, jenis, uploadDir })
+    if (!data) continue
+    if (data.error) { dilewati++; continue }
+    renderStudentPages(doc, data, bagian)
+    dicetak++
+  }
+  if (dicetak === 0 && dilewati === 0) return null
+  doc.meta = { dicetak, dilewati, total: siswaRows.length }
+  return doc
+}
+
+module.exports = { createRaporMtsplusPdf, createRaporMtsplusPdfBulk, jenisLabel }
