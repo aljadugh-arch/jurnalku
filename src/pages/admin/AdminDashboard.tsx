@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react'
 import {
   Users, GraduationCap, BookOpen,
-  ClipboardList, UserCheck, TrendingUp, DollarSign, Layers, DoorOpen, Clock, Activity, ArrowRight
+  ClipboardList, UserCheck, TrendingUp, DollarSign, Layers, DoorOpen, Clock, Activity, ArrowRight,
+  CheckCircle2, AlertCircle, LogIn, LogOut
 } from 'lucide-react'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line } from 'recharts'
 import api from '../../services/api'
@@ -183,19 +184,32 @@ export default function AdminDashboard() {
         {!(monitoring?.rombel_attendance?.length > 0) ? (
           <p className="py-4 text-center text-sm text-gray-400">Belum ada data rombel / absensi hari ini</p>
         ) : (
-          <div className="space-y-2">
+          <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
             {monitoring.rombel_attendance.map((r: any) => {
               const lengkap = r.belum_masuk === 0 && r.belum_pulang === 0
+              const dimulai = Number(r.masuk) > 0 || Number(r.pulang) > 0
+              const tone = lengkap ? 'border-emerald-200 bg-emerald-50/40' : 'border-gray-200 bg-white'
               return (
-                <div key={r.rombel_id} className="flex items-center justify-between gap-3 rounded-xl border border-gray-100 p-3">
-                  <div className="min-w-0">
-                    <p className="font-semibold text-gray-800">{r.rombel_nama}</p>
-                    <p className="text-xs text-gray-500">Masuk {r.masuk}/{r.total} · Pulang {r.pulang}/{r.total}</p>
+                <div key={r.rombel_id} className={`flex flex-col gap-2 rounded-xl border p-3 ${tone}`}>
+                  <div className="flex items-start gap-2">
+                    {lengkap
+                      ? <CheckCircle2 size={20} className="mt-0.5 shrink-0 text-emerald-500" />
+                      : dimulai
+                        ? <AlertCircle size={20} className="mt-0.5 shrink-0 text-amber-500" />
+                        : <Clock size={20} className="mt-0.5 shrink-0 text-gray-300" />}
+                    <p className="min-w-0 flex-1 truncate font-semibold text-gray-800" title={r.rombel_nama}>{r.rombel_nama}</p>
                   </div>
-                  <div className="flex shrink-0 gap-1.5">
-                    {r.belum_masuk > 0 && <Badge tone="yellow">Belum masuk {r.belum_masuk}</Badge>}
-                    {r.belum_pulang > 0 && <Badge tone="red">Belum pulang {r.belum_pulang}</Badge>}
-                    {lengkap && <Badge tone="green">Lengkap</Badge>}
+                  <div className="space-y-1 text-xs text-gray-600">
+                    <div className="flex items-center gap-1.5"><LogIn size={13} className="text-indigo-500" /><span>Masuk <b>{r.masuk}/{r.total}</b></span></div>
+                    <div className="flex items-center gap-1.5"><LogOut size={13} className="text-sky-500" /><span>Pulang <b>{r.pulang}/{r.total}</b></span></div>
+                  </div>
+                  <div className="mt-auto flex flex-wrap gap-1.5">
+                    {lengkap
+                      ? <Badge tone="green">Lengkap</Badge>
+                      : <>
+                          {Number(r.belum_masuk) > 0 && <Badge tone="yellow">Belum masuk {r.belum_masuk}</Badge>}
+                          {Number(r.belum_pulang) > 0 && <Badge tone="red">Belum pulang {r.belum_pulang}</Badge>}
+                        </>}
                   </div>
                 </div>
               )
