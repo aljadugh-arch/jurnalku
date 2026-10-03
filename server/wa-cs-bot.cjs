@@ -140,6 +140,55 @@ function nilaiAnak(db, tenantId, siswaId) {
     LIMIT 20`).all(siswaId, tenantId)
 }
 
+// Pasangan (mapel, rombel) yang diampu seorang guru (dari jadwal + pengajar).
+function pengajaranGuru(db, tenantId, gtkId) {
+  return db.prepare(`
+    SELECT m.id mapel_id, m.nama mapel, r.id rombel_id, r.nama rombel
+    FROM jadwal j
+    JOIN mapel m ON m.id=j.mapel_id AND m.tenant_id=j.tenant_id
+    JOIN rombel r ON r.id=j.rombel_id AND r.tenant_id=j.tenant_id
+    WHERE j.gtk_id=? AND j.tenant_id=? AND COALESCE(j.jenis_kegiatan,'mapel')='mapel'
+    UNION
+    SELECT m.id mapel_id, m.nama mapel, r.id rombel_id, r.nama rombel
+    FROM pengajar p
+    JOIN mapel m ON m.id=p.mapel_id AND m.tenant_id=p.tenant_id
+    JOIN rombel r ON r.id=p.rombel_id AND r.tenant_id=p.tenant_id
+    WHERE p.gtk_id=? AND p.tenant_id=?
+    ORDER BY rombel, mapel
+  `).all(gtkId, tenantId, gtkId, tenantId)
+}
+
+// Nilai akhir per siswa untuk satu (rombel, mapel) yang diampu guru.
+function nilaiRombelMapel(db, tenantId, rombelId, mapelId) {
+  return db.prepare(`
+    SELECT s.nama, s.nis, r.nilai_akhir, r.predikat
+    FROM siswa s
+    LEFT JOIN rapor r ON r.siswa_id=s.id AND r.mapel_id=? AND r.tenant_id=s.tenant_id
+      AND r.id = (SELECT id FROM rapor WHERE siswa_id=s.id AND mapel_id=? AND tenant_id=s.tenant_id AND nilai_akhir IS NOT NULL ORDER BY tahun_ajaran DESC, semester DESC LIMIT 1)
+    WHERE s.tenant_id=? AND s.rombel_id=? AND COALESCE(s.status,'aktif')='aktif'
+    ORDER BY s.nama
+  `).all(mapelId, mapelId, tenantId, rombelId)
+}
+
+// Rekap absensi satu rombel pada tanggal tertentu (hadir/sakit/izin/alpha).
+function absensiRombel(db, tenantId, rombelId, date) {
+  const rows = db.prepare(`SELECT s.nama, a.status
+    FROM siswa s LEFT JOIN absensi_siswa a ON a.siswa_id=s.id AND a.tenant_id=s.tenant_id AND a.tanggal=?
+    WHERE s.tenant_id=? AND s.rombel_id=? AND COALESCE(s.status,'aktif')='aktif'
+    ORDER BY s.nama`).all(date, tenantId, rombelId)
+  const count = { hadir: 0, sakit: 0, izin: 0, alpha: 0, belum: 0 }
+  const detail = []
+  for (const r of rows) {
+    const st = String(r.status || '').toLowerCase()
+    if (st === 'hadir') count.hadir++
+    else if (st === 'sakit') count.sakit++
+    else if (st === 'izin') count.izin++
+    else if (st === 'alpha' || st === 'alpa') count.alpha++
+    else count.belum++
+  }
+  return { count, detail: rows.filter(r => String(r.status || '').toLowerCase() !== 'hadir') }
+}
+
 // Format jawaban menu berdasarkan peran.
 function menuText(sender) {
   const umum = [
@@ -156,6 +205,8 @@ function menuText(sender) {
     commands.push('• *jadwal* — jadwal pelajaran hari ini')
   } else if (sender.jenis === 'gtk') {
     commands.push('• *jadwal* — jadwal mengajar hari ini')
+    commands.push('• *nilai* — nilai siswa per kelas & mapel yang Anda ampu')
+    commands.push('• *absensi* — rekap absensi kelas yang Anda ampu')
     commands.push('• *info* — profil lembaga')
   } else {
     commands.push('• *info* — profil lembaga')
@@ -225,16 +276,39 @@ function handleIncoming(db, { tenantId, phone, text, date: dateParam }) {
   }
 
   if (lower.includes('absensi') || lower.includes('kehadiran')) {
-    if (sender.jenis !== 'wali') return 'Perintah ini hanya untuk wali murid.'
-    const parts = []
-    for (const anak of sender.siswaRows) {
-      const rows = absensiAnak(db, tenantId, anak.id)
-      const body = rows.length
-        ? rows.map(r => `• ${r.tanggal}: ${r.status}`).join('\n')
-        : 'Belum ada catatan absensi.'
-      parts.push(`*${anak.nama}*:\n${body}`)
+    if (sender.jenis === 'wali') {
+      const parts = []
+      for (const anak of sender.siswaRows) {
+        const rows = absensiAnak(db, tenantId, anak.id)
+        const body = rows.length
+          ? rows.map(r => `• ${r.tanggal}: ${r.status}`).join('\n')
+          : 'Belum ada catatan absensi.'
+        parts.push(`*${anak.nama}*:\n${body}`)
+      }
+      return `*Kehadiran Terakhir*\n\n${parts.join('\n\n')}`
     }
-    return `*Kehadiran Terakhir*\n\n${parts.join('\n\n')}`
+    if (sender.jenis === 'gtk' && sender.gtkId) {
+      const pairs = pengajaranGuru(db, tenantId, sender.gtkId)
+      if (!pairs.length) return 'Anda belum terdaftar mengampu kelas/mapel apa pun.'
+      const rombels = [...new Map(pairs.map(p => [p.rombel_id, p])).values()]
+      // Deteksi rombel yang disebut di pesan (kalau ada).
+      const disebut = rombels.filter(r => r.rombel && lower.includes(String(r.rombel).toLowerCase()))
+      const target = disebut.length === 1 ? [disebut[0]] : rombels
+      const parts = []
+      for (const rb of target) {
+        const rekap = absensiRombel(db, tenantId, rb.rombel_id, date)
+        const c = rekap.count
+        let body = `Hadir ${c.hadir} · Sakit ${c.sakit} · Izin ${c.izin} · Alpha ${c.alpha}${c.belum ? ` · Belum ${c.belum}` : ''}`
+        if (rekap.detail.length) {
+          const tanpaHadir = rekap.detail.map(r => `  ${r.nama}: ${r.status || 'belum'}`).join('\n')
+          if (tanpaHadir.split('\n').length <= 15) body += '\n' + tanpaHadir
+          else body += '\n' + rekap.detail.slice(0, 15).map(r => `  ${r.nama}: ${r.status || 'belum'}`).join('\n') + '\n  …'
+        }
+        parts.push(`*${rb.rombel}* (${date}):\n${body}`)
+      }
+      return `*Rekap Absensi* — ${sender.nama}\n\n${parts.join('\n\n')}`
+    }
+    return 'Perintah ini hanya untuk wali murid atau guru.'
   }
 
   if (lower.includes('nilai')) {
@@ -248,6 +322,31 @@ function handleIncoming(db, { tenantId, phone, text, date: dateParam }) {
         parts.push(`*${anak.nama}*:\n${body}`)
       }
       return `*Nilai Rapor*\n\n${parts.join('\n\n')}`
+    }
+    if (sender.jenis === 'gtk' && sender.gtkId) {
+      const pairs = pengajaranGuru(db, tenantId, sender.gtkId)
+      if (!pairs.length) return 'Anda belum terdaftar mengampu kelas/mapel apa pun.'
+      // Deteksi mapel dan rombel yang disebut di pesan.
+      const mapelSebut = pairs.filter(p => p.mapel && lower.includes(String(p.mapel).toLowerCase()))
+      const rombelSebut = pairs.filter(p => p.rombel && lower.includes(String(p.rombel).toLowerCase()))
+      let target = pairs
+      if (mapelSebut.length) target = target.filter(p => mapelSebut.some(m => m.mapel_id === p.mapel_id))
+      if (rombelSebut.length) target = target.filter(p => rombelSebut.some(r => r.rombel_id === p.rombel_id))
+      const unique = [...new Map(target.map(p => [p.mapel_id + '|' + p.rombel_id, p])).values()]
+      if (!unique.length) return 'Tidak ada kelas/mapel yang cocok dengan yang Anda sebutkan.'
+      // Bila tanpa penyebutan dan ampuannya banyak, tampilkan menu ringkas.
+      if (!mapelSebut.length && !rombelSebut.length && pairs.length > 4) {
+        return `*Kelas & Mapel yang Anda ampu:*\n${pairs.map(p => `• ${p.rombel} — ${p.mapel}`).join('\n')}\n\nKetik contoh: *nilai ${pairs[0].rombel} ${pairs[0].mapel}* untuk melihat nilainya.`
+      }
+      const parts = []
+      for (const p of unique) {
+        const rows = nilaiRombelMapel(db, tenantId, p.rombel_id, p.mapel_id)
+        const isi = rows.length
+          ? rows.map(r => `• ${r.nama}${r.nis ? ` (${r.nis})` : ''}: ${r.nilai_akhir ?? '—'}${r.predikat ? ` ${r.predikat}` : ''}`).join('\n')
+          : 'Belum ada nilai.'
+        parts.push(`*${p.rombel} — ${p.mapel}*:\n${isi}`)
+      }
+      return `*Nilai Siswa* — ${sender.nama}\n\n${parts.join('\n\n')}`
     }
     return 'Perintah nilai untuk guru bisa dilihat lewat aplikasi (menu Ledger/Rekap Nilai).'
   }

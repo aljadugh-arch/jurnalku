@@ -91,3 +91,42 @@ test('data tenant lain tidak bocor', () => {
   assert.doesNotMatch(reply, /Rahasia/) // siswa t2 tidak bocor
   db.close()
 })
+
+test('guru bisa lihat nilai siswa di kelas/mapel yang diampunya', () => {
+  const db = fixture()
+  // Guru g1 mengampu Matematika di r1 (VII A); siswa s1 ada nilainya.
+  db.exec(`CREATE TABLE pengajar (id TEXT, tenant_id TEXT, gtk_id TEXT, mapel_id TEXT, rombel_id TEXT)`)
+  db.prepare('INSERT INTO pengajar VALUES (?,?,?,?,?)').run('p1', 't1', 'g1', 'm1', 'r1')
+  const reply = handleIncoming(db, { tenantId: 't1', phone: '081234567890', text: 'nilai VII A Matematika', date: '2026-08-24' })
+  assert.match(reply, /Matematika/)
+  assert.match(reply, /Ani/)
+  assert.match(reply, /85/)
+  db.close()
+})
+
+test('guru lihat nilai: hanya kelas/mapel yang diampu, tidak yang lain', () => {
+  const db = fixture()
+  db.exec(`CREATE TABLE pengajar (id TEXT, tenant_id TEXT, gtk_id TEXT, mapel_id TEXT, rombel_id TEXT)`)
+  // g1 mengampu m1 di r1 saja. Ada mapel lain m2 yang TIDAK diampu.
+  db.exec(`INSERT INTO mapel VALUES ('m2','t1','Bahasa Inggris')`)
+  db.prepare('INSERT INTO pengajar VALUES (?,?,?,?,?)').run('p1', 't1', 'g1', 'm1', 'r1')
+  db.prepare('INSERT INTO rapor VALUES (?,?,?,?,?,?,?,?)').run('rp2', 's1', 'm2', '2026/2027', 'ganjil', 90, 'A', 't1')
+  const reply = handleIncoming(db, { tenantId: 't1', phone: '081234567890', text: 'nilai', date: '2026-08-24' })
+  assert.match(reply, /Matematika/)
+  assert.doesNotMatch(reply, /Bahasa Inggris/) // mapel yang tidak diampu tidak muncul
+  db.close()
+})
+
+test('guru lihat rekap absensi kelas yang diampunya', () => {
+  const db = fixture()
+  db.exec(`CREATE TABLE pengajar (id TEXT, tenant_id TEXT, gtk_id TEXT, mapel_id TEXT, rombel_id TEXT)`)
+  db.prepare('INSERT INTO pengajar VALUES (?,?,?,?,?)').run('p1', 't1', 'g1', 'm1', 'r1')
+  // Tambah satu siswa lagi + absensi hari ini.
+  db.exec(`INSERT INTO siswa VALUES ('s3','t1','Budi','103','089000000001','r1','aktif')`)
+  db.exec(`INSERT INTO absensi_siswa VALUES ('a2','s1','2026-08-24','hadir','t1'),('a3','s3','2026-08-24','sakit','t1')`)
+  const reply = handleIncoming(db, { tenantId: 't1', phone: '081234567890', text: 'absensi VII A', date: '2026-08-24' })
+  assert.match(reply, /VII A/)
+  assert.match(reply, /Hadir 1/)
+  assert.match(reply, /Sakit 1/)
+  db.close()
+})
