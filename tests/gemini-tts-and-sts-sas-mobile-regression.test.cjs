@@ -81,12 +81,11 @@ test('TtsPrewarmCard.tsx ada di UI Pengaturan untuk memicu prewarm manual', () =
   assert.match(settingsPage, /<TtsPrewarmCard/, 'SettingsPage harus merender kartu prewarm untuk tenant (bukan superadmin)')
 })
 
-test('feedbackSound.ts mencoba TTS server Gemini dulu lalu fallback otomatis ke Web Speech API, tanpa pernah melempar', () => {
+test('feedbackSound.ts mencoba TTS server Edge dulu lalu fallback otomatis ke Web Speech API, tanpa pernah melempar', () => {
   assert.match(feedbackSound, /async function speakViaGeminiOrFallback/)
-  assert.match(feedbackSound, /geminiTtsUnavailable/, 'harus ingat status unavailable agar tidak retry percuma tiap panggilan')
   assert.match(feedbackSound, /catch \(err: any\) \{[\s\S]*?speakClear\(text\)/, 'fallback ke speakClear wajib ada di catch block')
   assert.match(feedbackSound, /geminiAudioCache/, 'audio hasil TTS di-cache in-memory per teks agar tidak request ulang di sesi yang sama')
-  // Regresi kunci: 404 cache-miss (generating:true) BUKAN berarti tenant
-  // belum konfigurasi — jangan matikan percobaan Gemini permanen karena itu.
-  assert.match(feedbackSound, /err\.response\?\.data\?\.generating/, 'harus bedakan 404 cache-miss (coba lagi nanti) dari 404 belum-dikonfigurasi (berhenti coba)')
+  // Perilaku baru: cache miss (404 generating) TIDAK boleh diam — harus
+  // langsung fallback ke speakClear supaya scan pertama pun bersuara.
+  assert.match(feedbackSound, /speakClear\(text\)/, 'cache miss harus fallback ke speakClear')
 })

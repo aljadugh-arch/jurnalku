@@ -47,16 +47,15 @@ test('helper suara mengucapkan nama depan dengan TTS Indonesia langsung tanpa de
   assert.match(soundLib, /utterance\.volume = 1/)
   assert.match(soundLib, /utterance\.rate = 0\.86/)
   assert.match(soundLib, /firstName\(name\)/)
-  // Sukses memicu speakViaGeminiOrFallback (coba TTS server Gemini voice pria
-  // lebih dulu, fallback otomatis ke speakClear/Web Speech API bila gagal
-  // atau belum dikonfigurasi) — bukan langsung speakClear seperti sebelumnya.
+  // Sukses memicu speakViaGeminiOrFallback (coba TTS server Edge female lebih
+  // dulu, fallback otomatis ke speakClear/Web Speech API bila cache miss atau
+  // gagal) — bukan langsung speakClear seperti sebelumnya.
   assert.match(soundLib, /void speakViaGeminiOrFallback\(`\$\{nickname\} \$\{session\}`\)/)
   assert.match(soundLib, /toNaturalCase/, 'nama harus dinormalisasi agar tidak dieja huruf per huruf')
-  assert.match(soundLib, /(male|pria|laki|man)/, 'prioritas voice male/pria pada fallback Web Speech API')
+  assert.match(soundLib, /female|wanita|perempuan/, 'voice fallback diprioritaskan female/wanita')
   assert.match(soundLib, /pickBestVoice/, 'pemilihan voice fallback memakai helper pickBestVoice')
-  assert.match(soundLib, /speakViaGeminiOrFallback/, 'harus ada jalur TTS server Gemini dengan fallback')
-  assert.match(soundLib, /geminiTtsUnavailable/, 'harus menandai tidak tersedia agar tidak retry percuma tiap panggilan')
-  const speakClearBlock = soundLib.slice(soundLib.indexOf('function speakClear'), soundLib.indexOf('// Cache in-memory audio Gemini'))
+  assert.match(soundLib, /speakViaGeminiOrFallback/, 'harus ada jalur TTS server Edge dengan fallback')
+  const speakClearBlock = soundLib.slice(soundLib.indexOf('function speakClear'), soundLib.indexOf('// Cache in-memory audio Edge'))
   assert.doesNotMatch(speakClearBlock, /setTimeout/, 'TTS fallback tidak boleh delay')
   const successBlock = soundLib.slice(soundLib.indexOf('export function announceAttendanceSuccess'), soundLib.indexOf('export function announceStudentScanSuccess'))
   assert.doesNotMatch(successBlock, /playFeedbackSound/, 'sukses tidak boleh campur beep')

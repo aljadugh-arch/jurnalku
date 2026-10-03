@@ -192,13 +192,10 @@ function speakClear(text: string) {
   }
 }
 
-// Cache in-memory audio Gemini TTS yang sudah pernah diputar di sesi ini,
+// Cache in-memory audio Edge TTS yang sudah pernah diputar di sesi ini,
 // supaya nama yang sama berulang (scan pagi lalu pulang) tidak perlu
 // request ulang ke server dalam sesi browser yang sama.
 const geminiAudioCache = new Map<string, HTMLAudioElement>()
-// Kalau server pernah menjawab dengan 404 generic (bukan sekadar
-// cache-miss dengan generating:true), jangan coba lagi di sesi ini.
-let geminiTtsUnavailable = false
 
 /**
  * Coba TTS server-side (Edge TTS neural, voice wanita natural, id-ID)
@@ -210,7 +207,6 @@ let geminiTtsUnavailable = false
  * sini SELALU instan, tidak ada delay tunggu network.
  */
 async function speakViaGeminiOrFallback(text: string) {
-  if (geminiTtsUnavailable) return speakClear(text)
   const cached = geminiAudioCache.get(text)
   if (cached) {
     try {
@@ -231,15 +227,12 @@ async function speakViaGeminiOrFallback(text: string) {
     geminiAudioCache.set(text, audio)
     await audio.play()
   } catch (err: any) {
-    // Cache miss berarti audio pria sedang dibuat di server. Jangan menggantinya
-    // dengan Web Speech Bahasa Indonesia yang pada Chrome/Android umumnya female;
-    // beep sukses tetap sudah dimainkan oleh alur scan dan scan berikutnya akan
-    // memakai cache pria yang selesai dibuat.
-    if (err?.response?.status === 404 && err.response?.data?.generating) return
-
-    // Untuk tenant tanpa konfigurasi Gemini atau kegagalan jaringan/audio lain,
-    // pertahankan fallback best-effort agar notifikasi tetap terdengar.
-    if (err?.response?.status === 404) geminiTtsUnavailable = true
+    // Cache miss (404 generating) atau error jaringan lain: server sedang (atau
+    // akan) generate audio Edge TTS di background untuk scan berikutnya. Supaya
+    // scan SEKARANG tetap bersuara, langsung fallback ke Web Speech API browser.
+    // Keduanya suara perempuan Indonesia (id-ID), jadi tidak ada lompatan suara
+    // yang mengganggu; scan berikutnya dengan nama sama akan memakai cache Edge
+    // TTS yang sudah selesai dibuat.
     speakClear(text)
   }
 }
