@@ -154,3 +154,12 @@ aside nav::-webkit-scrollbar-thumb {
   .dark .btn-secondary:hover { background-color: #334155; }
 }
 
+/* Gambar/video pada posting ditampilkan oleh renderMedia (grid seragam
+   aspect-video), bukan inline di dalam konten HTML. Ini mencegah gambar
+   dobel dan memastikan ukurannya konsisten (tidak ada yang tampil raksasa
+   sesuai dimensi asli). */
+.posting-content img,
+.posting-content video {
+  display: none !important;
+}
+

@@ -252,7 +252,7 @@ export default function PostingPageGuru() {
 
             <h2 className="mt-3 font-bold text-gray-800 dark:text-gray-100">{post.judul}</h2>
 
-            <div className="mt-2 prose prose-sm dark:prose-invert max-w-none">
+            <div className="posting-content mt-2 prose prose-sm dark:prose-invert max-w-none">
               <div dangerouslySetInnerHTML={{ __html: post.konten || post.isi }} />
             </div>
 
