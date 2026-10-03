@@ -10,7 +10,7 @@ async function compressImageBuffer(input, options = {}) {
   return sharp(input, { animated: false, failOn: 'error', limitInputPixels: 40_000_000 })
     .rotate()
     .resize(maxDimension, maxDimension, { fit: 'inside', withoutEnlargement: true })
-    .webp({ quality, alphaQuality: 85, effort: 5, smartSubsample: true })
+    .webp({ quality, alphaQuality: 85, effort: 4, smartSubsample: true })
     .toBuffer()
 }
 

@@ -42,7 +42,7 @@ test('every server-side raster upload path passes through compression', () => {
     assert.match(server, new RegExp(`app\\.post\\('${route.replaceAll('/', '\\/')}'.*compressUploadedImages`))
   }
   assert.match(server, /app\.post\('\/api\/settings\/kts-template'[\s\S]*?compressUploadedImages\(\['depan', 'belakang'\], 'kts'\)/)
-  assert.match(server, /for \(const file of files\)[\s\S]*?await savePostingUpload\(file/)
+  assert.match(server, /Promise\.all\(files\.map\(file => savePostingUpload\(file/)
   assert.match(server, /await saveDrawnSignature/)
   assert.match(server, /await saveUploadedSignature/)
 })
@@ -76,4 +76,19 @@ test('unknown and main hosts retain the public landing-page fallback', () => {
   assert.match(tenant, /req\.isRegisteredTenantHost = false/)
   assert.match(tenant, /Fallback to default tenant/)
   assert.match(app, /if \(!registeredHost\) return <LandingPage \/>/)
+})
+
+test('PUT posting mempertahankan konten HTML (gambar tidak hilang saat edit)', () => {
+  // Route edit wajib membaca `konten` dari body dan menyimpannya sebagai konten,
+  // bukan menimpanya dengan `isi` (teks polos) yang menghapus <img>/<video>.
+  const putRoute = server.slice(server.indexOf("app.put('/api/posting/:id'"), server.indexOf('// Posting Comments'))
+  assert.match(putRoute, /konten, kategori, media/, 'harus mendestructure konten dari body')
+  assert.match(putRoute, /const safeKonten = typeof konten === 'string' && konten\.trim\(\) \? konten\.trim\(\) : isi\.trim\(\)/, 'safeKonten harus mempertahankan HTML konten')
+  assert.match(putRoute, /judul\.trim\(\), isi\.trim\(\), safeKonten/, 'UPDATE harus menulis safeKonten, bukan isi.trim()')
+})
+
+test('GET posting menormalkan media agar renderer feed menemukan type/url', () => {
+  const getRoute = server.slice(server.indexOf("app.get('/api/posting'"), server.indexOf("app.post('/api/posting'"))
+  assert.match(getRoute, /url: m\.url \|\| m\.media_url/, 'harus mengisi url dari media_url')
+  assert.match(getRoute, /type: m\.type \|\| m\.media_type/, 'harus mengisi type dari media_type')
 })

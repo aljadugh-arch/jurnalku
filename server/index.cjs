@@ -7024,7 +7024,16 @@ app.get('/api/posting', authMiddleware, (req, res) => {
   const jp = (v, d) => { try { const p = JSON.parse(v); return Array.isArray(p) ? p : d } catch { return d } }
   res.json(rows.map(p => ({
     ...p,
-    media: jp(p.media, []),
+    // Normalisasi media: beberapa baris lama hanya punya media_url/media_type,
+    // sementara RichEditor menghasilkan url/type. Sediakan keduanya supaya
+    // renderer feed (yang memakai type/url) selalu menemukan gambar.
+    media: jp(p.media, []).map(m => ({
+      ...m,
+      url: m.url || m.media_url || '',
+      type: m.type || m.media_type || 'image',
+      media_url: m.media_url || m.url || '',
+      media_type: m.media_type || m.type || 'image',
+    })),
     poll_data: jp(p.poll_data, []),
     tags: jp(p.tags, []),
     user_liked: likedIds.has(p.id)
@@ -7047,8 +7056,11 @@ app.post('/api/posting/upload', STAFF, postingUpload.fields([{ name: 'files', ma
   if (!files.length) return res.status(400).json({ error: 'File wajib diunggah' })
   const saved = []
   try {
-    for (const file of files) {
-      await savePostingUpload(file, req.tenantId)
+    // Proses semua file secara PARALEL (bukan berurutan) supaya upload banyak
+    // gambar sekaligus tidak terasa lemot. Setiap file menulis ke path unik,
+    // jadi aman dijalankan bersamaan.
+    const results = await Promise.all(files.map(file => savePostingUpload(file, req.tenantId)))
+    for (const file of results) {
       const mime = file.mimetype || ''
       const mediaType = mime.startsWith('image/') ? 'image' : mime.startsWith('video/') ? 'video' : mime.startsWith('audio/') ? 'audio' : 'file'
       saved.push({ media_url: '/uploads/' + file.filename, media_type: mediaType, filename: file.originalname })
@@ -7073,11 +7085,14 @@ app.put('/api/posting/:id', STAFF, (req, res) => {
   const row = db.prepare('SELECT penulis_id, media FROM posting WHERE id=? AND tenant_id=?').get(req.params.id, req.tenantId)
   if (!row) return res.status(404).json({ error: 'Posting tidak ditemukan.' })
   if (!['admin','super_admin'].includes(req.user.role) && row.penulis_id !== req.user.id) return res.status(403).json({ error: 'Tidak boleh mengedit posting pengguna lain.' })
-  const { judul, isi, kategori, media, activity_type, location_lat, location_lng, location_name, poll_data, tags } = req.body
+  const { judul, isi, konten, kategori, media, activity_type, location_lat, location_lng, location_name, poll_data, tags } = req.body
   if (!judul?.trim() || !isi?.trim()) return res.status(400).json({ error: 'Judul dan isi wajib diisi.' })
+  // PENTING: pertahankan konten HTML (gambar/video/format) saat edit. Sebelumnya
+  // konten ditimpa dengan isi (teks polos) sehingga gambar lenyap setelah edit.
+  const safeKonten = typeof konten === 'string' && konten.trim() ? konten.trim() : isi.trim()
   const safeMedia = Array.isArray(media) ? media.filter(item => item && typeof item === 'object' && typeof item.media_url === 'string' && item.media_url.startsWith('/uploads/')) : []
   db.prepare(`UPDATE posting SET judul=?, isi=?, konten=?, kategori=?, media=?, activity_type=?, location_lat=?, location_lng=?, location_name=?, poll_data=?, tags=? WHERE id=? AND tenant_id=?`)
-    .run(judul.trim(), isi.trim(), isi.trim(), kategori || 'berita', JSON.stringify(safeMedia), activity_type || '', location_lat || null, location_lng || null, location_name || '', JSON.stringify(poll_data || []), JSON.stringify(tags || []), req.params.id, req.tenantId)
+    .run(judul.trim(), isi.trim(), safeKonten, kategori || 'berita', JSON.stringify(safeMedia), activity_type || '', location_lat || null, location_lng || null, location_name || '', JSON.stringify(poll_data || []), JSON.stringify(tags || []), req.params.id, req.tenantId)
   try {
     const retained = new Set(safeMedia.map(item => item.media_url))
     for (const item of JSON.parse(row.media || '[]')) if (!retained.has(item?.media_url)) removeManagedUpload(item?.media_url)
