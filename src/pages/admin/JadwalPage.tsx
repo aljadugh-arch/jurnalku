@@ -666,7 +666,7 @@ export default function JadwalPage() {
 
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
         {/* Desktop: matrix table */}
-        <div className="hidden md:block overflow-x-auto -mx-2 px-2">
+        <div className="hidden md:block overflow-x-auto">
           <table className="w-full text-sm" style={{ minWidth: `${140 + hari.length * 160}px` }}>
             <thead className="bg-gray-50 border-b">
               <tr>

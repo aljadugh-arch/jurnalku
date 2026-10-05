@@ -183,13 +183,13 @@ export default function BackupRestorePage() {
           </div>
         </div>
 
-        <div className="mb-4 flex items-center gap-2 text-sm">
+        <div className="mb-4 flex flex-wrap items-center gap-2 text-sm">
           {driveLoading ? (
             <span className="flex items-center gap-2 text-gray-500"><Loader2 size={16} className="animate-spin" /> Memeriksa koneksi…</span>
           ) : drive?.connected ? (
-            <span className="flex items-center gap-2 rounded-full bg-green-50 px-3 py-1 text-green-700"><CheckCircle2 size={16} /> Terhubung via {drive.auth_type === 'service_account' ? 'Service Account' : 'OAuth'}{drive.email ? ` (${drive.email})` : ''}{drive.folder_ok === false ? ' — folder belum bisa diakses' : ''}</span>
+            <span className="flex max-w-full items-start gap-2 break-words rounded-lg bg-green-50 px-3 py-1 text-green-700"><CheckCircle2 size={16} className="mt-0.5 shrink-0" /> <span className="min-w-0 break-words">Terhubung via {drive.auth_type === 'service_account' ? 'Service Account' : 'OAuth'}{drive.email ? ` (${drive.email})` : ''}{drive.folder_ok === false ? ' — folder belum bisa diakses' : ''}</span></span>
           ) : (
-            <span className="flex items-center gap-2 rounded-full bg-red-50 px-3 py-1 text-red-700"><XCircle size={16} /> Tidak terhubung{drive?.error ? `: ${drive.error}` : ''}</span>
+            <span className="flex max-w-full items-start gap-2 break-words rounded-lg bg-red-50 px-3 py-1 text-red-700"><XCircle size={16} className="mt-0.5 shrink-0" /> <span className="min-w-0 break-words">Tidak terhubung{drive?.error ? `: ${drive.error}` : ''}</span></span>
           )}
         </div>
 

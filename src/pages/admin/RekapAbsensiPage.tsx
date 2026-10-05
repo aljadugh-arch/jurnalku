@@ -37,7 +37,7 @@ function groupByRombel(data: any[]) {
 function SiswaRecapTable({ data }: { data: any[] }) {
   return (
     <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-      <div className="overflow-x-auto -mx-2 px-2">
+      <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead className="bg-gray-50 border-b"><tr>
             <th className="text-left px-4 py-3 font-medium text-gray-600">No</th>
@@ -80,7 +80,7 @@ function SiswaRecapTable({ data }: { data: any[] }) {
 function GtkRecapTable({ data }: { data: any[] }) {
   return (
     <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-      <div className="overflow-x-auto -mx-2 px-2">
+      <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead className="bg-gray-50 border-b"><tr>
             <th className="text-left px-4 py-3 font-medium text-gray-600">No</th>
@@ -119,7 +119,7 @@ function GtkRecapTable({ data }: { data: any[] }) {
 
 function CategoryRecapTable({ data }: { data: any[] }) {
   return (
-    <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden"><div className="overflow-x-auto -mx-2 px-2"><table className="w-full text-sm">
+    <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden"><div className="overflow-x-auto"><table className="w-full text-sm">
       <thead className="bg-gray-50 border-b"><tr><th className="text-left px-4 py-3 font-medium text-gray-600">No</th><th className="text-left px-4 py-3 font-medium text-gray-600">Nama</th><th className="text-left px-4 py-3 font-medium text-gray-600">NIS</th><th className="text-left px-4 py-3 font-medium text-gray-600">Rombel</th><th className="text-left px-4 py-3 font-medium text-gray-600">Kegiatan/Mapel</th><th className="text-center px-4 py-3 font-medium text-blue-600">Hadir</th><th className="text-center px-4 py-3 font-medium text-yellow-600">Sakit</th><th className="text-center px-4 py-3 font-medium text-purple-600">Izin</th><th className="text-center px-4 py-3 font-medium text-red-600">Alpha</th><th className="text-center px-4 py-3 font-medium text-gray-600">% Hadir</th></tr></thead>
       <tbody className="divide-y divide-gray-100">{data.length === 0 && <tr><td colSpan={10} className="px-4 py-8 text-center text-gray-400">Belum ada data absensi untuk periode ini</td></tr>}{data.map((row: any, i: number) => <tr key={row.id || i} className="hover:bg-gray-50"><td className="px-4 py-3 text-gray-600">{i + 1}</td><td className="px-4 py-3 font-medium text-gray-800">{row.nama}</td><td className="px-4 py-3 text-gray-600 text-xs">{row.nis || row.nisn || '-'}</td><td className="px-4 py-3 text-gray-600">{row.rombel_nama || '-'}</td><td className="px-4 py-3 text-gray-600">{row.kegiatan_nama || '-'}</td><td className="px-4 py-3 text-center font-medium text-blue-600">{row.hadir}</td><td className="px-4 py-3 text-center font-medium text-yellow-600">{row.sakit}</td><td className="px-4 py-3 text-center font-medium text-purple-600">{row.izin}</td><td className="px-4 py-3 text-center font-medium text-red-600">{row.alpha}</td><td className="px-4 py-3 text-center"><PercentageBadge row={row} /></td></tr>)}</tbody>
     </table></div></div>

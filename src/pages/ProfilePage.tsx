@@ -49,7 +49,7 @@ export default function ProfilePage() {
 
       <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100 space-y-6">
         <div className="flex items-center gap-4">
-          <div className="relative">
+          <div className="relative shrink-0">
             <div className="w-20 h-20 rounded-full overflow-hidden bg-primary/10 flex items-center justify-center border">
               {avatar
                 ? <img src={avatar} alt="Foto" className="w-full h-full object-cover" />
@@ -60,9 +60,9 @@ export default function ProfilePage() {
               <input type="file" accept="image/*" onChange={handleAvatar} className="hidden" />
             </label>
           </div>
-          <div>
-            <p className="font-semibold text-gray-800">{form.nama || 'User'}</p>
-            <p className="text-sm text-gray-500">{roleLabel(user?.role)}</p>
+          <div className="min-w-0">
+            <p className="truncate font-semibold text-gray-800">{form.nama || 'User'}</p>
+            <p className="truncate text-sm text-gray-500">{roleLabel(user?.role)}</p>
           </div>
         </div>
 

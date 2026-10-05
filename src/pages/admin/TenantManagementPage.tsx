@@ -311,12 +311,12 @@ export default function TenantManagementPage() {
         </div>
       </div>
 
-      <div className="flex items-center justify-between">
-        <div>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="min-w-0">
           <h1 className="text-2xl font-display font-bold text-gray-800">Manajemen Lembaga</h1>
           <p className="text-gray-500 mt-1">Kelola lembaga/tenant yang terdaftar di platform</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <button onClick={openPlanEditor} className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors">
             Pengaturan Paket &amp; Harga
           </button>
@@ -419,7 +419,7 @@ export default function TenantManagementPage() {
       )}
 
       <div className="bg-white rounded-xl shadow-sm border overflow-hidden">
-        <div className="overflow-x-auto -mx-2 px-2">
+        <div className="overflow-x-auto">
         <table className="w-full">
           <thead className="bg-gray-50 border-b border-gray-100">
             <tr>
