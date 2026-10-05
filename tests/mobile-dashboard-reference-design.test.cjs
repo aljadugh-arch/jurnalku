@@ -82,6 +82,8 @@ test('admin dashboard menampilkan menu grid 4x2 dengan ubin Lainnya', () => {
   assert.match(src, /Lainnya/)
   // Ubin Lainnya membuka menu lengkap.
   assert.match(src, /data-admin-menu-more="true"[\s\S]{0,200}setMenuOpen\(true\)/)
+  // Tulisan "Semua Menu" dihapus: fungsinya sudah diwakili ubin Lainnya.
+  assert.doesNotMatch(src, /Semua Menu/)
 })
 
 test('admin dashboard menampilkan kartu Jadwal Sholat', () => {
@@ -100,11 +102,25 @@ test('admin dashboard menampilkan kartu Statistik Monitoring Live', () => {
   assert.match(src, /to="\/admin\/monitoring"/)
 })
 
-test('admin dashboard tetap menjaga gerbang peran dan prioritas kelengkapan', () => {
+test('admin dashboard tetap menjaga gerbang peran pada pintasan', () => {
   const src = read(ADMIN)
   assert.match(src, /bisaBukaHalaman\(user\?\.role, item\.path\)/)
-  assert.match(src, /bisaBukaHalaman\(user\?\.role, p\.tautan\)/)
-  assert.match(src, /kelengkapan\.prioritas/)
+})
+
+test('admin dashboard menampilkan statistik monitoring live tanpa kartu kelengkapan', () => {
+  const src = read(ADMIN)
+  assert.match(src, /data-admin-monitoring-card="true"/)
+  // Tiga isi yang diminta: absensi siswa + rombel belum absen, ceklok GTK, jadwal guru.
+  assert.match(src, /data-monitoring-absensi="true"/)
+  assert.match(src, /Belum absen/)
+  assert.match(src, /rombel_attendance/)
+  assert.match(src, /data-monitoring-ceklok="true"/)
+  assert.match(src, /Ceklok GTK Hari Ini/)
+  assert.match(src, /data-monitoring-jadwal="true"/)
+  assert.match(src, /Jadwal Guru Hari Ini/)
+  // Kartu kelengkapan data dihapus agar tidak dobel dengan halaman monitoring.
+  assert.doesNotMatch(src, /Kelengkapan Data Lembaga/)
+  assert.doesNotMatch(src, /kelengkapan\.prioritas/)
 })
 
 test('admin dashboard menautkan grid ke menu lengkap dan meneruskan kelengkapan', () => {

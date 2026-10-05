@@ -52,6 +52,26 @@ function getMonitoring(db, tenantId, date) {
     FROM rombel r WHERE r.tenant_id=? ORDER BY r.nama`).all(date, date, tenantId)
       .map(row => ({ ...row, total: Number(row.total || 0), masuk: Number(row.masuk || 0), pulang: Number(row.pulang || 0), belum_masuk: Math.max(0, Number(row.total || 0) - Number(row.masuk || 0)), belum_pulang: Math.max(0, Number(row.total || 0) - Number(row.pulang || 0)) }))
   } catch { rombelAttendance = [] }
+  // Jadwal mengajar hari ini untuk SEMUA guru + jumlah GTK, dipakai kartu
+  // "Statistik Monitoring Live" pada dashboard admin mobile. Dijaga try/catch
+  // supaya DB lama/fixture tanpa kolom terkait tetap aman.
+  let jadwalHariIni = { total: 0, guru: 0, rows: [] }
+  let gtkAktif = 0
+  try {
+    const hari = require('./attendance-rules.cjs').hariJakarta(new Date(`${date}T12:00:00+07:00`))
+    const rows = db.prepare(`SELECT j.id, j.jam_mulai, j.jam_selesai, j.ruangan,
+        m.nama AS mapel_nama, r.nama AS rombel_nama, g.nama AS guru_nama
+      FROM jadwal j
+      LEFT JOIN mapel m ON m.id=j.mapel_id AND m.tenant_id=j.tenant_id
+      LEFT JOIN rombel r ON r.id=j.rombel_id AND r.tenant_id=j.tenant_id
+      LEFT JOIN gtk g ON g.id=j.gtk_id AND g.tenant_id=j.tenant_id
+      WHERE j.tenant_id=? AND lower(j.hari)=? AND COALESCE(j.jenis_kegiatan,'mapel')='mapel'
+      ORDER BY j.jam_mulai`).all(tenantId, hari)
+    jadwalHariIni = { total: rows.length, guru: new Set(rows.map(r => r.guru_nama).filter(Boolean)).size, rows }
+  } catch { jadwalHariIni = { total: 0, guru: 0, rows: [] } }
+  try {
+    gtkAktif = Number(db.prepare('SELECT COUNT(*) AS c FROM gtk WHERE tenant_id=?').get(tenantId)?.c || 0)
+  } catch { gtkAktif = 0 }
   return {
     date,
     assignments: { total: assignmentRows.length, students: assignmentRows.reduce((n, row) => n + Number(row.students || 0), 0), rows: assignmentRows },
@@ -60,7 +80,9 @@ function getMonitoring(db, tenantId, date) {
     student_qr_summary: { masuk: qrRows.filter(row => row.sesi !== 'pulang').length, pulang: qrRows.filter(row => row.sesi === 'pulang').length },
     teacher_checkins: { total: teacherRows.length, rows: teacherRows },
     rombel_attendance: rombelAttendance,
-    activity: activity.map(row => ({ ...row, metadata: JSON.parse(row.metadata_json || '{}') }))
+    jadwal_hari_ini: jadwalHariIni,
+    gtk_aktif: gtkAktif,
+    activity: activity.map(row => ({ ...row, metadata: JSON.parse(row.metadata_json || '{}') })),
   }
 }
 

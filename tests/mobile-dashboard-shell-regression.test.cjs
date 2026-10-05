@@ -13,9 +13,10 @@ test('mobile and tablet hide the global header and retain desktop header', () =>
 test('admin grid 4x2 membuka menu lengkap dari ubin Lainnya dan tombol Semua Menu', () => {
   const dashboard = read('src/pages/admin/MobileAdminDashboard.tsx')
   const sheet = read('src/components/MobileMenuSheet.tsx')
-  // Ubin kedelapan + tombol judul sama-sama membuka menu lengkap.
+  // Ubin kedelapan (Lainnya) yang membuka menu lengkap; tombol judul dihapus.
   assert.match(dashboard, /data-admin-menu-more="true"[\s\S]{0,220}setMenuOpen\(true\)/)
-  assert.match(dashboard, /onClick=\{\(\) => setMenuOpen\(true\)\}[\s\S]{0,220}Semua Menu/)
+  assert.match(dashboard, /Lainnya/)
+  assert.doesNotMatch(dashboard, /Semua Menu/)
   assert.match(dashboard, /<MobileMenuSheet open=\{menuOpen\}/)
   assert.match(sheet, /flattenMenu\(menuForRole\(role\)\)/)
   assert.match(sheet, /Manajemen Data/)
@@ -71,7 +72,10 @@ test('mobile heroes derive color from tenant settings and dark theme', () => {
 
   const admin = read('src/pages/admin/MobileAdminDashboard.tsx')
   assert.match(admin, /dark:bg-gray-950/)
-  assert.match(admin, /text-primary/)
+
+  // Peran pengguna memakai warna aksen tenant (text-primary, dari heroColors) —
+  // kini di header bersama yang dipakai admin & guru.
+  assert.match(dashHeader, /text-primary/)
 })
 
 test('guru and siswa mobile dashboards use compact hero card and section spacing', () => {

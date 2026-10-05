@@ -77,7 +77,7 @@ export default function AdminDashboard() {
 
   return (
     <>
-      <MobileAdminDashboard stats={stats} loading={loading} kelengkapan={kelengkapan} />
+      <MobileAdminDashboard stats={stats} />
 
       <div className="hidden lg:block space-y-3">
         <PageHeader title="Dashboard" subtitle="Ringkasan data sekolah/madrasah hari ini" />

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import {
-  Activity, ArrowRight, ChevronRight, LayoutGrid, Moon, Sun, Sunrise, Sunset,
+  Activity, ArrowRight, CalendarCheck, ChevronRight, ClipboardCheck, LayoutGrid, Moon, Sun, Sunrise, Users,
 } from 'lucide-react'
 import api from '../../services/api'
 import { adminDashboardShortcuts, parseAdminDashboardShortcutKeys } from '../../lib/adminDashboardShortcuts'
@@ -11,7 +11,7 @@ import { useSettingsStore } from '../../stores/settingsStore'
 import MobileDashboardHeader from '../../components/MobileDashboardHeader'
 import MobileMenuSheet from '../../components/MobileMenuSheet'
 
-interface Props { stats: any; loading?: boolean; kelengkapan?: any }
+interface Props { stats: any; loading?: boolean }
 
 // Urutan waktu sholat untuk kartu jadwal.
 const SHOLAT: Array<[string, string]> = [
@@ -19,7 +19,7 @@ const SHOLAT: Array<[string, string]> = [
   ['ashar', 'Ashar'], ['maghrib', 'Maghrib'], ['isya', 'Isya'],
 ]
 const IKON_SHOLAT: Record<string, any> = {
-  subuh: Sunrise, syuruq: Sun, dzuhur: Sun, ashar: Sunset, maghrib: Moon, isya: Moon,
+  subuh: Sunrise, syuruq: Sun, dzuhur: Sun, ashar: Sun, maghrib: Moon, isya: Moon,
 }
 
 function menitSekarang(): number {
@@ -36,7 +36,16 @@ function keMenit(t?: string | null): number {
   return Number.isFinite(h) ? h * 60 + (m || 0) : -1
 }
 
-export default function MobileAdminDashboard({ stats, kelengkapan }: Props) {
+function Bar({ nilai, maks, tone = 'bg-emerald-500' }: { nilai: number; maks: number; tone?: string }) {
+  const persen = maks > 0 ? Math.min(100, Math.round((nilai / maks) * 100)) : 0
+  return (
+    <div className="h-1.5 w-full overflow-hidden rounded-full bg-slate-100 dark:bg-gray-800">
+      <div className={`h-1.5 rounded-full ${tone}`} style={{ width: `${persen}%` }} />
+    </div>
+  )
+}
+
+export default function MobileAdminDashboard({ stats }: Props) {
   const navigate = useNavigate()
   const [menuOpen, setMenuOpen] = useState(false)
   const [sholat, setSholat] = useState<any>(null)
@@ -68,12 +77,14 @@ export default function MobileAdminDashboard({ stats, kelengkapan }: Props) {
     return null
   }, [sholat])
 
-  const metrik = [
-    { label: 'Guru Ceklok', value: monitoring?.teacher_checkins?.total ?? 0, tone: 'bg-emerald-50 text-emerald-700' },
-    { label: 'Masuk Kelas', value: monitoring?.class_sessions?.total ?? 0, tone: 'bg-amber-50 text-amber-700' },
-    { label: 'Siswa QR', value: monitoring?.student_qr?.total ?? 0, tone: 'bg-cyan-50 text-cyan-700' },
-    { label: 'Penugasan', value: monitoring?.assignments?.total ?? 0, tone: 'bg-indigo-50 text-indigo-700' },
-  ]
+  /* ── Angka kartu Statistik Monitoring Live ── */
+  const rombel = monitoring?.rombel_attendance || []
+  const totalSiswa = rombel.reduce((n: number, r: any) => n + Number(r.total || 0), 0) || Number(stats?.total_siswa || 0)
+  const siswaHadir = rombel.reduce((n: number, r: any) => n + Number(r.masuk || 0), 0)
+  const rombelBelumAbsen = rombel.filter((r: any) => Number(r.masuk || 0) < Number(r.total || 0))
+  const ceklok = Number(monitoring?.teacher_checkins?.total || 0)
+  const totalGtk = Number(monitoring?.gtk_aktif || 0)
+  const jadwal = monitoring?.jadwal_hari_ini || { total: 0, guru: 0, rows: [] }
 
   return (
     <div className="lg:hidden min-h-screen -mx-4 -mt-3 bg-slate-50 pb-8 dark:bg-gray-950">
@@ -84,16 +95,7 @@ export default function MobileAdminDashboard({ stats, kelengkapan }: Props) {
       <main data-mobile-compact-dashboard="true" className="space-y-4 px-4 pt-3">
         {/* ── MENU GRID 4x2 (ubin terakhir: Lainnya) ── */}
         <section className="rounded-3xl bg-white p-4 shadow-sm dark:bg-gray-900">
-          <div className="mb-3 flex items-center justify-between gap-2">
-            <h2 className="text-sm font-bold text-slate-900 dark:text-white">Menu Layanan</h2>
-            <button
-              type="button"
-              onClick={() => setMenuOpen(true)}
-              className="flex shrink-0 items-center gap-0.5 text-xs font-semibold text-primary"
-            >
-              Semua Menu <ChevronRight size={14} />
-            </button>
-          </div>
+          <h2 className="mb-3 text-sm font-bold text-slate-900 dark:text-white">Menu Layanan</h2>
           <div
             data-admin-menu-grid="true"
             data-dashboard-quick-menus="dashboard_quick_menus"
@@ -164,17 +166,94 @@ export default function MobileAdminDashboard({ stats, kelengkapan }: Props) {
               <h2 className="flex items-center gap-2 text-sm font-bold text-slate-900 dark:text-white">
                 <Activity size={16} className="shrink-0 text-indigo-600" /> Statistik Monitoring Live
               </h2>
-              <p className="mt-0.5 break-words text-[11px] text-slate-400">Aktivitas hari ini · {stats?.total_siswa ?? 0} siswa terdaftar</p>
+              <p className="mt-0.5 break-words text-[11px] text-slate-400">Aktivitas hari ini{monitoring?.date ? ` · ${monitoring.date}` : ''}</p>
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-2">
-            {metrik.map(m => (
-              <div key={m.label} className={`rounded-xl px-3 py-2.5 ${m.tone}`}>
-                <p className="text-xl font-bold tabular-nums">{m.value}</p>
-                <p className="break-words text-[11px] opacity-80">{m.label}</p>
+
+          {/* 1. Absensi siswa hari ini + rombel yang belum absen */}
+          <div data-monitoring-absensi="true" className="rounded-xl bg-slate-50 p-3 dark:bg-gray-800">
+            <div className="flex items-start justify-between gap-2">
+              <div className="min-w-0">
+                <p className="flex items-center gap-1.5 text-[12px] font-semibold text-slate-700 dark:text-gray-200">
+                  <ClipboardCheck size={14} className="shrink-0 text-emerald-600" /> Absensi Siswa Hari Ini
+                </p>
+                <p className="mt-0.5 break-words text-[11px] text-slate-500 dark:text-gray-400">
+                  {siswaHadir} dari {totalSiswa} siswa tercatat
+                </p>
               </div>
-            ))}
+              <span className="shrink-0 text-lg font-bold tabular-nums text-emerald-700 dark:text-emerald-300">{siswaHadir}</span>
+            </div>
+            <div className="mt-2"><Bar nilai={siswaHadir} maks={totalSiswa} /></div>
+            <div className="mt-2.5">
+              {rombelBelumAbsen.length === 0 ? (
+                <p className="text-[11px] font-medium text-emerald-700 dark:text-emerald-300">
+                  {totalSiswa > 0 ? 'Semua rombel sudah absen lengkap' : 'Belum ada rombel dengan siswa aktif'}
+                </p>
+              ) : (
+                <>
+                  <p className="text-[11px] font-semibold text-amber-700 dark:text-amber-400">
+                    Belum absen ({rombelBelumAbsen.length} rombel)
+                  </p>
+                  <div className="mt-1.5 flex flex-wrap gap-1.5">
+                    {rombelBelumAbsen.slice(0, 6).map((r: any) => (
+                      <span key={r.rombel_id} className="max-w-full break-words rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium text-amber-800 dark:bg-amber-500/20 dark:text-amber-300">
+                        {r.rombel_nama} · {Number(r.masuk || 0)}/{Number(r.total || 0)}
+                      </span>
+                    ))}
+                    {rombelBelumAbsen.length > 6 && (
+                      <span className="rounded-full bg-slate-200 px-2 py-0.5 text-[10px] font-medium text-slate-600 dark:bg-gray-700 dark:text-gray-300">
+                        +{rombelBelumAbsen.length - 6} lagi
+                      </span>
+                    )}
+                  </div>
+                </>
+              )}
+            </div>
           </div>
+
+          {/* 2. Ceklok GTK hari ini */}
+          <div data-monitoring-ceklok="true" className="mt-2 rounded-xl bg-slate-50 p-3 dark:bg-gray-800">
+            <div className="flex items-start justify-between gap-2">
+              <div className="min-w-0">
+                <p className="flex items-center gap-1.5 text-[12px] font-semibold text-slate-700 dark:text-gray-200">
+                  <Users size={14} className="shrink-0 text-cyan-600" /> Ceklok GTK Hari Ini
+                </p>
+                <p className="mt-0.5 break-words text-[11px] text-slate-500 dark:text-gray-400">
+                  {totalGtk > 0 ? `${ceklok} dari ${totalGtk} GTK sudah ceklok` : `${ceklok} GTK sudah ceklok`}
+                </p>
+              </div>
+              <span className="shrink-0 text-lg font-bold tabular-nums text-cyan-700 dark:text-cyan-300">{ceklok}</span>
+            </div>
+            <div className="mt-2"><Bar nilai={ceklok} maks={totalGtk || ceklok} tone="bg-cyan-500" /></div>
+          </div>
+
+          {/* 3. Jadwal guru hari ini */}
+          <div data-monitoring-jadwal="true" className="mt-2 rounded-xl bg-slate-50 p-3 dark:bg-gray-800">
+            <div className="flex items-start justify-between gap-2">
+              <div className="min-w-0">
+                <p className="flex items-center gap-1.5 text-[12px] font-semibold text-slate-700 dark:text-gray-200">
+                  <CalendarCheck size={14} className="shrink-0 text-indigo-600" /> Jadwal Guru Hari Ini
+                </p>
+                <p className="mt-0.5 break-words text-[11px] text-slate-500 dark:text-gray-400">
+                  {jadwal.total || 0} jadwal · {jadwal.guru || 0} guru mengajar
+                </p>
+              </div>
+              <span className="shrink-0 text-lg font-bold tabular-nums text-indigo-700 dark:text-indigo-300">{jadwal.total || 0}</span>
+            </div>
+            {(jadwal.rows || []).length > 0 && (
+              <div className="mt-2 space-y-1">
+                {(jadwal.rows || []).slice(0, 3).map((j: any) => (
+                  <p key={j.id} className="break-words text-[10px] text-slate-500 dark:text-gray-400">
+                    {j.jam_mulai}–{j.jam_selesai} · {j.mapel_nama || '-'} · {j.guru_nama || '-'}
+                  </p>
+                ))}
+                {(jadwal.rows || []).length > 3 && (
+                  <p className="text-[10px] text-slate-400">+{jadwal.rows.length - 3} jadwal lagi</p>
+                )}
+              </div>
+            )}
+          </div>
+
           <Link
             to="/admin/monitoring"
             className="mt-3 flex w-full items-center justify-center gap-1.5 rounded-xl bg-indigo-600 px-3 py-2 text-xs font-semibold text-white active:scale-95"
@@ -182,48 +261,6 @@ export default function MobileAdminDashboard({ stats, kelengkapan }: Props) {
             Buka Monitoring Lengkap <ArrowRight size={14} />
           </Link>
         </section>
-
-        {/* ── KELENGKAPAN DATA (bila tersedia) ── */}
-        {kelengkapan && (
-          <section className="rounded-3xl bg-white p-4 shadow-sm dark:bg-gray-900">
-            <div className="mb-3 flex items-start justify-between gap-2">
-              <div className="min-w-0">
-                <h2 className="text-sm font-bold text-slate-900 dark:text-white">Kelengkapan Data Lembaga</h2>
-                <p className="break-words text-[11px] text-slate-400">{kelengkapan.jumlah_lengkap ?? 0} dari {kelengkapan.jumlah_item ?? 0} kategori lengkap</p>
-              </div>
-              <span className={`shrink-0 rounded-full px-3 py-1 text-xs font-bold ${kelengkapan.skor_keseluruhan >= 75 ? 'bg-emerald-50 text-emerald-700' : kelengkapan.skor_keseluruhan >= 50 ? 'bg-amber-50 text-amber-700' : 'bg-red-50 text-red-700'}`}>{kelengkapan.skor_keseluruhan ?? 0}%</span>
-            </div>
-            <div className="h-1.5 w-full rounded-full bg-slate-100 dark:bg-gray-800">
-              <div
-                className={`h-1.5 rounded-full ${kelengkapan.skor_keseluruhan >= 75 ? 'bg-emerald-500' : kelengkapan.skor_keseluruhan >= 50 ? 'bg-amber-500' : 'bg-red-500'}`}
-                style={{ width: `${Math.min(kelengkapan.skor_keseluruhan ?? 0, 100)}%` }}
-              />
-            </div>
-            {/* Yang paling tertinggal saja — rincian penuh ada di menu Monitoring Data */}
-            {(kelengkapan.prioritas || [])
-              .filter((p: any) => bisaBukaHalaman(user?.role, p.tautan))
-              .slice(0, 3)
-              .map((p: any) => (
-                <Link
-                  key={p.key}
-                  to={p.tautan || '/admin/monitoring'}
-                  className="mt-2 flex items-center justify-between gap-2 rounded-xl bg-slate-50 px-3 py-2 active:scale-[0.99] dark:bg-gray-800"
-                >
-                  <span className="min-w-0">
-                    <span className="block break-words text-[11px] font-medium text-slate-700 dark:text-gray-200">{p.label}</span>
-                    {p.detail && <span className="block break-words text-[10px] text-slate-400">{p.detail}</span>}
-                  </span>
-                  <span className={`shrink-0 text-[11px] font-bold ${p.persen === 0 ? 'text-red-600' : 'text-amber-600'}`}>{p.persen}%</span>
-                </Link>
-              ))}
-            <Link
-              to="/admin/monitoring"
-              className="mt-3 flex w-full items-center justify-center gap-1.5 rounded-xl bg-primary px-3 py-2 text-xs font-medium text-white active:scale-95"
-            >
-              Lihat semua di Monitoring Data
-            </Link>
-          </section>
-        )}
       </main>
       <MobileMenuSheet open={menuOpen} onClose={() => setMenuOpen(false)} />
     </div>

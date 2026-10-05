@@ -107,7 +107,7 @@ test('tautan khusus admin disembunyikan dari peran non-admin', () => {
   assert.ok(hal.includes("useAuthStore(s => s.user?.role)"), 'peran pengguna tidak dibaca di halaman monitoring')
 
   const mobile = baca('src/pages/admin/MobileAdminDashboard.tsx')
-  assert.ok(mobile.includes('bisaBukaHalaman(user?.role, p.tautan)'), 'kartu prioritas mobile tidak memakai gate')
+  assert.ok(mobile.includes('bisaBukaHalaman(user?.role, item.path)'), 'pintasan mobile tidak memakai gate peran')
 
   // Fungsi gerbang sendiri harus benar untuk peran kepala.
   assert.ok(gerbang.includes("'/admin/settings'") && gerbang.includes("'/admin/rekap-nilai'"), 'daftar halaman khusus admin berubah')
@@ -140,18 +140,23 @@ test('dashboard kepala memakai halaman dashboard yang sama', () => {
   assert.ok(roleLine.includes("'admin'"), 'admin harus boleh membaca endpoint kelengkapan')
 })
 
-test('dashboard mobile menerima kelengkapan dan menaut ke halaman monitoring', () => {
+test('dashboard mobile menampilkan statistik monitoring live dan menaut ke halaman monitoring', () => {
   const mobile = baca('src/pages/admin/MobileAdminDashboard.tsx')
-  assert.ok(mobile.includes('kelengkapan?: any'), 'props kelengkapan tidak ada di mobile dashboard')
-  assert.ok(mobile.includes('Kelengkapan Data Lembaga'), 'judul kelengkapan tidak ada di mobile')
-  assert.ok(mobile.includes('prioritas'), 'prioritas tidak dipakai di mobile')
+  assert.ok(mobile.includes('Statistik Monitoring Live'), 'judul statistik monitoring live tidak ada di mobile')
+  // Isi kartu: absensi siswa + rombel yang belum absen, ceklok GTK, jadwal guru hari ini.
+  assert.ok(mobile.includes('rombel_attendance'), 'absensi per rombel tidak dipakai di mobile')
+  assert.ok(mobile.includes('Belum absen'), 'daftar rombel belum absen tidak ada di mobile')
+  assert.ok(mobile.includes('Ceklok GTK Hari Ini'), 'ceklok GTK hari ini tidak ada di mobile')
+  assert.ok(mobile.includes('Jadwal Guru Hari Ini'), 'jadwal guru hari ini tidak ada di mobile')
   assert.ok(mobile.includes('to="/admin/monitoring"'), 'tautan ke halaman monitoring tidak ada di mobile')
+  // Kartu kelengkapan dihapus dari dashboard mobile supaya tidak dobel dengan monitoring.
+  assert.ok(!mobile.includes('Kelengkapan Data Lembaga'), 'kartu kelengkapan masih tertinggal di mobile')
 })
 
-test('dashboard admin meneruskan kelengkapan ke versi mobile', () => {
+test('dashboard admin tidak lagi mengirim kelengkapan ke versi mobile', () => {
   const src = baca('src/pages/admin/AdminDashboard.tsx')
   assert.ok(
-    src.includes('<MobileAdminDashboard stats={stats} loading={loading} kelengkapan={kelengkapan} />'),
-    'MobileAdminDashboard harus menerima prop kelengkapan'
+    src.includes('<MobileAdminDashboard stats={stats} />'),
+    'MobileAdminDashboard hanya menerima prop stats'
   )
 })
