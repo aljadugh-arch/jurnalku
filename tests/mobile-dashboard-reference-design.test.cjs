@@ -9,6 +9,7 @@ const read = (p) => fs.readFileSync(path.join(root, p), 'utf8')
 const GURU = 'src/pages/guru/MobileGuruDashboard.tsx'
 const ADMIN = 'src/pages/admin/MobileAdminDashboard.tsx'
 const SISWA = 'src/pages/siswa/MobileSiswaDashboard.tsx'
+const BENDAHARA = 'src/pages/admin/MobileBendaharaDashboard.tsx'
 const HEADER = 'src/components/MobileHeader.tsx'
 const DASH_HEADER = 'src/components/MobileDashboardHeader.tsx'
 
@@ -96,12 +97,13 @@ test('admin dashboard menampilkan menu grid 4x2 dengan ubin Lainnya', () => {
   assert.doesNotMatch(src, /Semua Menu/)
 })
 
-test('admin dashboard menampilkan kartu Jadwal Sholat', () => {
-  const src = read(ADMIN)
-  assert.match(src, /data-admin-sholat-card="true"/)
-  assert.match(src, /Jadwal Sholat/)
-  assert.match(src, /api\.get\('\/jadwal-sholat'\)/)
-  for (const waktu of ['subuh', 'syuruq', 'dzuhur', 'ashar', 'maghrib', 'isya']) assert.match(src, new RegExp(waktu))
+test('kartu Jadwal Sholat dipakai bersama admin, guru, dan bendahara', () => {
+  // Satu komponen bersama supaya tampilannya identik di ketiga dashboard.
+  for (const file of [ADMIN, GURU, BENDAHARA]) assert.match(read(file), /<JadwalSholatCard \/>/)
+  const card = read('src/components/JadwalSholatCard.tsx')
+  assert.match(card, /data-jadwal-sholat-card="true"/)
+  assert.match(card, /api\.get\('\/jadwal-sholat'\)/)
+  for (const waktu of ['subuh', 'syuruq', 'dzuhur', 'ashar', 'maghrib', 'isya']) assert.match(card, new RegExp(waktu))
 })
 
 test('admin dashboard menampilkan kartu Statistik Monitoring Live', () => {
@@ -155,7 +157,8 @@ test('mobile header supports switch role for kepala with can_teach', () => {
   assert.match(header, /Mode Guru/)
 })
 
-test('dashboard admin dan guru memakai header lembaga, siswa tetap memakai MobileHeader', () => {
-  for (const file of [GURU, ADMIN]) assert.match(read(file), /<MobileDashboardHeader/)
-  assert.match(read(SISWA), /<MobileHeader/)
+test('semua dashboard mobile memakai header lembaga yang senada', () => {
+  for (const file of [GURU, ADMIN, SISWA, BENDAHARA]) {
+    assert.match(read(file), /<MobileDashboardHeader/)
+  }
 })

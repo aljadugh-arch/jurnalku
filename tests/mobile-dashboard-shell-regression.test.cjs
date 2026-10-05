@@ -32,17 +32,14 @@ test('header dashboard memegang aksi notifikasi, tema, profil, sandi, dan keluar
     /logout\(\)/,
   ]) assert.match(header, contract)
 
-  // Dashboard admin & guru memakai header lembaga (yang menitipkan lonceng ke NotifBell);
-  // dashboard bendahara & siswa tetap memakai MobileHeader dengan aksi lengkapnya.
+  // SEMUA dashboard mobile memakai header lembaga bersama (yang menitipkan
+  // lonceng ke NotifBell dan menu akun ke avatar) agar tampilannya senada.
   for (const file of [
     'src/pages/admin/MobileAdminDashboard.tsx',
-    'src/pages/guru/MobileGuruDashboard.tsx',
-  ]) assert.match(read(file), /<MobileDashboardHeader/)
-
-  for (const file of [
     'src/pages/admin/MobileBendaharaDashboard.tsx',
+    'src/pages/guru/MobileGuruDashboard.tsx',
     'src/pages/siswa/MobileSiswaDashboard.tsx',
-  ]) assert.match(read(file), /<MobileHeader/)
+  ]) assert.match(read(file), /<MobileDashboardHeader/)
 
   const dashHeader = read('src/components/MobileDashboardHeader.tsx')
   assert.match(dashHeader, /NotifBell/)
@@ -56,11 +53,10 @@ test('mobile heroes derive color from tenant settings and dark theme', () => {
   assert.match(helper, /settings\?\.sidebar_color/)
   assert.match(helper, /dark.*shade\(fallback, -38\)/)
 
-  for (const file of [
-    'src/pages/admin/MobileBendaharaDashboard.tsx',
-    'src/pages/siswa/MobileSiswaDashboard.tsx',
-  ]) {
-    const source = read(file)
+  // Siswa masih memakai banner bermotif warna aksen; bendahara kini kartu senada
+  // seperti admin/guru (hero-nya dipindah ke header bersama).
+  {
+    const source = read('src/pages/siswa/MobileSiswaDashboard.tsx')
     assert.match(source, /heroColors\(settings, dark\)/)
     assert.match(source, /linear-gradient\(135deg, \$\{hero\},/)
   }

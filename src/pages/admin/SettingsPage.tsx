@@ -79,6 +79,7 @@ import FeatureSettings from '../../components/FeatureSettings'
 import AiSettingsCard from '../../components/AiSettingsCard'
 import TtsPrewarmCard from '../../components/TtsPrewarmCard'
 import { adminDashboardShortcuts, defaultAdminDashboardShortcutKeys, parseAdminDashboardShortcutKeys } from '../../lib/adminDashboardShortcuts'
+import Toggle from '../../components/ui/Toggle'
 
 
 const HARI_OPTIONS = [
@@ -668,21 +669,16 @@ export default function SettingsPage() {
         </div>
         <div className="space-y-4">
           {/* Toggle pwa_enabled */}
-          <div className="flex items-center justify-between">
-            <div>
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
               <p className="text-sm font-medium text-gray-700">Aktifkan PWA</p>
-              <p className="text-xs text-gray-400 mt-0.5">Izinkan pengguna menginstal aplikasi ke layar utama perangkat.</p>
+              <p className="text-xs text-gray-400 mt-0.5 break-words">Izinkan pengguna menginstal aplikasi ke layar utama perangkat.</p>
             </div>
-            <div
-              role="switch"
-              aria-checked={form.pwa_enabled}
-              tabIndex={0}
-              onClick={() => setForm({ ...form, pwa_enabled: !form.pwa_enabled })}
-              onKeyDown={e => (e.key === 'Enter' || e.key === ' ') && setForm({ ...form, pwa_enabled: !form.pwa_enabled })}
-              className={'relative inline-flex h-6 w-11 cursor-pointer items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 ' + (form.pwa_enabled ? 'bg-primary' : 'bg-gray-300')}
-            >
-              <span className={'inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ' + (form.pwa_enabled ? 'translate-x-6' : 'translate-x-1')} />
-            </div>
+            <Toggle
+              checked={form.pwa_enabled}
+              onChange={next => setForm({ ...form, pwa_enabled: next })}
+              label="Aktifkan PWA"
+            />
           </div>
 
           {/* App name */}
@@ -810,21 +806,16 @@ export default function SettingsPage() {
         </div>
         <p className="text-xs text-gray-500 mb-4">Hubungkan folder Google Drive agar isinya bisa diakses langsung di dalam aplikasi tanpa membuka Google Drive.</p>
         <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <div>
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
               <p className="text-sm font-medium text-gray-700">Aktifkan Perpustakaan Digital</p>
-              <p className="text-xs text-gray-400 mt-0.5">Jika nonaktif, menu perpustakaan tidak akan menampilkan koleksi ke pengguna.</p>
+              <p className="text-xs text-gray-400 mt-0.5 break-words">Jika nonaktif, menu perpustakaan tidak akan menampilkan koleksi ke pengguna.</p>
             </div>
-            <div
-              role="switch"
-              aria-checked={library.enabled}
-              tabIndex={0}
-              onClick={() => setLibrary({ ...library, enabled: !library.enabled })}
-              onKeyDown={e => (e.key === 'Enter' || e.key === ' ') && setLibrary({ ...library, enabled: !library.enabled })}
-              className={'relative inline-flex h-6 w-11 cursor-pointer items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 ' + (library.enabled ? 'bg-primary' : 'bg-gray-300')}
-            >
-              <span className={'inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ' + (library.enabled ? 'translate-x-6' : 'translate-x-1')} />
-            </div>
+            <Toggle
+              checked={library.enabled}
+              onChange={next => setLibrary({ ...library, enabled: next })}
+              label="Aktifkan Perpustakaan Digital"
+            />
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-600 mb-1">Nama Koleksi</label>

@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { Bell, MessageSquare, Save, Loader2, AlertTriangle } from 'lucide-react'
 import toast from 'react-hot-toast'
 import api from '../../services/api'
+import Toggle from '../../components/ui/Toggle'
 
 export default function NotifSettingsPage() {
   const [settings, setSettings] = useState({
@@ -135,10 +136,12 @@ export default function NotifSettingsPage() {
                 <p className="break-words text-xs text-gray-500 mt-0.5">Kirim WA otomatis ke wali saat siswa diabsen</p>
               </div>
             </div>
-            <label className="relative inline-flex shrink-0 items-center cursor-pointer">
-              <input type="checkbox" checked={settings.absensi_siswa_ke_wali} onChange={e => setSettings({...settings, absensi_siswa_ke_wali: e.target.checked})} className="sr-only peer" />
-              <div className="w-11 h-6 bg-gray-200 peer-focus:ring-4 peer-focus:ring-primary/20 rounded-full peer peer-checked:after:translate-x-full peer-checked:bg-green-600 after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all"></div>
-            </label>
+            <Toggle
+              checked={settings.absensi_siswa_ke_wali}
+              onChange={next => setSettings({ ...settings, absensi_siswa_ke_wali: next })}
+              label="Notifikasi Absensi ke Wali Murid"
+              toneClassName="bg-green-600"
+            />
           </div>
           <div className="mt-4">
             <label className="block text-xs font-medium text-gray-500 mb-1">Template Pesan</label>
@@ -165,10 +168,12 @@ export default function NotifSettingsPage() {
                 <p className="break-words text-xs text-gray-500 mt-0.5">Kirim WA ke guru yang belum absen</p>
               </div>
             </div>
-            <label className="relative inline-flex shrink-0 items-center cursor-pointer">
-              <input type="checkbox" checked={settings.guru_belum_ceklok} onChange={e => setSettings({...settings, guru_belum_ceklok: e.target.checked})} className="sr-only peer" />
-              <div className="w-11 h-6 bg-gray-200 peer-focus:ring-4 peer-focus:ring-primary/20 rounded-full peer peer-checked:after:translate-x-full peer-checked:bg-green-600 after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all"></div>
-            </label>
+            <Toggle
+              checked={settings.guru_belum_ceklok}
+              onChange={next => setSettings({ ...settings, guru_belum_ceklok: next })}
+              label="Notifikasi Guru Belum Ceklok"
+              toneClassName="bg-green-600"
+            />
           </div>
           <div className="mt-4 space-y-3">
             <div>
@@ -226,10 +231,12 @@ export default function NotifSettingsPage() {
               <p className="break-words text-xs text-gray-500 mt-0.5">Kirim WA pengingat ke guru pembina 5 menit sebelum jadwal ekskul/peminatan dimulai</p>
             </div>
           </div>
-          <label className="relative inline-flex shrink-0 items-center cursor-pointer">
-            <input type="checkbox" checked={settings.notif_ekskul_guru} onChange={e => setSettings({...settings, notif_ekskul_guru: e.target.checked})} className="sr-only peer" />
-            <div className="w-11 h-6 bg-gray-200 peer-focus:ring-4 peer-focus:ring-violet/20 rounded-full peer peer-checked:after:translate-x-full peer-checked:bg-violet-600 after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all"></div>
-          </label>
+          <Toggle
+              checked={settings.notif_ekskul_guru}
+              onChange={next => setSettings({ ...settings, notif_ekskul_guru: next })}
+              label="Notifikasi Jadwal Ekskul / Peminatan"
+              toneClassName="bg-violet-600"
+            />
         </div>
         <textarea value={settings.template_ekskul_guru} onChange={e => setSettings({...settings, template_ekskul_guru: e.target.value})} rows={2} className="w-full px-3 py-2 border rounded-lg text-sm" placeholder="{nama_guru}, {ekskul}, {jam_mulai}, {jam_selesai}, {tanggal}, {lembaga}" />
         <button onClick={handleTestEkskulGuru} className="px-4 py-2 bg-violet-600 text-white rounded-lg text-sm">Test Notif Ekskul Sekarang</button>
@@ -247,10 +254,12 @@ export default function NotifSettingsPage() {
               <p className="break-words text-xs text-gray-500 mt-0.5">Jawab otomatis pesan masuk: wali murid lihat tagihan/tabungan/nilai/absensi/jadwal anak, guru lihat jadwal mengajarnya</p>
             </div>
           </div>
-          <label className="relative inline-flex shrink-0 items-center cursor-pointer">
-            <input type="checkbox" checked={settings.notif_cs_bot} onChange={e => setSettings({...settings, notif_cs_bot: e.target.checked})} className="sr-only peer" />
-            <div className="w-11 h-6 bg-gray-200 peer-focus:ring-4 peer-focus:ring-sky-500/20 rounded-full peer peer-checked:after:translate-x-full peer-checked:bg-sky-600 after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all"></div>
-          </label>
+          <Toggle
+              checked={settings.notif_cs_bot}
+              onChange={next => setSettings({ ...settings, notif_cs_bot: next })}
+              label="Bot CS WhatsApp"
+              toneClassName="bg-sky-600"
+            />
         </div>
         <p className="break-words text-xs text-gray-500">Kata kunci yang dikenali: <span className="font-mono">menu/halo, jadwal, nilai, tagihan, tabungan, absensi, info</span>. Hanya nomor terdaftar (guru/wali) yang mendapat data pribadi; nomor asing hanya menerima info lembaga.</p>
       </div>
@@ -267,10 +276,12 @@ export default function NotifSettingsPage() {
               <p className="break-words text-xs text-gray-500 mt-0.5">Kirim WA ringkasan tabungan, tagihan & pembayaran siswa secara terjadwal</p>
             </div>
           </div>
-          <label className="relative inline-flex shrink-0 items-center cursor-pointer">
-            <input type="checkbox" checked={settings.notif_keuangan_wali} onChange={e => setSettings({...settings, notif_keuangan_wali: e.target.checked})} className="sr-only peer" />
-            <div className="w-11 h-6 bg-gray-200 peer-focus:ring-4 peer-focus:ring-primary/20 rounded-full peer peer-checked:after:translate-x-full peer-checked:bg-emerald-600 after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all"></div>
-          </label>
+          <Toggle
+              checked={settings.notif_keuangan_wali}
+              onChange={next => setSettings({ ...settings, notif_keuangan_wali: next })}
+              label="Notifikasi Laporan Keuangan ke Wali Murid"
+              toneClassName="bg-emerald-600"
+            />
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           <div>

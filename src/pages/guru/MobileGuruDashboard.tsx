@@ -6,6 +6,7 @@ import { useNavigate } from 'react-router-dom'
 import toast from 'react-hot-toast'
 import api from '../../services/api'
 import MobileDashboardHeader from '../../components/MobileDashboardHeader'
+import JadwalSholatCard from '../../components/JadwalSholatCard'
 
 /* ─── helpers ─── */
 function nowMinutes() {
@@ -223,6 +224,9 @@ export default function MobileGuruDashboard() {
             </div>
           )}
         </section>
+
+        {/* ── JADWAL SHOLAT (komponen bersama, sama dgn admin & bendahara) ── */}
+        <JadwalSholatCard />
       </div>
     </div>
   )

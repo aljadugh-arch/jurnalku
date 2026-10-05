@@ -13,7 +13,7 @@ import {
   Sparkles,
 } from 'lucide-react'
 import api from '../../services/api'
-import MobileHeader from '../../components/MobileHeader'
+import MobileDashboardHeader from '../../components/MobileDashboardHeader'
 import { useSettingsStore } from '../../stores/settingsStore'
 import { useThemeStore } from '../../stores/themeStore'
 import { heroColors } from '../../lib/applyTheme'
@@ -123,8 +123,8 @@ export default function MobileSiswaDashboard() {
   const hero = heroColors(settings, dark)
 
   return (
-    <div className="min-h-screen bg-[#F8FAFC] dark:bg-gray-950 pb-8 text-slate-800 dark:text-gray-100">
-      <div className="px-4 pt-4 pb-2"><MobileHeader basePath="/siswa" profilePhoto={siswa?.foto || null} /></div>
+    <div className="min-h-screen -mx-4 -mt-3 bg-[#F8FAFC] pb-8 text-slate-800 dark:bg-gray-950 dark:text-gray-100 sm:-mx-6">
+      <div className="px-4 pt-4 pb-2"><MobileDashboardHeader photo={siswa?.foto || null} /></div>
 
       <div data-mobile-compact-dashboard="true" className="px-4 pt-4 space-y-3.5">
         {/* ─── 2. MOTIVATIONAL BANNER (Semangat Belajar) ─────────────── */}

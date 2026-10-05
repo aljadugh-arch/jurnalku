@@ -39,6 +39,8 @@ test('all user login token durations are configurable', () => {
 
 test('student dashboard has one mobile header', () => {
   const src = read('src/pages/siswa/MobileSiswaDashboard.tsx')
-  assert.equal((src.match(/<MobileHeader\b/g) || []).length, 1)
+  // Header lembaga bersama: satu saja, dan bukan header lama.
+  assert.equal((src.match(/<MobileDashboardHeader\b/g) || []).length, 1)
+  assert.doesNotMatch(src, /<MobileHeader\b/)
   assert.doesNotMatch(src, /HEADER DENGAN FOTO SISWA/)
 })

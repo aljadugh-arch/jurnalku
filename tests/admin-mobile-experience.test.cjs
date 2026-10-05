@@ -28,9 +28,8 @@ test('admin home has configurable eight shortcuts, notifications and charts', ()
   assert.match(DASH, /data-admin-menu-grid="true"/)
   assert.match(DASH, /data-admin-menu-more="true"/)
   assert.match(DASH, /grid-cols-4/)
-  // Kartu tambahan di bawah grid: jadwal sholat + statistik monitoring live.
-  assert.match(DASH, /data-admin-sholat-card="true"/)
-  assert.match(DASH, /Jadwal Sholat/)
+  // Kartu tambahan di bawah grid: jadwal sholat (komponen bersama) + monitoring live.
+  assert.match(DASH, /<JadwalSholatCard \/>/)
   assert.match(DASH, /data-admin-monitoring-card="true"/)
   assert.match(DASH, /Statistik Monitoring Live/)
   // Ringkasan grafik pindah ke halaman monitoring; dashboard tetap memuat angkanya.
