@@ -10,32 +10,56 @@ const GURU = 'src/pages/guru/MobileGuruDashboard.tsx'
 const ADMIN = 'src/pages/admin/MobileAdminDashboard.tsx'
 const SISWA = 'src/pages/siswa/MobileSiswaDashboard.tsx'
 const HEADER = 'src/components/MobileHeader.tsx'
+const DASH_HEADER = 'src/components/MobileDashboardHeader.tsx'
+
+/* ── Header lembaga (dipakai dashboard admin & guru) ── */
+
+test('header dashboard menampilkan logo + nama lembaga dan lonceng notifikasi', () => {
+  const src = read(DASH_HEADER)
+  assert.match(src, /data-dashboard-header="true"/)
+  assert.match(src, /settings\.nama_lembaga/)
+  assert.match(src, /logo/)
+  // Latar kotak memakai warna/aksen dari Pengaturan.
+  assert.match(src, /heroColors\(settings, dark\)/)
+  assert.match(src, /style=\{\{ background: accent \}\}/)
+  assert.match(src, /NotifBell/)
+})
+
+test('header dashboard menaruh nama besar dan peran di bawah header lembaga', () => {
+  const src = read(DASH_HEADER)
+  assert.match(src, /user\?\.nama/)
+  assert.match(src, /text-2xl font-bold/)
+  assert.match(src, /ROLE_LABEL/)
+})
 
 /* ── Guru dashboard ── */
 
-test('guru hero renders the Fokus Hari Ini focus card with jurnal CTA', () => {
+test('guru dashboard memakai header lembaga dan menampilkan peran GURU', () => {
   const src = read(GURU)
-  assert.match(src, /data-guru-focus-card="true"/)
-  assert.match(src, /FOKUS HARI INI/i)
-  assert.match(src, /Jurnal Mengajar/)
+  assert.match(src, /<MobileDashboardHeader/)
+  assert.match(src, /GURU/)
+  assert.match(src, /WALI MURID/)
 })
 
-test('guru focus card nests a white next-class card with green Masuk Kelas action', () => {
+test('guru dashboard menata dua grid utama: Ceklok Kehadiran dan Jadwal Mengajar', () => {
   const src = read(GURU)
-  assert.match(src, /data-guru-next-class="true"/)
-  assert.match(src, /Masuk Kelas/)
-})
-
-test('guru quick actions are a 2x2 grid of titled cards with subtitles and chevrons', () => {
-  const src = read(GURU)
-  assert.match(src, /data-guru-quick-grid="true"/)
-  assert.match(src, /Jadwal Mengajar/)
+  assert.match(src, /data-guru-main-grid="true"/)
+  assert.match(src, /grid-cols-2/)
+  assert.match(src, /data-guru-ceklok-card="true"/)
   assert.match(src, /Ceklok Kehadiran/)
-  assert.match(src, /Absensi Siswa/)
-  assert.match(src, /Penilaian Siswa/)
+  assert.match(src, /data-guru-jadwal-card="true"/)
+  assert.match(src, /Jadwal Mengajar/)
 })
 
-test('guru schedule list rows expose time block, subject and Masuk pill', () => {
+test('jadwal mengajar hari ini menyediakan tombol MASUK KELAS hijau dan SELESAI KELAS merah', () => {
+  const src = read(GURU)
+  assert.match(src, /Jadwal Mengajar Hari Ini/)
+  // Hijau = masuk kelas, merah = selesai kelas.
+  assert.match(src, /bg-emerald-600[^"']*"[\s\S]{0,120}MASUK KELAS/)
+  assert.match(src, /bg-red-600[^"']*"[\s\S]{0,120}SELESAI KELAS/)
+})
+
+test('baris jadwal guru memaparkan blok waktu, mata pelajaran, dan aksi', () => {
   const src = read(GURU)
   assert.match(src, /data-guru-schedule-row="true"/)
   assert.match(src, /data-guru-schedule-time="true"/)
@@ -44,41 +68,52 @@ test('guru schedule list rows expose time block, subject and Masuk pill', () => 
 
 /* ── Admin dashboard ── */
 
-test('admin greeting block is plain text above the hero, not a translucent chip', () => {
+test('admin dashboard memakai header lembaga dan identitas pengguna', () => {
   const src = read(ADMIN)
-  assert.match(src, /Selamat datang/)
+  assert.match(src, /<MobileDashboardHeader/)
 })
 
-test('admin hero is a green Total Siswa card with active count and chevron', () => {
+test('admin dashboard menampilkan menu grid 4x2 dengan ubin Lainnya', () => {
   const src = read(ADMIN)
-  assert.match(src, /Total Siswa/)
-  assert.match(src, /siswa_aktif/)
+  assert.match(src, /data-admin-menu-grid="true"/)
+  assert.match(src, /grid-cols-4/)
+  assert.match(src, /menuTerbuka\.slice\(0, 7\)/)
+  assert.match(src, /data-admin-menu-more="true"/)
+  assert.match(src, /Lainnya/)
+  // Ubin Lainnya membuka menu lengkap.
+  assert.match(src, /data-admin-menu-more="true"[\s\S]{0,200}setMenuOpen\(true\)/)
 })
 
-test('admin quick action row exposes the four reference shortcuts', () => {
-  const src = read('src/lib/adminDashboardShortcuts.tsx')
-  assert.match(src, /Kelola Siswa/)
-  assert.match(src, /Kelola GTK/)
-  assert.match(src, /Jadwal/)
-  assert.match(src, /Rekapitulasi/)
-})
-
-test('admin Menu Layanan keeps the four reference service tiles', () => {
-  const src = read('src/lib/adminDashboardShortcuts.tsx')
-  assert.match(src, /Absensi QR Siswa/)
-  assert.match(src, /Ceklok GTK/)
-  assert.match(src, /Penilaian/)
-  assert.match(src, /Keuangan/)
-})
-
-test('admin renders a Notifikasi Terbaru card with rows and timestamps', () => {
+test('admin dashboard menampilkan kartu Jadwal Sholat', () => {
   const src = read(ADMIN)
-  assert.match(src, /Notifikasi Terkini/)
-  assert.match(src, /notifications\.map/)
-  assert.match(src, /jam_mulai/)
+  assert.match(src, /data-admin-sholat-card="true"/)
+  assert.match(src, /Jadwal Sholat/)
+  assert.match(src, /api\.get\('\/jadwal-sholat'\)/)
+  for (const waktu of ['subuh', 'syuruq', 'dzuhur', 'ashar', 'maghrib', 'isya']) assert.match(src, new RegExp(waktu))
 })
 
-/* ── Header and Navigation ── */
+test('admin dashboard menampilkan kartu Statistik Monitoring Live', () => {
+  const src = read(ADMIN)
+  assert.match(src, /data-admin-monitoring-card="true"/)
+  assert.match(src, /Statistik Monitoring Live/)
+  assert.match(src, /api\.get\('\/admin\/monitoring'\)/)
+  assert.match(src, /to="\/admin\/monitoring"/)
+})
+
+test('admin dashboard tetap menjaga gerbang peran dan prioritas kelengkapan', () => {
+  const src = read(ADMIN)
+  assert.match(src, /bisaBukaHalaman\(user\?\.role, item\.path\)/)
+  assert.match(src, /bisaBukaHalaman\(user\?\.role, p\.tautan\)/)
+  assert.match(src, /kelengkapan\.prioritas/)
+})
+
+test('admin dashboard menautkan grid ke menu lengkap dan meneruskan kelengkapan', () => {
+  const src = read(ADMIN)
+  assert.match(src, /onClick=\{\(\) => setMenuOpen\(true\)\}/)
+  assert.match(src, /<MobileMenuSheet open=\{menuOpen\}/)
+})
+
+/* ── Header global & navigasi ── */
 
 test('mobile header renders avatar, name, and bell', () => {
   const header = read(HEADER)
@@ -94,9 +129,7 @@ test('mobile header supports switch role for kepala with can_teach', () => {
   assert.match(header, /Mode Guru/)
 })
 
-test('all dashboards integrate MobileHeader for consistent minimalist top bar', () => {
-  for (const file of [GURU, ADMIN, SISWA]) {
-    const src = read(file)
-    assert.match(src, /<MobileHeader/)
-  }
+test('dashboard admin dan guru memakai header lembaga, siswa tetap memakai MobileHeader', () => {
+  for (const file of [GURU, ADMIN]) assert.match(read(file), /<MobileDashboardHeader/)
+  assert.match(read(SISWA), /<MobileHeader/)
 })

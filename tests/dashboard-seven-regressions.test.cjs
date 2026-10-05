@@ -26,13 +26,13 @@ function block(source, start, end) {
 test('dashboard guru selalu mengirim foto GTK dan mobile memakai foto profil GTK', () => {
   const route = block(server, "app.get('/api/guru/dashboard'", "function clockToMinutes")
   assert.match(route, /foto:\s*gtk\.foto\s*\|\|\s*null/)
-  assert.match(mobileGuru, /profilePhoto=\{data\.gtk\?\.foto\s*\|\|\s*null\}/)
+  assert.match(mobileGuru, /photo=\{data\.gtk\?\.foto\s*\|\|\s*null\}/)
 })
 
 test('dashboard guru mobile dapat menyelesaikan sesi kelas aktif', () => {
   assert.match(mobileGuru, /const finishClass = async \(\) =>/)
   assert.match(mobileGuru, /api\.post\('\/guru\/sesi-kelas\/selesai',\s*\{\s*sesi_id:\s*data\.sesi_kelas_aktif\?\.id\s*\}\)/)
-  assert.match(mobileGuru, /data\.sesi_kelas_aktif[\s\S]*Selesai Kelas/)
+  assert.match(mobileGuru, /data\.sesi_kelas_aktif[\s\S]*SELESAI KELAS/)
 })
 
 test('semua pintasan siswa memiliki route dan route tak dikenal tidak memaksa login', () => {

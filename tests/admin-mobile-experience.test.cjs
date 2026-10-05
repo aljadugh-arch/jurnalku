@@ -24,11 +24,17 @@ const FEATURES = read('src/lib/featureAccess.ts')
 test('admin home has configurable eight shortcuts, notifications and charts', () => {
   assert.match(DASH, /dashboard_quick_menus/)
   for (const label of ['Kelola Siswa', 'Kelola GTK', 'Jadwal', 'Rekapitulasi', 'Absensi QR Siswa', 'Ceklok GTK', 'Penilaian', 'Keuangan']) assert.match(SHORTCUTS, new RegExp(label))
-  assert.match(DASH, /Presensi Hari Ini/)
-  assert.match(DASH, /Jadwal Mengajar Hari Ini/)
-  assert.match(DASH, /Rekap Absensi Siswa \(7 Hari Terakhir\)/)
-  assert.match(DASH, /Kehadiran Guru\/GTK \(7 Hari Terakhir\)/)
-  assert.match(DASH, /ResponsiveContainer/)
+  // Grid 4x2: tujuh pintasan + ubin "Lainnya" yang membuka menu lengkap.
+  assert.match(DASH, /data-admin-menu-grid="true"/)
+  assert.match(DASH, /data-admin-menu-more="true"/)
+  assert.match(DASH, /grid-cols-4/)
+  // Kartu tambahan di bawah grid: jadwal sholat + statistik monitoring live.
+  assert.match(DASH, /data-admin-sholat-card="true"/)
+  assert.match(DASH, /Jadwal Sholat/)
+  assert.match(DASH, /data-admin-monitoring-card="true"/)
+  assert.match(DASH, /Statistik Monitoring Live/)
+  // Ringkasan grafik pindah ke halaman monitoring; dashboard tetap memuat angkanya.
+  assert.match(DASH, /api\.get\('\/admin\/monitoring'\)/)
 })
 
 test('all-menu sheet is categorized', () => {

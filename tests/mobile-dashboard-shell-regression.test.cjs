@@ -10,16 +10,18 @@ test('mobile and tablet hide the global header and retain desktop header', () =>
   assert.match(layout, /className="hidden lg:block"[\s\S]*<Header \/>/)
 })
 
-test('admin Lihat Semua opens the complete role menu sheet', () => {
+test('admin grid 4x2 membuka menu lengkap dari ubin Lainnya dan tombol Semua Menu', () => {
   const dashboard = read('src/pages/admin/MobileAdminDashboard.tsx')
   const sheet = read('src/components/MobileMenuSheet.tsx')
-  assert.match(dashboard, /onClick=\{\(\) => setMenuOpen\(true\)\}[\s\S]*Lihat Semua/)
+  // Ubin kedelapan + tombol judul sama-sama membuka menu lengkap.
+  assert.match(dashboard, /data-admin-menu-more="true"[\s\S]{0,220}setMenuOpen\(true\)/)
+  assert.match(dashboard, /onClick=\{\(\) => setMenuOpen\(true\)\}[\s\S]{0,220}Semua Menu/)
   assert.match(dashboard, /<MobileMenuSheet open=\{menuOpen\}/)
   assert.match(sheet, /flattenMenu\(menuForRole\(role\)\)/)
   assert.match(sheet, /Manajemen Data/)
 })
 
-test('mobile dashboard header owns notification theme profile password and logout actions', () => {
+test('header dashboard memegang aksi notifikasi, tema, profil, sandi, dan keluar', () => {
   const header = read('src/components/MobileHeader.tsx')
   for (const contract of [
     /onBell/,
@@ -29,12 +31,21 @@ test('mobile dashboard header owns notification theme profile password and logou
     /logout\(\)/,
   ]) assert.match(header, contract)
 
+  // Dashboard admin & guru memakai header lembaga (yang menitipkan lonceng ke NotifBell);
+  // dashboard bendahara & siswa tetap memakai MobileHeader dengan aksi lengkapnya.
   for (const file of [
     'src/pages/admin/MobileAdminDashboard.tsx',
-    'src/pages/admin/MobileBendaharaDashboard.tsx',
     'src/pages/guru/MobileGuruDashboard.tsx',
+  ]) assert.match(read(file), /<MobileDashboardHeader/)
+
+  for (const file of [
+    'src/pages/admin/MobileBendaharaDashboard.tsx',
     'src/pages/siswa/MobileSiswaDashboard.tsx',
   ]) assert.match(read(file), /<MobileHeader/)
+
+  const dashHeader = read('src/components/MobileDashboardHeader.tsx')
+  assert.match(dashHeader, /NotifBell/)
+  assert.match(read('src/components/NotifBell.tsx'), /notifications\/feed/)
 })
 
 test('mobile heroes derive color from tenant settings and dark theme', () => {
@@ -46,13 +57,18 @@ test('mobile heroes derive color from tenant settings and dark theme', () => {
 
   for (const file of [
     'src/pages/admin/MobileBendaharaDashboard.tsx',
-    'src/pages/guru/MobileGuruDashboard.tsx',
     'src/pages/siswa/MobileSiswaDashboard.tsx',
   ]) {
     const source = read(file)
     assert.match(source, /heroColors\(settings, dark\)/)
-    assert.match(source, /linear-gradient\(135deg, \$\{hero\}/)
+    assert.match(source, /linear-gradient\(135deg, \$\{hero\},/)
   }
+
+  // Dashboard admin & guru memakai header lembaga bersama yang mewarnai kotaknya dari
+  // heroColors(settings, dark) — jadi tetap ikut warna aksen tenant + tema gelap.
+  const dashHeader = read('src/components/MobileDashboardHeader.tsx')
+  assert.match(dashHeader, /heroColors\(settings, dark\)/)
+
   const admin = read('src/pages/admin/MobileAdminDashboard.tsx')
   assert.match(admin, /dark:bg-gray-950/)
   assert.match(admin, /text-primary/)
