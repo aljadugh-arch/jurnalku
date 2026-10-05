@@ -50,7 +50,7 @@ const { getLateDashboard } = require('./dashboard-late.cjs')
 const { normalizePiketIds, attachPiketNames, MAKS_GURU_PIKET } = require('./jadwal-piket.cjs')
 const { registerRoutes: registerBackupRestoreRoutes, LIMITS: BACKUP_LIMITS } = require('./backup-restore.cjs')
 const { registerFinanceExcelRoutes } = require('./finance-excel.cjs')
-const { FEATURE_KEYS, addMonthsIso, accessForTenant, featureForPath, normalizeFeatureSelection, generateUnlockCode, hashUnlockCode, setupSubscriptionTables } = require('./subscription.cjs')
+const { FEATURE_KEYS, PLAN_KEYS, addMonthsIso, computeExpiry, accessForTenant, featureForPath, normalizeFeatureSelection, generateUnlockCode, hashUnlockCode, setupSubscriptionTables, getPlans, planFeatureMap, updatePlan } = require('./subscription.cjs')
 const { setupBackupTables, registerBackupRoutes, startBackupScheduler } = require('./backup-drive.cjs')
 const { DOCUMENT_TYPES, buildPrompt, validateGenerateInput, createTemplateContent, createDocumentDocx, callAi, clean } = require('./ai-documents.cjs')
 const { encryptSecret, decryptSecret, maskKey, PROVIDER_ENDPOINTS, setupAiConfigTables, resolveAiConfig } = require('./ai-config.cjs')
@@ -1628,13 +1628,19 @@ try {
 // Tenant detection middleware (API routes only)
 app.use(tenantMiddleware(db))
 
+// Peta fitur paket di-cache: dipakai di setiap request lewat enforceTenantAccess,
+// jadi tidak perlu query ulang. Cache dibuang saat paket diubah.
+let _planMapCache = null
+function planMap() { if (!_planMapCache) _planMapCache = planFeatureMap(db); return _planMapCache }
+function invalidatePlanMap() { _planMapCache = null }
+
 function getTenantAccess(tenantId) {
   const tenant = db.prepare('SELECT * FROM tenants WHERE id=?').get(tenantId || 'default')
-  return accessForTenant(tenant || { id: tenantId || 'default', plan: 'trial' })
+  return accessForTenant(tenant || { id: tenantId || 'default', plan: 'trial' }, new Date(), planMap())
 }
 
 function isSubscriptionBypass(req) {
-  return req.path.startsWith('/api/auth') || req.path === '/api/health' || req.path === '/api/settings' || req.path === '/api/subscription/status' || req.path === '/api/subscription/unlock' || req.path === '/api/tenant/info' || req.path.startsWith('/api/tenants')
+  return req.path.startsWith('/api/auth') || req.path === '/api/health' || req.path === '/api/settings' || req.path === '/api/subscription/status' || req.path === '/api/subscription/plans' || req.path === '/api/subscription/unlock' || req.path === '/api/tenant/info' || req.path.startsWith('/api/tenants')
 }
 
 function enforceTenantAccess(req, res, next) {
@@ -1732,7 +1738,68 @@ app.get('/api/subscription/status', authMiddleware, (req, res) => {
   const tenantId = req.user.role === 'super_admin' && req.query.tenant_id ? String(req.query.tenant_id) : req.tenantId
   const tenant = db.prepare('SELECT id,nama,slug,plan,trial_ends_at,subscription_ends_at,features_json FROM tenants WHERE id=?').get(tenantId)
   if (!tenant) return res.status(404).json({ error: 'Lembaga tidak ditemukan' })
-  res.json({ ...accessForTenant(tenant), tenant_id: tenant.id, tenant_name: tenant.nama, prices: { lite: 50000, pro: 80000 }, feature_keys: FEATURE_KEYS })
+  const access = accessForTenant(tenant, new Date(), planMap())
+  // Harga & masa aktif diambil dari konfigurasi paket (bisa diubah admin platform).
+  const plans = getPlans(db)
+  const prices = Object.fromEntries(plans.map(p => [p.plan, p.harga]))
+  res.json({
+    ...access, tenant_id: tenant.id, tenant_name: tenant.nama,
+    prices, plans, feature_keys: FEATURE_KEYS, is_super: req.user.role === 'super_admin',
+  })
+})
+
+// Daftar paket langganan beserta harga & masa aktifnya (untuk UI upgrade & editor).
+app.get('/api/subscription/plans', authMiddleware, (req, res) => {
+  res.json({ plans: getPlans(db), feature_keys: FEATURE_KEYS })
+})
+
+// Ubah konfigurasi paket (harga, masa aktif, nama, aktif, fitur). Khusus super admin.
+app.put('/api/subscription/plans/:plan', SUPER, (req, res) => {
+  const plan = String(req.params.plan || '').toLowerCase()
+  if (!PLAN_KEYS.includes(plan)) return res.status(400).json({ error: 'Paket tidak dikenal' })
+  const result = updatePlan(db, plan, req.body || {})
+  if (result.error) return res.status(400).json({ error: result.error })
+  invalidatePlanMap()
+  res.json({ success: true, plan: result.plan, plans: getPlans(db) })
+})
+
+// Set paket + masa aktif sebuah lembaga secara langsung (tanpa kunci unlock).
+// body: { plan, mode: 'set'|'extend', sampai?: 'YYYY-MM-DD', masa_nilai?, masa_satuan? }
+app.put('/api/subscription/tenant/:id', SUPER, (req, res) => {
+  const tenant = db.prepare('SELECT * FROM tenants WHERE id=?').get(req.params.id)
+  if (!tenant) return res.status(404).json({ error: 'Lembaga tidak ditemukan' })
+  const plan = String((req.body && req.body.plan) || tenant.plan || 'trial').toLowerCase()
+  if (!PLAN_KEYS.includes(plan)) return res.status(400).json({ error: 'Paket tidak dikenal' })
+  const mode = String((req.body && req.body.mode) || 'set')
+  const planRow = db.prepare('SELECT * FROM subscription_plans WHERE plan=?').get(plan)
+  const now = new Date()
+
+  let endsAt
+  const sampai = req.body && req.body.sampai
+  if (sampai !== undefined && sampai !== null && String(sampai).trim() !== '') {
+    // Tanggal berakhir eksplisit (YYYY-MM-DD) — dipakai apa adanya.
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(String(sampai)) || Number.isNaN(Date.parse(String(sampai) + 'T00:00:00Z')))
+      return res.status(400).json({ error: 'Tanggal berakhir tidak valid (format YYYY-MM-DD)' })
+    endsAt = new Date(String(sampai) + 'T23:59:59.999Z').toISOString()
+  } else {
+    const masaNilai = Number((req.body && req.body.masa_nilai) || (planRow && planRow.masa_nilai) || 1)
+    const masaSatuan = String((req.body && req.body.masa_satuan) || (planRow && planRow.masa_satuan) || 'bulan')
+    if (!Number.isInteger(masaNilai) || masaNilai < 1 || masaNilai > 3650) return res.status(400).json({ error: 'Masa aktif tidak valid' })
+    if (!['bulan', 'hari'].includes(masaSatuan)) return res.status(400).json({ error: "Satuan masa harus 'bulan' atau 'hari'" })
+    // 'extend' menambah dari tanggal berakhir yang masih berlaku; 'set' mulai dari sekarang.
+    const currentEnd = tenant.subscription_ends_at || tenant.trial_ends_at
+    const from = (mode === 'extend' && currentEnd && new Date(currentEnd) > now) ? currentEnd : now.toISOString()
+    endsAt = computeExpiry(from, masaNilai, masaSatuan)
+  }
+
+  const apply = db.transaction(() => {
+    const fitur = normalizeFeatureSelection({}, plan)
+    db.prepare('UPDATE tenants SET plan=?, subscription_ends_at=?, trial_ends_at=?, features_json=?, expired_at=NULL, aktif=1 WHERE id=?')
+      .run(plan, endsAt, plan === 'trial' ? endsAt : null, JSON.stringify(fitur), tenant.id)
+  })
+  apply()
+  invalidatePlanMap()
+  res.json({ success: true, ...getTenantAccess(tenant.id), tenant_id: tenant.id, plan, ends_at: endsAt })
 })
 
 app.put('/api/subscription/features', ADMIN, (req, res) => {
@@ -1763,9 +1830,9 @@ app.post('/api/subscription/unlock', ADMIN, (req, res) => {
 })
 
 app.post('/api/tenants/:id/unlock-keys', SUPER, (req, res) => {
-  const plan = String(req.body.plan || '')
+  const plan = String(req.body.plan || '').toLowerCase()
   const months = Number(req.body.months || 1)
-  if (!['lite','pro'].includes(plan) || !Number.isInteger(months) || months < 1 || months > 24) return res.status(400).json({ error: 'Paket atau durasi tidak valid' })
+  if (!PLAN_KEYS.includes(plan) || !Number.isInteger(months) || months < 1 || months > 120) return res.status(400).json({ error: 'Paket atau durasi tidak valid' })
   if (!db.prepare('SELECT 1 FROM tenants WHERE id=?').get(req.params.id)) return res.status(404).json({ error: 'Lembaga tidak ditemukan' })
   let code, hash
   do { code = generateUnlockCode(); hash = hashUnlockCode(code) } while (db.prepare('SELECT 1 FROM subscription_unlock_keys WHERE code_hash=?').get(hash))

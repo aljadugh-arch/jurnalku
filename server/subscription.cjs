@@ -7,8 +7,8 @@ const PLAN_FEATURES = {
   pro: FEATURE_KEYS,
   // 'premium' adalah nama plan legacy (dipakai sebelum sistem trial/lite/pro
   // dirapikan) — beberapa tenant lama (termasuk tenant demo) masih menyimpan
-  // nilai ini di kolom plan. Diperlakukan setara 'pro' (fitur lengkap) agar
-  // tidak salah dianggap 'trial' kadaluarsa dan terkunci secara keliru.
+  // nilai ini di kolom plan. Kini premium juga paket kelas satu yang bisa
+  // diatur (harga & masa aktif) seperti lite/pro.
   premium: FEATURE_KEYS,
 }
 const FEATURE_PREFIXES = {
@@ -48,8 +48,8 @@ function parseFeatures(value) {
   } catch { return {} }
 }
 
-function accessForTenant(tenant, now = new Date()) {
-  const plan = ['lite', 'pro', 'premium'].includes(tenant.plan) ? tenant.plan : 'trial'
+function accessForTenant(tenant, now = new Date(), planDefs = null) {
+  const plan = ['trial', 'lite', 'pro', 'premium'].includes(tenant.plan) ? tenant.plan : 'trial'
   // Plan 'premium' adalah grandfather/legacy plan berbayar tanpa siklus trial —
   // trial_ends_at pada tenant ini adalah sisa data lama dan tidak relevan;
   // hanya subscription_ends_at (jika pernah diset eksplisit) yang berlaku.
@@ -57,7 +57,9 @@ function accessForTenant(tenant, now = new Date()) {
     ? (tenant.subscription_ends_at || null)
     : (tenant.subscription_ends_at || tenant.trial_ends_at || tenant.expired_at || null)
   const locked = tenant.id !== 'default' && !!expiresAt && new Date(expiresAt).getTime() <= now.getTime()
-  const allowed = new Set(PLAN_FEATURES[plan] || PLAN_FEATURES.trial)
+  // Fitur diambil dari konfigurasi paket (subscription_plans) bila tersedia,
+  // sehingga admin platform bisa mengubah isi tiap paket tanpa deploy.
+  const allowed = new Set((planDefs && planDefs[plan]) || PLAN_FEATURES[plan] || PLAN_FEATURES.trial)
   const choices = parseFeatures(tenant.features_json)
   const features = Object.fromEntries(FEATURE_KEYS.map(key => [key, allowed.has(key) && choices[key] !== false]))
   return { plan, locked, expires_at: expiresAt, features }
@@ -82,6 +84,120 @@ function hashUnlockCode(code) {
   return crypto.createHash('sha256').update(String(code).trim().toUpperCase()).digest('hex')
 }
 
+// ===================== KONFIGURASI PAKET LANGGANAN =====================
+// Paket (trial/lite/pro/premium) beserta HARGA dan MASA AKTIF-nya disimpan di
+// DB agar admin platform bisa mengubahnya sendiri tanpa deploy. Tabel bersifat
+// global (satu konfigurasi untuk seluruh platform), bukan per-tenant.
+const PLAN_KEYS = ['trial', 'lite', 'pro', 'premium']
+const MASA_SATUAN = ['bulan', 'hari']
+const DEFAULT_PLANS = [
+  { plan: 'trial', label: 'Trial', harga: 0, masa_nilai: 1, masa_satuan: 'bulan', aktif: 1, urutan: 0 },
+  { plan: 'lite', label: 'Lite', harga: 50000, masa_nilai: 1, masa_satuan: 'bulan', aktif: 1, urutan: 1 },
+  { plan: 'pro', label: 'Pro', harga: 80000, masa_nilai: 1, masa_satuan: 'bulan', aktif: 1, urutan: 2 },
+  { plan: 'premium', label: 'Premium', harga: 150000, masa_nilai: 1, masa_satuan: 'bulan', aktif: 1, urutan: 3 },
+]
+
+function setupSubscriptionPlans(db) {
+  db.exec(`CREATE TABLE IF NOT EXISTS subscription_plans (
+    plan TEXT PRIMARY KEY,
+    label TEXT NOT NULL,
+    harga INTEGER NOT NULL DEFAULT 0,
+    masa_nilai INTEGER NOT NULL DEFAULT 1,
+    masa_satuan TEXT NOT NULL DEFAULT 'bulan',
+    aktif INTEGER NOT NULL DEFAULT 1,
+    fitur_json TEXT,
+    urutan INTEGER NOT NULL DEFAULT 0,
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+  )`)
+  const ins = db.prepare(`INSERT OR IGNORE INTO subscription_plans(plan,label,harga,masa_nilai,masa_satuan,aktif,fitur_json,urutan)
+    VALUES(?,?,?,?,?,?,?,?)`)
+  for (const p of DEFAULT_PLANS) {
+    ins.run(p.plan, p.label, p.harga, p.masa_nilai, p.masa_satuan, p.aktif, JSON.stringify(PLAN_FEATURES[p.plan] || FEATURE_KEYS), p.urutan)
+  }
+}
+
+// Daftar fitur yang diizinkan untuk sebuah baris paket.
+function planFeatures(row) {
+  const fallback = PLAN_FEATURES[row.plan] || FEATURE_KEYS
+  const parsed = parseFeatures(row.fitur_json)
+  const keys = Object.keys(parsed).filter(k => FEATURE_KEYS.includes(k) && parsed[k] !== false)
+  return keys.length ? keys : fallback
+}
+
+function getPlans(db) {
+  return db.prepare('SELECT * FROM subscription_plans ORDER BY urutan, plan').all()
+    .map(row => ({ ...row, aktif: row.aktif ? 1 : 0, fitur: planFeatures(row), fitur_json: undefined }))
+}
+
+// Peta plan -> daftar fitur, dipakai accessForTenant agar fitur mengikuti DB.
+function planFeatureMap(db) {
+  const map = {}
+  for (const row of db.prepare('SELECT plan, fitur_json FROM subscription_plans').all()) map[row.plan] = planFeatures(row)
+  return map
+}
+
+// Validasi patch paket. Mengembalikan { error } atau { values }.
+function validatePlanPatch(input = {}) {
+  const values = {}
+  if (input.label !== undefined) {
+    const label = String(input.label).trim()
+    if (!label || label.length > 60) return { error: 'Nama paket wajib 1-60 karakter' }
+    values.label = label
+  }
+  if (input.harga !== undefined) {
+    const harga = Number(input.harga)
+    if (!Number.isFinite(harga) || harga < 0 || harga > 999999999) return { error: 'Harga harus angka 0 - 999.999.999' }
+    values.harga = Math.round(harga)
+  }
+  if (input.masa_nilai !== undefined) {
+    const masa = Number(input.masa_nilai)
+    if (!Number.isInteger(masa) || masa < 1 || masa > 3650) return { error: 'Masa aktif harus bulat 1 - 3650' }
+    values.masa_nilai = masa
+  }
+  if (input.masa_satuan !== undefined) {
+    const satuan = String(input.masa_satuan)
+    if (!MASA_SATUAN.includes(satuan)) return { error: "Satuan masa harus 'bulan' atau 'hari'" }
+    values.masa_satuan = satuan
+  }
+  if (input.aktif !== undefined) values.aktif = input.aktif ? 1 : 0
+  if (input.urutan !== undefined) {
+    const urutan = Number(input.urutan)
+    if (!Number.isInteger(urutan) || urutan < 0 || urutan > 99) return { error: 'Urutan harus bulat 0 - 99' }
+    values.urutan = urutan
+  }
+  if (input.fitur !== undefined) {
+    if (!input.fitur || typeof input.fitur !== 'object' || Array.isArray(input.fitur)) return { error: 'Fitur harus berupa objek' }
+    const fitur = {}
+    for (const key of FEATURE_KEYS) if (input.fitur[key] !== undefined) fitur[key] = input.fitur[key] !== false
+    values.fitur_json = JSON.stringify(fitur)
+  }
+  if (!Object.keys(values).length) return { error: 'Tidak ada perubahan yang dikirim' }
+  return { values }
+}
+
+function updatePlan(db, plan, patch) {
+  if (!PLAN_KEYS.includes(plan)) return { error: 'Paket tidak dikenal' }
+  const check = validatePlanPatch(patch)
+  if (check.error) return { error: check.error }
+  const cols = Object.keys(check.values)
+  db.prepare(`UPDATE subscription_plans SET ${cols.map(c => `${c}=?`).join(', ')}, updated_at=datetime('now') WHERE plan=?`)
+    .run(...cols.map(c => check.values[c]), plan)
+  const row = db.prepare('SELECT * FROM subscription_plans WHERE plan=?').get(plan)
+  return { plan: { ...row, aktif: row.aktif ? 1 : 0, fitur: planFeatures(row), fitur_json: undefined } }
+}
+
+// Hitung tanggal berakhir dari titik mulai + nilai/satuan masa aktif.
+function computeExpiry(fromIso, masaNilai, masaSatuan) {
+  const base = new Date(fromIso)
+  if (Number.isNaN(base.getTime())) throw new Error('Tanggal tidak valid')
+  if (masaSatuan === 'hari') {
+    const d = new Date(base)
+    d.setUTCDate(d.getUTCDate() + Number(masaNilai))
+    return d.toISOString()
+  }
+  return addMonthsIso(base, Number(masaNilai))
+}
+
 function setupSubscriptionTables(db) {
   const columns = db.prepare('PRAGMA table_info(tenants)').all()
   const add = (name, definition) => { if (!columns.some(col => col.name === name)) db.exec(`ALTER TABLE tenants ADD COLUMN ${name} ${definition}`) }
@@ -95,13 +211,42 @@ function setupSubscriptionTables(db) {
     id TEXT PRIMARY KEY,
     code_hash TEXT UNIQUE NOT NULL,
     tenant_id TEXT NOT NULL,
-    plan TEXT NOT NULL CHECK(plan IN ('lite','pro')),
-    months INTEGER NOT NULL DEFAULT 1 CHECK(months BETWEEN 1 AND 24),
+    plan TEXT NOT NULL,
+    months INTEGER NOT NULL DEFAULT 1,
     created_by TEXT NOT NULL,
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     used_at TEXT,
     used_by TEXT
   ); CREATE INDEX IF NOT EXISTS idx_unlock_tenant ON subscription_unlock_keys(tenant_id, used_at);`)
+  // Migrasi: tabel lama membatasi plan ke ('lite','pro') dan months 1-24 lewat
+  // CHECK constraint, sehingga paket trial/premium & durasi panjang gagal.
+  // Bangun ulang tabel bila constraint lama masih terpasang.
+  const ddl = db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='subscription_unlock_keys'").get()?.sql || ''
+  if (ddl.includes("CHECK(plan IN ('lite','pro'))") || ddl.includes('CHECK(months BETWEEN 1 AND 24)')) {
+    db.exec(`PRAGMA foreign_keys=OFF;
+      ALTER TABLE subscription_unlock_keys RENAME TO subscription_unlock_keys_legacy;
+      CREATE TABLE subscription_unlock_keys (
+        id TEXT PRIMARY KEY,
+        code_hash TEXT UNIQUE NOT NULL,
+        tenant_id TEXT NOT NULL,
+        plan TEXT NOT NULL,
+        months INTEGER NOT NULL DEFAULT 1,
+        created_by TEXT NOT NULL,
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        used_at TEXT,
+        used_by TEXT
+      );
+      INSERT INTO subscription_unlock_keys SELECT id,code_hash,tenant_id,plan,months,created_by,created_at,used_at,used_by FROM subscription_unlock_keys_legacy;
+      DROP TABLE subscription_unlock_keys_legacy;
+      CREATE INDEX IF NOT EXISTS idx_unlock_tenant ON subscription_unlock_keys(tenant_id, used_at);
+      PRAGMA foreign_keys=ON;`)
+  }
+  setupSubscriptionPlans(db)
 }
 
-module.exports = { FEATURE_KEYS, PLAN_FEATURES, addMonthsIso, accessForTenant, featureForPath, normalizeFeatureSelection, generateUnlockCode, hashUnlockCode, setupSubscriptionTables }
+module.exports = {
+  FEATURE_KEYS, PLAN_FEATURES, PLAN_KEYS, MASA_SATUAN, DEFAULT_PLANS,
+  addMonthsIso, computeExpiry, accessForTenant, featureForPath, normalizeFeatureSelection,
+  generateUnlockCode, hashUnlockCode, setupSubscriptionTables,
+  setupSubscriptionPlans, getPlans, planFeatureMap, planFeatures, validatePlanPatch, updatePlan,
+}

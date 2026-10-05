@@ -3,11 +3,33 @@ import api from '../../services/api'
 import toast from 'react-hot-toast'
 import { MoreVertical, ExternalLink, Ban, CheckCircle2, Globe2, Link2, ArrowLeftRight, KeyRound, Repeat } from 'lucide-react'
 
-const PLAN_OPTIONS: { value: string; label: string; desc: string }[] = [
-  { value: 'trial', label: 'Trial', desc: 'Masa percobaan gratis, semua fitur aktif, otomatis terkunci saat trial_ends_at lewat' },
-  { value: 'lite', label: 'Lite', desc: 'Berbayar dasar — tanpa Backup ke Drive & Kelola Website Lembaga' },
-  { value: 'pro', label: 'Pro', desc: 'Berbayar lengkap — semua fitur aktif, tidak ada batasan modul' },
-  { value: 'premium', label: 'Premium (legacy)', desc: 'Plan lama/grandfather — diperlakukan sama seperti Pro (semua fitur aktif), dipertahankan agar tenant lama tidak terkunci' },
+type PlanRow = {
+  plan: string
+  label: string
+  harga: number
+  masa_nilai: number
+  masa_satuan: 'bulan' | 'hari' | string
+  aktif: 0 | 1
+  urutan: number
+  fitur?: string[]
+}
+
+const PLAN_DESC: Record<string, string> = {
+  trial: 'Masa percobaan — otomatis terkunci saat masa aktif habis',
+  lite: 'Berbayar dasar — tanpa Backup ke Drive & Kelola Website Lembaga',
+  pro: 'Berbayar lengkap — semua fitur aktif, tidak ada batasan modul',
+  premium: 'Paket tertinggi — semua fitur aktif tanpa batasan',
+}
+
+const rupiah = (n: number) => 'Rp' + Number(n || 0).toLocaleString('id-ID')
+const masaText = (p: { masa_nilai: number; masa_satuan: string }) => `${p.masa_nilai} ${p.masa_satuan}`
+
+// Cadangan bila daftar paket belum termuat — nilai harus sama dengan seed di server.
+const FALLBACK_PLANS: PlanRow[] = [
+  { plan: 'trial', label: 'Trial', harga: 0, masa_nilai: 1, masa_satuan: 'bulan', aktif: 1, urutan: 0 },
+  { plan: 'lite', label: 'Lite', harga: 50000, masa_nilai: 1, masa_satuan: 'bulan', aktif: 1, urutan: 1 },
+  { plan: 'pro', label: 'Pro', harga: 80000, masa_nilai: 1, masa_satuan: 'bulan', aktif: 1, urutan: 2 },
+  { plan: 'premium', label: 'Premium', harga: 150000, masa_nilai: 1, masa_satuan: 'bulan', aktif: 1, urutan: 3 },
 ]
 
 interface Tenant {
@@ -35,13 +57,24 @@ export default function TenantManagementPage() {
   const [domainMode, setDomainMode] = useState<'subdomain' | 'custom'>('subdomain')
   const [form, setForm] = useState({ slug: '', nama: '', email: '', telepon: '', max_siswa: 100, max_gtk: 20, base_domain: 'jurnal.cc.cd', domain_custom: '' })
   const [created, setCreated] = useState<any>(null)
-  const [unlock, setUnlock] = useState<{ tenantId: string; tenantName: string; plan: 'lite' | 'pro'; months: number } | null>(null)
+  const [unlock, setUnlock] = useState<{ tenantId: string; tenantName: string; plan: string; months: number } | null>(null)
   const [generatedKey, setGeneratedKey] = useState('')
   const [generating, setGenerating] = useState(false)
-  const [changePlan, setChangePlan] = useState<{ tenantId: string; tenantName: string; plan: string } | null>(null)
+  const [changePlan, setChangePlan] = useState<{ tenantId: string; tenantName: string; plan: string; mode: 'extend' | 'set'; masaNilai: number; masaSatuan: string; sampai: string } | null>(null)
   const [savingPlan, setSavingPlan] = useState(false)
   const [openMenuId, setOpenMenuId] = useState<string | null>(null)
+  const [plans, setPlans] = useState<PlanRow[]>([])
+  const [showPlanEditor, setShowPlanEditor] = useState(false)
+  const [planDraft, setPlanDraft] = useState<Record<string, { label: string; harga: number; masa_nilai: number; masa_satuan: string }>>({})
+  const [savingPlans, setSavingPlans] = useState(false)
   const menuRef = useRef<HTMLDivElement | null>(null)
+
+  const planRow = (name: string) => plans.find(p => p.plan === name)
+  const planLabel = (name: string) => planRow(name)?.label || name
+  const planInfo = (name: string) => {
+    const p = planRow(name)
+    return p ? `${rupiah(p.harga)} / ${masaText(p)}` : ''
+  }
 
   useEffect(() => {
     const onClickOutside = (e: MouseEvent) => {
@@ -51,7 +84,14 @@ export default function TenantManagementPage() {
     return () => document.removeEventListener('mousedown', onClickOutside)
   }, [])
 
-  useEffect(() => { loadTenants() }, [])
+  useEffect(() => { loadTenants(); loadPlans() }, [])
+
+  const loadPlans = async () => {
+    try {
+      const { data } = await api.get('/subscription/plans')
+      setPlans(Array.isArray(data?.plans) ? data.plans : [])
+    } catch { /* daftar paket opsional untuk tampilan harga */ }
+  }
 
   const loadTenants = async () => {
     try {
@@ -144,12 +184,60 @@ export default function TenantManagementPage() {
     if (!changePlan) return
     setSavingPlan(true)
     try {
-      await api.put(`/tenants/${changePlan.tenantId}`, { plan: changePlan.plan })
-      toast.success(`Paket "${changePlan.tenantName}" diubah ke ${changePlan.plan}`)
+      const body: Record<string, unknown> = { plan: changePlan.plan }
+      if (changePlan.mode === 'extend') {
+        body.mode = 'extend'
+        if (changePlan.masaNilai) body.masa_nilai = changePlan.masaNilai
+        body.masa_satuan = changePlan.masaSatuan
+      } else {
+        body.mode = 'set'
+        if (changePlan.sampai) body.sampai = changePlan.sampai
+      }
+      const { data } = await api.put(`/subscription/tenant/${changePlan.tenantId}`, body)
+      const akhir = data?.ends_at ? new Date(data.ends_at).toLocaleDateString('id-ID') : '-'
+      toast.success(`Paket "${changePlan.tenantName}" → ${planLabel(changePlan.plan)} s/d ${akhir}`)
       setChangePlan(null)
       loadTenants()
     } catch (e: any) { toast.error(e.response?.data?.error || 'Gagal mengubah paket langganan') }
     finally { setSavingPlan(false) }
+  }
+
+  const openChangePlan = (t: Tenant) => {
+    const row = plans.find(p => p.plan === t.plan)
+    setChangePlan({
+      tenantId: t.id, tenantName: t.nama, plan: t.plan || 'trial',
+      mode: 'extend', masaNilai: row?.masa_nilai || 1, masaSatuan: row?.masa_satuan || 'bulan', sampai: '',
+    })
+    setOpenMenuId(null)
+  }
+
+  const openUnlock = (t: Tenant) => {
+    setUnlock({ tenantId: t.id, tenantName: t.nama, plan: t.plan || 'lite', months: 1 })
+    setGeneratedKey('')
+    setOpenMenuId(null)
+  }
+
+  const openPlanEditor = () => {
+    const draft: Record<string, { label: string; harga: number; masa_nilai: number; masa_satuan: string }> = {}
+    for (const p of plans) draft[p.plan] = { label: p.label, harga: p.harga, masa_nilai: p.masa_nilai, masa_satuan: p.masa_satuan }
+    setPlanDraft(draft)
+    setShowPlanEditor(true)
+  }
+
+  const savePlanEditor = async () => {
+    setSavingPlans(true)
+    try {
+      for (const [plan, d] of Object.entries(planDraft)) {
+        await api.put(`/subscription/plans/${plan}`, {
+          label: d.label, harga: Number(d.harga) || 0,
+          masa_nilai: Number(d.masa_nilai) || 1, masa_satuan: d.masa_satuan,
+        })
+      }
+      toast.success('Harga & masa aktif paket tersimpan')
+      setShowPlanEditor(false)
+      loadPlans()
+    } catch (e: any) { toast.error(e.response?.data?.error || 'Gagal menyimpan paket') }
+    finally { setSavingPlans(false) }
   }
 
   const copyUnlockKey = async () => {
@@ -191,9 +279,14 @@ export default function TenantManagementPage() {
           <h1 className="text-2xl font-display font-bold text-gray-800">Manajemen Lembaga</h1>
           <p className="text-gray-500 mt-1">Kelola lembaga/tenant yang terdaftar di platform</p>
         </div>
-        <button onClick={() => setShowForm(!showForm)} className="px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary-dark transition-colors">
-          {showForm ? 'Batal' : '+ Tambah Lembaga'}
-        </button>
+        <div className="flex items-center gap-2">
+          <button onClick={openPlanEditor} className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors">
+            Pengaturan Paket &amp; Harga
+          </button>
+          <button onClick={() => setShowForm(!showForm)} className="px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary-dark transition-colors">
+            {showForm ? 'Batal' : '+ Tambah Lembaga'}
+          </button>
+        </div>
       </div>
 
       {created && (
@@ -336,9 +429,10 @@ export default function TenantManagementPage() {
                   ) : <span className="text-gray-300">—</span>}
                 </td>
                 <td className="px-3 py-2.5 align-top">
-                  <span className={`inline-block px-2.5 py-1 rounded-full text-xs font-medium ${t.plan === 'trial' ? 'bg-amber-50 text-amber-700' : t.plan === 'pro' ? 'bg-blue-50 text-blue-700' : 'bg-purple-50 text-purple-700'}`}>
-                    {t.plan}
+                  <span className={`inline-block px-2.5 py-1 rounded-full text-xs font-medium ${t.plan === 'trial' ? 'bg-amber-50 text-amber-700' : t.plan === 'pro' ? 'bg-blue-50 text-blue-700' : t.plan === 'premium' ? 'bg-emerald-50 text-emerald-700' : 'bg-purple-50 text-purple-700'}`}>
+                    {planLabel(t.plan)}
                   </span>
+                  {planInfo(t.plan) && <div className="mt-1 whitespace-nowrap text-[11px] text-gray-500">{planInfo(t.plan)}</div>}
                   {(t.subscription_ends_at || t.trial_ends_at) && <div className="mt-1 whitespace-nowrap text-[11px] text-gray-400">s/d {new Date((t.subscription_ends_at || t.trial_ends_at) as string).toLocaleDateString('id-ID')}</div>}
                 </td>
                 <td className="px-3 py-2.5 align-top">
@@ -387,14 +481,14 @@ export default function TenantManagementPage() {
                       </button>
                       <div className="my-1 border-t border-gray-100" />
                       <button
-                        onClick={() => { setUnlock({ tenantId: t.id, tenantName: t.nama, plan: 'lite', months: 1 }); setGeneratedKey(''); setOpenMenuId(null) }}
+                        onClick={() => openUnlock(t)}
                         className="w-full flex items-center gap-2.5 px-3.5 py-2 text-sm text-gray-700 hover:bg-gray-50"
                       >
                         <KeyRound size={15} className="text-purple-600" />
                         Buat Kunci Langganan
                       </button>
                       <button
-                        onClick={() => { setChangePlan({ tenantId: t.id, tenantName: t.nama, plan: t.plan || 'trial' }); setOpenMenuId(null) }}
+                        onClick={() => openChangePlan(t)}
                         className="w-full flex items-center gap-2.5 px-3.5 py-2 text-sm text-gray-700 hover:bg-gray-50"
                       >
                         <Repeat size={15} className="text-indigo-600" />
@@ -416,8 +510,15 @@ export default function TenantManagementPage() {
           <h2 className="text-lg font-bold text-gray-900">Kunci Langganan</h2>
           <p className="mt-1 text-sm text-gray-500">{unlock.tenantName}</p>
           {!generatedKey ? <div className="mt-5 space-y-4">
-            <div><label className="mb-1 block text-sm font-medium">Paket</label><select value={unlock.plan} onChange={e => setUnlock({ ...unlock, plan: e.target.value as 'lite' | 'pro' })} className="w-full rounded-lg border px-3 py-2"><option value="lite">Lite — Rp50.000/bulan</option><option value="pro">Pro — Rp80.000/bulan</option></select></div>
-            <div><label className="mb-1 block text-sm font-medium">Durasi (bulan)</label><input type="number" min="1" max="24" value={unlock.months} onChange={e => setUnlock({ ...unlock, months: Math.max(1, Math.min(24, Number(e.target.value))) })} className="w-full rounded-lg border px-3 py-2" /></div>
+            <div><label className="mb-1 block text-sm font-medium">Paket</label>
+              <select value={unlock.plan} onChange={e => setUnlock({ ...unlock, plan: e.target.value })} className="w-full rounded-lg border px-3 py-2">
+                {(plans.length ? plans : FALLBACK_PLANS).map(p => (
+                  <option key={p.plan} value={p.plan}>{p.label} — {rupiah(p.harga)}/{p.masa_satuan}</option>
+                ))}
+              </select>
+              <p className="mt-1 text-xs text-gray-500">Harga &amp; masa aktif default paket bisa diubah di "Pengaturan Paket &amp; Harga".</p>
+            </div>
+            <div><label className="mb-1 block text-sm font-medium">Durasi (bulan)</label><input type="number" min="1" max="120" value={unlock.months} onChange={e => setUnlock({ ...unlock, months: Math.max(1, Math.min(120, Number(e.target.value))) })} className="w-full rounded-lg border px-3 py-2" /></div>
             <button disabled={generating} onClick={generateUnlockKey} className="w-full rounded-lg bg-primary px-4 py-2 text-white disabled:opacity-50">{generating ? 'Membuat...' : 'Generate Kunci'}</button>
           </div> : <div className="mt-5">
             <div className="rounded-xl border border-green-200 bg-green-50 p-4 text-center"><p className="text-xs text-green-700">Kunci hanya ditampilkan sekali</p><code className="mt-2 block break-all text-base font-bold text-green-900">{generatedKey}</code></div>
@@ -432,31 +533,117 @@ export default function TenantManagementPage() {
           <h2 className="text-lg font-bold text-gray-900">Ubah Paket Langganan</h2>
           <p className="mt-1 text-sm text-gray-500">{changePlan.tenantName}</p>
           <div className="mt-5 space-y-2">
-            {PLAN_OPTIONS.map(opt => (
+            {(plans.length ? plans : FALLBACK_PLANS).map(p => (
               <label
-                key={opt.value}
-                className={`flex cursor-pointer items-start gap-3 rounded-lg border p-3 text-sm ${changePlan.plan === opt.value ? 'border-primary bg-primary/5' : 'border-gray-200 hover:bg-gray-50'}`}
+                key={p.plan}
+                className={`flex cursor-pointer items-start gap-3 rounded-lg border p-3 text-sm ${changePlan.plan === p.plan ? 'border-primary bg-primary/5' : 'border-gray-200 hover:bg-gray-50'}`}
               >
                 <input
                   type="radio"
                   name="plan"
                   className="mt-1"
-                  checked={changePlan.plan === opt.value}
-                  onChange={() => setChangePlan({ ...changePlan, plan: opt.value })}
+                  checked={changePlan.plan === p.plan}
+                  onChange={() => setChangePlan({ ...changePlan, masaNilai: p.masa_nilai, masaSatuan: p.masa_satuan, plan: p.plan })}
                 />
-                <span>
-                  <span className="block font-medium text-gray-900">{opt.label}</span>
-                  <span className="block text-xs text-gray-500">{opt.desc}</span>
+                <span className="min-w-0">
+                  <span className="flex items-baseline gap-2">
+                    <span className="font-medium text-gray-900">{p.label}</span>
+                    <span className="text-xs font-semibold text-primary">{p.harga > 0 ? `${rupiah(p.harga)}/${p.masa_satuan}` : 'Gratis'}</span>
+                  </span>
+                  <span className="block text-xs text-gray-500">{PLAN_DESC[p.plan] || ''}</span>
                 </span>
               </label>
             ))}
           </div>
-          <p className="mt-3 text-xs text-amber-600">
-            Catatan: mengubah paket langsung di sini tidak mengubah tanggal expired/trial. Untuk memperpanjang masa aktif, gunakan "Buat Kunci Langganan".
-          </p>
+
+          <div className="mt-4 rounded-xl border border-gray-200 p-3">
+            <div className="text-sm font-medium text-gray-800">Masa aktif</div>
+            <div className="mt-2 flex gap-2">
+              <button type="button" onClick={() => setChangePlan({ ...changePlan, mode: 'extend' })}
+                className={`flex-1 rounded-lg border px-3 py-1.5 text-xs ${changePlan.mode === 'extend' ? 'border-primary bg-primary/5 text-primary font-semibold' : 'border-gray-200 text-gray-600'}`}>
+                Perpanjang dari aktif sekarang
+              </button>
+              <button type="button" onClick={() => setChangePlan({ ...changePlan, mode: 'set' })}
+                className={`flex-1 rounded-lg border px-3 py-1.5 text-xs ${changePlan.mode === 'set' ? 'border-primary bg-primary/5 text-primary font-semibold' : 'border-gray-200 text-gray-600'}`}>
+                Set mulai hari ini
+              </button>
+            </div>
+            {changePlan.mode === 'extend' ? (
+              <div className="mt-3 flex items-end gap-2">
+                <div className="flex-1">
+                  <label className="mb-1 block text-xs text-gray-500">Lama</label>
+                  <input type="number" min="1" max="3650" value={changePlan.masaNilai}
+                    onChange={e => setChangePlan({ ...changePlan, masaNilai: Math.max(1, Number(e.target.value)) })}
+                    className="w-full rounded-lg border px-3 py-2 text-sm" />
+                </div>
+                <div className="w-28">
+                  <label className="mb-1 block text-xs text-gray-500">Satuan</label>
+                  <select value={changePlan.masaSatuan} onChange={e => setChangePlan({ ...changePlan, masaSatuan: e.target.value })} className="w-full rounded-lg border px-3 py-2 text-sm">
+                    <option value="bulan">Bulan</option>
+                    <option value="hari">Hari</option>
+                  </select>
+                </div>
+              </div>
+            ) : (
+              <div className="mt-3">
+                <label className="mb-1 block text-xs text-gray-500">Berlaku sampai (kosongkan = pakai masa aktif default paket)</label>
+                <input type="date" value={changePlan.sampai}
+                  onChange={e => setChangePlan({ ...changePlan, sampai: e.target.value })}
+                  className="w-full rounded-lg border px-3 py-2 text-sm" />
+              </div>
+            )}
+            <p className="mt-2 text-xs text-gray-400">
+              "Perpanjang" menambah dari tanggal berakhir yang masih berlaku; "Set mulai hari ini" menghitung ulang dari hari ini.
+            </p>
+          </div>
           <div className="mt-4 flex gap-2">
             <button disabled={savingPlan} onClick={saveChangePlan} className="flex-1 rounded-lg bg-primary px-4 py-2 text-white disabled:opacity-50">{savingPlan ? 'Menyimpan...' : 'Simpan'}</button>
             <button onClick={() => setChangePlan(null)} className="flex-1 rounded-lg border px-4 py-2 text-gray-600">Batal</button>
+          </div>
+        </div>
+      </div>}
+      {showPlanEditor && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => setShowPlanEditor(false)}>
+        <div className="w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-2xl bg-white p-5 shadow-xl" onClick={e => e.stopPropagation()}>
+          <h2 className="text-lg font-bold text-gray-900">Pengaturan Paket &amp; Harga</h2>
+          <p className="mt-1 text-sm text-gray-500">Ubah harga dan masa aktif tiap paket. Berlaku untuk seluruh platform.</p>
+          <div className="mt-4 space-y-3">
+            {(plans.length ? plans : FALLBACK_PLANS).map(p => {
+              const d = planDraft[p.plan] || { label: p.label, harga: p.harga, masa_nilai: p.masa_nilai, masa_satuan: p.masa_satuan }
+              const set = (patch: Partial<typeof d>) => setPlanDraft({ ...planDraft, [p.plan]: { ...d, ...patch } })
+              return (
+                <div key={p.plan} className="rounded-xl border border-gray-200 p-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-semibold text-gray-800">{p.label}</span>
+                    <span className="rounded-full bg-gray-100 px-2 py-0.5 text-[11px] uppercase text-gray-500">{p.plan}</span>
+                  </div>
+                  <div className="mt-2 grid grid-cols-2 sm:grid-cols-4 gap-2">
+                    <div className="col-span-2 sm:col-span-1">
+                      <label className="mb-1 block text-xs text-gray-500">Nama paket</label>
+                      <input value={d.label} onChange={e => set({ label: e.target.value })} className="w-full rounded-lg border px-3 py-2 text-sm" />
+                    </div>
+                    <div className="col-span-2 sm:col-span-1">
+                      <label className="mb-1 block text-xs text-gray-500">Harga (Rp) / satuan</label>
+                      <input type="number" min="0" value={d.harga} onChange={e => set({ harga: Number(e.target.value) })} className="w-full rounded-lg border px-3 py-2 text-sm" />
+                    </div>
+                    <div>
+                      <label className="mb-1 block text-xs text-gray-500">Masa aktif</label>
+                      <input type="number" min="1" max="3650" value={d.masa_nilai} onChange={e => set({ masa_nilai: Number(e.target.value) })} className="w-full rounded-lg border px-3 py-2 text-sm" />
+                    </div>
+                    <div>
+                      <label className="mb-1 block text-xs text-gray-500">Satuan</label>
+                      <select value={d.masa_satuan} onChange={e => set({ masa_satuan: e.target.value })} className="w-full rounded-lg border px-3 py-2 text-sm">
+                        <option value="bulan">Bulan</option>
+                        <option value="hari">Hari</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+          <div className="mt-4 flex gap-2">
+            <button disabled={savingPlans} onClick={savePlanEditor} className="flex-1 rounded-lg bg-primary px-4 py-2 text-white disabled:opacity-50">{savingPlans ? 'Menyimpan...' : 'Simpan Semua Paket'}</button>
+            <button onClick={() => setShowPlanEditor(false)} className="flex-1 rounded-lg border px-4 py-2 text-gray-600">Batal</button>
           </div>
         </div>
       </div>}
