@@ -43,6 +43,8 @@ const { createKtsPdf, CARD_W: KTS_W, CARD_H: KTS_H } = require('./kts-pdf-servic
 const { createRaporK13Pdf, createK13LedgerPdf } = require('./rapor-k13-pdf-service.cjs')
 const { getK13RaporData, getPeringkatK13, getK13Ledger, normalizeK13Nilai } = require('./rapor-k13-service.cjs')
 const { parseCsv, parseExcelBuffer, parseExcelBufferAll, buildImportPreview, clampNilai, fetchGoogleSheets } = require('./nilai-import-service.cjs')
+const { hitungJadwalSholat } = require('./jadwal-sholat.cjs')
+const { KOTA_SHOLAT, DEFAULT_KOTA, cariKota } = require('./kota-sholat.cjs')
 const { getCategoryRecap } = require('./attendance-recap.cjs')
 const { buildRekapRange, getPeriodicAttendanceRecap, deduplicateAttendance } = require('./attendance-periodic-recap.cjs')
 const { isDriveFolderUrl } = require('./library-config.cjs')
@@ -1209,6 +1211,11 @@ try {
   if (!settingsCols.includes('kepala_sekolah')) db.exec("ALTER TABLE settings ADD COLUMN kepala_sekolah TEXT DEFAULT ''")
   if (!settingsCols.includes('npsn'))           db.exec("ALTER TABLE settings ADD COLUMN npsn TEXT DEFAULT ''")
   if (!settingsCols.includes('kota_cetak'))     db.exec("ALTER TABLE settings ADD COLUMN kota_cetak TEXT DEFAULT ''")
+  // Jadwal sholat: nama kota (pilihan cepat) + koordinat & zona waktu manual.
+  if (!settingsCols.includes('kota_sholat'))    db.exec("ALTER TABLE settings ADD COLUMN kota_sholat TEXT DEFAULT ''")
+  if (!settingsCols.includes('lat_sholat'))     db.exec("ALTER TABLE settings ADD COLUMN lat_sholat REAL")
+  if (!settingsCols.includes('lng_sholat'))     db.exec("ALTER TABLE settings ADD COLUMN lng_sholat REAL")
+  if (!settingsCols.includes('tz_sholat'))      db.exec("ALTER TABLE settings ADD COLUMN tz_sholat INTEGER DEFAULT 7")
   if (!settingsCols.includes('nsm'))            db.exec("ALTER TABLE settings ADD COLUMN nsm TEXT DEFAULT ''")
 } catch (e) { console.error('[migrate] settings kop rapor failed', e.message) }
 
@@ -1629,10 +1636,21 @@ try {
 app.use(tenantMiddleware(db))
 
 // Peta fitur paket di-cache: dipakai di setiap request lewat enforceTenantAccess,
-// jadi tidak perlu query ulang. Cache dibuang saat paket diubah.
+// jadi tidak perlu query ulang. Cache punya masa berlaku pendek agar perubahan
+// yang dilakukan langsung di DB (mis. lewat sqlite3) ikut terasa tanpa restart;
+// perubahan lewat API tetap langsung berlaku lewat invalidatePlanMap().
+const PLAN_MAP_TTL_MS = 30 * 1000
 let _planMapCache = null
-function planMap() { if (!_planMapCache) _planMapCache = planFeatureMap(db); return _planMapCache }
-function invalidatePlanMap() { _planMapCache = null }
+let _planMapAt = 0
+function planMap() {
+  const now = Date.now()
+  if (!_planMapCache || now - _planMapAt > PLAN_MAP_TTL_MS) {
+    _planMapCache = planFeatureMap(db)
+    _planMapAt = now
+  }
+  return _planMapCache
+}
+function invalidatePlanMap() { _planMapCache = null; _planMapAt = 0 }
 
 function getTenantAccess(tenantId) {
   const tenant = db.prepare('SELECT * FROM tenants WHERE id=?').get(tenantId || 'default')
@@ -1843,6 +1861,29 @@ app.post('/api/tenants/:id/unlock-keys', SUPER, (req, res) => {
   do { code = generateUnlockCode(); hash = hashUnlockCode(code) } while (db.prepare('SELECT 1 FROM subscription_unlock_keys WHERE code_hash=?').get(hash))
   db.prepare('INSERT INTO subscription_unlock_keys(id,code_hash,tenant_id,plan,months,created_by) VALUES(?,?,?,?,?,?)').run(uuidv4(), hash, req.params.id, plan, months, req.user.id)
   res.status(201).json({ code, plan, months, tenant_id: req.params.id, note: 'Kunci hanya ditampilkan sekali. Simpan dan kirim kepada admin lembaga.' })
+})
+
+// ---- Jadwal sholat (dihitung lokal, tanpa ketergantungan API luar) ----
+app.get('/api/kota-sholat', authMiddleware, (_req, res) => {
+  res.json({ default: DEFAULT_KOTA, kota: KOTA_SHOLAT })
+})
+
+app.get('/api/jadwal-sholat', authMiddleware, (req, res) => {
+  const s = getTenantSettings(db, req.tenantId) || {}
+  const kotaTerpilih = cariKota(s.kota_sholat)
+  const kota = kotaTerpilih || cariKota(DEFAULT_KOTA) || KOTA_SHOLAT[0]
+  // Koordinat manual menimpa koordinat kota bila diisi admin.
+  const lat = s.lat_sholat != null && Number.isFinite(Number(s.lat_sholat)) ? Number(s.lat_sholat) : kota.lat
+  const lng = s.lng_sholat != null && Number.isFinite(Number(s.lng_sholat)) ? Number(s.lng_sholat) : kota.lng
+  const tz = s.tz_sholat != null && Number.isFinite(Number(s.tz_sholat)) ? Number(s.tz_sholat) : kota.tz
+  const diminta = String(req.query.tanggal || '')
+  const tanggal = /^\d{4}-\d{2}-\d{2}$/.test(diminta) ? diminta : todayJakarta()
+  try {
+    const jadwal = hitungJadwalSholat({ tanggal, lat, lng, tz })
+    res.json({ ...jadwal, kota: kota.nama, provinsi: kota.provinsi, lat, lng, tz, sumber: 'hitung lokal' })
+  } catch (error) {
+    res.status(400).json({ error: error.message })
+  }
 })
 
 // Harus sejalan dengan batas keras parser backup. Artefak ekspor yang memuat
@@ -2905,7 +2946,7 @@ app.get('/api/geocode/search', async (req, res) => {
 })
 
 app.put('/api/settings', ADMIN, (req, res) => {
-  const { nama_lembaga, alamat, telepon, email, theme, primary_color, accent_color, sidebar_color, geo_latitude, geo_longitude, geo_radius, jenjang, hari_libur, kbm_auto_aktif, bg_size, bg_position, bg_repeat, bg_blur, pwa_enabled, pwa_name, pwa_theme_color, pwa_bg_color, dashboard_quick_menus, kepala_sekolah, npsn, nsm, kota_cetak } = req.body
+  const { nama_lembaga, alamat, telepon, email, theme, primary_color, accent_color, sidebar_color, geo_latitude, geo_longitude, geo_radius, jenjang, hari_libur, kbm_auto_aktif, bg_size, bg_position, bg_repeat, bg_blur, pwa_enabled, pwa_name, pwa_theme_color, pwa_bg_color, dashboard_quick_menus, kepala_sekolah, npsn, nsm, kota_cetak, kota_sholat, lat_sholat, lng_sholat, tz_sholat } = req.body
   const id = canonicalSettingsId(req.tenantId)
   const kbm_auto = kbm_auto_aktif ? 1 : 0
   const bg_size_v = bg_size || 'cover'
@@ -2917,10 +2958,10 @@ app.put('/api/settings', ADMIN, (req, res) => {
   const normalizedQuickMenus = [...new Set(dashboard_quick_menus.filter(item => typeof item === 'string' && allowedQuickMenus.has(item)))]
   if (normalizedQuickMenus.length < 1 || normalizedQuickMenus.length > allowedQuickMenus.size) return res.status(400).json({ error: 'Pilih minimal 1 pintasan dashboard yang valid. Anda memilih: ' + normalizedQuickMenus.length })
   const quickMenus = JSON.stringify(normalizedQuickMenus)
-  db.prepare(`INSERT INTO settings (id, tenant_id, nama_lembaga, alamat, telepon, email, theme, primary_color, accent_color, sidebar_color, geo_latitude, geo_longitude, geo_radius, jenjang, hari_libur, kbm_auto_aktif, bg_size, bg_position, bg_repeat, bg_blur, pwa_enabled, pwa_name, pwa_theme_color, pwa_bg_color, dashboard_quick_menus, kepala_sekolah, npsn, nsm, kota_cetak, updated_at)
-    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,datetime('now'))
-    ON CONFLICT(id) DO UPDATE SET tenant_id=excluded.tenant_id, nama_lembaga=excluded.nama_lembaga, alamat=excluded.alamat, telepon=excluded.telepon, email=excluded.email, theme=excluded.theme, primary_color=excluded.primary_color, accent_color=excluded.accent_color, sidebar_color=excluded.sidebar_color, geo_latitude=excluded.geo_latitude, geo_longitude=excluded.geo_longitude, geo_radius=excluded.geo_radius, jenjang=excluded.jenjang, hari_libur=excluded.hari_libur, kbm_auto_aktif=excluded.kbm_auto_aktif, bg_size=excluded.bg_size, bg_position=excluded.bg_position, bg_repeat=excluded.bg_repeat, bg_blur=excluded.bg_blur, pwa_enabled=excluded.pwa_enabled, pwa_name=excluded.pwa_name, pwa_theme_color=excluded.pwa_theme_color, pwa_bg_color=excluded.pwa_bg_color, dashboard_quick_menus=excluded.dashboard_quick_menus, kepala_sekolah=excluded.kepala_sekolah, npsn=excluded.npsn, nsm=excluded.nsm, kota_cetak=excluded.kota_cetak, updated_at=datetime('now')`)
-    .run(id, req.tenantId, nama_lembaga, alamat, telepon, email, theme, primary_color, accent_color, sidebar_color, geo_latitude || null, geo_longitude || null, geo_radius || 200, jenjang || '', JSON.stringify(hari_libur || []), kbm_auto, bg_size_v, bg_position_v, bg_repeat_v, bg_blur_v, pwa_enabled ? 1 : 0, pwa_name || '', pwa_theme_color || '#1e40af', pwa_bg_color || '#ffffff', quickMenus, kepala_sekolah || '', npsn || '', nsm || '', kota_cetak || '')
+  db.prepare(`INSERT INTO settings (id, tenant_id, nama_lembaga, alamat, telepon, email, theme, primary_color, accent_color, sidebar_color, geo_latitude, geo_longitude, geo_radius, jenjang, hari_libur, kbm_auto_aktif, bg_size, bg_position, bg_repeat, bg_blur, pwa_enabled, pwa_name, pwa_theme_color, pwa_bg_color, dashboard_quick_menus, kepala_sekolah, npsn, nsm, kota_cetak, kota_sholat, lat_sholat, lng_sholat, tz_sholat, updated_at)
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,datetime('now'))
+    ON CONFLICT(id) DO UPDATE SET tenant_id=excluded.tenant_id, nama_lembaga=excluded.nama_lembaga, alamat=excluded.alamat, telepon=excluded.telepon, email=excluded.email, theme=excluded.theme, primary_color=excluded.primary_color, accent_color=excluded.accent_color, sidebar_color=excluded.sidebar_color, geo_latitude=excluded.geo_latitude, geo_longitude=excluded.geo_longitude, geo_radius=excluded.geo_radius, jenjang=excluded.jenjang, hari_libur=excluded.hari_libur, kbm_auto_aktif=excluded.kbm_auto_aktif, bg_size=excluded.bg_size, bg_position=excluded.bg_position, bg_repeat=excluded.bg_repeat, bg_blur=excluded.bg_blur, pwa_enabled=excluded.pwa_enabled, pwa_name=excluded.pwa_name, pwa_theme_color=excluded.pwa_theme_color, pwa_bg_color=excluded.pwa_bg_color, dashboard_quick_menus=excluded.dashboard_quick_menus, kepala_sekolah=excluded.kepala_sekolah, npsn=excluded.npsn, nsm=excluded.nsm, kota_cetak=excluded.kota_cetak, kota_sholat=excluded.kota_sholat, lat_sholat=excluded.lat_sholat, lng_sholat=excluded.lng_sholat, tz_sholat=excluded.tz_sholat, updated_at=datetime('now')`)
+    .run(id, req.tenantId, nama_lembaga, alamat, telepon, email, theme, primary_color, accent_color, sidebar_color, geo_latitude || null, geo_longitude || null, geo_radius || 200, jenjang || '', JSON.stringify(hari_libur || []), kbm_auto, bg_size_v, bg_position_v, bg_repeat_v, bg_blur_v, pwa_enabled ? 1 : 0, pwa_name || '', pwa_theme_color || '#1e40af', pwa_bg_color || '#ffffff', quickMenus, kepala_sekolah || '', npsn || '', nsm || '', kota_cetak || '', kota_sholat || '', lat_sholat || null, lng_sholat || null, tz_sholat || 7)
   res.json({ success: true, dashboard_quick_menus: JSON.parse(quickMenus) })
 })
 

@@ -92,6 +92,7 @@ export default function SettingsPage() {
   const [form, setForm] = useState({
     nama_lembaga: '', alamat: '', telepon: '', email: '',
     kepala_sekolah: '', npsn: '', nsm: '', kota_cetak: '', yayasan_nama: '',
+    kota_sholat: '', lat_sholat: '', lng_sholat: '', tz_sholat: '7',
     theme: 'light', primary_color: '#1e40af', accent_color: '#059669', sidebar_color: '#1e293b',
     geo_latitude: '', geo_longitude: '', geo_radius: '200', jenjang: '', hari_libur: [] as string[], kbm_auto_aktif: false,
     bg_size: 'cover', bg_position: 'center', bg_repeat: 'no-repeat', bg_blur: 0,
@@ -106,6 +107,8 @@ export default function SettingsPage() {
   const [background, setBackground] = useState('')
   const [kemenagLogo, setKemenagLogo] = useState('')
   const [kts, setKts] = useState({ depan: '', belakang: '' })
+  // Pilihan kota untuk kartu Jadwal Sholat di dashboard (koordinat diambil otomatis).
+  const [kotaSholatList, setKotaSholatList] = useState<Array<{ nama: string; provinsi: string; lat: number; lng: number; tz: number }>>([])
   const [ktsLayout, setKtsLayout] = useState<KtsLayout>(() => JSON.parse(JSON.stringify(KTS_DEFAULT_LAYOUT)))
   const [jam, setJam] = useState({
     sesi_masuk_mulai: '06:00', sesi_masuk_selesai: '07:30',
@@ -132,6 +135,12 @@ export default function SettingsPage() {
   const [library, setLibrary] = useState({ name: 'Perpustakaan Digital', description: '', drive_folder_url: '', enabled: false, visibility_roles: ['all'] as string[] })
   const [savingLibrary, setSavingLibrary] = useState(false)
 
+  // Daftar kota untuk jadwal sholat (sekali muat; gagal = pilihan manual tetap bisa dipakai).
+  useEffect(() => {
+    api.get('/kota-sholat')
+      .then(res => setKotaSholatList(Array.isArray(res.data?.kota) ? res.data.kota : []))
+      .catch(() => setKotaSholatList([]))
+  }, [])
 
   useEffect(() => {
     api.get('/settings').then(res => {
@@ -144,6 +153,7 @@ export default function SettingsPage() {
       setForm({
         nama_lembaga: s.nama_lembaga || '', alamat: s.alamat || '', telepon: s.telepon || '', email: s.email || '',
         kepala_sekolah: s.kepala_sekolah || '', npsn: s.npsn || '', nsm: s.nsm || '', kota_cetak: s.kota_cetak || '', yayasan_nama: s.yayasan_nama || '',
+        kota_sholat: s.kota_sholat || '', lat_sholat: s.lat_sholat ?? '', lng_sholat: s.lng_sholat ?? '', tz_sholat: String(s.tz_sholat ?? 7),
         theme: s.theme || 'light', primary_color: s.primary_color || '#1e40af', accent_color: s.accent_color || '#059669', sidebar_color: s.sidebar_color || '#1e293b',
         geo_latitude: s.geo_latitude || '', geo_longitude: s.geo_longitude || '', geo_radius: s.geo_radius || '200', jenjang: s.jenjang || '',
         hari_libur: (() => { try { return JSON.parse(s.hari_libur || '[]') } catch { return [] } })(),
@@ -428,6 +438,37 @@ export default function SettingsPage() {
               <label className="block text-sm font-medium text-gray-600 mb-1">Kota / Kabupaten (cetak)</label>
               <input value={form.kota_cetak} onChange={e => setForm({...form, kota_cetak: e.target.value})} placeholder="Bondowoso" className="w-full px-4 py-2 border rounded-lg text-sm" />
               <p className="text-xs text-gray-400 mt-1">Muncul di "Bondowoso, 16 September 2026" pada rapor</p>
+            </div>
+            <div className="min-w-0">
+              <label className="block text-sm font-medium text-gray-600 mb-1">Kota Jadwal Sholat</label>
+              <select
+                value={form.kota_sholat}
+                onChange={e => {
+                  const nama = e.target.value
+                  const k = kotaSholatList.find(x => x.nama === nama)
+                  setForm({
+                    ...form,
+                    kota_sholat: nama,
+                    lat_sholat: k ? String(k.lat) : form.lat_sholat,
+                    lng_sholat: k ? String(k.lng) : form.lng_sholat,
+                    tz_sholat: k ? String(k.tz) : form.tz_sholat,
+                  })
+                }}
+                className="w-full px-4 py-2 border rounded-lg text-sm"
+              >
+                <option value="">— Pilih kota —</option>
+                {kotaSholatList.map(k => <option key={k.nama} value={k.nama}>{k.nama} · {k.provinsi}</option>)}
+              </select>
+              <p className="text-xs text-gray-400 mt-1">Sumber kartu Jadwal Sholat di dashboard. Kosong = Surabaya.</p>
+            </div>
+            <div className="min-w-0">
+              <label className="block text-sm font-medium text-gray-600 mb-1">Lintang / Bujur / Zona <span className="text-xs text-gray-400">(opsional)</span></label>
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+                <input value={form.lat_sholat} onChange={e => setForm({...form, lat_sholat: e.target.value})} placeholder="Lintang, mis. -7.9135" className="w-full px-3 py-2 border rounded-lg text-sm" />
+                <input value={form.lng_sholat} onChange={e => setForm({...form, lng_sholat: e.target.value})} placeholder="Bujur, mis. 113.8213" className="w-full px-3 py-2 border rounded-lg text-sm" />
+                <input value={form.tz_sholat} onChange={e => setForm({...form, tz_sholat: e.target.value})} placeholder="Zona (7)" className="w-full px-3 py-2 border rounded-lg text-sm" />
+              </div>
+              <p className="text-xs text-gray-400 mt-1">Isi bila ingin lebih presisi. Zona: 7=WIB, 8=WITA, 9=WIT.</p>
             </div>
           </div>
           <div>
