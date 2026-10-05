@@ -59,13 +59,14 @@ export default function MobileDashboardHeader({ roleOverride, photo }: { roleOve
   return (
     <header data-dashboard-header="true" className="space-y-3">
       <div
-        className="relative overflow-hidden rounded-2xl px-4 py-3.5 shadow-sm"
+        className="relative rounded-2xl px-4 py-3.5 shadow-sm"
         style={{ background: accent }}
       >
-        {/* Lapisan gradasi dibuat terpisah agar warna aksen boleh berupa var(...)
-            (heroColors mengembalikan var(--color-primary, …) sebelum setelan termuat). */}
-        <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-white/20 via-transparent to-black/15" />
-        <div className="absolute inset-0 overflow-hidden pointer-events-none">
+        {/* Dekorasi dipotong di wadahnya SENDIRI — kotak header sengaja tidak
+            memakai overflow-hidden supaya panel dropdown lonceng & menu akun
+            bisa keluar dari kotak (sebelumnya terpotong tepat di batas bawah). */}
+        <div className="pointer-events-none absolute inset-0 overflow-hidden rounded-2xl">
+          <div className="absolute inset-0 bg-gradient-to-br from-white/20 via-transparent to-black/15" />
           <div className="absolute -right-6 -top-8 h-24 w-24 rounded-full bg-white/10" />
         </div>
         <div className="relative flex items-center gap-3">

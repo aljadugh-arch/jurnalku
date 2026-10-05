@@ -32,6 +32,16 @@ test('header dashboard menaruh nama besar dan peran di bawah header lembaga', ()
   assert.match(src, /ROLE_LABEL/)
 })
 
+test('kotak header dashboard tidak memotong panel dropdown', () => {
+  const src = read(DASH_HEADER)
+  // Kotak berwarna TIDAK boleh overflow-hidden: panel lonceng & menu akun keluar
+  // dari kotak dan akan terpotong tepat di batas bawahnya.
+  assert.match(src, /className="relative rounded-2xl px-4 py-3\.5 shadow-sm"/)
+  assert.doesNotMatch(src, /relative overflow-hidden rounded-2xl px-4 py-3\.5/)
+  // Dekorasi tetap dipotong di wadahnya sendiri supaya sudut tetap rapi.
+  assert.match(src, /pointer-events-none absolute inset-0 overflow-hidden rounded-2xl/)
+})
+
 /* ── Guru dashboard ── */
 
 test('guru dashboard memakai header lembaga dan menampilkan peran GURU', () => {
