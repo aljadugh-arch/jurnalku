@@ -32,6 +32,26 @@ const FALLBACK_PLANS: PlanRow[] = [
   { plan: 'premium', label: 'Premium', harga: 150000, masa_nilai: 1, masa_satuan: 'bulan', aktif: 1, urutan: 3 },
 ]
 
+// Nama fitur (selaras dengan FeatureSettings) untuk editor fitur per paket.
+const FEATURE_LABELS: Record<string, string> = {
+  master_data: 'Data Master',
+  jadwal: 'Jadwal',
+  absensi: 'Absensi',
+  jurnal: 'Jurnal Mengajar',
+  penilaian: 'Penilaian & Rapor',
+  keuangan: 'Keuangan',
+  whatsapp: 'WhatsApp',
+  posting: 'Posting',
+  modul_ajar: 'Modul Ajar',
+  backup_drive: 'Backup Google Drive',
+  website: 'Website Lembaga',
+  cashless: 'Cashless',
+  ekantin: 'E-Kantin',
+  rest_api: 'REST API Developer',
+}
+
+type PlanDraft = { label: string; harga: number; masa_nilai: number; masa_satuan: string; aktif: boolean; fitur: Record<string, boolean> }
+
 interface Tenant {
   id: string
   slug: string
@@ -65,7 +85,7 @@ export default function TenantManagementPage() {
   const [openMenuId, setOpenMenuId] = useState<string | null>(null)
   const [plans, setPlans] = useState<PlanRow[]>([])
   const [showPlanEditor, setShowPlanEditor] = useState(false)
-  const [planDraft, setPlanDraft] = useState<Record<string, { label: string; harga: number; masa_nilai: number; masa_satuan: string }>>({})
+  const [planDraft, setPlanDraft] = useState<Record<string, PlanDraft>>({})
   const [savingPlans, setSavingPlans] = useState(false)
   const menuRef = useRef<HTMLDivElement | null>(null)
 
@@ -74,6 +94,12 @@ export default function TenantManagementPage() {
   const planInfo = (name: string) => {
     const p = planRow(name)
     return p ? `${rupiah(p.harga)} / ${masaText(p)}` : ''
+  }
+  // Paket yang bisa dipilih: hanya yang aktif. Paket non-aktif tetap ikut
+  // ditampilkan bila lembaga sedang memakainya, agar kondisinya terlihat.
+  const selectablePlans = (current?: string) => {
+    const list = plans.length ? plans : FALLBACK_PLANS
+    return list.filter(p => p.aktif || p.plan === current)
   }
 
   useEffect(() => {
@@ -218,8 +244,15 @@ export default function TenantManagementPage() {
   }
 
   const openPlanEditor = () => {
-    const draft: Record<string, { label: string; harga: number; masa_nilai: number; masa_satuan: string }> = {}
-    for (const p of plans) draft[p.plan] = { label: p.label, harga: p.harga, masa_nilai: p.masa_nilai, masa_satuan: p.masa_satuan }
+    const draft: Record<string, PlanDraft> = {}
+    for (const p of plans) {
+      const on = new Set(p.fitur || [])
+      draft[p.plan] = {
+        label: p.label, harga: p.harga, masa_nilai: p.masa_nilai, masa_satuan: p.masa_satuan,
+        aktif: !!p.aktif,
+        fitur: Object.fromEntries(Object.keys(FEATURE_LABELS).map(k => [k, on.has(k)])),
+      }
+    }
     setPlanDraft(draft)
     setShowPlanEditor(true)
   }
@@ -231,9 +264,10 @@ export default function TenantManagementPage() {
         await api.put(`/subscription/plans/${plan}`, {
           label: d.label, harga: Number(d.harga) || 0,
           masa_nilai: Number(d.masa_nilai) || 1, masa_satuan: d.masa_satuan,
+          aktif: d.aktif, fitur: d.fitur,
         })
       }
-      toast.success('Harga & masa aktif paket tersimpan')
+      toast.success('Pengaturan paket tersimpan')
       setShowPlanEditor(false)
       loadPlans()
     } catch (e: any) { toast.error(e.response?.data?.error || 'Gagal menyimpan paket') }
@@ -512,7 +546,7 @@ export default function TenantManagementPage() {
           {!generatedKey ? <div className="mt-5 space-y-4">
             <div><label className="mb-1 block text-sm font-medium">Paket</label>
               <select value={unlock.plan} onChange={e => setUnlock({ ...unlock, plan: e.target.value })} className="w-full rounded-lg border px-3 py-2">
-                {(plans.length ? plans : FALLBACK_PLANS).map(p => (
+                {selectablePlans(unlock.plan).map(p => (
                   <option key={p.plan} value={p.plan}>{p.label} — {rupiah(p.harga)}/{p.masa_satuan}</option>
                 ))}
               </select>
@@ -533,7 +567,7 @@ export default function TenantManagementPage() {
           <h2 className="text-lg font-bold text-gray-900">Ubah Paket Langganan</h2>
           <p className="mt-1 text-sm text-gray-500">{changePlan.tenantName}</p>
           <div className="mt-5 space-y-2">
-            {(plans.length ? plans : FALLBACK_PLANS).map(p => (
+            {selectablePlans(changePlan.plan).map(p => (
               <label
                 key={p.plan}
                 className={`flex cursor-pointer items-start gap-3 rounded-lg border p-3 text-sm ${changePlan.plan === p.plan ? 'border-primary bg-primary/5' : 'border-gray-200 hover:bg-gray-50'}`}
@@ -635,6 +669,30 @@ export default function TenantManagementPage() {
                         <option value="bulan">Bulan</option>
                         <option value="hari">Hari</option>
                       </select>
+                    </div>
+                  </div>
+                  <label className="mt-3 flex items-center gap-2 text-sm text-gray-700">
+                    <input type="checkbox" className="h-4 w-4 accent-primary" checked={d.aktif} onChange={e => set({ aktif: e.target.checked })} />
+                    Paket aktif (bisa dipilih saat mengubah langganan lembaga)
+                  </label>
+                  <div className="mt-3">
+                    <div className="mb-1 flex items-center justify-between">
+                      <span className="text-xs font-medium text-gray-500">Fitur yang diizinkan</span>
+                      <div className="flex gap-2 text-[11px]">
+                        <button type="button" className="text-primary hover:underline"
+                          onClick={() => set({ fitur: Object.fromEntries(Object.keys(FEATURE_LABELS).map(k => [k, true])) })}>Pilih semua</button>
+                        <button type="button" className="text-gray-500 hover:underline"
+                          onClick={() => set({ fitur: Object.fromEntries(Object.keys(FEATURE_LABELS).map(k => [k, false])) })}>Kosongkan</button>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
+                      {Object.entries(FEATURE_LABELS).map(([key, name]) => (
+                        <label key={key} className="flex items-center gap-2 rounded-lg border border-gray-100 px-2 py-1.5 text-xs text-gray-700">
+                          <input type="checkbox" className="h-3.5 w-3.5 accent-primary" checked={!!d.fitur[key]}
+                            onChange={e => set({ fitur: { ...d.fitur, [key]: e.target.checked } })} />
+                          {name}
+                        </label>
+                      ))}
                     </div>
                   </div>
                 </div>

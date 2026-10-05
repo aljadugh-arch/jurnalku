@@ -116,12 +116,16 @@ function setupSubscriptionPlans(db) {
   }
 }
 
-// Daftar fitur yang diizinkan untuk sebuah baris paket.
+// Daftar fitur yang diizinkan untuk sebuah baris paket. Konfigurasi kosong
+// (belum pernah disetel) memakai default paket; konfigurasi yang eksplisit
+// menyimpan semua fitur sebagai false berarti paket itu memang tanpa fitur.
 function planFeatures(row) {
   const fallback = PLAN_FEATURES[row.plan] || FEATURE_KEYS
-  const parsed = parseFeatures(row.fitur_json)
-  const keys = Object.keys(parsed).filter(k => FEATURE_KEYS.includes(k) && parsed[k] !== false)
-  return keys.length ? keys : fallback
+  if (!row.fitur_json) return fallback
+  let parsed
+  try { parsed = JSON.parse(row.fitur_json) } catch { return fallback }
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed) || !Object.keys(parsed).length) return fallback
+  return Object.keys(parsed).filter(k => FEATURE_KEYS.includes(k) && parsed[k] !== false)
 }
 
 function getPlans(db) {

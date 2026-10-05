@@ -118,3 +118,41 @@ test('DEFAULT_PLANS konsisten dengan PLAN_KEYS', () => {
   assert.deepEqual(DEFAULT_PLANS.map(p => p.plan).sort(), [...PLAN_KEYS].sort())
   for (const p of DEFAULT_PLANS) assert.equal(['bulan', 'hari'].includes(p.masa_satuan), true)
 })
+
+test('mengosongkan SEMUA fitur paket tidak kembali ke default', () => {
+  const db = freshDb()
+  const { FEATURE_KEYS } = require('./subscription.cjs')
+  // Setel semua fitur lite ke false secara eksplisit.
+  updatePlan(db, 'lite', { fitur: Object.fromEntries(FEATURE_KEYS.map(k => [k, false])) })
+  assert.equal(planFeatureMap(db).lite.length, 0)
+  const acc = accessForTenant({ id: 't1', plan: 'lite', features_json: null }, new Date(), planFeatureMap(db))
+  assert.equal(Object.values(acc.features).every(v => v === false), true)
+  // Paket yang belum pernah disetel tetap memakai default (bukan kosong).
+  assert.ok(planFeatureMap(db).pro.length > 0)
+  db.close()
+})
+
+test('paket non-aktif tersimpan (aktif=0) dan bisa diaktifkan lagi', () => {
+  const db = freshDb()
+  const r = updatePlan(db, 'lite', { aktif: false })
+  assert.equal(r.plan.aktif, 0)
+  assert.equal(getPlans(db).find(p => p.plan === 'lite').aktif, 0)
+  updatePlan(db, 'lite', { aktif: true })
+  assert.equal(getPlans(db).find(p => p.plan === 'lite').aktif, 1)
+  db.close()
+})
+
+test('updatePlan menyimpan fitur + aktif + masa sekaligus (seperti UI)', () => {
+  const db = freshDb()
+  const { FEATURE_KEYS } = require('./subscription.cjs')
+  const fitur = Object.fromEntries(FEATURE_KEYS.map(k => [k, k !== 'website']))
+  const r = updatePlan(db, 'premium', { label: 'Premium Plus', harga: 250000, masa_nilai: 12, masa_satuan: 'bulan', aktif: true, fitur })
+  assert.equal(r.error, undefined)
+  const row = getPlans(db).find(p => p.plan === 'premium')
+  assert.equal(row.label, 'Premium Plus')
+  assert.equal(row.harga, 250000)
+  assert.equal(row.masa_nilai, 12)
+  assert.equal(row.fitur.includes('website'), false)
+  assert.equal(row.fitur.includes('absensi'), true)
+  db.close()
+})
