@@ -21,3 +21,7 @@ server/index.cjs.failed-*
 eng.traineddata
 ind.traineddata
 *.traineddata
+backup/
+
+# arsip/backup file sumber tidak perlu masuk repo
+*.bak*
