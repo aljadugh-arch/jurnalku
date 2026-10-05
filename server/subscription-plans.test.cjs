@@ -83,11 +83,11 @@ test('fitur paket mengikuti DB (bisa diubah tanpa deploy)', () => {
   const db = freshDb()
   // Awalnya lite tidak boleh backup_drive.
   let map = planFeatureMap(db)
-  assert.equal(map.lite.includes('backup_drive'), false)
+  assert.equal(map.lite.fitur.includes('backup_drive'), false)
   // Admin mengaktifkan backup_drive untuk lite.
   updatePlan(db, 'lite', { fitur: { ...Object.fromEntries(require('./subscription.cjs').FEATURE_KEYS.map(k => [k, true])) } })
   map = planFeatureMap(db)
-  assert.equal(map.lite.includes('backup_drive'), true)
+  assert.equal(map.lite.fitur.includes('backup_drive'), true)
   // accessForTenant memakai peta dari DB.
   const acc = accessForTenant({ id: 't1', plan: 'lite', features_json: null }, new Date(), map)
   assert.equal(acc.features.backup_drive, true)
@@ -124,11 +124,11 @@ test('mengosongkan SEMUA fitur paket tidak kembali ke default', () => {
   const { FEATURE_KEYS } = require('./subscription.cjs')
   // Setel semua fitur lite ke false secara eksplisit.
   updatePlan(db, 'lite', { fitur: Object.fromEntries(FEATURE_KEYS.map(k => [k, false])) })
-  assert.equal(planFeatureMap(db).lite.length, 0)
+  assert.equal(planFeatureMap(db).lite.fitur.length, 0)
   const acc = accessForTenant({ id: 't1', plan: 'lite', features_json: null }, new Date(), planFeatureMap(db))
   assert.equal(Object.values(acc.features).every(v => v === false), true)
   // Paket yang belum pernah disetel tetap memakai default (bukan kosong).
-  assert.ok(planFeatureMap(db).pro.length > 0)
+  assert.ok(planFeatureMap(db).pro.fitur.length > 0)
   db.close()
 })
 
@@ -155,4 +155,37 @@ test('updatePlan menyimpan fitur + aktif + masa sekaligus (seperti UI)', () => {
   assert.equal(row.fitur.includes('website'), false)
   assert.equal(row.fitur.includes('absensi'), true)
   db.close()
+})
+
+test('paket dinonaktifkan -> lembaga pemakainya TERKUNCI (402) dan ditandai plan_inactive', () => {
+  const db = freshDb()
+  const tenant = { id: 't1', plan: 'pro', subscription_ends_at: null, trial_ends_at: '2099-01-01T00:00:00.000Z', features_json: null }
+  // Sebelum dinonaktifkan: lembaga aktif (belum kedaluwarsa).
+  assert.equal(accessForTenant(tenant, new Date(), planFeatureMap(db)).locked, false)
+  updatePlan(db, 'pro', { aktif: false })
+  const acc = accessForTenant(tenant, new Date(), planFeatureMap(db))
+  assert.equal(acc.locked, true)
+  assert.equal(acc.plan_inactive, true)
+  // Diaktifkan lagi -> lembaga bisa dipakai kembali.
+  updatePlan(db, 'pro', { aktif: true })
+  assert.equal(accessForTenant(tenant, new Date(), planFeatureMap(db)).locked, false)
+  db.close()
+})
+
+test('tenant platform (default) tidak pernah terkunci walau paketnya dinonaktifkan', () => {
+  const db = freshDb()
+  updatePlan(db, 'pro', { aktif: false })
+  const acc = accessForTenant({ id: 'default', plan: 'pro', trial_ends_at: null, submission_ends_at: null }, new Date(), planFeatureMap(db))
+  assert.equal(acc.locked, false)
+  db.close()
+})
+
+test('accessForTenant menerima peta format lama (array fitur)', () => {
+  const tenant = { id: 't1', plan: 'lite', trial_ends_at: '2099-01-01T00:00:00.000Z', subscription_ends_at: null, features_json: null }
+  const legacyMap = { lite: ['absensi', 'penilaian'] }
+  const acc = accessForTenant(tenant, new Date(), legacyMap)
+  assert.equal(acc.locked, false)
+  assert.equal(acc.plan_inactive, false)
+  assert.equal(acc.features.absensi, true)
+  assert.equal(acc.features.keuangan, false)
 })

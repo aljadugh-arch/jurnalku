@@ -56,13 +56,21 @@ function accessForTenant(tenant, now = new Date(), planDefs = null) {
   const expiresAt = plan === 'premium'
     ? (tenant.subscription_ends_at || null)
     : (tenant.subscription_ends_at || tenant.trial_ends_at || tenant.expired_at || null)
-  const locked = tenant.id !== 'default' && !!expiresAt && new Date(expiresAt).getTime() <= now.getTime()
-  // Fitur diambil dari konfigurasi paket (subscription_plans) bila tersedia,
-  // sehingga admin platform bisa mengubah isi tiap paket tanpa deploy.
-  const allowed = new Set((planDefs && planDefs[plan]) || PLAN_FEATURES[plan] || PLAN_FEATURES.trial)
+  const expired = !!expiresAt && new Date(expiresAt).getTime() <= now.getTime()
+  // Fitur & status paket diambil dari konfigurasi paket (subscription_plans)
+  // bila tersedia, sehingga admin platform bisa mengubahnya tanpa deploy.
+  // Nilai peta boleh berupa array fitur (format lama) atau objek {aktif,fitur}.
+  const def = planDefs ? planDefs[plan] : null
+  const allowed = new Set(
+    def ? (Array.isArray(def) ? def : def.fitur) : (PLAN_FEATURES[plan] || PLAN_FEATURES.trial)
+  )
+  // Paket yang dinonaktifkan admin platform ikut memblokir lembaga yang
+  // memakainya — bukan hanya menyembunyikannya dari pilihan baru.
+  const planInactive = !!(def && !Array.isArray(def) && def.aktif === false)
+  const locked = tenant.id !== 'default' && (planInactive || expired)
   const choices = parseFeatures(tenant.features_json)
   const features = Object.fromEntries(FEATURE_KEYS.map(key => [key, allowed.has(key) && choices[key] !== false]))
-  return { plan, locked, expires_at: expiresAt, features }
+  return { plan, locked, plan_inactive: planInactive, expires_at: expiresAt, features }
 }
 
 function featureForPath(path) {
@@ -133,10 +141,13 @@ function getPlans(db) {
     .map(row => ({ ...row, aktif: row.aktif ? 1 : 0, fitur: planFeatures(row), fitur_json: undefined }))
 }
 
-// Peta plan -> daftar fitur, dipakai accessForTenant agar fitur mengikuti DB.
+// Peta plan -> { aktif, fitur }, dipakai accessForTenant agar fitur & status
+// paket mengikuti DB (termasuk pemblokiran paket yang dinonaktifkan).
 function planFeatureMap(db) {
   const map = {}
-  for (const row of db.prepare('SELECT plan, fitur_json FROM subscription_plans').all()) map[row.plan] = planFeatures(row)
+  for (const row of db.prepare('SELECT plan, aktif, fitur_json FROM subscription_plans').all()) {
+    map[row.plan] = { aktif: !!row.aktif, fitur: planFeatures(row) }
+  }
   return map
 }
 

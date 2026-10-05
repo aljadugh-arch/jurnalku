@@ -101,6 +101,9 @@ export default function TenantManagementPage() {
     const list = plans.length ? plans : FALLBACK_PLANS
     return list.filter(p => p.aktif || p.plan === current)
   }
+  // Jumlah lembaga yang memakai sebuah paket — dipakai untuk memperingatkan
+  // sebelum paket dinonaktifkan (menonaktifkan = memblokir pemakainya).
+  const tenantCountForPlan = (plan: string) => tenants.filter(t => (t.plan || 'trial') === plan).length
 
   useEffect(() => {
     const onClickOutside = (e: MouseEvent) => {
@@ -671,9 +674,18 @@ export default function TenantManagementPage() {
                       </select>
                     </div>
                   </div>
-                  <label className="mt-3 flex items-center gap-2 text-sm text-gray-700">
-                    <input type="checkbox" className="h-4 w-4 accent-primary" checked={d.aktif} onChange={e => set({ aktif: e.target.checked })} />
-                    Paket aktif (bisa dipilih saat mengubah langganan lembaga)
+                  <label className="mt-3 flex items-start gap-2 text-sm text-gray-700">
+                    <input type="checkbox" className="mt-0.5 h-4 w-4 accent-primary" checked={d.aktif} onChange={e => set({ aktif: e.target.checked })} />
+                    <span>
+                      Paket aktif (bisa dipilih saat mengubah langganan lembaga)
+                      {d.aktif ? (
+                        <span className="block text-xs text-gray-400">{tenantCountForPlan(p.plan)} lembaga memakai paket ini</span>
+                      ) : (
+                        <span className="block text-xs font-medium text-amber-600">
+                          Non-aktif — {tenantCountForPlan(p.plan)} lembaga yang memakai paket ini akan TERKUNCI (tidak bisa memakai aplikasi)
+                        </span>
+                      )}
+                    </span>
                   </label>
                   <div className="mt-3">
                     <div className="mb-1 flex items-center justify-between">

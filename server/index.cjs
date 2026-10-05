@@ -1649,7 +1649,12 @@ function enforceTenantAccess(req, res, next) {
   if (token) { try { const decoded = jwt.verify(token, JWT_SECRET); if (decoded.tenant_id) req.tenantId = decoded.tenant_id } catch {} }
   const access = getTenantAccess(req.tenantId)
   req.tenantAccess = access
-  if (access.locked) return res.status(402).json({ error: 'Masa percobaan/langganan sudah berakhir. Masukkan kunci unlock untuk melanjutkan.', code: 'SUBSCRIPTION_LOCKED', subscription: access })
+  if (access.locked) {
+    const pesan = access.plan_inactive
+      ? 'Paket langganan lembaga ini sedang dinonaktifkan oleh admin platform. Hubungi admin platform untuk mengaktifkan kembali.'
+      : 'Masa percobaan/langganan sudah berakhir. Masukkan kunci unlock untuk melanjutkan.'
+    return res.status(402).json({ error: pesan, code: access.plan_inactive ? 'PLAN_INACTIVE' : 'SUBSCRIPTION_LOCKED', subscription: access })
+  }
   const feature = featureForPath(req.path)
   if (feature && access.features[feature] === false) return res.status(403).json({ error: 'Fitur ini dinonaktifkan untuk lembaga ini', code: 'FEATURE_DISABLED', feature })
   next()
