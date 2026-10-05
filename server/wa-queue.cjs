@@ -135,6 +135,68 @@ function queueDueSchedules(db,{tenantId,date,time}) {
   }
   return out
 }
+// Mode ujian aktif pada tanggal tsb bila ada event kalender_kbm jenis='ujian'
+// DAN ada template ujian yang memiliki slot jadwal_ujian. Logika ini meniru
+// examModeForDate() di index.cjs agar notif WA konsisten dengan tampilan
+// dashboard guru (yang sudah memakai jadwal_ujian saat mode ujian).
+function examModeForDate(db, tenantId, date) {
+  const event = db.prepare("SELECT id FROM kalender_kbm WHERE tenant_id=? AND tanggal=? AND jenis='ujian' LIMIT 1").get(tenantId, date)
+  if (!event) return null
+  const tpl = db.prepare(`SELECT t.id FROM template_jadwal t
+    WHERE t.tenant_id=? AND t.jenis='ujian'
+      AND EXISTS (SELECT 1 FROM jadwal_ujian j WHERE j.template_id=t.id AND j.tenant_id=t.tenant_id)
+    ORDER BY t.created_at DESC LIMIT 1`).get(tenantId)
+  return tpl ? tpl.id : null
+}
+// Notif WA pengingat jadwal UJIAN ke guru pengawas. Saat mode ujian aktif,
+// jadwal reguler diganti jadwal_ujian; guru harus diingatkan ujian, bukan
+// jadwal mengajar biasa. Tidak mengubah queueDueSchedules (jadwal reguler).
+function queueDueExamSchedules(db,{tenantId,date,time}) {
+  const out={queued:0,skipped:0,missing:0}
+  if (shouldSuppress(db, tenantId, date)) return {...out, reason:'holiday'}
+  const conf=db.prepare('SELECT * FROM notif_settings WHERE tenant_id=?').get(tenantId)
+  if(!conf?.notif_ujian_guru)return out
+  if(!time || !/^\d{2}:\d{2}$/.test(String(time))) return {...out,reason:'invalid_time'}
+  const examTemplateId = examModeForDate(db, tenantId, date)
+  if (!examTemplateId) return out // bukan hari ujian: jadwal reguler yang menangani
+  const day=['Minggu','Senin','Selasa','Rabu','Kamis','Jumat','Sabtu'][new Date(`${date}T12:00:00Z`).getUTCDay()]
+  const school=getTenantSettings(db, tenantId, 'nama_lembaga')
+  const rows=db.prepare(`SELECT j.id,j.gtk_id,j.jam_mulai,j.jam_selesai,g.nama nama_guru,g.no_hp,m.nama mapel,r.nama rombel
+    FROM jadwal_ujian j
+    LEFT JOIN gtk g ON g.id=j.gtk_id AND g.tenant_id=j.tenant_id AND g.status='aktif'
+    LEFT JOIN mapel m ON m.id=j.mapel_id AND m.tenant_id=j.tenant_id
+    LEFT JOIN rombel r ON r.id=j.rombel_id AND r.tenant_id=j.tenant_id
+    WHERE j.tenant_id=? AND j.template_id=? AND lower(j.hari)=lower(?) ORDER BY j.jam_mulai`).all(tenantId, examTemplateId, day)
+  const grouped = new Map()
+  for (const row of rows) {
+    if (!row.gtk_id) continue // slot tanpa pengawas: tidak ada yang diingatkan
+    const key = `${row.gtk_id}|${row.mapel}|${row.rombel}|${date}`
+    const current = grouped.get(key)
+    if (!current || String(row.jam_mulai) < String(current.jam_mulai)) grouped.set(key, { ...row, _slots: [row] })
+    else if (String(row.jam_mulai) <= String(current.jam_selesai)) {
+      current.jam_selesai = String(row.jam_selesai) > String(current.jam_selesai) ? row.jam_selesai : current.jam_selesai
+      current._slots.push(row)
+    }
+  }
+  for(const x of grouped.values()){
+    const firstStart = String(x.jam_mulai)
+    const firstMinutes = Number(firstStart.slice(0, 2)) * 60 + Number(firstStart.slice(3, 5))
+    const tickMinutes = Number(String(time).slice(0, 2)) * 60 + Number(String(time).slice(3, 5))
+    if (!Number.isFinite(tickMinutes) || tickMinutes < firstMinutes - 5 || tickMinutes > firstMinutes + 5) { out.skipped++; continue }
+    delete x._slots
+    if(!normalizePhone(x.no_hp)){out.missing++;continue}
+    const gtkColumns = db.prepare('PRAGMA table_info(gtk)').all()
+    const hasGender = gtkColumns.some(column => column.name === 'jenis_kelamin')
+    const gender = hasGender ? db.prepare('SELECT jenis_kelamin FROM gtk WHERE id=? AND tenant_id=?').get(x.gtk_id, tenantId)?.jenis_kelamin : 'L'
+    const namaGuru = honorificTeacherName(x.nama_guru, gender)
+    const defaultTemplate='Assalamu’alaikum {nama_guru}. Pengingat jadwal UJIAN {mapel} di kelas {rombel}, pukul {jam_mulai}–{jam_selesai} pada {tanggal}. — {lembaga}'
+    const message=render(String(conf.template_ujian_guru||'').trim()||defaultTemplate,{...x,nama_guru:namaGuru,tanggal:date,lembaga:school?.nama_lembaga||'Sekolah'})
+    const r=enqueue(db,{tenantId,phone:x.no_hp,message,key:`ujian-guru:${x.gtk_id}:${x.mapel}:${x.rombel}:${date}:${x.jam_mulai}`,targetType:'gtk',targetId:x.gtk_id})
+    if (r.queued) out.queued++
+    else out.skipped++
+  }
+  return out
+}
 function queueDueEkskul(db,{tenantId,date,time}) {
   const out={queued:0,skipped:0,missing:0}
   if (shouldSuppress(db, tenantId, date)) return {...out, reason:'holiday'}
@@ -241,4 +303,4 @@ function queueFinanceReports(db,{tenantId,date,time,force=false}) {
   return out
 }
 
-module.exports={setupWA,normalizePhone,enqueue,claimNext,render,honorificTeacherName,queueWaliAttendance,queueDueTeachers,queueDueSchedules,queueDueEkskul,queueFinanceReports,isWhitelisted,shouldSuppress}
+module.exports={setupWA,normalizePhone,enqueue,claimNext,render,honorificTeacherName,queueWaliAttendance,queueDueTeachers,queueDueSchedules,queueDueExamSchedules,queueDueEkskul,queueFinanceReports,isWhitelisted,shouldSuppress}

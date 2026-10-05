@@ -5183,6 +5183,8 @@ if (!existNotif) db.prepare("INSERT INTO notif_settings (id) VALUES ('main')").r
 for (const [name, definition] of [
   ['notif_jadwal_guru', 'INTEGER DEFAULT 0'],
   ['template_jadwal_guru', "TEXT DEFAULT 'Assalamualaikum {nama_guru}, sekarang waktunya mengajar {mapel} di rombel {rombel}, pukul {jam_mulai}-{jam_selesai} pada {tanggal}. - {lembaga}'"],
+  ['notif_ujian_guru', 'INTEGER DEFAULT 0'],
+  ['template_ujian_guru', "TEXT DEFAULT 'Assalamualaikum {nama_guru}, pengingat jadwal UJIAN {mapel} di kelas {rombel}, pukul {jam_mulai}-{jam_selesai} pada {tanggal}. - {lembaga}'"],
   ['notif_ekskul_guru', 'INTEGER DEFAULT 0'],
   ['template_ekskul_guru', "TEXT DEFAULT 'Assalamualaikum {nama_guru}, pengingat jadwal {ekskul} pukul {jam_mulai}-{jam_selesai} pada {tanggal}. - {lembaga}'"],
   ['notif_cs_bot', 'INTEGER DEFAULT 0'],
@@ -5200,9 +5202,9 @@ app.get('/api/notif-settings', authMiddleware, (req, res) => {
 })
 
 app.put('/api/notif-settings', ADMIN, (req, res) => {
-  const { absensi_siswa_ke_wali, guru_belum_ceklok, batas_ceklok_guru, template_absensi_wali, template_guru_ceklok, notif_jadwal_guru, template_jadwal_guru, notif_ekskul_guru, template_ekskul_guru, notif_cs_bot, notif_keuangan_wali, keuangan_frekuensi, keuangan_hari, keuangan_jam, template_keuangan_wali } = req.body
-  db.prepare("UPDATE notif_settings SET absensi_siswa_ke_wali=?, guru_belum_ceklok=?, batas_ceklok_guru=?, template_absensi_wali=?, template_guru_ceklok=?, notif_jadwal_guru=?, template_jadwal_guru=?, notif_ekskul_guru=?, template_ekskul_guru=?, notif_cs_bot=?, notif_keuangan_wali=?, keuangan_frekuensi=?, keuangan_hari=?, keuangan_jam=?, template_keuangan_wali=? WHERE tenant_id=?")
-    .run(absensi_siswa_ke_wali ? 1 : 0, guru_belum_ceklok ? 1 : 0, batas_ceklok_guru || '07:30', template_absensi_wali || '', template_guru_ceklok || '', notif_jadwal_guru ? 1 : 0, template_jadwal_guru || '', notif_ekskul_guru ? 1 : 0, template_ekskul_guru || '', notif_cs_bot ? 1 : 0, notif_keuangan_wali ? 1 : 0, keuangan_frekuensi || 'bulanan', keuangan_hari || '', keuangan_jam || '08:00', template_keuangan_wali || '', req.tenantId)
+  const { absensi_siswa_ke_wali, guru_belum_ceklok, batas_ceklok_guru, template_absensi_wali, template_guru_ceklok, notif_jadwal_guru, template_jadwal_guru, notif_ujian_guru, template_ujian_guru, notif_ekskul_guru, template_ekskul_guru, notif_cs_bot, notif_keuangan_wali, keuangan_frekuensi, keuangan_hari, keuangan_jam, template_keuangan_wali } = req.body
+  db.prepare("UPDATE notif_settings SET absensi_siswa_ke_wali=?, guru_belum_ceklok=?, batas_ceklok_guru=?, template_absensi_wali=?, template_guru_ceklok=?, notif_jadwal_guru=?, template_jadwal_guru=?, notif_ujian_guru=?, template_ujian_guru=?, notif_ekskul_guru=?, template_ekskul_guru=?, notif_cs_bot=?, notif_keuangan_wali=?, keuangan_frekuensi=?, keuangan_hari=?, keuangan_jam=?, template_keuangan_wali=? WHERE tenant_id=?")
+    .run(absensi_siswa_ke_wali ? 1 : 0, guru_belum_ceklok ? 1 : 0, batas_ceklok_guru || '07:30', template_absensi_wali || '', template_guru_ceklok || '', notif_jadwal_guru ? 1 : 0, template_jadwal_guru || '', notif_ujian_guru ? 1 : 0, template_ujian_guru || '', notif_ekskul_guru ? 1 : 0, template_ekskul_guru || '', notif_cs_bot ? 1 : 0, notif_keuangan_wali ? 1 : 0, keuangan_frekuensi || 'bulanan', keuangan_hari || '', keuangan_jam || '08:00', template_keuangan_wali || '', req.tenantId)
   res.json({ success: true })
 })
 
@@ -5220,6 +5222,13 @@ app.delete('/api/notif-whitelist/:id', ADMIN, (req, res) => {
 })
 app.post('/api/notif/jadwal-guru', STAFF, (req, res) => {
   res.json({ success: true, ...waQueue.queueDueSchedules(db, { tenantId: req.tenantId, date: todayJakarta(), time: timeJakarta() }) })
+})
+
+// Test kirim notif jadwal ujian ke guru pengawas.
+app.post('/api/notif/ujian-guru', STAFF, (req, res) => {
+  const conf = db.prepare('SELECT * FROM notif_settings WHERE tenant_id=?').get(req.tenantId)
+  if (!conf?.notif_ujian_guru) return res.status(400).json({ error: 'Notifikasi ujian belum diaktifkan' })
+  res.json({ success: true, ...waQueue.queueDueExamSchedules(db, { tenantId: req.tenantId, date: todayJakarta(), time: timeJakarta() }) })
 })
 
 // Test kirim notif jadwal ekskul ke guru pembina.
@@ -9550,6 +9559,8 @@ setInterval(async () => {
         waQueue.queueDueTeachers(db, { tenantId: t.id, date, time })
         // Notif jadwal guru (hanya hari kerja)
         waQueue.queueDueSchedules(db, { tenantId: t.id, date, time })
+        // Notif jadwal ujian ke guru pengawas (saat mode ujian aktif)
+        waQueue.queueDueExamSchedules(db, { tenantId: t.id, date, time })
         // Notif jadwal ekskul/peminatan ke guru pembina
         waQueue.queueDueEkskul(db, { tenantId: t.id, date, time })
         // Laporan keuangan otomatis ke wali murid (mingguan/bulanan)

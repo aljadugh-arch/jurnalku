@@ -13,6 +13,8 @@ export default function NotifSettingsPage() {
     template_guru_ceklok: '',
     notif_jadwal_guru: false,
     template_jadwal_guru: '',
+    notif_ujian_guru: false,
+    template_ujian_guru: '',
     notif_ekskul_guru: false,
     template_ekskul_guru: '',
     notif_cs_bot: false,
@@ -41,6 +43,8 @@ export default function NotifSettingsPage() {
         template_guru_ceklok: d.template_guru_ceklok || '',
         notif_jadwal_guru: !!d.notif_jadwal_guru,
         template_jadwal_guru: d.template_jadwal_guru || '',
+        notif_ujian_guru: !!d.notif_ujian_guru,
+        template_ujian_guru: d.template_ujian_guru || '',
         notif_ekskul_guru: !!d.notif_ekskul_guru,
         template_ekskul_guru: d.template_ekskul_guru || '',
         notif_cs_bot: !!d.notif_cs_bot,
@@ -73,6 +77,7 @@ export default function NotifSettingsPage() {
   const addWhitelist = async () => { try { await api.post('/notif-whitelist', whiteForm); const r = await api.get('/notif-whitelist'); setWhitelist(r.data); setWhiteForm({ target_type: 'phone', phone: '', target_id: '', reason: '' }); toast.success('Whitelist ditambah') } catch { toast.error('Gagal whitelist') } }
   const delWhitelist = async (id: string) => { try { await api.delete('/notif-whitelist/' + id); setWhitelist(whitelist.filter(w => w.id !== id)) } catch { toast.error('Gagal hapus') } }
   const handleTestJadwalGuru = async () => { setTesting(true); try { const r = await api.post('/notif/jadwal-guru'); toast.success(`Antrean notif jadwal: ${r.data.queued || 0}`) } catch { toast.error('Gagal test jadwal') } finally { setTesting(false) } }
+  const handleTestUjianGuru = async () => { setTesting(true); try { const r = await api.post('/notif/ujian-guru'); toast.success(`Antrean notif ujian: ${r.data.queued || 0}`) } catch (e: any) { toast.error(e.response?.data?.error || 'Gagal test ujian — pastikan hari ini ditandai hari ujian di Kalender KBM') } finally { setTesting(false) } }
   const handleTestEkskulGuru = async () => { setTesting(true); try { const r = await api.post('/notif/ekskul-guru'); toast.success(`Antrean notif ekskul: ${r.data.queued || 0}`) } catch (e: any) { toast.error(e.response?.data?.error || 'Gagal test ekskul') } finally { setTesting(false) } }
 
   const handleTestGuruCeklok = async () => {
@@ -198,6 +203,15 @@ export default function NotifSettingsPage() {
         )}
         <textarea value={settings.template_jadwal_guru} onChange={e => setSettings({...settings, template_jadwal_guru: e.target.value})} rows={3} className="w-full px-3 py-2 border rounded-lg text-sm" placeholder="{nama_guru}, {mapel}, {rombel}, {jam_mulai}, {jam_selesai}, {tanggal}, {lembaga}" />
         <button onClick={handleTestJadwalGuru} className="px-4 py-2 bg-primary text-white rounded-lg text-sm">Test Notif Jadwal Sekarang</button>
+      </div>
+
+      {/* Notif Jadwal Ujian -> Guru Pengawas (hanya saat mode ujian aktif) */}
+      <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100 space-y-4">
+        <h3 className="font-semibold text-gray-800">Notifikasi Jadwal Ujian Guru</h3>
+        <p className="text-xs text-gray-500 -mt-2">Kirim WA pengingat 5 menit sebelum jadwal ujian ke guru pengawas, hanya pada tanggal yang ditandai sebagai hari ujian di Kalender KBM.</p>
+        <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={settings.notif_ujian_guru} onChange={e => setSettings({...settings, notif_ujian_guru: e.target.checked})} /> Aktifkan pengingat 5 menit sebelum jam ujian</label>
+        <textarea value={settings.template_ujian_guru} onChange={e => setSettings({...settings, template_ujian_guru: e.target.value})} rows={3} className="w-full px-3 py-2 border rounded-lg text-sm" placeholder="{nama_guru}, {mapel}, {rombel}, {jam_mulai}, {jam_selesai}, {tanggal}, {lembaga}" />
+        <button onClick={handleTestUjianGuru} className="px-4 py-2 bg-primary text-white rounded-lg text-sm">Test Notif Ujian Sekarang</button>
       </div>
 
       {/* Notif Jadwal Ekskul/Peminatan -> Guru Pembina */}
