@@ -10,6 +10,7 @@ SSH_KNOWN_HOSTS="${SSH_KNOWN_HOSTS:-$HOME/.ssh/known_hosts}"
 LIVE="${LIVE_DIR:-/www/wwwroot/jurnal.cc.cd}"
 SECONDARY_LIVE="${SECONDARY_LIVE_DIR:-/www/wwwroot/jurnalmadrasah.web.id}"
 STG="${STG_DIR:-/www/wwwroot/staging.jurnal.cc.cd}"
+STG_PM2_APP="${STG_PM2_APP:-jurnalku-staging}"
 LIVE_PM2_APP="${LIVE_PM2_APP:-jurnalku-api}"
 LIVE_HEALTH_URL="${LIVE_HEALTH_URL:-https://jurnal.cc.cd/api/health}"
 TS="$(date +%Y%m%d-%H%M%S)"
@@ -107,3 +108,9 @@ REMOTE
 
 node scripts/check-live-frontend-sync.mjs jurnal.cc.cd jurnalmadrasah.web.id
 echo "LIVE sehat dan frontend sinkron: $LIVE_HEALTH_URL + https://jurnalmadrasah.web.id/api/health"
+
+# Staging hanya dipakai untuk verifikasi SEBELUM promote. Setelah promote sukses,
+# hentikan agar tidak ada proses uji yang tertinggal di VPS (deploy-staging.sh
+# akan membuatnya lagi saat deploy berikutnya). Dijalankan paling akhir supaya
+# bila promote gagal, staging tetap hidup untuk penelusuran.
+remote "pm2 stop $STG_PM2_APP >/dev/null 2>&1 || true; pm2 delete $STG_PM2_APP >/dev/null 2>&1 || true; echo 'staging dihentikan'" || true
