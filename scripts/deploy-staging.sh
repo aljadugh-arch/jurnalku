@@ -9,7 +9,8 @@ VPS_PASS="${VPS_PASS:?Set VPS_PASS via environment}"
 SSH_KNOWN_HOSTS="${SSH_KNOWN_HOSTS:-$HOME/.ssh/known_hosts}"
 STG="${STG_DIR:-/www/wwwroot/staging.jurnal.cc.cd}"
 STG_PM2_APP="${STG_PM2_APP:-jurnalku-staging}"
-STG_HEALTH_URL="${STG_HEALTH_URL:-http://127.0.0.1:3003/api/health}"
+STG_PORT="${STG_PORT:-3003}"
+STG_HEALTH_URL="${STG_HEALTH_URL:-http://127.0.0.1:${STG_PORT}/api/health}"
 DEPLOY_ID="$(date +%Y%m%d-%H%M%S)-$$"
 LOCAL_ARCHIVE="$(mktemp /tmp/jurnalku-staging.XXXXXX.tgz)"
 REMOTE_ARCHIVE="/tmp/jurnalku-staging-${DEPLOY_ID}.tgz"
@@ -64,12 +65,23 @@ tar -czf "$LOCAL_ARCHIVE" "${TAR_ARGS[@]}"
 sshpass -e scp "${SSH_OPTS[@]}" "$LOCAL_ARCHIVE" "$TARGET:$REMOTE_ARCHIVE"
 
 echo "[4/5] Pasang artefak staging secara atomik..."
-remote bash -s -- "$STG" "$REMOTE_ARCHIVE" "$DEPLOY_ID" "$STG_PM2_APP" "$STG_HEALTH_URL" <<'REMOTE'
+remote bash -s -- "$STG" "$REMOTE_ARCHIVE" "$DEPLOY_ID" "$STG_PM2_APP" "$STG_HEALTH_URL" "$STG_PORT" <<'REMOTE'
 set -euo pipefail
-STG="$1"; ARCHIVE="$2"; DEPLOY_ID="$3"; PM2_APP="$4"; HEALTH_URL="$5"
+STG="$1"; ARCHIVE="$2"; DEPLOY_ID="$3"; PM2_APP="$4"; HEALTH_URL="$5"; STG_PORT="$6"
 WORK="$STG/.deploy-$DEPLOY_ID"
 BACKUP_SERVER="$STG/.server-backup-$DEPLOY_ID"
 ACTIVATED=0
+
+# Restart, atau buat prosesnya bila belum ada (mis. dibersihkan setelah smoke
+# test). Tanpa ini deploy gagal "Process not found" dan staging tidak pernah
+# kembali hidup.
+ensure_pm2() {
+  if pm2 describe "$PM2_APP" >/dev/null 2>&1; then
+    pm2 restart "$PM2_APP" --update-env
+  else
+    PORT="$STG_PORT" pm2 start "$STG/server/index.cjs" --name "$PM2_APP" --cwd "$STG" --update-env
+  fi
+}
 
 rollback() {
   status=$?
@@ -79,7 +91,7 @@ rollback() {
     rm -rf "$STG/dist"
     [[ ! -d "$STG/dist.previous" ]] || mv "$STG/dist.previous" "$STG/dist"
     cp -a "$BACKUP_SERVER/." "$STG/server/"
-    pm2 restart "$PM2_APP" --update-env >/dev/null 2>&1 || true
+    ensure_pm2 >/dev/null 2>&1 || true
   fi
   rm -rf "$BACKUP_SERVER"
   exit "$status"
@@ -119,7 +131,7 @@ if [[ -d "$WORK/server/scripts" ]]; then
     esac
   done
 fi
-pm2 restart "$PM2_APP" --update-env
+ensure_pm2
 for attempt in {1..10}; do
   curl --fail --silent --show-error --max-time 15 "$HEALTH_URL" >/dev/null && break
   [[ "$attempt" -lt 10 ]] || exit 1
