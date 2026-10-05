@@ -265,13 +265,13 @@ export default function DataGTKPage() {
           </div>
         }>
             <div className="space-y-3">
-              <div className="grid grid-cols-3 gap-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                 <div><label className="block text-xs font-medium text-gray-600 mb-1">NIK</label><input inputMode="numeric" maxLength={16} value={form.nik} onChange={e => setForm({...form, nik: e.target.value.replace(/\D/g, '')})} placeholder="16 digit" className="w-full px-3 py-2 border rounded-lg text-sm" /></div>
                 <div><label className="block text-xs font-medium text-gray-600 mb-1">NIP</label><input value={form.nip} onChange={e => setForm({...form, nip: e.target.value})} className="w-full px-3 py-2 border rounded-lg text-sm" /></div>
                 <div><label className="block text-xs font-medium text-gray-600 mb-1">NUPTK</label><input value={form.nuptk} onChange={e => setForm({...form, nuptk: e.target.value})} className="w-full px-3 py-2 border rounded-lg text-sm" /></div>
               </div>
               <div><label className="block text-xs font-medium text-gray-600 mb-1">Nama Lengkap *</label><input value={form.nama} onChange={e => setForm({...form, nama: e.target.value})} className="w-full px-3 py-2 border rounded-lg text-sm" /></div>
-              <div className="grid grid-cols-3 gap-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                 <div><label className="block text-xs font-medium text-gray-600 mb-1">JK *</label><select value={form.jenis_kelamin} onChange={e => setForm({...form, jenis_kelamin: e.target.value})} className="w-full px-3 py-2 border rounded-lg text-sm"><option value="L">L</option><option value="P">P</option></select></div>
                 <div><label className="block text-xs font-medium text-gray-600 mb-1">Jabatan</label><select value={form.jabatan} onChange={e => setForm({...form, jabatan: e.target.value})} className="w-full px-3 py-2 border rounded-lg text-sm"><option value="guru">Guru</option><option value="kepala_sekolah">Kepala Sekolah</option><option value="staff_tu">Staff TU</option><option value="operator">Operator</option></select></div>
                 <div><label className="block text-xs font-medium text-gray-600 mb-1">Status</label><select value={form.status_kepegawaian} onChange={e => setForm({...form, status_kepegawaian: e.target.value})} className="w-full px-3 py-2 border rounded-lg text-sm"><option value="pns">PNS</option><option value="pppk">PPPK</option><option value="honorer">Honorer</option></select></div>

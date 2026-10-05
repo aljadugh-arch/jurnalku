@@ -578,7 +578,7 @@ export default function DataSiswaPage() {
           }
         >
             <div className="space-y-3">
-              <div className="grid grid-cols-3 gap-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-1">NIK</label>
                   <input inputMode="numeric" maxLength={16} value={form.nik} onChange={(e) => setForm({...form, nik: e.target.value.replace(/\D/g, '')})} placeholder="16 digit" className="w-full px-3 py-2 border rounded-lg text-sm" />
@@ -643,7 +643,7 @@ export default function DataSiswaPage() {
 
               <div className="pt-2 border-t">
                 <p className="text-xs font-semibold text-gray-500 mb-2 uppercase tracking-wide">Biodata untuk Rapor</p>
-                <div className="grid grid-cols-3 gap-3">
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                   <div>
                     <label className="block text-xs font-medium text-gray-600 mb-1">Agama</label>
                     <select value={form.agama || 'Islam'} onChange={(e) => setForm({...form, agama: e.target.value})} className="w-full px-3 py-2 border rounded-lg text-sm">

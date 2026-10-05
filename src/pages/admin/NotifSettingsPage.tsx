@@ -124,18 +124,18 @@ export default function NotifSettingsPage() {
       {/* Toggle Notifikasi */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Notif Absensi Siswa -> Wali */}
-        <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
-          <div className="flex items-start justify-between mb-4">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
+        <div className="bg-white rounded-xl p-4 sm:p-6 shadow-sm border border-gray-100">
+          <div className="flex items-start justify-between gap-3 mb-4">
+            <div className="flex min-w-0 items-center gap-3">
+              <div className="w-10 h-10 shrink-0 bg-green-100 rounded-lg flex items-center justify-center">
                 <Bell size={20} className="text-green-600" />
               </div>
-              <div>
+              <div className="min-w-0">
                 <h3 className="font-semibold text-gray-800">Notifikasi Absensi ke Wali Murid</h3>
-                <p className="text-xs text-gray-500 mt-0.5">Kirim WA otomatis ke wali saat siswa diabsen</p>
+                <p className="break-words text-xs text-gray-500 mt-0.5">Kirim WA otomatis ke wali saat siswa diabsen</p>
               </div>
             </div>
-            <label className="relative inline-flex items-center cursor-pointer">
+            <label className="relative inline-flex shrink-0 items-center cursor-pointer">
               <input type="checkbox" checked={settings.absensi_siswa_ke_wali} onChange={e => setSettings({...settings, absensi_siswa_ke_wali: e.target.checked})} className="sr-only peer" />
               <div className="w-11 h-6 bg-gray-200 peer-focus:ring-4 peer-focus:ring-primary/20 rounded-full peer peer-checked:after:translate-x-full peer-checked:bg-green-600 after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all"></div>
             </label>
@@ -154,18 +154,18 @@ export default function NotifSettingsPage() {
         </div>
 
         {/* Notif Guru Belum Ceklok */}
-        <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
-          <div className="flex items-start justify-between mb-4">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-orange-100 rounded-lg flex items-center justify-center">
+        <div className="bg-white rounded-xl p-4 sm:p-6 shadow-sm border border-gray-100">
+          <div className="flex items-start justify-between gap-3 mb-4">
+            <div className="flex min-w-0 items-center gap-3">
+              <div className="w-10 h-10 shrink-0 bg-orange-100 rounded-lg flex items-center justify-center">
                 <MessageSquare size={20} className="text-orange-600" />
               </div>
-              <div>
+              <div className="min-w-0">
                 <h3 className="font-semibold text-gray-800">Notifikasi Guru Belum Ceklok</h3>
-                <p className="text-xs text-gray-500 mt-0.5">Kirim WA ke guru yang belum absen</p>
+                <p className="break-words text-xs text-gray-500 mt-0.5">Kirim WA ke guru yang belum absen</p>
               </div>
             </div>
-            <label className="relative inline-flex items-center cursor-pointer">
+            <label className="relative inline-flex shrink-0 items-center cursor-pointer">
               <input type="checkbox" checked={settings.guru_belum_ceklok} onChange={e => setSettings({...settings, guru_belum_ceklok: e.target.checked})} className="sr-only peer" />
               <div className="w-11 h-6 bg-gray-200 peer-focus:ring-4 peer-focus:ring-primary/20 rounded-full peer peer-checked:after:translate-x-full peer-checked:bg-green-600 after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all"></div>
             </label>
@@ -195,7 +195,7 @@ export default function NotifSettingsPage() {
         </div>
       </div>
 
-      <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100 space-y-4">
+      <div className="bg-white rounded-xl p-4 sm:p-6 shadow-sm border border-gray-100 space-y-4">
         <h3 className="font-semibold text-gray-800">Notifikasi Jadwal Guru Mapel</h3>
         <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={settings.notif_jadwal_guru} onChange={e => setSettings({...settings, notif_jadwal_guru: e.target.checked})} /> Aktifkan pengingat 5 menit sebelum jam mapel</label>
         {cekTahunAjaran && !tahunAktif && (
@@ -206,7 +206,7 @@ export default function NotifSettingsPage() {
       </div>
 
       {/* Notif Jadwal Ujian -> Guru Pengawas (hanya saat mode ujian aktif) */}
-      <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100 space-y-4">
+      <div className="bg-white rounded-xl p-4 sm:p-6 shadow-sm border border-gray-100 space-y-4">
         <h3 className="font-semibold text-gray-800">Notifikasi Jadwal Ujian Guru</h3>
         <p className="text-xs text-gray-500 -mt-2">Kirim WA pengingat 5 menit sebelum jadwal ujian ke guru pengawas, hanya pada tanggal yang ditandai sebagai hari ujian di Kalender KBM.</p>
         <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={settings.notif_ujian_guru} onChange={e => setSettings({...settings, notif_ujian_guru: e.target.checked})} /> Aktifkan pengingat 5 menit sebelum jam ujian</label>
@@ -215,18 +215,18 @@ export default function NotifSettingsPage() {
       </div>
 
       {/* Notif Jadwal Ekskul/Peminatan -> Guru Pembina */}
-      <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100 space-y-4">
-        <div className="flex items-start justify-between mb-2">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-violet-100 rounded-lg flex items-center justify-center">
+      <div className="bg-white rounded-xl p-4 sm:p-6 shadow-sm border border-gray-100 space-y-4">
+        <div className="flex items-start justify-between gap-3 mb-2">
+          <div className="flex min-w-0 items-center gap-3">
+            <div className="w-10 h-10 shrink-0 bg-violet-100 rounded-lg flex items-center justify-center">
               <Bell size={20} className="text-violet-600" />
             </div>
-            <div>
+              <div className="min-w-0">
               <h3 className="font-semibold text-gray-800">Notifikasi Jadwal Ekskul / Peminatan</h3>
-              <p className="text-xs text-gray-500 mt-0.5">Kirim WA pengingat ke guru pembina 5 menit sebelum jadwal ekskul/peminatan dimulai</p>
+              <p className="break-words text-xs text-gray-500 mt-0.5">Kirim WA pengingat ke guru pembina 5 menit sebelum jadwal ekskul/peminatan dimulai</p>
             </div>
           </div>
-          <label className="relative inline-flex items-center cursor-pointer">
+          <label className="relative inline-flex shrink-0 items-center cursor-pointer">
             <input type="checkbox" checked={settings.notif_ekskul_guru} onChange={e => setSettings({...settings, notif_ekskul_guru: e.target.checked})} className="sr-only peer" />
             <div className="w-11 h-6 bg-gray-200 peer-focus:ring-4 peer-focus:ring-violet/20 rounded-full peer peer-checked:after:translate-x-full peer-checked:bg-violet-600 after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all"></div>
           </label>
@@ -236,38 +236,38 @@ export default function NotifSettingsPage() {
       </div>
 
       {/* Bot CS WhatsApp -> jawab otomatis pesan masuk sesuai peran */}
-      <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100 space-y-4">
-        <div className="flex items-start justify-between mb-2">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-sky-100 rounded-lg flex items-center justify-center">
+      <div className="bg-white rounded-xl p-4 sm:p-6 shadow-sm border border-gray-100 space-y-4">
+        <div className="flex items-start justify-between gap-3 mb-2">
+          <div className="flex min-w-0 items-center gap-3">
+            <div className="w-10 h-10 shrink-0 bg-sky-100 rounded-lg flex items-center justify-center">
               <MessageSquare size={20} className="text-sky-600" />
             </div>
-            <div>
+              <div className="min-w-0">
               <h3 className="font-semibold text-gray-800">Bot CS WhatsApp</h3>
-              <p className="text-xs text-gray-500 mt-0.5">Jawab otomatis pesan masuk: wali murid lihat tagihan/tabungan/nilai/absensi/jadwal anak, guru lihat jadwal mengajarnya</p>
+              <p className="break-words text-xs text-gray-500 mt-0.5">Jawab otomatis pesan masuk: wali murid lihat tagihan/tabungan/nilai/absensi/jadwal anak, guru lihat jadwal mengajarnya</p>
             </div>
           </div>
-          <label className="relative inline-flex items-center cursor-pointer">
+          <label className="relative inline-flex shrink-0 items-center cursor-pointer">
             <input type="checkbox" checked={settings.notif_cs_bot} onChange={e => setSettings({...settings, notif_cs_bot: e.target.checked})} className="sr-only peer" />
-            <div className="w-11 h-6 bg-gray-200 peer-focus:ring-4 peer-focus:ring-sky/20 rounded-full peer peer-checked:after:translate-x-full peer-checked:bg-sky-600 after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all"></div>
+            <div className="w-11 h-6 bg-gray-200 peer-focus:ring-4 peer-focus:ring-sky-500/20 rounded-full peer peer-checked:after:translate-x-full peer-checked:bg-sky-600 after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all"></div>
           </label>
         </div>
-        <p className="text-xs text-gray-500">Kata kunci yang dikenali: <span className="font-mono">menu/halo, jadwal, nilai, tagihan, tabungan, absensi, info</span>. Hanya nomor terdaftar (guru/wali) yang mendapat data pribadi; nomor asing hanya menerima info lembaga.</p>
+        <p className="break-words text-xs text-gray-500">Kata kunci yang dikenali: <span className="font-mono">menu/halo, jadwal, nilai, tagihan, tabungan, absensi, info</span>. Hanya nomor terdaftar (guru/wali) yang mendapat data pribadi; nomor asing hanya menerima info lembaga.</p>
       </div>
 
       {/* Notif Laporan Keuangan -> Wali Murid */}
-      <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100 space-y-4">
-        <div className="flex items-start justify-between mb-2">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-emerald-100 rounded-lg flex items-center justify-center">
+      <div className="bg-white rounded-xl p-4 sm:p-6 shadow-sm border border-gray-100 space-y-4">
+        <div className="flex items-start justify-between gap-3 mb-2">
+          <div className="flex min-w-0 items-center gap-3">
+            <div className="w-10 h-10 shrink-0 bg-emerald-100 rounded-lg flex items-center justify-center">
               <Bell size={20} className="text-emerald-600" />
             </div>
-            <div>
+              <div className="min-w-0">
               <h3 className="font-semibold text-gray-800">Notifikasi Laporan Keuangan ke Wali Murid</h3>
-              <p className="text-xs text-gray-500 mt-0.5">Kirim WA ringkasan tabungan, tagihan & pembayaran siswa secara terjadwal</p>
+              <p className="break-words text-xs text-gray-500 mt-0.5">Kirim WA ringkasan tabungan, tagihan & pembayaran siswa secara terjadwal</p>
             </div>
           </div>
-          <label className="relative inline-flex items-center cursor-pointer">
+          <label className="relative inline-flex shrink-0 items-center cursor-pointer">
             <input type="checkbox" checked={settings.notif_keuangan_wali} onChange={e => setSettings({...settings, notif_keuangan_wali: e.target.checked})} className="sr-only peer" />
             <div className="w-11 h-6 bg-gray-200 peer-focus:ring-4 peer-focus:ring-primary/20 rounded-full peer peer-checked:after:translate-x-full peer-checked:bg-emerald-600 after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all"></div>
           </label>
@@ -319,9 +319,9 @@ export default function NotifSettingsPage() {
         >Test Kirim Sekarang</button>
       </div>
 
-      <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100 space-y-4">
+      <div className="bg-white rounded-xl p-4 sm:p-6 shadow-sm border border-gray-100 space-y-4">
         <h3 className="font-semibold text-gray-800">Whitelist Notifikasi WA</h3>
-        <p className="text-xs text-gray-500">Nomor/target di daftar ini dikecualikan dari antrean WA.</p>
+        <p className="break-words text-xs text-gray-500">Nomor/target di daftar ini dikecualikan dari antrean WA.</p>
         <div className="grid grid-cols-1 md:grid-cols-4 gap-2"><select value={whiteForm.target_type} onChange={e=>setWhiteForm({...whiteForm,target_type:e.target.value})} className="px-3 py-2 border rounded-lg text-sm"><option value="phone">Nomor</option><option value="siswa">Siswa</option><option value="gtk">GTK</option></select><input value={whiteForm.phone} onChange={e=>setWhiteForm({...whiteForm,phone:e.target.value})} placeholder="Nomor WA" className="px-3 py-2 border rounded-lg text-sm" /><input value={whiteForm.target_id} onChange={e=>setWhiteForm({...whiteForm,target_id:e.target.value})} placeholder="ID target opsional" className="px-3 py-2 border rounded-lg text-sm" /><button onClick={addWhitelist} className="px-4 py-2 bg-gray-800 text-white rounded-lg text-sm">Tambah</button></div>
         <div className="divide-y">{whitelist.map(w=><div key={w.id} className="py-2 flex justify-between text-sm"><span>{w.target_type} {w.phone || w.target_id} {w.reason ? '· '+w.reason : ''}</span><button onClick={()=>delWhitelist(w.id)} className="text-red-600">Hapus</button></div>)}</div>
       </div>
