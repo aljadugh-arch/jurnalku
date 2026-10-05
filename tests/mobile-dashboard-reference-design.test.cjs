@@ -43,6 +43,13 @@ test('kotak header dashboard tidak memotong panel dropdown', () => {
   assert.match(src, /pointer-events-none absolute inset-0 overflow-hidden rounded-2xl/)
 })
 
+test('blok identitas dashboard dibungkus kartu ber-padding dan rounded', () => {
+  const src = read(DASH_HEADER)
+  assert.match(src, /data-dashboard-identity="true"/)
+  // padding + rounded + latar + shadow, sama seperti kartu lain di dashboard
+  assert.match(src, /relative flex items-center gap-3 rounded-3xl bg-white p-4 shadow-sm dark:bg-gray-900/)
+})
+
 /* ── Guru dashboard ── */
 
 test('guru dashboard memakai header lembaga dan menampilkan peran GURU', () => {

@@ -83,8 +83,14 @@ export default function MobileDashboardHeader({ roleOverride, photo }: { roleOve
         </div>
       </div>
 
-      {/* Identitas pengguna: avatar (membuka menu akun) + nama besar + peran */}
-      <div ref={menuRef} className="relative flex items-center gap-3">
+      {/* Identitas pengguna: avatar (membuka menu akun) + nama besar + peran.
+          Dibungkus kartu (padding + rounded + shadow) supaya senada dengan kartu
+          lain di dashboard, bukan menempel langsung di latar halaman. */}
+      <div
+        ref={menuRef}
+        data-dashboard-identity="true"
+        className="relative flex items-center gap-3 rounded-3xl bg-white p-4 shadow-sm dark:bg-gray-900"
+      >
         <button
           type="button"
           data-akun-trigger="true"
