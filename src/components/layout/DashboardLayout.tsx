@@ -2,6 +2,7 @@ import { Outlet } from 'react-router-dom'
 import Sidebar from './Sidebar'
 import Header from './Header'
 import BottomNavigation from './BottomNavigation'
+import AdzanNotifier from '../AdzanNotifier'
 import { useSidebarStore } from '../../stores/sidebarStore'
 import { useAuthStore } from '../../stores/authStore'
 import { isReadOnly } from '../../lib/roles'
@@ -32,6 +33,9 @@ export default function DashboardLayout() {
         </main>
         <BottomNavigation />
       </div>
+      {/* Adzan otomatis saat masuk waktu sholat (hanya untuk peran staf,
+          hanya bila diaktifkan admin di Pengaturan > Notifikasi). */}
+      <AdzanNotifier />
     </div>
   )
 }

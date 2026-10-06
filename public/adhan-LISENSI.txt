@@ -1,0 +1,12 @@
+adhan.mp3 — suara adzan bawaan JURNALKU
+
+Sumber : https://commons.wikimedia.org/wiki/File:Adhan.ogg
+Lisensi: CC0 1.0 Universal (Public Domain Dedication)
+         https://creativecommons.org/publicdomain/zero/1.0/
+Pencipta: Aishatu98 (karya sendiri)
+Diubah : dikonversi ke MP3 96 kbps mono 44,1 kHz + normalisasi kenyaringan
+         (loudnorm I=-16 LUFS) memakai ffmpeg. CC0 mengizinkan perubahan dan
+         penggunaan komersial tanpa izin.
+
+Lembaga boleh menggantinya dengan rekaman adzan sendiri lewat
+Pengaturan > Notifikasi > Adzan > URL suara adzan.

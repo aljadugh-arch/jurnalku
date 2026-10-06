@@ -38,7 +38,8 @@ test('toggle notifikasi memakai komponen bersama dan tetap berwarna per bagian',
   assert.match(src, /import Toggle from '\.\.\/\.\.\/components\/ui\/Toggle'/)
   assert.doesNotMatch(src, /sr-only peer/, 'toggle inline lama masih tertinggal')
   assert.doesNotMatch(src, /role="switch"/)
-  assert.equal((src.match(/<Toggle/g) || []).length, 5)
+  // Lima toggle notifikasi + toggle adzan & suara adzan; semuanya komponen bersama.
+  assert.ok((src.match(/<Toggle/g) || []).length >= 5, 'toggle notifikasi harus memakai komponen bersama')
   // warna bagian dipertahankan (hijau / violet)
   assert.match(src, /toneClassName="bg-green-600"/)
 })

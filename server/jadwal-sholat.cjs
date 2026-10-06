@@ -125,4 +125,42 @@ function hitungJadwalSholat({
   return hasil
 }
 
-module.exports = { hitungJadwalSholat, HARI }
+// Daftar waktu sholat yang bisa dinotifikasi, urut sesuai adzan.
+// 'syuruq' (terbit) sengaja tidak termasuk: itu bukan waktu sholat berjamaah.
+const WAKTU_SHOLAT = ['subuh', 'dzuhur', 'ashar', 'maghrib', 'isya']
+const LABEL_WAKTU = { subuh: 'Subuh', dzuhur: 'Dzuhur', ashar: 'Ashar', maghrib: 'Maghrib', isya: 'Isya' }
+
+/**
+ * Koordinat & zona waktu efektif sebuah lembaga: pakai koordinat manual bila
+ * diisi, kalau tidak ambil dari daftar kota. Dipakai bersama oleh endpoint
+ * /api/jadwal-sholat dan penjadwal notifikasi adzan supaya keduanya sependapat.
+ */
+function koordinatTenant(db, tenantId) {
+  const { getTenantSettings } = require('./tenant-settings.cjs')
+  const { cariKota, DEFAULT_KOTA } = require('./kota-sholat.cjs')
+  const s = getTenantSettings(db, tenantId) || {}
+  const kota = cariKota(s.kota_sholat) || cariKota(DEFAULT_KOTA)
+  const angka = v => (v === '' || v == null || !Number.isFinite(Number(v))) ? null : Number(v)
+  const lat = angka(s.lat_sholat)
+  const lng = angka(s.lng_sholat)
+  const tz = angka(s.tz_sholat)
+  return {
+    kota: kota?.nama || 'Surabaya',
+    provinsi: kota?.provinsi || '',
+    lat: lat == null ? kota.lat : lat,
+    lng: lng == null ? kota.lng : lng,
+    tz: tz == null ? kota.tz : tz,
+  }
+}
+
+// Jadwal sholat satu tanggal untuk sebuah lembaga (koordinat + sumber sekalian).
+function jadwalSholatTenant(db, tenantId, tanggal) {
+  const k = koordinatTenant(db, tenantId)
+  return { ...hitungJadwalSholat({ tanggal, lat: k.lat, lng: k.lng, tz: k.tz }), ...k, sumber: 'hitung lokal' }
+}
+
+module.exports = {
+  hitungJadwalSholat, HARI,
+  WAKTU_SHOLAT, LABEL_WAKTU,
+  koordinatTenant, jadwalSholatTenant,
+}

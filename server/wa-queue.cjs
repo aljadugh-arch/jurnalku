@@ -303,4 +303,82 @@ function queueFinanceReports(db,{tenantId,date,time,force=false}) {
   return out
 }
 
-module.exports={setupWA,normalizePhone,enqueue,claimNext,render,honorificTeacherName,queueWaliAttendance,queueDueTeachers,queueDueSchedules,queueDueExamSchedules,queueDueEkskul,queueFinanceReports,isWhitelisted,shouldSuppress}
+// Penerima notifikasi adzan.
+//  'gtk'   = semua GTK aktif yang punya nomor HP
+//  'admin' = hanya GTK yang terhubung ke akun admin/kepala/bendahara/operator/TU
+//            (jauh lebih hemat kuota WA untuk lembaga besar)
+function penerimaAdzan(db, tenantId, conf) {
+  const target = String(conf?.adzan_target || 'gtk').toLowerCase()
+  const kolom = db.prepare('PRAGMA table_info(gtk)').all().map(c => c.name)
+  const pilih = `g.id, g.nama, g.no_hp${kolom.includes('jenis_kelamin') ? ', g.jenis_kelamin' : ", 'L' jenis_kelamin"}`
+  if (target === 'admin') {
+    return db.prepare(`SELECT ${pilih} FROM gtk g
+      WHERE g.tenant_id=? AND COALESCE(g.status,'aktif')='aktif'
+        AND EXISTS (SELECT 1 FROM users u WHERE u.tenant_id=g.tenant_id AND u.gtk_id=g.id
+          AND u.role IN ('admin','super_admin','kepala','bendahara','operator','tata_usaha','tu'))`).all(tenantId)
+  }
+  return db.prepare(`SELECT ${pilih} FROM gtk g WHERE g.tenant_id=? AND COALESCE(g.status,'aktif')='aktif'`).all(tenantId)
+}
+
+/**
+ * Notifikasi adzan saat masuk waktu sholat.
+ *
+ * Sengaja TIDAK memakai shouldSuppress(): waktu sholat tetap berjalan pada hari
+ * libur maupun hari ujian, jadi penekanan hari libur tidak berlaku di sini.
+ * Waktu diambil dari koordinat lembaga (Pengaturan) lewat jadwalSholatTenant —
+ * sumber yang sama dengan kartu Jadwal Sholat, sehingga keduanya tidak berbeda.
+ */
+function queueAdzanReminders(db, { tenantId, date, time, force = false, paksaWaktu = '' }) {
+  const out = { queued: 0, skipped: 0, missing: 0 }
+  if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(String(date))) return { ...out, reason: 'invalid_date' }
+  if (!time || !/^\d{2}:\d{2}$/.test(String(time))) return { ...out, reason: 'invalid_time' }
+  const conf = db.prepare('SELECT * FROM notif_settings WHERE tenant_id=?').get(tenantId)
+  if (!force && !conf?.notif_adzan) return { ...out, reason: 'disabled' }
+
+  const { WAKTU_SHOLAT, LABEL_WAKTU, jadwalSholatTenant } = require('./jadwal-sholat.cjs')
+  let jadwal
+  try { jadwal = jadwalSholatTenant(db, tenantId, date) } catch { return { ...out, reason: 'invalid_coordinates' } }
+
+  const dipilih = String(conf?.adzan_waktu || '').split(',').map(s => s.trim().toLowerCase()).filter(k => WAKTU_SHOLAT.includes(k))
+  // Kirim-uji: paksa satu waktu tertentu dan lewati pemeriksaan jam.
+  const paksa = String(paksaWaktu || '').trim().toLowerCase()
+  const aktif = WAKTU_SHOLAT.includes(paksa) ? [paksa] : (dipilih.length ? dipilih : WAKTU_SHOLAT)
+  const menitAwal = Math.max(0, Math.min(120, Number(conf?.adzan_menit_awal) || 0))
+
+  const tickMenit = Number(String(time).slice(0, 2)) * 60 + Number(String(time).slice(3, 5))
+  const sekolah = getTenantSettings(db, tenantId, 'nama_lembaga')
+  const template = String(conf?.template_adzan || '').trim()
+    || 'Assalamualaikum, waktu {waktu} telah masuk untuk wilayah {kota} pukul {jam}. Mari tunaikan sholat berjamaah. - {lembaga}'
+
+  for (const waktu of aktif) {
+    const jam = jadwal[waktu]
+    if (!/^\d{2}:\d{2}$/.test(String(jam || ''))) { out.skipped++; continue }
+    const targetMenit = Number(String(jam).slice(0, 2)) * 60 + Number(String(jam).slice(3, 5)) - menitAwal
+    // Toleransi ±5 menit seperti notifikasi lain supaya satu tick yang terlewat tetap terkirim.
+    if (!paksa && (tickMenit < targetMenit - 5 || tickMenit > targetMenit + 5)) { out.skipped++; continue }
+
+    for (const x of penerimaAdzan(db, tenantId, conf)) {
+      if (!normalizePhone(x.no_hp)) { out.missing++; continue }
+      const nama = honorificTeacherName(x.nama, x.jenis_kelamin)
+      const message = render(template, {
+        nama, nama_guru: nama,
+        waktu: LABEL_WAKTU[waktu] || waktu,
+        jam,
+        kota: jadwal.kota,
+        tanggal: date,
+        lembaga: sekolah?.nama_lembaga || 'Sekolah',
+      })
+      const r = enqueue(db, {
+        tenantId, phone: x.no_hp, message,
+        // Kirim-uji memakai kunci berbeda supaya tidak menutup kiriman sungguhan hari itu.
+        key: paksa ? `adzan-uji:${Date.now()}:${waktu}:${x.id}` : `adzan:${date}:${waktu}:${x.id}`,
+        targetType: 'gtk', targetId: x.id,
+      })
+      if (r.queued) out.queued++
+      else out.skipped++
+    }
+  }
+  return out
+}
+
+module.exports={setupWA,normalizePhone,enqueue,claimNext,render,honorificTeacherName,queueWaliAttendance,queueDueTeachers,queueDueSchedules,queueDueExamSchedules,queueDueEkskul,queueFinanceReports,queueAdzanReminders,penerimaAdzan,isWhitelisted,shouldSuppress}

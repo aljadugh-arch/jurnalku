@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
-import { Bell, MessageSquare, Save, Loader2, AlertTriangle } from 'lucide-react'
+import { Bell, BellRing, MessageSquare, Save, Loader2, AlertTriangle } from 'lucide-react'
 import toast from 'react-hot-toast'
 import api from '../../services/api'
 import Toggle from '../../components/ui/Toggle'
@@ -24,6 +24,13 @@ export default function NotifSettingsPage() {
     keuangan_hari: '',
     keuangan_jam: '08:00',
     template_keuangan_wali: '',
+    notif_adzan: false,
+    adzan_waktu: 'subuh,dzuhur,ashar,maghrib,isya',
+    adzan_menit_awal: 0,
+    adzan_target: 'gtk',
+    template_adzan: '',
+    adzan_suara: true,
+    adzan_suara_url: '',
   })
   const [saving, setSaving] = useState(false)
   const [testing, setTesting] = useState(false)
@@ -54,6 +61,13 @@ export default function NotifSettingsPage() {
         keuangan_hari: d.keuangan_hari || '',
         keuangan_jam: d.keuangan_jam || '08:00',
         template_keuangan_wali: d.template_keuangan_wali || '',
+        notif_adzan: !!d.notif_adzan,
+        adzan_waktu: d.adzan_waktu || 'subuh,dzuhur,ashar,maghrib,isya',
+        adzan_menit_awal: Number(d.adzan_menit_awal) || 0,
+        adzan_target: d.adzan_target || 'gtk',
+        template_adzan: d.template_adzan || '',
+        adzan_suara: d.adzan_suara === undefined ? true : !!d.adzan_suara,
+        adzan_suara_url: d.adzan_suara_url || '',
       })
     })
     // Peringatan dini: pengingat jadwal guru hanya terbit bila lembaga punya
@@ -73,6 +87,27 @@ export default function NotifSettingsPage() {
       toast.success('Pengaturan notifikasi berhasil disimpan')
     } catch { toast.error('Gagal menyimpan') }
     finally { setSaving(false) }
+  }
+
+  // Pemilih waktu adzan: minimal satu harus tetap tercentang supaya tidak
+  // kosong (kalau kosong server mengirim semuanya, itu mengejutkan admin).
+  const URUT_WAKTU = ['subuh', 'dzuhur', 'ashar', 'maghrib', 'isya']
+  const LABEL_WAKTU: Record<string, string> = { subuh: 'Subuh', dzuhur: 'Dzuhur', ashar: 'Ashar', maghrib: 'Maghrib', isya: 'Isya' }
+  const waktuAdzanTerpilih = String(settings.adzan_waktu || '').split(',').map(v => v.trim()).filter(v => URUT_WAKTU.includes(v))
+  const toggleWaktuAdzan = (k: string) => {
+    const dipilih = waktuAdzanTerpilih.includes(k)
+      ? waktuAdzanTerpilih.filter(x => x !== k)
+      : [...waktuAdzanTerpilih, k]
+    if (!dipilih.length) return toast.error('Minimal satu waktu harus dipilih')
+    setSettings({ ...settings, adzan_waktu: URUT_WAKTU.filter(x => dipilih.includes(x)).join(',') })
+  }
+  const ujiAdzan = async (waktu: string) => {
+    setTesting(true)
+    try {
+      const r = await api.post('/notif/adzan', { waktu })
+      toast.success(`Adzan ${LABEL_WAKTU[waktu] || waktu} diantrekan ke ${r.data.queued || 0} penerima`)
+    } catch (err: any) { toast.error(err.response?.data?.error || 'Gagal uji kirim') }
+    finally { setTesting(false) }
   }
 
   const addWhitelist = async () => { try { await api.post('/notif-whitelist', whiteForm); const r = await api.get('/notif-whitelist'); setWhitelist(r.data); setWhiteForm({ target_type: 'phone', phone: '', target_id: '', reason: '' }); toast.success('Whitelist ditambah') } catch { toast.error('Gagal whitelist') } }
@@ -328,6 +363,126 @@ export default function NotifSettingsPage() {
           disabled={testing}
           className="px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm disabled:opacity-50"
         >Test Kirim Sekarang</button>
+      </div>
+
+      {/* ===== Notifikasi Adzan ===== */}
+      <div className="bg-white rounded-xl p-4 sm:p-6 shadow-sm border border-gray-100 space-y-4">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <h3 className="flex items-center gap-2 font-semibold text-gray-800">
+              <BellRing size={18} className="shrink-0 text-emerald-600" /> Notifikasi Adzan
+            </h3>
+            <p className="mt-0.5 break-words text-xs text-gray-500">
+              Pesan WA dan suara adzan saat masuk waktu sholat. Waktu dihitung dari kota/koordinat lembaga di menu Pengaturan.
+            </p>
+          </div>
+          <Toggle
+            checked={settings.notif_adzan}
+            onChange={next => setSettings({ ...settings, notif_adzan: next })}
+            label="Notifikasi Adzan"
+          />
+        </div>
+
+        <div className={'space-y-4 ' + (settings.notif_adzan ? '' : 'opacity-60')}>
+          <div>
+            <label className="mb-2 block text-sm font-medium text-gray-700">Waktu yang dinotifikasi</label>
+            <div className="flex flex-wrap gap-2">
+              {URUT_WAKTU.map(k => {
+                const aktif = waktuAdzanTerpilih.includes(k)
+                return (
+                  <button
+                    key={k}
+                    type="button"
+                    aria-pressed={aktif}
+                    onClick={() => toggleWaktuAdzan(k)}
+                    className={'rounded-lg border px-3 py-1.5 text-sm font-medium transition-colors ' + (aktif
+                      ? 'border-emerald-500 bg-emerald-50 text-emerald-700'
+                      : 'border-gray-200 bg-white text-gray-500 hover:bg-gray-50')}
+                  >
+                    {LABEL_WAKTU[k]}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <div className="min-w-0">
+              <label className="mb-1 block text-sm font-medium text-gray-700">Kirim berapa menit sebelum adzan</label>
+              <input
+                type="number" min={0} max={120}
+                value={settings.adzan_menit_awal}
+                onChange={e => setSettings({ ...settings, adzan_menit_awal: Math.max(0, Math.min(120, Number(e.target.value) || 0)) })}
+                className="w-full px-3 py-2 border rounded-lg text-sm"
+              />
+              <p className="mt-1 text-xs text-gray-400">0 = tepat saat adzan. Suara di aplikasi selalu tepat waktu.</p>
+            </div>
+            <div className="min-w-0">
+              <label className="mb-1 block text-sm font-medium text-gray-700">Penerima pesan WA</label>
+              <select
+                value={settings.adzan_target}
+                onChange={e => setSettings({ ...settings, adzan_target: e.target.value })}
+                className="w-full px-3 py-2 border rounded-lg text-sm"
+              >
+                <option value="gtk">Semua GTK yang punya nomor HP</option>
+                <option value="admin">Hanya admin / kepala / bendahara / TU</option>
+              </select>
+              <p className="mt-1 text-xs text-gray-400">Pilih yang kedua untuk menghemat kuota WA di lembaga besar.</p>
+            </div>
+          </div>
+
+          <div className="rounded-xl border border-gray-100 bg-gray-50/60 p-3">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-sm font-medium text-gray-700">Suara adzan di aplikasi</p>
+                <p className="mt-0.5 break-words text-xs text-gray-400">
+                  Diputar di peramban saat waktu sholat masuk (peran staf). Pastikan volume perangkat tidak senyap.
+                </p>
+              </div>
+              <Toggle
+                checked={settings.adzan_suara}
+                onChange={next => setSettings({ ...settings, adzan_suara: next })}
+                label="Suara adzan di aplikasi"
+              />
+            </div>
+            <div className="mt-3 min-w-0">
+              <label className="mb-1 block text-xs font-medium text-gray-600">URL suara adzan sendiri <span className="text-gray-400">(opsional)</span></label>
+              <input
+                value={settings.adzan_suara_url}
+                onChange={e => setSettings({ ...settings, adzan_suara_url: e.target.value })}
+                placeholder="Kosongkan untuk memakai adzan bawaan (/adhan.mp3)"
+                className="w-full px-3 py-2 border rounded-lg text-sm"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="mb-1 block text-sm font-medium text-gray-700">Isi pesan WA</label>
+            <textarea
+              value={settings.template_adzan}
+              onChange={e => setSettings({ ...settings, template_adzan: e.target.value })}
+              rows={3}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+              placeholder="Assalamualaikum, waktu {waktu} telah masuk untuk wilayah {kota} pukul {jam}. - {lembaga}"
+            />
+            <p className="mt-1 break-words text-xs text-gray-400">Boleh memakai: {'{nama}'}, {'{waktu}'}, {'{jam}'}, {'{kota}'}, {'{tanggal}'}, {'{lembaga}'}</p>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-sm text-gray-600">Uji kirim:</span>
+            {URUT_WAKTU.map(k => (
+              <button
+                key={k}
+                type="button"
+                disabled={testing}
+                onClick={() => ujiAdzan(k)}
+                className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-700 disabled:opacity-50"
+              >
+                {LABEL_WAKTU[k]}
+              </button>
+            ))}
+          </div>
+        </div>
       </div>
 
       <div className="bg-white rounded-xl p-4 sm:p-6 shadow-sm border border-gray-100 space-y-4">

@@ -43,7 +43,7 @@ const { createKtsPdf, CARD_W: KTS_W, CARD_H: KTS_H } = require('./kts-pdf-servic
 const { createRaporK13Pdf, createK13LedgerPdf } = require('./rapor-k13-pdf-service.cjs')
 const { getK13RaporData, getPeringkatK13, getK13Ledger, normalizeK13Nilai } = require('./rapor-k13-service.cjs')
 const { parseCsv, parseExcelBuffer, parseExcelBufferAll, buildImportPreview, clampNilai, fetchGoogleSheets } = require('./nilai-import-service.cjs')
-const { hitungJadwalSholat } = require('./jadwal-sholat.cjs')
+const { hitungJadwalSholat, jadwalSholatTenant } = require('./jadwal-sholat.cjs')
 const { KOTA_SHOLAT, DEFAULT_KOTA, cariKota } = require('./kota-sholat.cjs')
 const { getCategoryRecap } = require('./attendance-recap.cjs')
 const { buildRekapRange, getPeriodicAttendanceRecap, deduplicateAttendance } = require('./attendance-periodic-recap.cjs')
@@ -1869,18 +1869,12 @@ app.get('/api/kota-sholat', authMiddleware, (_req, res) => {
 })
 
 app.get('/api/jadwal-sholat', authMiddleware, (req, res) => {
-  const s = getTenantSettings(db, req.tenantId) || {}
-  const kotaTerpilih = cariKota(s.kota_sholat)
-  const kota = kotaTerpilih || cariKota(DEFAULT_KOTA) || KOTA_SHOLAT[0]
-  // Koordinat manual menimpa koordinat kota bila diisi admin.
-  const lat = s.lat_sholat != null && Number.isFinite(Number(s.lat_sholat)) ? Number(s.lat_sholat) : kota.lat
-  const lng = s.lng_sholat != null && Number.isFinite(Number(s.lng_sholat)) ? Number(s.lng_sholat) : kota.lng
-  const tz = s.tz_sholat != null && Number.isFinite(Number(s.tz_sholat)) ? Number(s.tz_sholat) : kota.tz
   const diminta = String(req.query.tanggal || '')
   const tanggal = /^\d{4}-\d{2}-\d{2}$/.test(diminta) ? diminta : todayJakarta()
   try {
-    const jadwal = hitungJadwalSholat({ tanggal, lat, lng, tz })
-    res.json({ ...jadwal, kota: kota.nama, provinsi: kota.provinsi, lat, lng, tz, sumber: 'hitung lokal' })
+    // Sumber yang sama dengan penjadwal notifikasi adzan (jadwal-sholat.cjs),
+    // supaya kartu di dashboard dan pesan adzan tidak pernah berbeda.
+    res.json(jadwalSholatTenant(db, req.tenantId, tanggal))
   } catch (error) {
     res.status(400).json({ error: error.message })
   }
@@ -5307,7 +5301,18 @@ for (const [name, definition] of [
   ['keuangan_frekuensi', "TEXT DEFAULT 'bulanan'"],
   ['keuangan_hari', "TEXT DEFAULT ''"],
   ['keuangan_jam', "TEXT DEFAULT '08:00'"],
-  ['template_keuangan_wali', "TEXT DEFAULT 'Assalamualaikum {nama_ortu}, berikut ringkasan keuangan ananda {nama}:\n{tagihan}\n\nSaldo tabungan: {saldo_tabungan}\n\n- {lembaga}'"]
+  ['template_keuangan_wali', "TEXT DEFAULT 'Assalamualaikum {nama_ortu}, berikut ringkasan keuangan ananda {nama}:\n{tagihan}\n\nSaldo tabungan: {saldo_tabungan}\n\n- {lembaga}'"],
+  // Notifikasi adzan saat masuk waktu sholat (dihitung dari koordinat lembaga di Pengaturan).
+  // Daftar waktu disimpan sebagai teks dipisah koma agar sederhana, mis. 'subuh,dzuhur,ashar,maghrib,isya'.
+  ['notif_adzan', 'INTEGER DEFAULT 0'],
+  ['adzan_waktu', "TEXT DEFAULT 'subuh,dzuhur,ashar,maghrib,isya'"],
+  ['adzan_menit_awal', 'INTEGER DEFAULT 0'],
+  ['adzan_target', "TEXT DEFAULT 'gtk'"],
+  ['template_adzan', "TEXT DEFAULT 'Assalamualaikum, waktu {waktu} telah masuk untuk wilayah {kota} pukul {jam}. Mari tunaikan sholat berjamaah. - {lembaga}'"],
+  // Suara adzan di aplikasi (diputar di peramban saat waktu sholat masuk).
+  // Kosong = pakai berkas bawaan /adhan.mp3.
+  ['adzan_suara', 'INTEGER DEFAULT 1'],
+  ['adzan_suara_url', "TEXT DEFAULT ''"]
 ]) if (!db.prepare('PRAGMA table_info(notif_settings)').all().some(c => c.name === name)) db.exec(`ALTER TABLE notif_settings ADD COLUMN ${name} ${definition}`)
 
 app.get('/api/notif-settings', authMiddleware, (req, res) => {
@@ -5315,9 +5320,20 @@ app.get('/api/notif-settings', authMiddleware, (req, res) => {
 })
 
 app.put('/api/notif-settings', ADMIN, (req, res) => {
-  const { absensi_siswa_ke_wali, guru_belum_ceklok, batas_ceklok_guru, template_absensi_wali, template_guru_ceklok, notif_jadwal_guru, template_jadwal_guru, notif_ujian_guru, template_ujian_guru, notif_ekskul_guru, template_ekskul_guru, notif_cs_bot, notif_keuangan_wali, keuangan_frekuensi, keuangan_hari, keuangan_jam, template_keuangan_wali } = req.body
-  db.prepare("UPDATE notif_settings SET absensi_siswa_ke_wali=?, guru_belum_ceklok=?, batas_ceklok_guru=?, template_absensi_wali=?, template_guru_ceklok=?, notif_jadwal_guru=?, template_jadwal_guru=?, notif_ujian_guru=?, template_ujian_guru=?, notif_ekskul_guru=?, template_ekskul_guru=?, notif_cs_bot=?, notif_keuangan_wali=?, keuangan_frekuensi=?, keuangan_hari=?, keuangan_jam=?, template_keuangan_wali=? WHERE tenant_id=?")
-    .run(absensi_siswa_ke_wali ? 1 : 0, guru_belum_ceklok ? 1 : 0, batas_ceklok_guru || '07:30', template_absensi_wali || '', template_guru_ceklok || '', notif_jadwal_guru ? 1 : 0, template_jadwal_guru || '', notif_ujian_guru ? 1 : 0, template_ujian_guru || '', notif_ekskul_guru ? 1 : 0, template_ekskul_guru || '', notif_cs_bot ? 1 : 0, notif_keuangan_wali ? 1 : 0, keuangan_frekuensi || 'bulanan', keuangan_hari || '', keuangan_jam || '08:00', template_keuangan_wali || '', req.tenantId)
+  // Pastikan baris pengaturan ada. UPDATE tanpa baris tidak melakukan apa pun,
+  // sehingga admin melihat "tersimpan" padahal tidak ada yang berubah.
+  db.prepare('INSERT OR IGNORE INTO notif_settings (id, tenant_id) VALUES (?,?)').run('main_' + req.tenantId, req.tenantId)
+  const { absensi_siswa_ke_wali, guru_belum_ceklok, batas_ceklok_guru, template_absensi_wali, template_guru_ceklok, notif_jadwal_guru, template_jadwal_guru, notif_ujian_guru, template_ujian_guru, notif_ekskul_guru, template_ekskul_guru, notif_cs_bot, notif_keuangan_wali, keuangan_frekuensi, keuangan_hari, keuangan_jam, template_keuangan_wali, notif_adzan, adzan_waktu, adzan_menit_awal, adzan_target, template_adzan, adzan_suara, adzan_suara_url } = req.body
+  // Daftar waktu adzan: hanya kunci yang dikenal, disimpan sebagai teks dipisah koma.
+  const WAKTU_SAH = ['subuh', 'dzuhur', 'ashar', 'maghrib', 'isya']
+  const daftarAdzan = (Array.isArray(adzan_waktu) ? adzan_waktu : String(adzan_waktu || '').split(','))
+    .map(v => String(v).trim().toLowerCase())
+    .filter(k => WAKTU_SAH.includes(k))
+  const waktuAdzan = (daftarAdzan.length ? [...new Set(daftarAdzan)] : WAKTU_SAH).join(',')
+  const menitAwalAdzan = Math.max(0, Math.min(120, Number(adzan_menit_awal) || 0))
+  const targetAdzan = ['gtk', 'admin'].includes(String(adzan_target || '').toLowerCase()) ? String(adzan_target).toLowerCase() : 'gtk'
+  db.prepare("UPDATE notif_settings SET absensi_siswa_ke_wali=?, guru_belum_ceklok=?, batas_ceklok_guru=?, template_absensi_wali=?, template_guru_ceklok=?, notif_jadwal_guru=?, template_jadwal_guru=?, notif_ujian_guru=?, template_ujian_guru=?, notif_ekskul_guru=?, template_ekskul_guru=?, notif_cs_bot=?, notif_keuangan_wali=?, keuangan_frekuensi=?, keuangan_hari=?, keuangan_jam=?, template_keuangan_wali=?, notif_adzan=?, adzan_waktu=?, adzan_menit_awal=?, adzan_target=?, template_adzan=?, adzan_suara=?, adzan_suara_url=? WHERE tenant_id=?")
+    .run(absensi_siswa_ke_wali ? 1 : 0, guru_belum_ceklok ? 1 : 0, batas_ceklok_guru || '07:30', template_absensi_wali || '', template_guru_ceklok || '', notif_jadwal_guru ? 1 : 0, template_jadwal_guru || '', notif_ujian_guru ? 1 : 0, template_ujian_guru || '', notif_ekskul_guru ? 1 : 0, template_ekskul_guru || '', notif_cs_bot ? 1 : 0, notif_keuangan_wali ? 1 : 0, keuangan_frekuensi || 'bulanan', keuangan_hari || '', keuangan_jam || '08:00', template_keuangan_wali || '', notif_adzan ? 1 : 0, waktuAdzan, menitAwalAdzan, targetAdzan, template_adzan || '', adzan_suara ? 1 : 0, String(adzan_suara_url || '').trim(), req.tenantId)
   res.json({ success: true })
 })
 
@@ -5335,6 +5351,23 @@ app.delete('/api/notif-whitelist/:id', ADMIN, (req, res) => {
 })
 app.post('/api/notif/jadwal-guru', STAFF, (req, res) => {
   res.json({ success: true, ...waQueue.queueDueSchedules(db, { tenantId: req.tenantId, date: todayJakarta(), time: timeJakarta() }) })
+})
+
+// Kirim-uji notifikasi adzan ke penerima (opsional: paksa satu waktu tertentu).
+app.post('/api/notif/adzan', STAFF, (req, res) => {
+  const conf = db.prepare('SELECT * FROM notif_settings WHERE tenant_id=?').get(req.tenantId)
+  const paksa = String(req.body?.waktu || '').trim().toLowerCase()
+  if (!conf?.notif_adzan && !paksa) return res.status(400).json({ error: 'Notifikasi adzan belum diaktifkan' })
+  res.json({
+    success: true,
+    ...waQueue.queueAdzanReminders(db, {
+      tenantId: req.tenantId,
+      date: todayJakarta(),
+      time: timeJakarta(),
+      force: true,
+      paksaWaktu: paksa,
+    }),
+  })
 })
 
 // Test kirim notif jadwal ujian ke guru pengawas.
@@ -9678,6 +9711,8 @@ setInterval(async () => {
         waQueue.queueDueEkskul(db, { tenantId: t.id, date, time })
         // Laporan keuangan otomatis ke wali murid (mingguan/bulanan)
         waQueue.queueFinanceReports(db, { tenantId: t.id, date, time })
+        // Notifikasi adzan saat masuk waktu sholat (tetap jalan walau hari libur)
+        waQueue.queueAdzanReminders(db, { tenantId: t.id, date, time })
       } catch {}
     }
   } catch {}
