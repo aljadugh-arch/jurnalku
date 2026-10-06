@@ -84,3 +84,27 @@ test('guru and siswa mobile dashboards use compact hero card and section spacing
     assert.doesNotMatch(source, /px-5 pt-12 pb-8/)
   }
 })
+
+test('semua dashboard memakai irama spasi yang sama antar elemen', () => {
+  for (const file of [
+    'src/pages/admin/MobileAdminDashboard.tsx',
+    'src/pages/admin/MobileBendaharaDashboard.tsx',
+    'src/pages/guru/MobileGuruDashboard.tsx',
+    'src/pages/siswa/MobileSiswaDashboard.tsx',
+  ]) {
+    const source = read(file)
+    // 12px seragam: header -> kartu isi, dan antar kartu isi
+    assert.match(source, /data-mobile-compact-dashboard="true" className="space-y-3 px-4 pt-3"/)
+  }
+  // header internal juga 12px, dan tidak ada sisa padding ganda
+  const header = read('src/components/MobileDashboardHeader.tsx')
+  assert.match(header, /<header data-dashboard-header="true" className="space-y-3">/)
+  for (const file of [
+    'src/pages/admin/MobileAdminDashboard.tsx',
+    'src/pages/admin/MobileBendaharaDashboard.tsx',
+    'src/pages/guru/MobileGuruDashboard.tsx',
+    'src/pages/siswa/MobileSiswaDashboard.tsx',
+  ]) {
+    assert.doesNotMatch(read(file), /px-4 pt-4 pb-2|pt-4 pb-2/, `${file} masih menyisakan jarak ganda`)
+  }
+})

@@ -36,11 +36,11 @@ export default function MobileBendaharaDashboard({ data }: { data: BendaharaData
   return (
     <div className="min-h-[100dvh] -mx-4 -mt-3 bg-slate-50 pb-6 dark:bg-gray-950 sm:-mx-6">
       {/* ── HEADER: sama seperti dashboard admin & guru (logo lembaga + identitas) ── */}
-      <div className="px-4 pt-4 pb-2">
+      <div className="px-4 pt-4">
         <MobileDashboardHeader />
       </div>
 
-      <div data-mobile-compact-dashboard="true" className="space-y-4 px-4">
+      <div data-mobile-compact-dashboard="true" className="space-y-3 px-4 pt-3">
         {/* ── RINGKASAN KEUANGAN (dulu hero bergradasi; kini kartu senada) ── */}
         <section className="rounded-3xl bg-white p-4 shadow-sm dark:bg-gray-900">
           <div className="mb-3">

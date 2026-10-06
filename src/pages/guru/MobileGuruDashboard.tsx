@@ -105,11 +105,11 @@ export default function MobileGuruDashboard() {
 
   return (
     <div className="lg:hidden min-h-[100dvh] -mx-4 -mt-3 bg-slate-50 pb-6 dark:bg-gray-950 sm:-mx-6">
-      <div className="px-4 pt-4 pb-2">
+      <div className="px-4 pt-4">
         <MobileDashboardHeader roleOverride={peran} photo={data.gtk?.foto || null} />
       </div>
 
-      <div data-mobile-compact-dashboard="true" className="space-y-4 px-4">
+      <div data-mobile-compact-dashboard="true" className="space-y-3 px-4 pt-3">
         {/* ── DUA GRID UTAMA: Ceklok Kehadiran & Jadwal Mengajar ── */}
         <div data-guru-main-grid="true" className="grid grid-cols-2 gap-3">
           <button

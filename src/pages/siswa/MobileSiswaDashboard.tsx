@@ -124,9 +124,9 @@ export default function MobileSiswaDashboard() {
 
   return (
     <div className="min-h-screen -mx-4 -mt-3 bg-[#F8FAFC] pb-8 text-slate-800 dark:bg-gray-950 dark:text-gray-100 sm:-mx-6">
-      <div className="px-4 pt-4 pb-2"><MobileDashboardHeader photo={siswa?.foto || null} /></div>
+      <div className="px-4 pt-4"><MobileDashboardHeader photo={siswa?.foto || null} /></div>
 
-      <div data-mobile-compact-dashboard="true" className="px-4 pt-4 space-y-3.5">
+      <div data-mobile-compact-dashboard="true" className="space-y-3 px-4 pt-3">
         {/* ─── 2. MOTIVATIONAL BANNER (Semangat Belajar) ─────────────── */}
         <div 
           className="relative overflow-hidden rounded-2xl p-4 text-white shadow-md"

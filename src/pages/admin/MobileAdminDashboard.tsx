@@ -55,11 +55,11 @@ export default function MobileAdminDashboard({ stats }: Props) {
 
   return (
     <div className="lg:hidden min-h-screen -mx-4 -mt-3 bg-slate-50 pb-8 dark:bg-gray-950">
-      <div className="px-4 pb-2 pt-4">
+      <div className="px-4 pt-4">
         <MobileDashboardHeader />
       </div>
 
-      <main data-mobile-compact-dashboard="true" className="space-y-4 px-4 pt-3">
+      <main data-mobile-compact-dashboard="true" className="space-y-3 px-4 pt-3">
         {/* ── MENU GRID 4x2 (ubin terakhir: Lainnya) ── */}
         <section className="rounded-3xl bg-white p-4 shadow-sm dark:bg-gray-900">
           <h2 className="mb-3 text-sm font-bold text-slate-900 dark:text-white">Menu Layanan</h2>
