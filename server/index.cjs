@@ -2590,7 +2590,7 @@ app.post('/api/auth/register', accountLimiter, (req, res) => {
 
   // Create default settings for tenant
   ensureTenantSettings(db, tenantId, { nama_lembaga: nama_lembaga || nama })
-  db.prepare('INSERT INTO notif_settings (id, tenant_id) VALUES (?,?)').run('main_' + tenantId, tenantId)
+  db.prepare('INSERT OR IGNORE INTO notif_settings (id, tenant_id) VALUES (?,?)').run('main_' + tenantId, tenantId)
 
   // Auto-login: return token + user so FE can go straight to dashboard.
   const token = jwt.sign({ id, role: 'admin', nama, email, tenant_id: tenantId }, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN })
@@ -5315,8 +5315,20 @@ for (const [name, definition] of [
   ['adzan_suara_url', "TEXT DEFAULT ''"]
 ]) if (!db.prepare('PRAGMA table_info(notif_settings)').all().some(c => c.name === name)) db.exec(`ALTER TABLE notif_settings ADD COLUMN ${name} ${definition}`)
 
+// ── Rapikan notif_settings ──
+// Satu lembaga = satu baris. Lihat server/notif-settings.cjs untuk alasan
+// lengkapnya (baris duplikat membuat setelan tersimpan tidak terbaca klien,
+// dan fitur seperti adzan mati tanpa jejak).
+try {
+  const { rapikanNotifSettings } = require('./notif-settings.cjs')
+  const r = rapikanNotifSettings(db)
+  if (r.digabung || r.dibuat || r.dilewati) console.log(`[notif_settings] digabung=${r.digabung} dibuat=${r.dibuat}${r.dilewati ? ' (dilewati: ' + r.dilewati + ')' : ''}`)
+} catch (e) { console.error('[notif_settings] rapikan gagal:', e.message) }
+
 app.get('/api/notif-settings', authMiddleware, (req, res) => {
-  res.json(db.prepare("SELECT * FROM notif_settings WHERE tenant_id = ?").get(req.tenantId) || {})
+  // Satu baris per lembaga (dijamin indeks unik); ORDER BY rowid DESC menjaga hasil
+  // tetap deterministik bila masih ada sisa baris lama sebelum pembersihan.
+  res.json(db.prepare('SELECT * FROM notif_settings WHERE tenant_id = ? ORDER BY rowid DESC LIMIT 1').get(req.tenantId) || {})
 })
 
 app.put('/api/notif-settings', ADMIN, (req, res) => {

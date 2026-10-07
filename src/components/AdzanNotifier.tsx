@@ -76,24 +76,33 @@ export default function AdzanNotifier() {
      putaran singkat tanpa suara, sehingga pemutaran otomatis nanti diizinkan. */
   useEffect(() => {
     if (!staf) return
+    let lepas = false
+    const bersihkan = () => {
+      window.removeEventListener('pointerdown', buka)
+      window.removeEventListener('keydown', buka)
+    }
+    // JANGAN pakai { once: true }: gestur pertama sering terjadi sebelum elemen
+    // audio terpasang / sebelum pengaturan termuat. Dulu listener terpakai pada
+    // panggilan yang gagal itu lalu hilang — sesudahnya peramban memblokir
+    // autoplay untuk selamanya dan adzan tidak pernah berbunyi sendiri.
     const buka = () => {
+      if (lepas) return
       const a = audioRef.current
       if (!a) return
       try {
         a.muted = true
         const p = a.play()
         if (p && typeof p.then === 'function') {
-          p.then(() => { a.pause(); a.currentTime = 0; a.muted = false; setTerkunci(false) })
-           .catch(() => { a.muted = false; setTerkunci(true) })
-        } else { a.muted = false }
+          p.then(() => {
+            a.pause(); a.currentTime = 0; a.muted = false
+            lepas = true; setTerkunci(false); bersihkan()
+          }).catch(() => { a.muted = false; setTerkunci(true) })
+        } else { a.muted = false; lepas = true; setTerkunci(false); bersihkan() }
       } catch { try { a.muted = false } catch { /* abaikan */ } }
     }
-    window.addEventListener('pointerdown', buka, { once: true })
-    window.addEventListener('keydown', buka, { once: true })
-    return () => {
-      window.removeEventListener('pointerdown', buka)
-      window.removeEventListener('keydown', buka)
-    }
+    window.addEventListener('pointerdown', buka)
+    window.addEventListener('keydown', buka)
+    return bersihkan
   }, [staf])
 
   const bunyikan = useCallback(async (waktu: string, jam: string) => {
@@ -149,17 +158,19 @@ export default function AdzanNotifier() {
     return () => clearInterval(t)
   }, [staf, jadwal, conf, bunyikan])
 
-  if (!staf || !conf?.notif_adzan || !conf?.adzan_suara) return null
+  if (!staf) return null
 
-  const sumber = String(conf.adzan_suara_url || '').trim() || '/adhan.mp3'
+  const sumber = String(conf?.adzan_suara_url || '').trim() || '/adhan.mp3'
+  const berbunyi = !!(bunyi && !matikan)
 
   return (
     <>
-      {/* Elemen audio selalu terpasang (walau belum berbunyi) supaya bisa
-          "dipanaskan" pada gestur pertama dan siap diputar otomatis. */}
+      {/* Elemen audio SELALU terpasang untuk staf — termasuk selagi fitur belum
+          dinyalakan — supaya bisa "dipanaskan" pada gestur pertama dan siap
+          diputar otomatis saat waktunya tiba. */}
       <audio ref={audioRef} src={sumber} preload="auto" data-adzan-audio="true" />
 
-      {bunyi && !matikan && (
+      {berbunyi && (
         <div
           data-adzan-panel="true"
           className="fixed inset-x-3 bottom-20 z-[120] mx-auto max-w-md rounded-2xl border border-emerald-200 bg-white p-4 shadow-2xl dark:border-emerald-800 dark:bg-gray-900 sm:bottom-6"

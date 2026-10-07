@@ -31,10 +31,35 @@ test('klien: hanya berbunyi di jendela sempit dan tidak mengulang', () => {
   assert.match(notifier, /JENDELA_MENIT/)
   assert.match(notifier, /KUNCI_SIMPAN/)
   assert.match(notifier, /localStorage/)
-  // suara mengikuti sakelar admin, dan ada tombol putar bila autoplay diblokir
-  assert.match(notifier, /!conf\?\.notif_adzan \|\| !conf\?\.adzan_suara/)
+  // gerbang fitur berada di efek pemeriksa waktu (bukan lagi di dalam render):
+  // komponen HARUS tetap ter-render untuk staf supaya elemen audio terpasang dan
+  // bisa "dipanaskan" pada gestur pertama, walau admin belum menyalakan fitur.
+  assert.match(notifier, /if \(!staf \|\| !jadwal \|\| !conf\) return/)
+  assert.match(notifier, /if \(!conf\.notif_adzan \|\| !conf\.adzan_suara\) return/)
+  assert.match(notifier, /if \(!staf\) return null/)
   assert.match(notifier, /data-adzan-putar="true"/)
   assert.match(notifier, /data-adzan-hentikan="true"/)
+})
+
+test('klien: elemen audio terpasang walau fitur belum dinyalakan + gestur pertama tidak sekalian terbuang', () => {
+  const notifier = baca('src/components/AdzanNotifier.tsx')
+  // Elemen audio TIDAK boleh berada di dalam blok kondisional yang menunggu
+  // notif_adzan/adzan_suara — kalau ya, gestur pertama hanya menemukan
+  // audioRef.current === null, pemanasan gagal, dan autoplay terkunci permanen.
+  const setelahGuard = notifier.slice(notifier.indexOf('if (!staf) return null'))
+  assert.match(setelahGuard, /<audio ref=\{audioRef\}/, 'elemen audio harus ada setelah guard staf saja')
+  // listener gestur tidak boleh pakai { once: true }
+  assert.doesNotMatch(notifier, /addEventListener\('pointerdown', buka, \{ once: true \}\)/)
+  assert.doesNotMatch(notifier, /addEventListener\('keydown', buka, \{ once: true \}\)/)
+})
+
+test('UI: kartu adzan menyediakan uji suara langsung + info adzan berikutnya', () => {
+  const page = baca('src/pages/admin/NotifSettingsPage.tsx')
+  assert.match(page, /data-adzan-uji-suara="true"/)
+  assert.match(page, /data-adzan-contoh="true"/)
+  assert.match(page, /putarContohSuara/)
+  assert.match(page, /Adzan berikutnya/)
+  assert.match(page, /api\.get\('\/jadwal-sholat'\)/)
 })
 
 test('server: adzan memakai sumber waktu yang sama dengan kartu jadwal sholat', () => {

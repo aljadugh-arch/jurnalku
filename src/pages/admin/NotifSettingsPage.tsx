@@ -1,6 +1,6 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Link } from 'react-router-dom'
-import { Bell, BellRing, MessageSquare, Save, Loader2, AlertTriangle } from 'lucide-react'
+import { Bell, BellRing, MessageSquare, Save, Loader2, AlertTriangle, Volume2, Square, Clock } from 'lucide-react'
 import toast from 'react-hot-toast'
 import api from '../../services/api'
 import Toggle from '../../components/ui/Toggle'
@@ -38,6 +38,11 @@ export default function NotifSettingsPage() {
   const [cekTahunAjaran, setCekTahunAjaran] = useState(false)
   const [whitelist, setWhitelist] = useState<any[]>([])
   const [whiteForm, setWhiteForm] = useState({ target_type: 'phone', phone: '', target_id: '', reason: '' })
+  // Uji suara adzan langsung di peramban admin — supaya bisa dipastikan berbunyi
+  // tanpa harus menunggu waktu sholat tiba.
+  const audioContohRef = useRef<HTMLAudioElement | null>(null)
+  const [memutarContoh, setMemutarContoh] = useState(false)
+  const [jadwalSholat, setJadwalSholat] = useState<any>(null)
 
   useEffect(() => {
     api.get('/notif-whitelist').then(r => setWhitelist(r.data)).catch(() => {})
@@ -78,6 +83,9 @@ export default function NotifSettingsPage() {
       const hariIniWIB = new Date(Date.now() + 7 * 3600 * 1000).toISOString().slice(0, 10)
       setTahunAktif(rows.find((t: any) => t.aktif && t.tanggal_mulai <= hariIniWIB && hariIniWIB <= t.tanggal_selesai) || null)
     }).catch(() => {}).finally(() => setCekTahunAjaran(true))
+    // Waktu sholat hari ini (dihitung server dari kota/koordinat lembaga) supaya
+    // admin melihat kapan adzan berikutnya akan berbunyi.
+    api.get('/jadwal-sholat').then(r => setJadwalSholat(r.data || null)).catch(() => {})
   }, [])
 
   const handleSave = async () => {
@@ -109,6 +117,29 @@ export default function NotifSettingsPage() {
     } catch (err: any) { toast.error(err.response?.data?.error || 'Gagal uji kirim') }
     finally { setTesting(false) }
   }
+
+  // Putar berkas suara yang akan dipakai (URL lembaga bila diisi, kalau tidak
+  // /adhan.mp3). Tombol ini ada karena fitur adzan tidak bisa "dicoba" tanpa
+  // menunggu waktu sholat — dulu admin hanya bisa menebak apakah suaranya jalan.
+  const putarContohSuara = async () => {
+    const a = audioContohRef.current
+    if (!a) return
+    if (!a.paused) { a.pause(); a.currentTime = 0; setMemutarContoh(false); return }
+    a.currentTime = 0
+    try { await a.play(); setMemutarContoh(true) }
+    catch { setMemutarContoh(false); toast.error('Peramban menolak memutar suara. Coba klik lagi.') }
+  }
+
+  // Adzan berikutnya hari ini menurut jadwal server (untuk ditampilkan).
+  const adzanBerikutnya = (() => {
+    if (!jadwalSholat) return null
+    const menit = (j?: string) => /^\d{2}:\d{2}$/.test(String(j || '')) ? Number(String(j).slice(0, 2)) * 60 + Number(String(j).slice(3)) : -1
+    const sekarang = Number(new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Jakarta', hour: '2-digit', minute: '2-digit', hour12: false }).format(new Date()).replace(':', ''))
+    const nowMenit = Math.floor(sekarang / 100) * 60 + (sekarang % 100)
+    const daftar = URUT_WAKTU.filter(k => waktuAdzanTerpilih.includes(k))
+      .map(k => ({ k, m: menit(jadwalSholat[k]) })).filter(x => x.m >= 0).sort((a, b) => a.m - b.m)
+    return daftar.find(x => x.m >= nowMenit) || daftar[0] || null
+  })()
 
   const addWhitelist = async () => { try { await api.post('/notif-whitelist', whiteForm); const r = await api.get('/notif-whitelist'); setWhitelist(r.data); setWhiteForm({ target_type: 'phone', phone: '', target_id: '', reason: '' }); toast.success('Whitelist ditambah') } catch { toast.error('Gagal whitelist') } }
   const delWhitelist = async (id: string) => { try { await api.delete('/notif-whitelist/' + id); setWhitelist(whitelist.filter(w => w.id !== id)) } catch { toast.error('Gagal hapus') } }
@@ -453,6 +484,36 @@ export default function NotifSettingsPage() {
                 placeholder="Kosongkan untuk memakai adzan bawaan (/adhan.mp3)"
                 className="w-full px-3 py-2 border rounded-lg text-sm"
               />
+            </div>
+
+            {/* Uji langsung: dulu satu-satunya cara memastikan suara berbunyi
+                adalah menunggu waktu sholat — sehingga fitur terasa "tidak
+                bekerja" padahal hanya belum waktunya. */}
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <audio
+                ref={audioContohRef}
+                src={(settings.adzan_suara_url || '').trim() || '/adhan.mp3'}
+                preload="auto"
+                data-adzan-contoh="true"
+                onEnded={() => setMemutarContoh(false)}
+                onPause={() => setMemutarContoh(false)}
+              />
+              <button
+                type="button"
+                data-adzan-uji-suara="true"
+                onClick={putarContohSuara}
+                className="inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700"
+              >
+                {memutarContoh ? <Square size={13} /> : <Volume2 size={13} />}
+                {memutarContoh ? 'Hentikan' : 'Coba suara'}
+              </button>
+              {adzanBerikutnya && (
+                <span className="inline-flex min-w-0 items-center gap-1.5 break-words text-xs text-gray-500">
+                  <Clock size={13} className="shrink-0" />
+                  Adzan berikutnya: {LABEL_WAKTU[adzanBerikutnya.k]} {jadwalSholat[adzanBerikutnya.k]} WIB
+                  {jadwalSholat?.kota ? ` · ${jadwalSholat.kota}` : ''}
+                </span>
+              )}
             </div>
           </div>
 
