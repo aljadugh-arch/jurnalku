@@ -123,7 +123,11 @@ export default function AdzanNotifier() {
   /* ── pemeriksa waktu tiap 20 detik ── */
   useEffect(() => {
     if (!staf || !jadwal || !conf) return
-    if (!conf.notif_adzan || !conf.adzan_suara) return
+    // Gerbang kanal SUARA saja — terpisah dari notif WA. `adzan_wa` (kanal WA)
+    // tidak lagi mengunci suara. Baris lama tanpa `adzan_wa` (belum pernah disimpan
+    // sejak kanal dipisah) jatuh kembali ke `notif_adzan` = perilaku lama.
+    const suaraAktif = conf.adzan_wa == null ? !!conf.notif_adzan : !!Number(conf.adzan_suara)
+    if (!suaraAktif) return
 
     const dipilih = String(conf.adzan_waktu || '').split(',').map(s => s.trim().toLowerCase()).filter(k => (WAKTU as readonly string[]).includes(k))
     const aktif = dipilih.length ? dipilih : [...WAKTU]

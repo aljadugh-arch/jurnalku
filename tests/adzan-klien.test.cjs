@@ -35,7 +35,9 @@ test('klien: hanya berbunyi di jendela sempit dan tidak mengulang', () => {
   // komponen HARUS tetap ter-render untuk staf supaya elemen audio terpasang dan
   // bisa "dipanaskan" pada gestur pertama, walau admin belum menyalakan fitur.
   assert.match(notifier, /if \(!staf \|\| !jadwal \|\| !conf\) return/)
-  assert.match(notifier, /if \(!conf\.notif_adzan \|\| !conf\.adzan_suara\) return/)
+  // gerbang kanal SUARA saja — terpisah dari notif WA (adzan_wa):
+  assert.match(notifier, /const suaraAktif = conf\.adzan_wa == null \? !!conf\.notif_adzan : !!Number\(conf\.adzan_suara\)/)
+  assert.match(notifier, /if \(!suaraAktif\) return/)
   assert.match(notifier, /if \(!staf\) return null/)
   assert.match(notifier, /data-adzan-putar="true"/)
   assert.match(notifier, /data-adzan-hentikan="true"/)
@@ -82,9 +84,29 @@ test('UI: kartu pengaturan adzan lengkap', () => {
   const page = baca('src/pages/admin/NotifSettingsPage.tsx')
   assert.match(page, /Notifikasi Adzan/)
   assert.match(page, /Suara adzan di aplikasi/)
-  for (const k of ['notif_adzan', 'adzan_waktu', 'adzan_menit_awal', 'adzan_target', 'template_adzan', 'adzan_suara', 'adzan_suara_url']) {
+  for (const k of ['adzan_wa', 'adzan_waktu', 'adzan_menit_awal', 'adzan_target', 'template_adzan', 'adzan_suara', 'adzan_suara_url']) {
     assert.match(page, new RegExp(k), `field ${k} harus ada di halaman pengaturan`)
   }
   // uji kirim per waktu
   assert.match(page, /api\.post\('\/notif\/adzan', \{ waktu \}\)/)
+})
+
+test('server: kanal WA adzan terpisah dari suara aplikasi (adzan_wa)', () => {
+  const server = baca('server/index.cjs')
+  const queue = baca('server/wa-queue.cjs')
+  const page = baca('src/pages/admin/NotifSettingsPage.tsx')
+  // kolom kanal WA berdiri sendiri, plus backfill sekali dari perilaku lama
+  assert.match(server, /\['adzan_wa', 'INTEGER'\]/)
+  assert.match(server, /SET adzan_wa = CASE WHEN COALESCE\(notif_adzan,0\)=1 THEN 1 ELSE 0 END[\s\S]{0,160}WHERE adzan_wa IS NULL/)
+  // gerbang WA memakai adzan_wa; baris lama (adzan_wa NULL) jatuh ke notif_adzan
+  const gate = /const waAktif = conf\?\.adzan_wa == null \? !!conf\?\.notif_adzan : !!Number\(conf\.adzan_wa\)/
+  assert.match(queue, gate, 'antrean WA harus digerbangi adzan_wa')
+  assert.match(server, gate, 'uji kirim WA harus digerbangi adzan_wa')
+  // PUT menyimpan kanal WA eksplisit + menurunkan notif_adzan (klien lama tetap aman)
+  assert.match(server, /const notifAdzanTurunan = \(adzanWaBaru \|\| adzanSuaraBaru\) \? 1 : 0/)
+  assert.match(server, /UPDATE notif_settings SET[\s\S]*?adzan_wa=\?/)
+  // UI: dua toggle yang berdiri sendiri
+  assert.match(page, /checked=\{settings\.adzan_wa\}/)
+  assert.match(page, /checked=\{settings\.adzan_suara\}/)
+  assert.doesNotMatch(page, /checked=\{settings\.notif_adzan\}/)
 })

@@ -59,19 +59,27 @@ test('halaman absensi menjelaskan bahwa KBM harus aktif sebelum manual atau QR',
   assert.match(attendancePage, /startQrCamera/)
 })
 
-test('absensi harian QR dan manual tersedia untuk semua guru tetapi tetap scoped kelas wali atau jadwal tanggal itu', () => {
+test('absensi harian QR dan manual tersedia untuk semua guru tanpa syarat wali kelas atau jadwal', () => {
   const guard = routeBody('function requireTeacherDailyAttendanceAccess', 'function teacherScheduleForDay')
   const context = routeBody("app.get('/api/guru/jadwal-context'", '// Absensi per mata pelajaran')
   const single = routeBody("app.post('/api/absensi-siswa', STAFF", "app.post('/api/absensi-siswa/bulk'")
   const bulk = routeBody("app.post('/api/absensi-siswa/bulk', STAFF", "app.post('/api/absensi-siswa/bulk-range'")
   const qr = routeBody("app.post('/api/absensi-siswa/qr-scan', STAFF", "// ==================== ABSENSI GURU")
 
-  assert.doesNotMatch(guard, /Absensi harian oleh guru hanya berlaku/)
-  assert.match(guard, /wali_kelas_id/)
-  assert.match(guard, /jenis_kegiatan='mapel'/)
-  assert.match(context, /rombels/)
-  assert.match(context, /wali_kelas_id/)
-  assert.match(context, /jenis_kegiatan='mapel'/)
+  // Gerbang guru TIDAK lagi mensyaratkan wali kelas / jadwal mapel tanggal itu —
+  // guru biasa (piket gerbang, mengajar kelas itu di hari lain) boleh mengabsen.
+  assert.doesNotMatch(guard, /wali_kelas_id/)
+  assert.doesNotMatch(guard, /jenis_kegiatan='mapel'/)
+  assert.doesNotMatch(guard, /bukan kelas wali atau kelas terjadwal/)
+  // …tetapi validasi tenant, koneksi akun→GTK, dan siswa aktif tetap dijaga.
+  assert.match(guard, /resolveGtkForUser\(req\.user\.id, req\.tenantId\)/)
+  assert.match(guard, /s\.tenant_id=\?/)
+  assert.match(guard, /COALESCE\(s\.status,'aktif'\)='aktif'/)
+  // Halaman absensi harian QR meminta SELURUH rombel lembaga (semua=1).
+  assert.match(context, /req\.query\.semua/)
+  assert.match(context, /lihatSemuaRombel/)
+  assert.match(context, /FROM rombel r WHERE r\.tenant_id=\? ORDER BY r\.nama/)
+  // Ketiga jalur simpan tetap memanggil gerbang yang sama.
   assert.match(single, /requireTeacherDailyAttendanceAccess\(req, siswa_id, tanggal\)/)
   assert.match(bulk, /requireTeacherDailyAttendanceAccess\(req, d\.siswa_id, tanggal\)/)
   assert.match(qr, /requireTeacherDailyAttendanceAccess\(req, siswa\.id, tanggal\)/)
@@ -102,6 +110,8 @@ test('halaman guru mengirim siswa dan tanggal untuk filter akses server pada bac
   assert.match(teacherAttendancePage, /api\.post\('\/absensi-siswa\/qr-scan'.*tanggal/s)
   assert.doesNotMatch(teacherAttendancePage, /api\.get\('\/siswa'/)
   assert.match(teacherAttendancePage, /contextSiswa\.filter/)
+  // daftar rombel meminta seluruh lembaga, bukan hanya kelas wali/jadwal
+  assert.match(teacherAttendancePage, /params: \{ tanggal, semua: 1 \}/)
 })
 
 test('dashboard siswa juga dapat diakses wali murid tertaut', () => {

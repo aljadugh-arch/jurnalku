@@ -333,7 +333,10 @@ function queueAdzanReminders(db, { tenantId, date, time, force = false, paksaWak
   if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(String(date))) return { ...out, reason: 'invalid_date' }
   if (!time || !/^\d{2}:\d{2}$/.test(String(time))) return { ...out, reason: 'invalid_time' }
   const conf = db.prepare('SELECT * FROM notif_settings WHERE tenant_id=?').get(tenantId)
-  if (!force && !conf?.notif_adzan) return { ...out, reason: 'disabled' }
+  // Kanal WA saja. Baris lama tanpa `adzan_wa` (belum pernah disimpan sejak kanal
+  // dipisah) jatuh kembali ke `notif_adzan` supaya perilaku lama tetap utuh.
+  const waAktif = conf?.adzan_wa == null ? !!conf?.notif_adzan : !!Number(conf.adzan_wa)
+  if (!force && !waAktif) return { ...out, reason: 'disabled' }
 
   const { WAKTU_SHOLAT, LABEL_WAKTU, jadwalSholatTenant } = require('./jadwal-sholat.cjs')
   let jadwal

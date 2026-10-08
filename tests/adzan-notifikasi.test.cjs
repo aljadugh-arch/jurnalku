@@ -11,14 +11,15 @@ const TZ = 7
 const TANGGAL = '2026-10-06' // Selasa
 const WAKTU = hitungJadwalSholat({ tanggal: TANGGAL, lat: LAT, lng: LNG, tz: TZ })
 
-function fixture({ aktif = 1, target = 'gtk', menitAwal = 0, dipilih = 'subuh,dzuhur,ashar,maghrib,isya', hariLibur = '[]', kalenderLibur = false } = {}) {
+function fixture({ aktif = 1, adzanWa = null, target = 'gtk', menitAwal = 0, dipilih = 'subuh,dzuhur,ashar,maghrib,isya', hariLibur = '[]', kalenderLibur = false } = {}) {
   const db = new Database(':memory:')
   db.exec(`
     CREATE TABLE settings (id TEXT, tenant_id TEXT, nama_lembaga TEXT, hari_libur TEXT,
       kota_sholat TEXT, lat_sholat REAL, lng_sholat REAL, tz_sholat INTEGER);
     CREATE TABLE kalender_kbm (tenant_id TEXT, tanggal TEXT, jenis TEXT);
-    CREATE TABLE notif_settings (tenant_id TEXT PRIMARY KEY, notif_adzan INTEGER, adzan_waktu TEXT,
-      adzan_menit_awal INTEGER, adzan_target TEXT, template_adzan TEXT, adzan_suara INTEGER, adzan_suara_url TEXT);
+    CREATE TABLE notif_settings (tenant_id TEXT PRIMARY KEY, notif_adzan INTEGER, adzan_wa INTEGER,
+      adzan_waktu TEXT, adzan_menit_awal INTEGER, adzan_target TEXT, template_adzan TEXT,
+      adzan_suara INTEGER, adzan_suara_url TEXT);
     CREATE TABLE gtk (id TEXT, tenant_id TEXT, nama TEXT, no_hp TEXT, jenis_kelamin TEXT, status TEXT);
     CREATE TABLE users (id TEXT, tenant_id TEXT, gtk_id TEXT, role TEXT);
   `)
@@ -26,8 +27,8 @@ function fixture({ aktif = 1, target = 'gtk', menitAwal = 0, dipilih = 'subuh,dz
   db.prepare('INSERT INTO settings VALUES (?,?,?,?,?,?,?,?)')
     .run('main_t1', 't1', 'MTs Uji', hariLibur, 'Surabaya', LAT, LNG, TZ)
   if (kalenderLibur) db.prepare('INSERT INTO kalender_kbm VALUES (?,?,?)').run('t1', TANGGAL, 'libur')
-  db.prepare('INSERT INTO notif_settings VALUES (?,?,?,?,?,?,?,?)')
-    .run('t1', aktif, dipilih, menitAwal, target, '', 1, '')
+  db.prepare('INSERT INTO notif_settings VALUES (?,?,?,?,?,?,?,?,?)')
+    .run('t1', aktif, adzanWa, dipilih, menitAwal, target, '', 1, '')
   // Dua guru ber-nomor, satu tanpa nomor.
   db.prepare('INSERT INTO gtk VALUES (?,?,?,?,?,?)').run('g1', 't1', 'Budi Santoso', '081234567890', 'L', 'aktif')
   db.prepare('INSERT INTO gtk VALUES (?,?,?,?,?,?)').run('g2', 't1', 'Siti Aminah', '081298765432', 'P', 'aktif')
@@ -122,4 +123,27 @@ test('adzan: koordinat tidak valid tidak membuat server error', () => {
   const r = queueAdzanReminders(db, { tenantId: 't1', date: TANGGAL, time: WAKTU.dzuhur })
   assert.equal(r.queued, 0)
   assert.equal(jumlahAntre(db), 0)
+})
+
+// ── Pemisahan kanal: WA (adzan_wa) berdiri sendiri dari suara aplikasi ──
+test('adzan: kanal WA mati tidak mengantre walau notif_adzan menyala (kanal lama)', () => {
+  const db = fixture({ aktif: 1, adzanWa: 0 })
+  const r = queueAdzanReminders(db, { tenantId: 't1', date: TANGGAL, time: WAKTU.dzuhur })
+  assert.equal(r.queued, 0)
+  assert.equal(r.reason, 'disabled')
+  assert.equal(jumlahAntre(db), 0)
+})
+
+test('adzan: kanal WA menyala mengantre walau notif_adzan mati (kanal lama)', () => {
+  const db = fixture({ aktif: 0, adzanWa: 1 })
+  const r = queueAdzanReminders(db, { tenantId: 't1', date: TANGGAL, time: WAKTU.dzuhur })
+  assert.equal(r.queued, 2)
+  assert.equal(jumlahAntre(db), 2)
+})
+
+test('adzan: baris lama (adzan_wa NULL) tetap ikut notif_adzan — perilaku dipertahankan', () => {
+  const nyala = fixture({ aktif: 1, adzanWa: null })
+  assert.equal(queueAdzanReminders(nyala, { tenantId: 't1', date: TANGGAL, time: WAKTU.ashar }).queued, 2)
+  const mati = fixture({ aktif: 0, adzanWa: null })
+  assert.equal(queueAdzanReminders(mati, { tenantId: 't1', date: TANGGAL, time: WAKTU.ashar }).queued, 0)
 })

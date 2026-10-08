@@ -14,9 +14,10 @@ const statusColors: Record<string, string> = {
 }
 
 /**
- * Halaman absensi harian siswa (masuk/pulang) untuk semua guru.
- * Menggunakan backend QR scan yang sudah ada (`POST /absensi-siswa/qr-scan`).
- * Rombel dibatasi backend ke kelas wali atau kelas terjadwal pada tanggal itu.
+ * Halaman absensi harian siswa (masuk/pulang) untuk SEMUA guru — tidak harus
+ * wali kelas dan tidak harus punya jadwal mapel pada tanggal itu.
+ * Menggunakan backend QR scan yang sudah ada (`POST /absensi-siswa/qr-scan`),
+ * dengan `semua=1` agar daftar rombel mencakup seluruh rombel lembaga.
  */
 export default function GuruAbsensiSiswaQRPage() {
   const [tanggal, setTanggal] = useState(todayWib())
@@ -38,16 +39,17 @@ export default function GuruAbsensiSiswaQRPage() {
   const lastQrRef = useRef('')
   const cameraStartingRef = useRef(false)
 
-  // Backend mengembalikan rombel kelas wali dan kelas terjadwal guru pada tanggal ini.
+  // Backend (semua=1) mengembalikan SELURUH rombel lembaga: absensi harian tidak
+  // lagi wajib wali kelas / kelas terjadwal pada tanggal itu — guru biasa pun bisa.
   useEffect(() => {
-    api.get('/guru/jadwal-context', { params: { tanggal } })
+    api.get('/guru/jadwal-context', { params: { tanggal, semua: 1 } })
       .then(res => {
         const uniqueRombels = res.data.rombels || []
         setRombels(uniqueRombels)
         setContextSiswa(res.data.siswa || [])
         setSelectedRombel(current => uniqueRombels.some((r: any) => r.id === current) ? current : (uniqueRombels[0]?.id || ''))
       })
-      .catch(() => { setRombels([]); setContextSiswa([]); setSelectedRombel(''); toast.error('Gagal memuat rombel yang Anda ampu') })
+      .catch(() => { setRombels([]); setContextSiswa([]); setSelectedRombel(''); toast.error('Gagal memuat daftar rombel') })
   }, [tanggal])
 
   // Check KBM status

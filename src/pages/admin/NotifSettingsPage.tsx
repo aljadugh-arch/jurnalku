@@ -24,7 +24,7 @@ export default function NotifSettingsPage() {
     keuangan_hari: '',
     keuangan_jam: '08:00',
     template_keuangan_wali: '',
-    notif_adzan: false,
+    adzan_wa: false,
     adzan_waktu: 'subuh,dzuhur,ashar,maghrib,isya',
     adzan_menit_awal: 0,
     adzan_target: 'gtk',
@@ -66,12 +66,14 @@ export default function NotifSettingsPage() {
         keuangan_hari: d.keuangan_hari || '',
         keuangan_jam: d.keuangan_jam || '08:00',
         template_keuangan_wali: d.template_keuangan_wali || '',
-        notif_adzan: !!d.notif_adzan,
+        // Dua kanal berdiri sendiri. Baris yang belum pernah disimpan sejak kanal
+        // dipisah (adzan_wa NULL) dipetakan dari notif_adzan — persis seperti server.
+        adzan_wa: d.adzan_wa == null ? !!d.notif_adzan : !!d.adzan_wa,
         adzan_waktu: d.adzan_waktu || 'subuh,dzuhur,ashar,maghrib,isya',
         adzan_menit_awal: Number(d.adzan_menit_awal) || 0,
         adzan_target: d.adzan_target || 'gtk',
         template_adzan: d.template_adzan || '',
-        adzan_suara: d.adzan_suara === undefined ? true : !!d.adzan_suara,
+        adzan_suara: d.adzan_wa == null ? !!d.notif_adzan : (d.adzan_suara === undefined ? true : !!d.adzan_suara),
         adzan_suara_url: d.adzan_suara_url || '',
       })
     })
@@ -404,17 +406,28 @@ export default function NotifSettingsPage() {
               <BellRing size={18} className="shrink-0 text-emerald-600" /> Notifikasi Adzan
             </h3>
             <p className="mt-0.5 break-words text-xs text-gray-500">
-              Pesan WA dan suara adzan saat masuk waktu sholat. Waktu dihitung dari kota/koordinat lembaga di menu Pengaturan.
+              Dua kanal berdiri sendiri: pesan WA dan suara di aplikasi. Nyalakan salah satu, keduanya, atau matikan keduanya — saling tidak bergantung. Waktu dihitung dari kota/koordinat lembaga di menu Pengaturan.
             </p>
           </div>
-          <Toggle
-            checked={settings.notif_adzan}
-            onChange={next => setSettings({ ...settings, notif_adzan: next })}
-            label="Notifikasi Adzan"
-          />
         </div>
 
-        <div className={'space-y-4 ' + (settings.notif_adzan ? '' : 'opacity-60')}>
+        {/* ── Kanal 1: Notif WA adzan (independen dari suara aplikasi) ── */}
+        <div className="space-y-4 rounded-xl border border-gray-100 bg-gray-50/60 p-3">
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <p className="text-sm font-medium text-gray-700">Notif WA adzan</p>
+              <p className="mt-0.5 break-words text-xs text-gray-400">
+                Pesan WhatsApp ke GTK saat masuk waktu sholat. Boleh dikirim beberapa menit sebelum adzan.
+              </p>
+            </div>
+            <Toggle
+              checked={settings.adzan_wa}
+              onChange={next => setSettings({ ...settings, adzan_wa: next })}
+              label="Notif WA adzan"
+            />
+          </div>
+
+          <div className={'space-y-4 ' + (settings.adzan_wa ? '' : 'opacity-60')}>
           <div>
             <label className="mb-2 block text-sm font-medium text-gray-700">Waktu yang dinotifikasi</label>
             <div className="flex flex-wrap gap-2">
@@ -462,29 +475,58 @@ export default function NotifSettingsPage() {
             </div>
           </div>
 
-          <div className="rounded-xl border border-gray-100 bg-gray-50/60 p-3">
-            <div className="flex items-start justify-between gap-3">
-              <div className="min-w-0">
-                <p className="text-sm font-medium text-gray-700">Suara adzan di aplikasi</p>
-                <p className="mt-0.5 break-words text-xs text-gray-400">
-                  Diputar di peramban saat waktu sholat masuk (peran staf). Pastikan volume perangkat tidak senyap.
-                </p>
-              </div>
-              <Toggle
-                checked={settings.adzan_suara}
-                onChange={next => setSettings({ ...settings, adzan_suara: next })}
-                label="Suara adzan di aplikasi"
-              />
+          <div>
+            <label className="mb-1 block text-sm font-medium text-gray-700">Isi pesan WA</label>
+            <textarea
+              value={settings.template_adzan}
+              onChange={e => setSettings({ ...settings, template_adzan: e.target.value })}
+              rows={3}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+              placeholder="Assalamualaikum, waktu {waktu} telah masuk untuk wilayah {kota} pukul {jam}. - {lembaga}"
+            />
+            <p className="mt-1 break-words text-xs text-gray-400">Boleh memakai: {'{nama}'}, {'{waktu}'}, {'{jam}'}, {'{kota}'}, {'{tanggal}'}, {'{lembaga}'}</p>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-sm text-gray-600">Uji kirim:</span>
+            {URUT_WAKTU.map(k => (
+              <button
+                key={k}
+                type="button"
+                disabled={testing}
+                onClick={() => ujiAdzan(k)}
+                className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-700 disabled:opacity-50"
+              >
+                {LABEL_WAKTU[k]}
+              </button>
+            ))}
+          </div>
+          </div>
+        </div>
+
+        {/* ── Kanal 2: Suara adzan di aplikasi (independen dari notif WA) ── */}
+        <div className="rounded-xl border border-gray-100 bg-gray-50/60 p-3">
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <p className="text-sm font-medium text-gray-700">Suara adzan di aplikasi</p>
+              <p className="mt-0.5 break-words text-xs text-gray-400">
+                Diputar di peramban saat waktu sholat masuk (peran staf). Selalu tepat waktu — tidak mengikuti opsi "N menit sebelum" milik notif WA. Pastikan volume perangkat tidak senyap.
+              </p>
             </div>
-            <div className="mt-3 min-w-0">
-              <label className="mb-1 block text-xs font-medium text-gray-600">URL suara adzan sendiri <span className="text-gray-400">(opsional)</span></label>
-              <input
-                value={settings.adzan_suara_url}
-                onChange={e => setSettings({ ...settings, adzan_suara_url: e.target.value })}
-                placeholder="Kosongkan untuk memakai adzan bawaan (/adhan.mp3)"
-                className="w-full px-3 py-2 border rounded-lg text-sm"
-              />
-            </div>
+            <Toggle
+              checked={settings.adzan_suara}
+              onChange={next => setSettings({ ...settings, adzan_suara: next })}
+              label="Suara adzan di aplikasi"
+            />
+          </div>
+          <div className={'mt-3 min-w-0 ' + (settings.adzan_suara ? '' : 'opacity-60')}>
+            <label className="mb-1 block text-xs font-medium text-gray-600">URL suara adzan sendiri <span className="text-gray-400">(opsional)</span></label>
+            <input
+              value={settings.adzan_suara_url}
+              onChange={e => setSettings({ ...settings, adzan_suara_url: e.target.value })}
+              placeholder="Kosongkan untuk memakai adzan bawaan (/adhan.mp3)"
+              className="w-full px-3 py-2 border rounded-lg text-sm"
+            />
 
             {/* Uji langsung: dulu satu-satunya cara memastikan suara berbunyi
                 adalah menunggu waktu sholat — sehingga fitur terasa "tidak
@@ -515,33 +557,6 @@ export default function NotifSettingsPage() {
                 </span>
               )}
             </div>
-          </div>
-
-          <div>
-            <label className="mb-1 block text-sm font-medium text-gray-700">Isi pesan WA</label>
-            <textarea
-              value={settings.template_adzan}
-              onChange={e => setSettings({ ...settings, template_adzan: e.target.value })}
-              rows={3}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
-              placeholder="Assalamualaikum, waktu {waktu} telah masuk untuk wilayah {kota} pukul {jam}. - {lembaga}"
-            />
-            <p className="mt-1 break-words text-xs text-gray-400">Boleh memakai: {'{nama}'}, {'{waktu}'}, {'{jam}'}, {'{kota}'}, {'{tanggal}'}, {'{lembaga}'}</p>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="text-sm text-gray-600">Uji kirim:</span>
-            {URUT_WAKTU.map(k => (
-              <button
-                key={k}
-                type="button"
-                disabled={testing}
-                onClick={() => ujiAdzan(k)}
-                className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-700 disabled:opacity-50"
-              >
-                {LABEL_WAKTU[k]}
-              </button>
-            ))}
           </div>
         </div>
       </div>

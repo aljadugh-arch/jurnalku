@@ -4089,6 +4089,12 @@ function tenantUsesLegacyStudentQrWindow(tenantId) {
 // Absensi harian masuk/pulang tersedia untuk seluruh guru. Akses tetap hanya
 // untuk kelas wali atau rombel yang mempunyai jadwal mapel guru pada tanggal itu.
 // Admin RA/TK dan MI/SD tetap dapat membaca rekap, tetapi tidak menulis.
+// Absensi harian masuk/pulang (manual & QR) tersedia untuk SELURUH guru, bukan
+// hanya wali kelas. Syarat lama — siswa wajib berada di kelas wali atau kelas
+// yang punya jadwal mapel guru pada tanggal itu — dihapus atas permintaan
+// eksplisit pengguna agar guru biasa (piket gerbang, guru yang mengajar kelas itu
+// di hari lain, BK/TU yang merangkap) tetap bisa mengabsen lewat QR. Validasi
+// tenant, format tanggal, koneksi akun→GTK, dan status siswa aktif tetap dijaga.
 function requireTeacherDailyAttendanceAccess(req, siswaId, tanggal) {
   if (!isTeacherContext(req)) return { allowed: true }
   if (!/^\d{4}-\d{2}-\d{2}$/.test(String(tanggal || ''))) {
@@ -4096,17 +4102,10 @@ function requireTeacherDailyAttendanceAccess(req, siswaId, tanggal) {
   }
   const gtk = resolveGtkForUser(req.user.id, req.tenantId)
   if (!gtk) return { allowed: false, status: 403, error: 'Akun guru belum terhubung GTK' }
-  const day = HARI_ID[new Date(`${tanggal}T12:00:00+07:00`).getUTCDay()]
-  const allowed = db.prepare(`SELECT 1 FROM siswa s
-    JOIN rombel r ON r.id=s.rombel_id AND r.tenant_id=s.tenant_id
-    WHERE s.id=? AND s.tenant_id=? AND COALESCE(s.status,'aktif')='aktif'
-      AND (r.wali_kelas_id=? OR EXISTS (
-        SELECT 1 FROM jadwal j WHERE j.rombel_id=s.rombel_id AND j.gtk_id=?
-          AND j.tenant_id=s.tenant_id AND lower(j.hari)=? AND j.jenis_kegiatan='mapel'
-      )) LIMIT 1`).get(siswaId, req.tenantId, gtk.id, gtk.id, day)
-  return allowed
+  const ada = db.prepare("SELECT 1 FROM siswa s WHERE s.id=? AND s.tenant_id=? AND COALESCE(s.status,'aktif')='aktif' LIMIT 1").get(siswaId, req.tenantId)
+  return ada
     ? { allowed: true }
-    : { allowed: false, status: 403, error: 'Siswa bukan kelas wali atau kelas terjadwal Anda pada tanggal ini' }
+    : { allowed: false, status: 403, error: 'Siswa tidak valid untuk lembaga ini' }
 }
 
 function requireTeacherDailyRombelAccess(req, rombelId, tanggal) {
@@ -4116,15 +4115,10 @@ function requireTeacherDailyRombelAccess(req, rombelId, tanggal) {
   }
   const gtk = resolveGtkForUser(req.user.id, req.tenantId)
   if (!gtk) return { allowed: false, status: 403, error: 'Akun guru belum terhubung GTK' }
-  const day = HARI_ID[new Date(`${tanggal}T12:00:00+07:00`).getUTCDay()]
-  const allowed = db.prepare(`SELECT 1 FROM rombel r WHERE r.id=? AND r.tenant_id=?
-    AND (r.wali_kelas_id=? OR EXISTS (
-      SELECT 1 FROM jadwal j WHERE j.rombel_id=r.id AND j.gtk_id=?
-        AND j.tenant_id=r.tenant_id AND lower(j.hari)=? AND j.jenis_kegiatan='mapel'
-    )) LIMIT 1`).get(rombelId, req.tenantId, gtk.id, gtk.id, day)
-  return allowed
+  const ada = db.prepare('SELECT 1 FROM rombel r WHERE r.id=? AND r.tenant_id=? LIMIT 1').get(rombelId, req.tenantId)
+  return ada
     ? { allowed: true }
-    : { allowed: false, status: 403, error: 'Rombel bukan kelas wali atau kelas terjadwal Anda pada tanggal ini' }
+    : { allowed: false, status: 403, error: 'Rombel tidak valid untuk lembaga ini' }
 }
 
 // Admin diizinkan menginput absensi harian siswa (manual & QR) di semua jenjang,
@@ -4403,7 +4397,14 @@ app.get('/api/guru/jadwal-context', authMiddleware, (req, res) => {
   const jadwal = db.prepare(`SELECT DISTINCT j.id AS jadwal_id,j.mapel_id,j.rombel_id,j.hari,j.jam_mulai,j.jam_selesai,j.ruangan,m.nama AS mapel_nama,m.kode AS mapel_kode,r.nama AS rombel_nama
     FROM jadwal j JOIN mapel m ON m.id=j.mapel_id AND m.tenant_id=j.tenant_id LEFT JOIN rombel r ON r.id=j.rombel_id AND r.tenant_id=j.tenant_id
     WHERE j.gtk_id=? AND j.tenant_id=? AND lower(j.hari)=? AND j.jenis_kegiatan='mapel' ORDER BY j.jam_mulai`).all(gtk.id, req.tenantId, day)
-  const rombels = db.prepare(`SELECT DISTINCT r.id,r.nama
+  // Absensi harian QR: halaman guru meminta `semua=1` sehingga SELURUH rombel
+  // lembaga tersedia (absensi harian tidak lagi wajib wali kelas). Tanpa flag ini
+  // perilaku lama dipertahankan (kelas wali + kelas terjadwal hari itu) agar
+  // pemakai jadwal-context lain — mis. widget jadwal dashboard guru — tak berubah.
+  const lihatSemuaRombel = String(req.query.semua || '') === '1'
+  const rombels = lihatSemuaRombel
+    ? db.prepare('SELECT DISTINCT r.id,r.nama FROM rombel r WHERE r.tenant_id=? ORDER BY r.nama').all(req.tenantId)
+    : db.prepare(`SELECT DISTINCT r.id,r.nama
     FROM rombel r
     WHERE r.tenant_id=? AND (r.wali_kelas_id=? OR EXISTS (
       SELECT 1 FROM jadwal j WHERE j.rombel_id=r.id AND j.gtk_id=?
@@ -5305,6 +5306,10 @@ for (const [name, definition] of [
   // Notifikasi adzan saat masuk waktu sholat (dihitung dari koordinat lembaga di Pengaturan).
   // Daftar waktu disimpan sebagai teks dipisah koma agar sederhana, mis. 'subuh,dzuhur,ashar,maghrib,isya'.
   ['notif_adzan', 'INTEGER DEFAULT 0'],
+  // Sakelar kanal WA adzan, terpisah dari suara adzan di aplikasi (adzan_suara).
+  // NULL = baris belum pernah disimpan sesudah pemisahan kanal; dibackfill sekali
+  // di bawah agar perilaku lama (WA + suara mengikuti notif_adzan) tetap terjaga.
+  ['adzan_wa', 'INTEGER'],
   ['adzan_waktu', "TEXT DEFAULT 'subuh,dzuhur,ashar,maghrib,isya'"],
   ['adzan_menit_awal', 'INTEGER DEFAULT 0'],
   ['adzan_target', "TEXT DEFAULT 'gtk'"],
@@ -5325,6 +5330,20 @@ try {
   if (r.digabung || r.dibuat || r.dilewati) console.log(`[notif_settings] digabung=${r.digabung} dibuat=${r.dibuat}${r.dilewati ? ' (dilewati: ' + r.dilewati + ')' : ''}`)
 } catch (e) { console.error('[notif_settings] rapikan gagal:', e.message) }
 
+// ── Pemisahan kanal adzan (WA vs suara aplikasi) ──
+// Sekali saja per baris: baris yang belum pernah disimpan sesudah kolom `adzan_wa`
+// ada (nilainya masih NULL). Perilaku lama dipetakan apa adanya — notif_adzan=1
+// berarti WA + suara seperti sebelumnya; notif_adzan=0 berarti keduanya mati.
+// Sesudah admin menyimpan dari UI, kedua kolom diisi eksplisit sehingga baris ini
+// tak tersentuh lagi (idempoten).
+try {
+  const r = db.prepare(`UPDATE notif_settings
+    SET adzan_wa = CASE WHEN COALESCE(notif_adzan,0)=1 THEN 1 ELSE 0 END,
+        adzan_suara = CASE WHEN COALESCE(notif_adzan,0)=1 THEN COALESCE(adzan_suara,1) ELSE 0 END
+    WHERE adzan_wa IS NULL`).run()
+  if (r.changes) console.log(`[notif_settings] backfill kanal adzan: ${r.changes} baris`)
+} catch (e) { console.error('[notif_settings] backfill adzan_wa gagal:', e.message) }
+
 app.get('/api/notif-settings', authMiddleware, (req, res) => {
   // Satu baris per lembaga (dijamin indeks unik); ORDER BY rowid DESC menjaga hasil
   // tetap deterministik bila masih ada sisa baris lama sebelum pembersihan.
@@ -5335,7 +5354,15 @@ app.put('/api/notif-settings', ADMIN, (req, res) => {
   // Pastikan baris pengaturan ada. UPDATE tanpa baris tidak melakukan apa pun,
   // sehingga admin melihat "tersimpan" padahal tidak ada yang berubah.
   db.prepare('INSERT OR IGNORE INTO notif_settings (id, tenant_id) VALUES (?,?)').run('main_' + req.tenantId, req.tenantId)
-  const { absensi_siswa_ke_wali, guru_belum_ceklok, batas_ceklok_guru, template_absensi_wali, template_guru_ceklok, notif_jadwal_guru, template_jadwal_guru, notif_ujian_guru, template_ujian_guru, notif_ekskul_guru, template_ekskul_guru, notif_cs_bot, notif_keuangan_wali, keuangan_frekuensi, keuangan_hari, keuangan_jam, template_keuangan_wali, notif_adzan, adzan_waktu, adzan_menit_awal, adzan_target, template_adzan, adzan_suara, adzan_suara_url } = req.body
+  const { absensi_siswa_ke_wali, guru_belum_ceklok, batas_ceklok_guru, template_absensi_wali, template_guru_ceklok, notif_jadwal_guru, template_jadwal_guru, notif_ujian_guru, template_ujian_guru, notif_ekskul_guru, template_ekskul_guru, notif_cs_bot, notif_keuangan_wali, keuangan_frekuensi, keuangan_hari, keuangan_jam, template_keuangan_wali, notif_adzan, adzan_wa, adzan_waktu, adzan_menit_awal, adzan_target, template_adzan, adzan_suara, adzan_suara_url } = req.body
+  // Dua kanal adzan berdiri sendiri: WA (adzan_wa) dan suara aplikasi (adzan_suara).
+  // Klien lama belum mengirim `adzan_wa` dan hanya punya satu sakelar `notif_adzan`;
+  // bila field baru absen, perilaku lamanya dipetakan (notif_adzan → kedua kanal).
+  // `notif_adzan` tetap ditulis sebagai turunan (wa ATAU suara) supaya pembaca lama
+  // yang masih memakai kolom itu tidak melihat fitur "mati".
+  const adzanWaBaru = adzan_wa === undefined ? !!notif_adzan : !!adzan_wa
+  const adzanSuaraBaru = adzan_suara === undefined ? !!notif_adzan : !!adzan_suara
+  const notifAdzanTurunan = (adzanWaBaru || adzanSuaraBaru) ? 1 : 0
   // Daftar waktu adzan: hanya kunci yang dikenal, disimpan sebagai teks dipisah koma.
   const WAKTU_SAH = ['subuh', 'dzuhur', 'ashar', 'maghrib', 'isya']
   const daftarAdzan = (Array.isArray(adzan_waktu) ? adzan_waktu : String(adzan_waktu || '').split(','))
@@ -5344,8 +5371,8 @@ app.put('/api/notif-settings', ADMIN, (req, res) => {
   const waktuAdzan = (daftarAdzan.length ? [...new Set(daftarAdzan)] : WAKTU_SAH).join(',')
   const menitAwalAdzan = Math.max(0, Math.min(120, Number(adzan_menit_awal) || 0))
   const targetAdzan = ['gtk', 'admin'].includes(String(adzan_target || '').toLowerCase()) ? String(adzan_target).toLowerCase() : 'gtk'
-  db.prepare("UPDATE notif_settings SET absensi_siswa_ke_wali=?, guru_belum_ceklok=?, batas_ceklok_guru=?, template_absensi_wali=?, template_guru_ceklok=?, notif_jadwal_guru=?, template_jadwal_guru=?, notif_ujian_guru=?, template_ujian_guru=?, notif_ekskul_guru=?, template_ekskul_guru=?, notif_cs_bot=?, notif_keuangan_wali=?, keuangan_frekuensi=?, keuangan_hari=?, keuangan_jam=?, template_keuangan_wali=?, notif_adzan=?, adzan_waktu=?, adzan_menit_awal=?, adzan_target=?, template_adzan=?, adzan_suara=?, adzan_suara_url=? WHERE tenant_id=?")
-    .run(absensi_siswa_ke_wali ? 1 : 0, guru_belum_ceklok ? 1 : 0, batas_ceklok_guru || '07:30', template_absensi_wali || '', template_guru_ceklok || '', notif_jadwal_guru ? 1 : 0, template_jadwal_guru || '', notif_ujian_guru ? 1 : 0, template_ujian_guru || '', notif_ekskul_guru ? 1 : 0, template_ekskul_guru || '', notif_cs_bot ? 1 : 0, notif_keuangan_wali ? 1 : 0, keuangan_frekuensi || 'bulanan', keuangan_hari || '', keuangan_jam || '08:00', template_keuangan_wali || '', notif_adzan ? 1 : 0, waktuAdzan, menitAwalAdzan, targetAdzan, template_adzan || '', adzan_suara ? 1 : 0, String(adzan_suara_url || '').trim(), req.tenantId)
+  db.prepare("UPDATE notif_settings SET absensi_siswa_ke_wali=?, guru_belum_ceklok=?, batas_ceklok_guru=?, template_absensi_wali=?, template_guru_ceklok=?, notif_jadwal_guru=?, template_jadwal_guru=?, notif_ujian_guru=?, template_ujian_guru=?, notif_ekskul_guru=?, template_ekskul_guru=?, notif_cs_bot=?, notif_keuangan_wali=?, keuangan_frekuensi=?, keuangan_hari=?, keuangan_jam=?, template_keuangan_wali=?, notif_adzan=?, adzan_wa=?, adzan_waktu=?, adzan_menit_awal=?, adzan_target=?, template_adzan=?, adzan_suara=?, adzan_suara_url=? WHERE tenant_id=?")
+    .run(absensi_siswa_ke_wali ? 1 : 0, guru_belum_ceklok ? 1 : 0, batas_ceklok_guru || '07:30', template_absensi_wali || '', template_guru_ceklok || '', notif_jadwal_guru ? 1 : 0, template_jadwal_guru || '', notif_ujian_guru ? 1 : 0, template_ujian_guru || '', notif_ekskul_guru ? 1 : 0, template_ekskul_guru || '', notif_cs_bot ? 1 : 0, notif_keuangan_wali ? 1 : 0, keuangan_frekuensi || 'bulanan', keuangan_hari || '', keuangan_jam || '08:00', template_keuangan_wali || '', notifAdzanTurunan, adzanWaBaru ? 1 : 0, waktuAdzan, menitAwalAdzan, targetAdzan, template_adzan || '', adzanSuaraBaru ? 1 : 0, String(adzan_suara_url || '').trim(), req.tenantId)
   res.json({ success: true })
 })
 
@@ -5369,7 +5396,10 @@ app.post('/api/notif/jadwal-guru', STAFF, (req, res) => {
 app.post('/api/notif/adzan', STAFF, (req, res) => {
   const conf = db.prepare('SELECT * FROM notif_settings WHERE tenant_id=?').get(req.tenantId)
   const paksa = String(req.body?.waktu || '').trim().toLowerCase()
-  if (!conf?.notif_adzan && !paksa) return res.status(400).json({ error: 'Notifikasi adzan belum diaktifkan' })
+  // Gerbang kanal WA saja. Baris lama tanpa `adzan_wa` (belum pernah disimpan sejak
+  // pemisahan) jatuh kembali ke `notif_adzan` — perilaku lama.
+  const waAktif = conf?.adzan_wa == null ? !!conf?.notif_adzan : !!Number(conf.adzan_wa)
+  if (!waAktif && !paksa) return res.status(400).json({ error: 'Notif WA adzan belum diaktifkan' })
   res.json({
     success: true,
     ...waQueue.queueAdzanReminders(db, {
