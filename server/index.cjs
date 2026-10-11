@@ -26,7 +26,7 @@ const { setupPortalCashless, registerPortalRoutes, registerKantinRoutes, selectP
 const waQueue = require('./wa-queue.cjs')
 const notificationMonitor = require('./notification-monitor.cjs')
 const ExcelJS = require('exceljs')
-const { generateRaporForRombel, refreshGeneratedRapor, loadBobot, pickBobot, BOBOT_DEFAULT, computeRaporLive } = require('./rapor-grade-service.cjs')
+const { generateRaporForRombel, refreshGeneratedRapor, loadBobot, pickBobot, BOBOT_DEFAULT, computeRaporLive, predikatFromNilai } = require('./rapor-grade-service.cjs')
 const { createRdmClient, buildSasImportItems, bobotRdmKeJurnalku } = require('./rdm-sas-connector.cjs')
 const { getAuthorizedLedgerRombels, getLedgerRows, createLedgerWorkbook, createLedgerPdf } = require('./ledger-service.cjs')
 const {
@@ -7603,13 +7603,7 @@ app.post('/api/catatan-kepribadian/bulk', STAFF, (req, res) => {
 //   Rapor SAS     = (nilai_harian * 0.4) + (asesmen_STS * 0.2) + (asesmen_SAS * 0.4)
 //
 // Backward-compat: jenis='tengah'/'akhir'/'sumatif' lama masih bisa dibaca (tidak dihapus).
-
-function predikatFromNilai(n) {
-  if (n >= 90) return 'A'
-  if (n >= 80) return 'B'
-  if (n >= 70) return 'C'
-  return 'D'
-}
+// predikatFromNilai kini didefinisikan di rapor-grade-service.cjs (kanonik).
 
 // Hitung nilai_harian dari rata-rata penilaian_harian dalam rentang tanggal untuk satu siswa+mapel
 function hitungNilaiHarian(siswaId, mapelId, tenantId, from, to) {

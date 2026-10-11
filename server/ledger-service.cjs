@@ -1,5 +1,6 @@
 const ExcelJS = require('exceljs')
 const PDFDocument = require('pdfkit')
+const { computeNilai, pickBobot, loadBobot } = require('./rapor-grade-service.cjs')
 
 function normalizeLedgerJenis(jenis) {
   return ['rapor_sts', 'rapor_sas', 'semua'].includes(jenis) ? jenis : 'semua'
@@ -25,6 +26,9 @@ function getLedgerRows(db, options) {
   const includeSts = jenis !== 'rapor_sas'
   const includeSas = jenis !== 'rapor_sts'
 
+  // Bobot (rapor_bobot) diambil sekali per panggilan, bukan per baris.
+  const bobotRows = loadBobot(db, tenantId)
+
   return db.prepare(`
     WITH candidates AS (
       SELECT ph.siswa_id, ph.mapel_id
@@ -38,7 +42,7 @@ function getLedgerRows(db, options) {
       JOIN siswa s ON s.id=r.siswa_id AND s.tenant_id=r.tenant_id
       JOIN mapel m ON m.id=r.mapel_id AND m.tenant_id=r.tenant_id
       WHERE s.rombel_id=? AND r.tenant_id=? AND r.tahun_ajaran=? AND r.semester=?
-        AND r.jenis IN (${includeSts && includeSas ? "'sts','sas','rapor_sts','rapor_sas'" : includeSts ? "'sts','rapor_sts'" : "'sas','rapor_sas'"})
+        AND r.jenis IN (${includeSts && includeSas ? "'sts','sas'" : includeSts ? "'sts'" : "'sas'"})
     ),
     daily AS (
       SELECT ph.siswa_id, ph.mapel_id,
@@ -51,9 +55,7 @@ function getLedgerRows(db, options) {
     report_values AS (
       SELECT r.siswa_id, r.mapel_id,
         ${includeSts ? "MAX(CASE WHEN r.jenis='sts' THEN r.nilai_sts END)" : 'NULL'} AS nilai_sts,
-        ${includeSas ? "MAX(CASE WHEN r.jenis='sas' THEN r.nilai_sts END)" : 'NULL'} AS nilai_sas,
-        ${includeSts ? "MAX(CASE WHEN r.jenis='rapor_sts' THEN r.nilai_akhir END)" : 'NULL'} AS nilai_akhir_sts,
-        ${includeSas ? "MAX(CASE WHEN r.jenis='rapor_sas' THEN r.nilai_akhir END)" : 'NULL'} AS nilai_akhir_sas
+        ${includeSas ? "MAX(CASE WHEN r.jenis='sas' THEN r.nilai_sts END)" : 'NULL'} AS nilai_sas
       FROM rapor r
       JOIN siswa s ON s.id=r.siswa_id AND s.tenant_id=r.tenant_id
       WHERE s.rombel_id=? AND r.tenant_id=? AND r.tahun_ajaran=? AND r.semester=?
@@ -62,7 +64,7 @@ function getLedgerRows(db, options) {
     SELECT s.id AS siswa_id, s.nama AS siswa_nama, s.nis AS siswa_nis,
       m.id AS mapel_id, m.nama AS mapel_nama,
       CASE WHEN d.nilai_harian IS NULL THEN 0 ELSE ROUND(d.nilai_harian) END AS nilai_harian,
-      rv.nilai_sts, rv.nilai_sas, rv.nilai_akhir_sts, rv.nilai_akhir_sas
+      rv.nilai_sts, rv.nilai_sas
     FROM candidates c
     JOIN siswa s ON s.id=c.siswa_id AND s.tenant_id=? AND s.rombel_id=?
     JOIN mapel m ON m.id=c.mapel_id AND m.tenant_id=?
@@ -75,10 +77,29 @@ function getLedgerRows(db, options) {
     rombelId, tenantId, from, to,
     rombelId, tenantId, tahunAjaran, semester,
     tenantId, rombelId, tenantId,
-  ).map(row => ({
-    ...row,
-    nilai_harian: Number(row.nilai_harian),
-  }))
+  ).map(row => {
+    // Nilai akhir STS/SAS dihitung LIVE dari sumber (nilai harian + asesmen
+    // mentah STS/SAS), bukan dari baris `rapor` hasil materialisasi. Baris
+    // cache itu bisa kosong sehingga kolom ledger tampil '-' walau nilai
+    // sebenarnya sudah cukup untuk dihitung. Formula & bobot identik dengan
+    // jalur cetak rapor (computeRaporLive) supaya angka di ledger = angka di PDF.
+    const nilaiHarian = Number(row.nilai_harian) || 0
+    const daily = { jumlah: 1, nilai_harian: nilaiHarian }
+    const adaData = nilaiHarian > 0 || row.nilai_sts != null || row.nilai_sas != null
+    const nilai_akhir_sts = includeSts && adaData
+      ? computeNilai({
+          daily, sts: row.nilai_sts, sas: null, jenis: 'rapor_sts',
+          bobot: pickBobot(bobotRows, { rombelId, mapelId: row.mapel_id }, 'sts'),
+        }).akhir
+      : null
+    const nilai_akhir_sas = includeSas && adaData
+      ? computeNilai({
+          daily, sts: row.nilai_sts, sas: row.nilai_sas, jenis: 'rapor_sas',
+          bobot: pickBobot(bobotRows, { rombelId, mapelId: row.mapel_id }, 'sas'),
+        }).akhir
+      : null
+    return { ...row, nilai_harian: nilaiHarian, nilai_akhir_sts, nilai_akhir_sas }
+  })
 }
 
 function createLedgerWorkbook(rows, details) {

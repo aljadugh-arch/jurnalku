@@ -366,8 +366,18 @@ function computeRombelRanking(db, { tenantId, rombelId, tahunAjaran, semester, j
   return ranked
 }
 
+// Predikat huruf dari nilai akhir — definisi kanonik (dipakai generate/refresh
+// rapor, ledger, dan bot CS WhatsApp) supaya ambang batasnya tidak bercabang.
+function predikatFromNilai(n) {
+  if (n >= 90) return 'A'
+  if (n >= 80) return 'B'
+  if (n >= 70) return 'C'
+  return 'D'
+}
+
 module.exports = {
   generateRaporForRombel,
+  predikatFromNilai,
   refreshGeneratedRapor,
   periodFromTanggal,
   computeNilai,

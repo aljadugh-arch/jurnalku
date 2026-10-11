@@ -244,9 +244,13 @@ function hitungKelengkapan(db, tenantId, options = {}) {
     ...(penilaianDetail.length ? { detail: penilaianDetail.join('; ') } : {})
   })
 
-  // 9. Rapor — siswa yang sudah punya rapor tergenerate.
-  const entriRapor = count('SELECT COUNT(*) as c FROM rapor WHERE tenant_id=?', tid)
-  const siswaAdaRapor = count('SELECT COUNT(DISTINCT siswa_id) as c FROM rapor WHERE tenant_id=?', tid)
+  // 9. Rapor — dibuat ON-THE-FLY dari nilai yang sudah diisikan. Sejak jalur
+  // cetak tidak lagi bergantung pada tabel `rapor` hasil materialisasi
+  // (baris jenis 'rapor_sts'/'rapor_sas' bisa kosong), kesiapan rapor = kesiapan
+  // nilai: siswa siap dicetak bila punya nilai harian terisi. Karena itu item ini
+  // menurunkan angka dari `penilaian_harian`, bukan dari COUNT tabel `rapor`.
+  const entriRapor = entriPenilaian
+  const siswaAdaRapor = siswaAdaNilai
   const raporPersen = persenDari(siswaAdaRapor, totalSiswa)
   const siswaTanpaRapor = Math.max(0, totalSiswa - siswaAdaRapor)
   items.push({
@@ -259,11 +263,9 @@ function hitungKelengkapan(db, tenantId, options = {}) {
     entri: entriRapor,
     ...(totalSiswa === 0
       ? { detail: 'Belum ada siswa' }
-      : entriRapor === 0
-        ? { detail: 'Rapor belum digenerate' }
-        : siswaTanpaRapor > 0
-          ? { detail: `${siswaTanpaRapor} siswa belum punya rapor` }
-          : {})
+      : siswaTanpaRapor > 0
+        ? { detail: `${siswaTanpaRapor} siswa belum punya nilai — rapor dibuat otomatis dari nilai` }
+        : {})
   })
 
   // 10. Absensi hari ini — keterisian absensi siswa & guru.

@@ -216,9 +216,13 @@ test('data parsial: persentase dan detail sesuai kekurangan nyata', () => {
 
 test('tenant terisolasi: data tenant lain tidak ikut terhitung', () => {
   const db = makeDb(); seedLengkap(db)
-  // Tenant B punya siswa lengkap, mapel, dan rapor sendiri.
+  // Tenant B punya siswa lengkap, mapel, dan nilai sendiri. Item "Rapor" kini
+  // mengikuti nilai (on-the-fly: rapor dibuat dari nilai harian), jadi tenant B
+  // harus punya penilaian_harian — bukan hanya baris `rapor` — agar status
+  // "siap rapor" terbaca dan isolasi antar-tenant tetap terbukti.
   insert(db, 'settings', [{ id: 'main_tenant-b', tenant_id: 'tenant-b', nama_lembaga: 'MTs B', alamat: 'B', kepala_sekolah: 'B', npsn: '999' }])
   insert(db, 'siswa', [{ id: 'bs1', tenant_id: 'tenant-b', nama: 'C', nis: '999', rombel_id: 'br1', jenis_kelamin: 'P' }])
+  insert(db, 'penilaian_harian', [{ id: 'bn1', tenant_id: 'tenant-b', siswa_id: 'bs1', mapel_id: 'm1', tanggal: TODAY, sikap: 70, keaktifan: 70, pengetahuan: 70 }])
   insert(db, 'rapor', [{ id: 'brp1', tenant_id: 'tenant-b', siswa_id: 'bs1', mapel_id: 'm1', jenis: 'sts', nilai_sts: 70, nilai_sas: 70 }])
 
   const a = hitungKelengkapan(db, TENANT, { today: TODAY })

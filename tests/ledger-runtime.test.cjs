@@ -26,8 +26,11 @@ function fixture() {
   run("INSERT INTO penilaian_harian VALUES ('ph-b','s-b','m-a','2026-08-01',10,10,10,'ta')")
   run("INSERT INTO rapor VALUES ('sts','s-a','m-a','2026/2027','ganjil','sts',0,NULL,'ta')")
   run("INSERT INTO rapor VALUES ('sas','s-a','m-a','2026/2027','ganjil','sas',90,NULL,'ta')")
-  run("INSERT INTO rapor VALUES ('rst','s-a','m-a','2026/2027','ganjil','rapor_sts',NULL,44,'ta')")
-  run("INSERT INTO rapor VALUES ('rsa','s-a','m-a','2026/2027','ganjil','rapor_sas',NULL,68,'ta')")
+  // Baris materialisasi sengaja diberi nilai BERBEDA dari hasil hitung live
+  // (11/22). Ledger kini mengabaikannya dan menghitung sendiri dari sumber —
+  // jadi nilai benar (STS 44, SAS 65) membuktikan cache bukan sumber kebenaran.
+  run("INSERT INTO rapor VALUES ('rst','s-a','m-a','2026/2027','ganjil','rapor_sts',NULL,11,'ta')")
+  run("INSERT INTO rapor VALUES ('rsa','s-a','m-a','2026/2027','ganjil','rapor_sas',NULL,22,'ta')")
   return db
 }
 
@@ -42,7 +45,7 @@ test('ledger memakai formula harian, mempertahankan nol, dan tidak membuat mapel
   assert.deepEqual(rows[0], {
     siswa_id: 's-a', siswa_nama: 'Ani', siswa_nis: '1001',
     mapel_id: 'm-a', mapel_nama: 'Matematika', nilai_harian: 73,
-    nilai_sts: 0, nilai_sas: 90, nilai_akhir_sts: 44, nilai_akhir_sas: 68,
+    nilai_sts: 0, nilai_sas: 90, nilai_akhir_sts: 44, nilai_akhir_sas: 65,
   })
 })
 
@@ -83,5 +86,5 @@ test('workbook ledger dapat diparsing dan berisi dua nilai akhir', async () => {
   assert.equal(sheet.getCell('B4').value, '1001')
   assert.equal(sheet.getCell('E4').value, 73)
   assert.equal(sheet.getCell('F4').value, 0)
-  assert.equal(sheet.getCell('I4').value, 68)
+  assert.equal(sheet.getCell('I4').value, 65)
 })

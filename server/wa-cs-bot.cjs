@@ -10,6 +10,7 @@
 
 const { normalizePhone } = require('./wa-queue.cjs')
 const { getTenantSettings } = require('./tenant-settings.cjs')
+const { computeRaporLive, periodFromTanggal, predikatFromNilai } = require('./rapor-grade-service.cjs')
 
 // Strip semua karakter non-digit agar nomor telepon bisa dibandingkan lintas
 // format ("0812...", "62812...", "+62 812-...", dst).
@@ -131,13 +132,33 @@ function absensiAnak(db, tenantId, siswaId) {
   return rows
 }
 
+// Periode rapor terakhir seorang siswa: dari asesmen mentah (baris rapor jenis
+// sts/sas) bila ada, jika tidak dari tanggal penilaian harian terakhir.
+function latestPeriod(db, tenantId, siswaId) {
+  const r = db.prepare(`SELECT tahun_ajaran, semester FROM rapor
+      WHERE siswa_id=? AND tenant_id=? AND tahun_ajaran IS NOT NULL AND semester IS NOT NULL
+      ORDER BY tahun_ajaran DESC, semester DESC LIMIT 1`).get(siswaId, tenantId)
+  if (r) return { tahunAjaran: r.tahun_ajaran, semester: r.semester }
+  const d = db.prepare('SELECT MAX(tanggal) t FROM penilaian_harian WHERE siswa_id=? AND tenant_id=?').get(siswaId, tenantId)
+  return d && d.t ? periodFromTanggal(d.t) : null
+}
+
+// Nilai akhir rapor terakhir per mapel (STS/SAS) — dihitung LANGSUNG dari nilai
+// harian + asesmen, bukan dari baris `rapor` hasil materialisasi yang bisa
+// kosong sehingga nilai anak tampak tidak ada.
 function nilaiAnak(db, tenantId, siswaId) {
-  // Nilai rapor terakhir per mapel (STS/SAS), terlepas dari periode.
-  return db.prepare(`SELECT m.nama mapel, r.nilai_akhir, r.predikat, r.semester, r.tahun_ajaran
-    FROM rapor r JOIN mapel m ON m.id=r.mapel_id AND m.tenant_id=r.tenant_id
-    WHERE r.siswa_id=? AND r.tenant_id=? AND r.nilai_akhir IS NOT NULL
-    ORDER BY r.tahun_ajaran DESC, r.semester DESC, m.nama
-    LIMIT 20`).all(siswaId, tenantId)
+  const period = latestPeriod(db, tenantId, siswaId)
+  if (!period) return []
+  const siswa = db.prepare('SELECT rombel_id FROM siswa WHERE id=? AND tenant_id=?').get(siswaId, tenantId) || {}
+  const live = computeRaporLive(db, {
+    tenantId, siswaId, rombelId: siswa.rombel_id,
+    tahunAjaran: period.tahunAjaran, semester: period.semester, jenis: 'rapor_sas',
+  })
+  return live.rows.map(r => ({
+    mapel: r.mapel_nama, nilai_akhir: r.nilai_akhir,
+    predikat: predikatFromNilai(r.nilai_akhir),
+    semester: period.semester, tahun_ajaran: period.tahunAjaran,
+  }))
 }
 
 // Pasangan (mapel, rombel) yang diampu seorang guru (dari jadwal + pengajar).
@@ -158,16 +179,27 @@ function pengajaranGuru(db, tenantId, gtkId) {
   `).all(gtkId, tenantId, gtkId, tenantId)
 }
 
-// Nilai akhir per siswa untuk satu (rombel, mapel) yang diampu guru.
+// Nilai akhir LIVE satu (rombel, mapel) untuk semua siswa aktif — tiap siswa
+// memakai periode terakhirnya sendiri, dihitung dari sumber (bukan cache).
 function nilaiRombelMapel(db, tenantId, rombelId, mapelId) {
-  return db.prepare(`
-    SELECT s.nama, s.nis, r.nilai_akhir, r.predikat
-    FROM siswa s
-    LEFT JOIN rapor r ON r.siswa_id=s.id AND r.mapel_id=? AND r.tenant_id=s.tenant_id
-      AND r.id = (SELECT id FROM rapor WHERE siswa_id=s.id AND mapel_id=? AND tenant_id=s.tenant_id AND nilai_akhir IS NOT NULL ORDER BY tahun_ajaran DESC, semester DESC LIMIT 1)
-    WHERE s.tenant_id=? AND s.rombel_id=? AND COALESCE(s.status,'aktif')='aktif'
-    ORDER BY s.nama
-  `).all(mapelId, mapelId, tenantId, rombelId)
+  const siswaRows = db.prepare(`SELECT id, nama, nis FROM siswa
+    WHERE tenant_id=? AND rombel_id=? AND COALESCE(status,'aktif')='aktif' ORDER BY nama`).all(tenantId, rombelId)
+  return siswaRows.map(s => {
+    const period = latestPeriod(db, tenantId, s.id)
+    let nilai_akhir = null
+    if (period) {
+      const live = computeRaporLive(db, {
+        tenantId, siswaId: s.id, rombelId,
+        tahunAjaran: period.tahunAjaran, semester: period.semester, jenis: 'rapor_sas',
+      })
+      const row = live.rows.find(r => r.mapel_id === mapelId)
+      if (row) nilai_akhir = row.nilai_akhir
+    }
+    return {
+      nama: s.nama, nis: s.nis, nilai_akhir,
+      predikat: nilai_akhir != null ? predikatFromNilai(nilai_akhir) : null,
+    }
+  })
 }
 
 // Rekap absensi satu rombel pada tanggal tertentu (hadir/sakit/izin/alpha).
