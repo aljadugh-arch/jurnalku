@@ -425,7 +425,7 @@ export default function RekapAbsensiPage() {
         <div>
           <h1 className="text-2xl font-bold text-gray-800 font-display">Rekapitulasi Absensi</h1>
           <p className="text-gray-500 text-sm mt-1">Rekap kehadiran siswa, GTK, mapel, kegiatan, ekstrakurikuler, dan jamaah</p>
-          <select value={category} onChange={e => setCategory(e.target.value as typeof category)} className="mt-3 px-3 py-2 border rounded-lg text-sm">
+          <select value={category} onChange={e => setCategory(e.target.value as typeof category)} className="mt-3 w-full sm:w-auto max-w-full min-w-0 px-3 py-2 border rounded-lg text-sm">
             <option value="kehadiran">Kehadiran Masuk & Pulang</option>
             <option value="mapel">Absensi Mapel</option>
             <option value="kokurikuler">Absensi Kokurikuler</option>
@@ -445,42 +445,42 @@ export default function RekapAbsensiPage() {
       </div>
 
       {/* Filter */}
-      <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100 flex flex-wrap gap-4 items-center">
-        <div className="flex bg-gray-100 rounded-lg p-1">
+      <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100 flex flex-wrap gap-3 sm:gap-4 items-center">
+        <div className="flex w-full sm:w-auto min-w-0 bg-gray-100 rounded-lg p-1">
           {category === 'kehadiran' && <>
-            <button onClick={() => setTab('siswa')} className={`px-4 py-1.5 rounded-md text-sm font-medium transition flex items-center gap-1 ${tab === 'siswa' ? 'bg-white shadow text-primary' : 'text-gray-600'}`}>
+            <button onClick={() => setTab('siswa')} className={`flex flex-1 sm:flex-none items-center justify-center gap-1 whitespace-nowrap px-4 py-1.5 rounded-md text-sm font-medium transition ${tab === 'siswa' ? 'bg-white shadow text-primary' : 'text-gray-600'}`}>
               <GraduationCap size={16} /> Siswa
             </button>
-            <button onClick={() => setTab('gtk')} className={`px-4 py-1.5 rounded-md text-sm font-medium transition flex items-center gap-1 ${tab === 'gtk' ? 'bg-white shadow text-primary' : 'text-gray-600'}`}>
+            <button onClick={() => setTab('gtk')} className={`flex flex-1 sm:flex-none items-center justify-center gap-1 whitespace-nowrap px-4 py-1.5 rounded-md text-sm font-medium transition ${tab === 'gtk' ? 'bg-white shadow text-primary' : 'text-gray-600'}`}>
               <Users size={16} /> GTK
             </button>
           </>}
         </div>
-        <select value={mode} onChange={e => setMode(e.target.value as any)} className="px-3 py-2 border rounded-lg text-sm"><option value="harian">Harian</option><option value="mingguan">Mingguan</option><option value="bulanan">Bulanan</option><option value="semester">Semester</option></select>
+        <select value={mode} onChange={e => setMode(e.target.value as any)} className="w-full sm:w-auto min-w-0 max-w-full px-3 py-2 border rounded-lg text-sm"><option value="harian">Harian</option><option value="mingguan">Mingguan</option><option value="bulanan">Bulanan</option><option value="semester">Semester</option></select>
         {(category !== 'kehadiran' || tab === 'siswa') && (
-          <select value={filterRombel} onChange={e => setFilterRombel(e.target.value)} className="px-3 py-2 border rounded-lg text-sm">
+          <select value={filterRombel} onChange={e => setFilterRombel(e.target.value)} className="w-full sm:w-auto min-w-0 max-w-full px-3 py-2 border rounded-lg text-sm">
             <option value="">Semua Rombel</option>
             {rombels.map(r => <option key={r.id} value={r.id}>{r.nama}</option>)}
           </select>
         )}
         {category === 'mapel' && (
           <>
-            <select value={filterMapel} onChange={e => setFilterMapel(e.target.value)} className="px-3 py-2 border rounded-lg text-sm">
+            <select value={filterMapel} onChange={e => setFilterMapel(e.target.value)} className="w-full sm:w-auto min-w-0 max-w-full truncate px-3 py-2 border rounded-lg text-sm">
               <option value="">Semua Mapel</option>
               {mapels.map(m => <option key={m.id} value={m.id}>{m.nama}</option>)}
             </select>
-            <div className="flex bg-gray-100 rounded-lg p-1">
+            <div className="flex w-full sm:w-auto min-w-0 bg-gray-100 rounded-lg p-1">
               {([['siswa', 'Per Siswa'], ['mapel', 'Per Mapel'], ['guru', 'Per Guru']] as const).map(([value, label]) => (
-                <button key={value} onClick={() => setMapelView(value)} className={`px-3 py-1.5 rounded-md text-sm font-medium transition whitespace-nowrap ${mapelView === value ? 'bg-white shadow text-primary' : 'text-gray-600'}`}>{label}</button>
+                <button key={value} onClick={() => setMapelView(value)} className={`flex-1 sm:flex-none px-3 py-1.5 rounded-md text-sm font-medium transition whitespace-nowrap ${mapelView === value ? 'bg-white shadow text-primary' : 'text-gray-600'}`}>{label}</button>
               ))}
             </div>
           </>
         )}
-        {mode === 'bulanan' && <input type="month" value={bulan} onChange={e => setBulan(e.target.value)} className="px-3 py-2 border rounded-lg text-sm" />}
-        {mode === 'harian' && <input type="date" value={from} onChange={e => { setFrom(e.target.value); setTo(e.target.value) }} className="px-3 py-2 border rounded-lg text-sm" />}
-        {mode === 'mingguan' && <input type="date" value={from} onChange={e => setFrom(e.target.value)} className="px-3 py-2 border rounded-lg text-sm" />}
-        {mode === 'semester' && <><input value={tahunAjaran} onChange={e => setTahunAjaran(e.target.value)} placeholder="2026/2027" className="px-3 py-2 border rounded-lg text-sm w-32" /><select value={semester} onChange={e => setSemester(e.target.value as 'ganjil' | 'genap')} className="px-3 py-2 border rounded-lg text-sm"><option value="ganjil">Ganjil</option><option value="genap">Genap</option></select></>}
-        <span className="text-xs text-gray-500">{reportPeriod.label}</span>
+        {mode === 'bulanan' && <input type="month" value={bulan} onChange={e => setBulan(e.target.value)} className="w-full sm:w-auto min-w-0 max-w-full px-3 py-2 border rounded-lg text-sm" />}
+        {mode === 'harian' && <input type="date" value={from} onChange={e => { setFrom(e.target.value); setTo(e.target.value) }} className="w-full sm:w-auto min-w-0 max-w-full px-3 py-2 border rounded-lg text-sm" />}
+        {mode === 'mingguan' && <input type="date" value={from} onChange={e => setFrom(e.target.value)} className="w-full sm:w-auto min-w-0 max-w-full px-3 py-2 border rounded-lg text-sm" />}
+        {mode === 'semester' && <><input value={tahunAjaran} onChange={e => setTahunAjaran(e.target.value)} placeholder="2026/2027" className="w-full sm:w-32 min-w-0 max-w-full px-3 py-2 border rounded-lg text-sm" /><select value={semester} onChange={e => setSemester(e.target.value as 'ganjil' | 'genap')} className="w-full sm:w-auto min-w-0 max-w-full px-3 py-2 border rounded-lg text-sm"><option value="ganjil">Ganjil</option><option value="genap">Genap</option></select></>}
+        <span className="text-xs text-gray-500 w-full sm:w-auto">{reportPeriod.label}</span>
       </div>
 
       {category === 'kehadiran' && breakdown.items.length > 0 && (
