@@ -186,11 +186,13 @@ function getPeriodicAttendanceRecap(db, tenantId, entityType, range, rombelId = 
         ORDER BY CASE WHEN r.id IS NULL THEN 1 ELSE 0 END,r.nama,s.nama`).all(tenantId, rombelId, rombelId)
     : db.prepare(`SELECT g.id,g.nama,g.nip,g.jabatan FROM gtk g WHERE g.tenant_id=?
         AND COALESCE(g.status_kepegawaian,'')!='Nonaktif' ORDER BY g.nama`).all(tenantId)
+  // Rekap MASUK & PULANG: masuk dari kolom `status`, pulang dari `status_pulang`
+  // (siswa) dan `waktu_pulang` (GTK). Sebelumnya pulang tidak dibaca sama sekali.
   const records = isStudent
-    ? db.prepare(`SELECT a.siswa_id entity_id,a.tanggal,a.status FROM absensi_siswa a
+    ? db.prepare(`SELECT a.siswa_id entity_id,a.tanggal,a.status,a.status_pulang FROM absensi_siswa a
         JOIN siswa s ON s.id=a.siswa_id AND s.tenant_id=a.tenant_id
         WHERE a.tenant_id=? AND a.tanggal BETWEEN ? AND ?`).all(tenantId, range.from, range.to)
-    : db.prepare(`SELECT a.gtk_id entity_id,a.tanggal,a.status FROM absensi_guru a
+    : db.prepare(`SELECT a.gtk_id entity_id,a.tanggal,a.status,a.waktu_pulang FROM absensi_guru a
         JOIN gtk g ON g.id=a.gtk_id AND g.tenant_id=a.tenant_id
         WHERE a.tenant_id=? AND a.tanggal BETWEEN ? AND ?`).all(tenantId, range.from, range.to)
   const normalizedRecords = records.map(record => ({ ...record, status: statusKey(record.status) }))
@@ -200,6 +202,18 @@ function getPeriodicAttendanceRecap(db, tenantId, entityType, range, rombelId = 
     const key = `${record.entity_id}\0${record.tanggal}`
     if (!byEntityDate.has(key)) byEntityDate.set(key, statusKey(record.status))
   }
+  // Penanda pulang per entitas/tanggal. Siswa memakai huruf status dari status_pulang
+  // (H/S/I/A); GTK memakai 'P' bila waktu_pulang terisi (absensi_guru tanpa status_pulang).
+  const pulangMarker = record => isStudent
+    ? (statusKey(record.status_pulang) ? statusKey(record.status_pulang).charAt(0).toUpperCase() : '')
+    : (String(record.waktu_pulang || '').trim() ? 'P' : '')
+  const byEntityDatePulang = new Map()
+  for (const record of records) {
+    const key = `${record.entity_id}\0${record.tanggal}`
+    if (byEntityDatePulang.has(key)) continue
+    const marker = pulangMarker(record)
+    if (marker) byEntityDatePulang.set(key, marker)
+  }
   const jtmByGtk = new Map()
   for (const row of teaching.schedule) jtmByGtk.set(row.gtk_id, Number(row.slots) || 0)
   const provision = (entityId, date) => {
@@ -208,23 +222,29 @@ function getPeriodicAttendanceRecap(db, tenantId, entityType, range, rombelId = 
   }
   const detail = entities.map(entity => {
     const per_tanggal = Object.fromEntries(dates.map(date => [date, '']))
+    const per_tanggal_pulang = Object.fromEntries(dates.map(date => [date, '']))
     const totals = emptySummary()
     let hadirCount = 0
+    let pulangCount = 0
     for (const date of dates) {
       const key = byEntityDate.get(`${entity.id}\0${date}`) || ''
       per_tanggal[date] = key ? key.charAt(0).toUpperCase() : ''
       if (key) { totals[key]++; totals.total++ } else totals.kosong++
+      const pulang = byEntityDatePulang.get(`${entity.id}\0${date}`) || ''
+      if (pulang) { per_tanggal_pulang[date] = pulang; pulangCount++ }
       if (provision(entity.id, date)) hadirCount++
     }
-    if (isStudent) return { ...entity, ...totals, per_tanggal }
+    if (isStudent) return { ...entity, ...totals, pulang: pulangCount, per_tanggal, per_tanggal_pulang }
     const mapel_list = teaching.mapelByGtk[entity.id] || []
     return {
       ...entity,
       mapel_list,
       jml_jtm: jtmByGtk.get(entity.id) || 0,
       jumlah_kehadiran: hadirCount,
+      pulang: pulangCount,
       ...totals,
       per_tanggal,
+      per_tanggal_pulang,
     }
   })
   return {
@@ -234,7 +254,7 @@ function getPeriodicAttendanceRecap(db, tenantId, entityType, range, rombelId = 
     to: range.to,
     label: range.label,
     detail,
-    summary: summarize(detail),
+    summary: { ...summarize(detail), pulang: detail.reduce((n, row) => n + (row.pulang || 0), 0) },
     breakdown: buildBreakdown(range.mode, range.from, range.to, normalizedRecords),
     schedule,
   }
@@ -273,10 +293,43 @@ function deduplicateTable(db, table, identityColumn) {
   return removed
 }
 
+// Absensi kegiatan/ekskul memakai kunci gabungan (siswa, kegiatan/ekskul, tanggal).
+// Endpoint bulk/jamaah mengandalkan kunci ini agar tidak ada dobel absen; indeks unik
+// menjaga jaminan yang sama di level DB (bukan hanya cek aplikasi yang rentan balapan).
+function deduplicateComposite(db, table, secondColumn) {
+  if (!tableExists(db, table)) return 0
+  // `tenant_id` ada di skema produksi, tetapi tabel lama bisa belum punya kolomnya;
+  // kunci mengikuti kolom yang benar-benar ada supaya index tetap bisa dibangun.
+  const present = new Set(db.prepare(`PRAGMA table_info(${table})`).all().map(c => c.name))
+  const keys = ['tenant_id', 'siswa_id', secondColumn, 'tanggal'].filter(key => present.has(key))
+  const duplicateRows = db.prepare(`SELECT ${keys.join(',')},COUNT(*) count FROM ${table}
+    GROUP BY ${keys.join(',')} HAVING COUNT(*)>1`).all()
+  let removed = 0
+  for (const duplicate of duplicateRows) {
+    const where = keys.map(key => `${key}=?`).join(' AND ')
+    const rows = db.prepare(`SELECT rowid,* FROM ${table} WHERE ${where}
+      ORDER BY (CASE WHEN status IS NULL OR trim(status)='' THEN 0 ELSE 1 END) DESC,rowid DESC`)
+      .all(...keys.map(key => duplicate[key]))
+    const keep = rows[0]
+    for (const row of rows.slice(1)) {
+      db.prepare(`UPDATE ${table} SET
+        status=CASE WHEN trim(COALESCE(status,''))='' THEN ? ELSE status END,
+        keterangan=COALESCE(NULLIF(COALESCE(keterangan,''),''),?) WHERE rowid=?`)
+        .run(row.status || '', row.keterangan || '', keep.rowid)
+      db.prepare(`DELETE FROM ${table} WHERE rowid=?`).run(row.rowid)
+      removed++
+    }
+  }
+  db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_${table}_unique ON ${table}(${keys.join(',')})`)
+  return removed
+}
+
 function deduplicateAttendance(db) {
   const run = db.transaction(() => ({
     absensi_siswa: deduplicateTable(db, 'absensi_siswa', 'siswa_id'),
     absensi_guru: deduplicateTable(db, 'absensi_guru', 'gtk_id'),
+    absensi_kegiatan: deduplicateComposite(db, 'absensi_kegiatan', 'kegiatan_id'),
+    absensi_ekskul: deduplicateComposite(db, 'absensi_ekskul', 'ekskul_id'),
   }))
   return run()
 }

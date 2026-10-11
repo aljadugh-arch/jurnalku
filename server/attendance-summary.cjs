@@ -47,7 +47,9 @@ function studentAttendance(db, tenantId, studentId, limit = 100) {
     WHERE ta.tenant_id=? AND ta.siswa_id=? ORDER BY tp.tanggal DESC LIMIT ?`).all(tenantId, studentId, limit) : []
   const kokurikuler = activities.filter(row => String(row.jenis || '').toLowerCase() === 'kokurikuler')
   const kegiatanLain = activities.filter(row => String(row.jenis || '').toLowerCase() !== 'kokurikuler')
-  const ekskul = [...extracurricular, ...tahfidz]
+  // Ekskul & tahfidz dapat mencatat kejadian yang sama (ekskul bernama TAHFIDZ vs modul
+  // tahfidz_absensi). Gabungkan tanpa dobel per (tanggal, nama kegiatan).
+  const ekskul = dedupeActivityRows([...extracurricular, ...tahfidz])
   const qrStatuses = qr.flatMap(row => [row.status ? { status: row.status } : null, row.status_pulang ? { status: row.status_pulang } : null].filter(Boolean))
   return {
     rekap_kehadiran: {
@@ -90,15 +92,57 @@ function getAttendanceOverview(db, tenantId, date) {
   const jamaah = aggregate(db, aggregateSql('absensi_kegiatan', "AND kegiatan_id IN (SELECT id FROM jamaah_sesi WHERE tenant_id=?)"), [tenantId, date, tenantId])
   const kokurikuler = aggregate(db, aggregateSql('absensi_kegiatan', "AND kegiatan_id IN (SELECT id FROM kegiatan_khusus WHERE tenant_id=? AND lower(COALESCE(jenis,''))='kokurikuler')"), [tenantId, date, tenantId])
   const kegiatanLain = aggregate(db, aggregateSql('absensi_kegiatan', "AND kegiatan_id IN (SELECT id FROM kegiatan_khusus WHERE tenant_id=? AND lower(COALESCE(jenis,''))<>'kokurikuler')"), [tenantId, date, tenantId])
-  const ekskul = aggregate(db, aggregateSql('absensi_ekskul'), [tenantId, date])
-  const tahfidz = tableExists(db, 'tahfidz_absensi') ? aggregate(db, `SELECT COUNT(*) total,
-    SUM(CASE WHEN lower(COALESCE(ta.status,'')) IN ('hadir','present') THEN 1 ELSE 0 END) hadir,
-    SUM(CASE WHEN lower(COALESCE(ta.status,'')) IN ('sakit','sick') THEN 1 ELSE 0 END) sakit,
-    SUM(CASE WHEN lower(COALESCE(ta.status,'')) IN ('izin','ijin','permitted') THEN 1 ELSE 0 END) izin,
-    SUM(CASE WHEN lower(COALESCE(ta.status,'')) IN ('alpha','alpa','absent') THEN 1 ELSE 0 END) alpha,
-    SUM(CASE WHEN lower(COALESCE(ta.status,'')) NOT IN ('hadir','present','sakit','sick','izin','ijin','permitted','alpha','alpa','absent') THEN 1 ELSE 0 END) lain
-    FROM tahfidz_absensi ta JOIN tahfidz_pertemuan tp ON tp.id=ta.pertemuan_id AND tp.tenant_id=ta.tenant_id WHERE ta.tenant_id=? AND tp.tanggal=?`, [tenantId, date]) : summary([])
-  return { tanggal: date, qr_masuk_pulang: add(qrIn, qrOut), mapel, jamaah, kokurikuler, ekskul: add(ekskul, tahfidz), kegiatan_lain: kegiatanLain }
+  const ekskul = ekskulDailySummary(db, tenantId, date)
+  return { tanggal: date, qr_masuk_pulang: add(qrIn, qrOut), mapel, jamaah, kokurikuler, ekskul, kegiatan_lain: kegiatanLain }
 }
 
-module.exports = { getAttendanceOverview, studentAttendance, statusKey, summary }
+// Detail per siswa dapat memuat baris yang sama dari dua sumber (absensi_ekskul ekskul
+// TAHFIDZ + tahfidz_absensi). Buang duplikat berdasarkan (tanggal, nama kegiatan).
+function dedupeActivityRows(rows) {
+  const seen = new Set()
+  const out = []
+  for (const row of rows) {
+    const key = `${row.tanggal || ''}|${String(row.ekskul_nama || '').trim().toLowerCase()}`
+    if (seen.has(key)) continue
+    seen.add(key)
+    out.push(row)
+  }
+  return out
+}
+
+// Angka harian kategori ekskul = gabungan absensi_ekskul + tahfidz_absensi yang di-dedupe
+// per (siswa, tanggal, nama kegiatan), supaya satu kejadian tidak dihitung dua kali.
+function ekskulDailySummary(db, tenantId, date) {
+  const parts = []
+  const params = []
+  if (tableExists(db, 'absensi_ekskul')) {
+    const ekskulJoin = tableExists(db, 'ekskul')
+      ? `LEFT JOIN ekskul e ON e.id=ae.ekskul_id AND e.tenant_id=ae.tenant_id`
+      : ''
+    const ekskulName = tableExists(db, 'ekskul') ? "COALESCE(e.nama,'')" : "''"
+    parts.push(`SELECT ae.siswa_id,ae.tanggal,${ekskulName} nama,ae.status,1 src
+      FROM absensi_ekskul ae ${ekskulJoin}
+      WHERE ae.tenant_id=? AND ae.tanggal=?`)
+    params.push(tenantId, date)
+  }
+  if (tableExists(db, 'tahfidz_absensi') && tableExists(db, 'tahfidz_pertemuan')) {
+    parts.push(`SELECT ta.siswa_id,tp.tanggal,COALESCE(tk.nama,'') nama,ta.status,2 src
+      FROM tahfidz_absensi ta
+      JOIN tahfidz_pertemuan tp ON tp.id=ta.pertemuan_id AND tp.tenant_id=ta.tenant_id
+      LEFT JOIN tahfidz_kelompok tk ON tk.id=tp.kelompok_id AND tk.tenant_id=tp.tenant_id
+      WHERE ta.tenant_id=? AND tp.tanggal=?`)
+    params.push(tenantId, date)
+  }
+  if (!parts.length) return summary([])
+  const union = parts.join('\n      UNION ALL\n      ')
+  return aggregate(db, `SELECT COUNT(*) total,
+    SUM(CASE WHEN lower(COALESCE(status,'')) IN ('hadir','present') THEN 1 ELSE 0 END) hadir,
+    SUM(CASE WHEN lower(COALESCE(status,'')) IN ('sakit','sick') THEN 1 ELSE 0 END) sakit,
+    SUM(CASE WHEN lower(COALESCE(status,'')) IN ('izin','ijin','permitted') THEN 1 ELSE 0 END) izin,
+    SUM(CASE WHEN lower(COALESCE(status,'')) IN ('alpha','alpa','absent') THEN 1 ELSE 0 END) alpha,
+    SUM(CASE WHEN lower(COALESCE(status,'')) NOT IN ('hadir','present','sakit','sick','izin','ijin','permitted','alpha','alpa','absent') THEN 1 ELSE 0 END) lain
+    FROM (SELECT siswa_id,tanggal,nama,status, ROW_NUMBER() OVER (PARTITION BY siswa_id,tanggal,nama ORDER BY src) rn
+      FROM (${union})) WHERE rn=1`, params)
+}
+
+module.exports = { getAttendanceOverview, studentAttendance, statusKey, summary, ekskulDailySummary }

@@ -8,8 +8,9 @@ function fixture() {
   db.exec(`
     CREATE TABLE siswa (id TEXT, tenant_id TEXT, nama TEXT, nis TEXT, nisn TEXT, rombel_id TEXT, status TEXT);
     CREATE TABLE rombel (id TEXT, tenant_id TEXT, nama TEXT);
-    CREATE TABLE absensi_mapel (id TEXT, tenant_id TEXT, siswa_id TEXT, tanggal TEXT, status TEXT, mapel_id TEXT, jadwal_id TEXT);
+    CREATE TABLE absensi_mapel (id TEXT, tenant_id TEXT, siswa_id TEXT, tanggal TEXT, status TEXT, mapel_id TEXT, jadwal_id TEXT, guru_id TEXT, rombel_id TEXT);
     CREATE TABLE mapel (id TEXT, tenant_id TEXT, nama TEXT);
+    CREATE TABLE gtk (id TEXT, tenant_id TEXT, nama TEXT, nip TEXT, jabatan TEXT, status_kepegawaian TEXT);
     CREATE TABLE absensi_ekskul (id TEXT, tenant_id TEXT, siswa_id TEXT, tanggal TEXT, status TEXT, ekskul_id TEXT);
     CREATE TABLE ekskul (id TEXT, tenant_id TEXT, nama TEXT);
     CREATE TABLE tahfidz_absensi (tenant_id TEXT, pertemuan_id TEXT, siswa_id TEXT, status TEXT);
@@ -22,8 +23,9 @@ function fixture() {
   db.exec(`
     INSERT INTO rombel VALUES ('r1','t1','VII-A'),('r2','t2','VII-B');
     INSERT INTO siswa VALUES ('s1','t1','Ali','001','N001','r1','aktif'),('s2','t1','Budi','002','N002','r1','aktif'),('sx','t2','Tenant B','003','N003','r2','aktif');
-    INSERT INTO mapel VALUES ('m1','t1','Matematika');
-    INSERT INTO absensi_mapel VALUES ('am1','t1','s1','2026-09-01','izin','m1','j1'),('am2','t1','s1','2026-09-02','hadir','m1','j1'),('am3','t2','sx','2026-09-01','hadir','m1','j1');
+    INSERT INTO mapel VALUES ('m1','t1','Matematika'),('m2','t1','Fikih');
+    INSERT INTO gtk VALUES ('g1','t1','Pak Ahmad','1980','Guru','Aktif'),('g2','t1','Bu Siti','1981','Guru','Aktif');
+    INSERT INTO absensi_mapel VALUES ('am1','t1','s1','2026-09-01','izin','m1','j1','g1','r1'),('am2','t1','s1','2026-09-02','hadir','m1','j1','g1','r1'),('am3','t2','sx','2026-09-01','hadir','m1','j1','g1','r2');
     INSERT INTO ekskul VALUES ('e1','t1','Pramuka');
     INSERT INTO absensi_ekskul VALUES ('ae1','t1','s1','2026-09-01','sakit','e1');
     INSERT INTO tahfidz_kelompok VALUES ('tk1','t1','Tahfidz');
@@ -68,7 +70,7 @@ test('category recap filters by rombel when rombelId is supplied', () => {
   // Tambah rombel kedua + siswa di tenant yang sama untuk menguji pemfilteran nyata.
   db.exec(`INSERT INTO rombel VALUES ('r1b','t1','VII-B');`)
   db.exec(`INSERT INTO siswa VALUES ('s3','t1','Citra','004','N004','r1b','aktif');`)
-  db.exec(`INSERT INTO absensi_mapel VALUES ('am4','t1','s3','2026-09-01','hadir','m1','j1');`)
+  db.exec(`INSERT INTO absensi_mapel VALUES ('am4','t1','s3','2026-09-01','hadir','m1','j1','g1','r1b');`)
 
   const all = getCategoryRecap(db, 't1', 'mapel', '2026-09-01', '2026-09-30')
   assert.equal(all.detail.some(row => row.id === 's1'), true)
@@ -82,5 +84,35 @@ test('category recap filters by rombel when rombelId is supplied', () => {
   const emptyRombel = getCategoryRecap(db, 't1', 'mapel', '2026-09-01', '2026-09-30', 'r1b')
   assert.equal(emptyRombel.detail.some(row => row.id === 's3'), true)
   assert.equal(emptyRombel.detail.some(row => row.id === 's1'), false)
+  db.close()
+})
+
+test('category recap filter mapel_id membatasi ke satu mata pelajaran', () => {
+  const db = fixture()
+  // Satu siswa dengan dua mapel berbeda; filter m1 hanya menghitung m1.
+  db.exec(`INSERT INTO absensi_mapel VALUES ('am5','t1','s2','2026-09-01','alpha','m2','j2','g2','r1');`)
+  const all = getCategoryRecap(db, 't1', 'mapel', '2026-09-01', '2026-09-30')
+  assert.equal(all.detail.filter(row => row.id === 's2').reduce((n, r) => n + r.total, 0), 1)
+  const onlyM1 = getCategoryRecap(db, 't1', 'mapel', '2026-09-01', '2026-09-30', '', 'm1')
+  assert.equal(onlyM1.detail.filter(row => row.id === 's2').reduce((n, r) => n + r.total, 0), 0)
+  assert.equal(onlyM1.detail.every(row => row.kegiatan_nama === 'Matematika'), true)
+  assert.equal(onlyM1.summary.total, 2)
+  db.close()
+})
+
+test('category recap group_by guru menggabungkan mapel yang diampu satu guru', () => {
+  const db = fixture()
+  // Pak Ahmad (g1) mengampu Matematika (sudah ada) + Fikih; Bu Siti (g2) tidak mengampu apa pun.
+  db.exec(`INSERT INTO absensi_mapel VALUES ('am6','t1','s1','2026-09-03','hadir','m2','j2','g1','r1');`)
+  const result = getCategoryRecap(db, 't1', 'mapel', '2026-09-01', '2026-09-30', '', '', 'guru')
+  assert.equal(result.group_by, 'guru')
+  const g1 = result.detail.find(row => row.id === 'g1')
+  assert.equal(g1.total, 3)
+  assert.deepEqual([...g1.mapel_list].sort(), ['Fikih', 'Matematika'])
+  assert.equal(g1.hadir, 2)
+  assert.equal(g1.izin, 1)
+  // Guru tanpa absensi tetap tampil dengan total 0 (agar terlihat belum mengisi).
+  const g2 = result.detail.find(row => row.id === 'g2')
+  assert.equal(g2.total, 0)
   db.close()
 })

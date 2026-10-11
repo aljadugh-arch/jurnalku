@@ -47,6 +47,7 @@ const { hitungJadwalSholat, jadwalSholatTenant } = require('./jadwal-sholat.cjs'
 const { KOTA_SHOLAT, DEFAULT_KOTA, cariKota } = require('./kota-sholat.cjs')
 const { getCategoryRecap } = require('./attendance-recap.cjs')
 const { buildRekapRange, getPeriodicAttendanceRecap, deduplicateAttendance } = require('./attendance-periodic-recap.cjs')
+const { migrateAbsensiKegiatanForeignKey } = require('./attendance-schema.cjs')
 const { isDriveFolderUrl } = require('./library-config.cjs')
 const { getLateDashboard } = require('./dashboard-late.cjs')
 const { normalizePiketIds, attachPiketNames, MAKS_GURU_PIKET } = require('./jadwal-piket.cjs')
@@ -1417,10 +1418,21 @@ for (const col of [
     ]) {
   try { db.prepare(`ALTER TABLE ${col[0]} ADD COLUMN ${col[1]} ${col[2]}`).run() } catch {}
 }
+// Absensi jamaah memakai kegiatan_id = jamaah_sesi.id, sedang kegiatan lain memakai
+// kegiatan_khusus.id. FK lama ke kegiatan_khusus memblokir simpan jamaah — lepas FK
+// tsb lebih dulu, SEBELUM index unik komposit dibuat (recreate tabel menghapus index).
+try {
+  db.pragma('foreign_keys = OFF')
+  if (migrateAbsensiKegiatanForeignKey(db)) console.log('[migration] absensi_kegiatan FK dipolimorfikkan (jamaah dapat disimpan)')
+} catch (e) {
+  console.error('[migration] absensi_kegiatan FK:', e.message)
+} finally {
+  db.pragma('foreign_keys = ON')
+}
 // duplicate QR reads must converge to one student/day row after tenant_id migration
 try {
   const cleanedAttendance = deduplicateAttendance(db)
-  if (cleanedAttendance.absensi_siswa || cleanedAttendance.absensi_guru) {
+  if (Object.values(cleanedAttendance).some(n => n)) {
     console.log('[migration] attendance duplicates removed:', cleanedAttendance)
   }
 } catch (e) {
@@ -4007,7 +4019,9 @@ app.post('/api/absensi-kegiatan/bulk', STAFF, (req, res) => {
   if (!owns) return res.status(403).json({ error: 'Kegiatan tidak ditemukan' })
   let count = 0
   for (const d of data) {
-    const exists = db.prepare('SELECT id FROM absensi_kegiatan WHERE siswa_id = ? AND kegiatan_id = ? AND tenant_id = ?').get(d.siswa_id, kegiatan_id, req.tenantId)
+    // Kunci baris = (siswa, kegiatan, tanggal). Tanpa `tanggal` pada klausa pencarian,
+    // penyimpanan tanggal kedua akan menimpa baris tanggal pertama (kehilangan data).
+    const exists = db.prepare('SELECT id FROM absensi_kegiatan WHERE siswa_id = ? AND kegiatan_id = ? AND tanggal = ? AND tenant_id = ?').get(d.siswa_id, kegiatan_id, tanggal || '', req.tenantId)
     if (exists) {
       db.prepare('UPDATE absensi_kegiatan SET status=?, keterangan=? WHERE id=? AND tenant_id=?').run(d.status, d.keterangan || '', exists.id, req.tenantId)
     } else {
@@ -4792,11 +4806,20 @@ app.post('/api/jamaah/sesi', ADMIN, (req, res) => {
   if (!nama || !dates.length || !Array.isArray(data)) return res.status(400).json({ error: 'nama, tanggal[], data wajib' })
   const id = uuidv4()
   const ins = db.prepare('INSERT INTO absensi_kegiatan (id,siswa_id,kegiatan_id,tanggal,status,keterangan,tenant_id) VALUES (?,?,?,?,?,?,?)')
+  const upd = db.prepare('UPDATE absensi_kegiatan SET status=?, keterangan=? WHERE id=? AND tenant_id=?')
+  const find = db.prepare('SELECT id FROM absensi_kegiatan WHERE siswa_id=? AND kegiatan_id=? AND tanggal=? AND tenant_id=?')
+  let count = 0
   db.transaction(() => {
     db.prepare('INSERT INTO jamaah_sesi (id,nama,mulai,selesai,minimal_hadir,tenant_id) VALUES (?,?,?,?,?,?)').run(id, nama, mulai || dates[0], selesai || dates[dates.length - 1], Number(minimal_hadir) || 10, req.tenantId)
-    for (const d of dates) for (const row of data) ins.run(uuidv4(), row.siswa_id, id, d, row.status || 'hadir', row.keterangan || '', req.tenantId)
+    // Satu baris per (siswa, sesi, tanggal) — hindari dobel absen bila sesi yang sama
+    // tersimpan dua kali atau payload memuat siswa yang sama dua kali.
+    for (const d of dates) for (const row of data) {
+      const exists = find.get(row.siswa_id, id, d, req.tenantId)
+      if (exists) upd.run(row.status || 'hadir', row.keterangan || '', exists.id, req.tenantId)
+      else { ins.run(uuidv4(), row.siswa_id, id, d, row.status || 'hadir', row.keterangan || '', req.tenantId); count++ }
+    }
   })()
-  res.json({ id, count: dates.length * data.length })
+  res.json({ id, count })
 })
 app.get('/api/jamaah/rekap', authMiddleware, (req, res) => {
   const { mulai, selesai, minimal_hadir } = req.query
@@ -5465,8 +5488,10 @@ app.get('/api/rekap-absensi/kategori', authMiddleware, (req, res) => {
   const { kategori = 'mapel', mulai, selesai } = req.query
   if (!mulai || !selesai) return res.status(400).json({ error: 'Parameter mulai dan selesai wajib diisi' })
   const rombelId = String(req.query.rombel_id || '').trim()
+  const mapelId = String(req.query.mapel_id || '').trim()
+  const groupBy = String(req.query.group_by || '').trim()
   try {
-    return res.json(getCategoryRecap(db, req.tenantId, kategori, mulai, selesai, rombelId))
+    return res.json(getCategoryRecap(db, req.tenantId, kategori, mulai, selesai, rombelId, mapelId, groupBy))
   } catch (error) {
     return res.status(400).json({ error: error.message })
   }
