@@ -375,7 +375,7 @@ export default function RaporPage() {
   const siswa = ringkasan?.siswa || siswaList.find(s => s.id === selectedSiswa)
   const rombel = rombelList.find(r => r.id === selectedRombel)
   const rataAkhir = rapor.length ? Math.round(rapor.reduce((sum, row) => sum + (Number(row.nilai_akhir) || 0), 0) / rapor.length) : 0
-  const jenisLabel = jenis === 'rapor_sas' ? 'AKHIR SEMESTER (SAS)' : 'TENGAH SEMESTER (STS)'
+  const jenisLabel = jenis === 'rapor_sas' ? 'SUMATIF AKHIR SEMESTER (SAS)' : 'SUMATIF TENGAH SEMESTER (STS)'
   const formulaLabel = jenis === 'rapor_sas'
     ? 'Nilai Akhir = (Nilai Harian × 40%) + (Asesmen STS × 20%) + (Asesmen SAS × 40%)'
     : 'Nilai Akhir = (Nilai Harian × 60%) + (Asesmen STS × 40%)'
@@ -496,7 +496,7 @@ export default function RaporPage() {
           <Field label="Tahun Ajaran"><input value={tahunAjaran} onChange={e => setTahunAjaran(e.target.value)} className="input" /></Field>
           <Select label="Semester" value={semester} onChange={setSemester} options={[{ value: 'ganjil', label: 'Ganjil' }, { value: 'genap', label: 'Genap' }]} />
           {kurikulum === 'k13' && <Select label="Jenis Kelamin" value={k13Jk} onChange={setK13Jk} options={[{ value: '', label: 'Semua' }, { value: 'L', label: 'Laki-laki' }, { value: 'P', label: 'Perempuan' }]} />}
-          {kurikulum === 'merdeka' && <Field label="Jenis Rapor"><select value={jenis} onChange={e => setJenis(e.target.value as any)} className="input"><option value="rapor_sts">Rapor STS (Tengah Semester)</option><option value="rapor_sas">Rapor SAS (Akhir Semester)</option></select></Field>}
+          {kurikulum === 'merdeka' && <Field label="Jenis Rapor"><select value={jenis} onChange={e => setJenis(e.target.value as any)} className="input"><option value="rapor_sts">Rapor STS (Sumatif Tengah Semester)</option><option value="rapor_sas">Rapor SAS (Sumatif Akhir Semester)</option></select></Field>}
         </div>
         {msg && <p className={`mt-3 text-sm ${msg.startsWith('✓') ? 'text-green-600' : 'text-red-600'}`}>{msg}</p>}
       </div>
@@ -577,8 +577,8 @@ export default function RaporPage() {
                 </div>
               </div>
               {bobot && <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                <BobotGroup title="Rapor STS (Tengah Semester)" jenis="sts" bobot={bobot.sts} defaults={bobotDefaults?.sts} onChange={(v: any) => setBobot({ ...bobot, sts: v })} />
-                <BobotGroup title="Rapor SAS (Akhir Semester)" jenis="sas" bobot={bobot.sas} defaults={bobotDefaults?.sas} onChange={(v: any) => setBobot({ ...bobot, sas: v })} />
+                <BobotGroup title="Rapor STS (Sumatif Tengah Semester)" jenis="sts" bobot={bobot.sts} defaults={bobotDefaults?.sts} onChange={(v: any) => setBobot({ ...bobot, sts: v })} />
+                <BobotGroup title="Rapor SAS (Sumatif Akhir Semester)" jenis="sas" bobot={bobot.sas} defaults={bobotDefaults?.sas} onChange={(v: any) => setBobot({ ...bobot, sas: v })} />
               </div>}
               {bobotMsg && <p className={`text-sm ${bobotMsg.startsWith('✓') ? 'text-green-600' : 'text-red-600'}`}>{bobotMsg}</p>}
               {bobotRows.length > 0 && (
@@ -612,8 +612,8 @@ export default function RaporPage() {
               <div className="grid sm:grid-cols-2 gap-4">
                 <Field label="Jenis Nilai">
                   <select value={importJenis} onChange={e => setImportJenis(e.target.value as any)} className="input">
-                    <option value="sts">STS (Tengah Semester)</option>
-                    <option value="sas">SAS (Akhir Semester)</option>
+                    <option value="sts">STS (Sumatif Tengah Semester)</option>
+                    <option value="sas">SAS (Sumatif Akhir Semester)</option>
                     <option value="harian">Nilai Harian</option>
                   </select>
                 </Field>

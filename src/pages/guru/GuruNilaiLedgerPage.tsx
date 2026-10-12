@@ -142,8 +142,8 @@ export default function GuruNilaiLedgerPage() {
             <select value={jenis} onChange={e => setJenis(e.target.value as any)}
               className="w-full px-3 py-2 border border-gray-300 dark:border-gray-700 dark:bg-gray-800 dark:text-white rounded-lg focus:ring-2 focus:ring-primary/20 focus:border-primary">
               <option value="semua">Semua</option>
-              <option value="rapor_sts">STS (Tengah Semester)</option>
-              <option value="rapor_sas">SAS (Akhir Semester)</option>
+              <option value="rapor_sts">STS (Sumatif Tengah Semester)</option>
+              <option value="rapor_sas">SAS (Sumatif Akhir Semester)</option>
             </select>
           </div>
           <div className="flex items-end">

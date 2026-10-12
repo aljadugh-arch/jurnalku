@@ -168,8 +168,8 @@ export default function GuruRekapNilaiPage() {
               className="w-full px-3 py-2 border border-gray-300 dark:border-gray-700 dark:bg-gray-800 dark:text-white rounded-lg focus:ring-2 focus:ring-primary/20 focus:border-primary">
               <option value="semua">Semua</option>
               <option value="harian">Harian</option>
-              <option value="sts">STS (Tengah Semester)</option>
-              <option value="sas">SAS (Akhir Semester)</option>
+              <option value="sts">STS (Sumatif Tengah Semester)</option>
+              <option value="sas">SAS (Sumatif Akhir Semester)</option>
             </select>
           </div>
           <div className="flex items-end gap-2">
