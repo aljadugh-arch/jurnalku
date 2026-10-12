@@ -5460,7 +5460,10 @@ app.post('/api/notif/keuangan-wali', ADMIN, (req, res) => {
 // Dipanggil saat absensi siswa disimpan - kirim notif ke wali murid
 async function sendAbsensiNotifToWali(siswaId, status, tanggal) {
   const siswa = db.prepare('SELECT tenant_id FROM siswa WHERE id = ?').get(siswaId)
-  if (siswa) waQueue.queueWaliAttendance(db, { tenantId: siswa.tenant_id, studentId: siswaId, date: tanggal, session: status.includes('(pulang)') ? 'pulang' : 'masuk', status: status.replace(' (pulang)', '') })
+  if (!siswa) return
+  try {
+    waQueue.queueWaliAttendance(db, { tenantId: siswa.tenant_id, studentId: siswaId, date: tanggal, session: status.includes('(pulang)') ? 'pulang' : 'masuk', status: status.replace(' (pulang)', '') })
+  } catch (e) { console.error('[wa-notif] queueWaliAttendance gagal', e.message) }
 }
 
 // Cron-like check: guru belum ceklok (dipanggil via endpoint manual atau scheduler)
@@ -6777,7 +6780,7 @@ app.post('/api/absensi-siswa/bulk', STAFF, (req, res) => {
     })
     if (result.already) { already++; continue }
     count++
-    try { waQueue.queueWaliAttendance(db, { tenantId: req.tenantId, studentId: d.siswa_id, date: tanggal, session: isPulang ? 'pulang' : 'masuk', status: d.status }) } catch {}
+    try { waQueue.queueWaliAttendance(db, { tenantId: req.tenantId, studentId: d.siswa_id, date: tanggal, session: isPulang ? 'pulang' : 'masuk', status: d.status }) } catch (e) { console.error('[wa-notif] queueWaliAttendance gagal', e.message) }
   }
   res.json({ count, already, jenis: isPulang ? 'pulang' : 'masuk' })
 })
@@ -6946,7 +6949,7 @@ app.post('/api/absensi-siswa/qr-scan', STAFF, (req, res) => {
   if (result.already) return res.json({ ...payload, already: true, status: result.status })
   try { notificationMonitor.logActivity(db, { tenantId: req.tenantId, eventType: 'student_qr_attendance', actorId: null, entityId: siswa.id, metadata: { sesi: normalizedJenis, metode: 'qr' } }) } catch {}
   if (normalizedJenis === 'pulang') {
-    try { waQueue.queueWaliAttendance(db, { tenantId: req.tenantId, studentId: siswa.id, date: tanggal, session: 'pulang', status: 'hadir' }) } catch {}
+    try { waQueue.queueWaliAttendance(db, { tenantId: req.tenantId, studentId: siswa.id, date: tanggal, session: 'pulang', status: 'hadir' }) } catch (e) { console.error('[wa-notif] queueWaliAttendance gagal', e.message) }
   } else {
     sendAbsensiNotifToWali(siswa.id, 'hadir', tanggal).catch(() => {})
   }

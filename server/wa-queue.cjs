@@ -60,8 +60,17 @@ function queueWaliAttendance(db,{tenantId,studentId,date,session,status}) {
   if(!conf?.absensi_siswa_ke_wali)return {queued:false,reason:'disabled'}
   const s=db.prepare('SELECT * FROM siswa WHERE id=? AND tenant_id=?').get(studentId,tenantId)
   if(!s)return {queued:false,reason:'missing_student'}
-  const linked=db.prepare("SELECT u.phone,u.nama FROM user_students l JOIN users u ON u.id=l.user_id AND u.tenant_id=l.tenant_id WHERE l.tenant_id=? AND l.student_id=? AND u.role='wali_murid' LIMIT 1").get(tenantId,studentId)
-  const user=linked||db.prepare("SELECT phone,nama FROM users WHERE tenant_id=? AND role='wali_murid' AND nis=? LIMIT 1").get(tenantId,s.nis)
+  // Nomor wali: utamakan no_hp siswa (kontak orang tua di formulir). Akun
+  // wali_murid (users) TIDAK menyimpan kolom phone pada skema saat ini, dan
+  // query ke kolom yang belum ada akan melempar — jangan biarkan itu mematikan
+  // seluruh notifikasi absen ke wali. Guard + fallback ke no_hp siswa.
+  let user=null
+  try {
+    user=db.prepare("SELECT u.phone,u.nama FROM user_students l JOIN users u ON u.id=l.user_id AND u.tenant_id=l.tenant_id WHERE l.tenant_id=? AND l.student_id=? AND u.role='wali_murid' LIMIT 1").get(tenantId,studentId)
+  } catch { user=null }
+  if(!user){
+    try { user=db.prepare("SELECT phone,nama FROM users WHERE tenant_id=? AND role='wali_murid' AND nis=? LIMIT 1").get(tenantId,s.nis) } catch { user=null }
+  }
   const phone=s.no_hp||user?.phone
   if(!normalizePhone(phone))return {queued:false,reason:'missing_phone'}
   const school=getTenantSettings(db, tenantId, 'nama_lembaga')
@@ -256,16 +265,18 @@ function queueFinanceReports(db,{tenantId,date,time,force=false}) {
     || 'Assalamualaikum {nama_ortu}, berikut ringkasan keuangan ananda {nama}:\n{tagihan}\n\nSaldo tabungan: {saldo_tabungan}\n\n- {lembaga}'
   // Pasangan (wali -> siswa). Wali = akun role wali_murid yang tertaut via
   // user_students, atau fallback user wali_murid dengan nis yang sama.
-  const links=db.prepare(`SELECT u.id AS user_id,u.nama AS user_nama,u.phone,l.student_id
+  // Kolom users.phone belum ada di skema — guard agar laporan keuangan wali
+  // tidak 500. Tanpa akun wali_murid tertaut, pairs kosong = tidak ada kiriman.
+  const links=(()=>{try{return db.prepare(`SELECT u.id AS user_id,u.nama AS user_nama,u.phone,l.student_id
     FROM user_students l JOIN users u ON u.id=l.user_id AND u.tenant_id=l.tenant_id
-    WHERE l.tenant_id=? AND u.role='wali_murid'`).all(tenantId)
+    WHERE l.tenant_id=? AND u.role='wali_murid'`).all(tenantId)}catch{return []}})()
   const seen=new Set()
   const pairs=[]
   for(const l of links){ const k=l.user_id+':'+l.student_id; if(seen.has(k))continue; seen.add(k); pairs.push(l) }
   // Fallback: user wali_murid tanpa user_students tapi nis == siswa.nis.
-  const fallback=db.prepare(`SELECT u.id AS user_id,u.nama AS user_nama,u.phone,s.id AS student_id
+  const fallback=(()=>{try{return db.prepare(`SELECT u.id AS user_id,u.nama AS user_nama,u.phone,s.id AS student_id
     FROM users u JOIN siswa s ON s.nis=u.nis AND s.tenant_id=u.tenant_id
-    WHERE u.tenant_id=? AND u.role='wali_murid'`).all(tenantId)
+    WHERE u.tenant_id=? AND u.role='wali_murid'`).all(tenantId)}catch{return []}})()
   for(const l of fallback){ const k=l.user_id+':'+l.student_id; if(seen.has(k))continue; seen.add(k); pairs.push(l) }
 
   const unpaidStmt=db.prepare(`SELECT j.nama AS jenis,t.nominal,t.bulan,t.tahun FROM tagihan t JOIN jenis_tagihan j ON j.id=t.jenis_tagihan_id AND j.tenant_id=t.tenant_id WHERE t.siswa_id=? AND t.tenant_id=? AND t.status='belum_bayar' ORDER BY t.tahun DESC,t.bulan DESC`)

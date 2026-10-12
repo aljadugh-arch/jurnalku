@@ -9,15 +9,30 @@ interface ImportExcelProps {
   templateUrl?: string
   headerRow: number // 0-indexed row where headers are (0-indexed: row 0 = baris 1 di Excel)
   columnMap: Record<string, string> // excel column name -> api field name
+  aliases?: Record<string, string> // header variasi -> api field name (selain columnMap; tidak ikut jadi kolom template)
   sampleRows?: Record<string, any>[] // contoh data untuk template (opsional)
   onImport: (data: Record<string, any>[]) => Promise<void>
   onClose: () => void
 }
 
-export default function ImportExcel({ title, templateName, templateUrl, headerRow, columnMap, sampleRows, onImport, onClose }: ImportExcelProps) {
+// Normalisasi nama header agar impor toleran terhadap variasi penulisan:
+// beda kapital, spasi ganda, titik ("No. HP" vs "No HP"), serta hint dalam
+// kurung ("Jenis Kelamin (L/P)" vs "Jenis Kelamin"). "JK"/"TGL Lahir" tetap
+// butuh alias eksplisit (singkatan tidak bisa dinormalkan jadi kata panjang).
+function normalizeHeader(h: string) {
+  return String(h || '')
+    .toLowerCase()
+    .replace(/\s*\([^)]*\)\s*/g, ' ')
+    .replace(/\./g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+export default function ImportExcel({ title, templateName, templateUrl, headerRow, columnMap, aliases, sampleRows, onImport, onClose }: ImportExcelProps) {
   const [preview, setPreview] = useState<Record<string, any>[]>([])
   const [loading, setLoading] = useState(false)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
+  const [unmappedHeaders, setUnmappedHeaders] = useState<string[]>([])
   const fileRef = useRef<HTMLInputElement>(null)
 
   /** Generate template XLSX dari columnMap + sampleRows (jika templateUrl tidak tersedia) */
@@ -65,6 +80,7 @@ export default function ImportExcel({ title, templateName, templateUrl, headerRo
     const file = e.target.files?.[0]
     if (!file) return
     setErrorMessage(null)
+    setUnmappedHeaders([])
     const reader = new FileReader()
     reader.onload = (evt) => {
       const data = new Uint8Array(evt.target?.result as ArrayBuffer)
@@ -76,15 +92,24 @@ export default function ImportExcel({ title, templateName, templateUrl, headerRo
       const rows: any[][] = XLSX.utils.sheet_to_json(sh, { header: 1 })
       
       if (rows.length <= headerRow) { toast.error('File kosong atau format tidak sesuai'); return }
+
+      // Gabung columnMap + aliases jadi satu lookup ternormalisasi, sehingga
+      // variasi penulisan header tetap terpetakan (dan tidak dibuang diam-diam).
+      const lookup: Record<string, string> = {}
+      for (const [h, f] of Object.entries(columnMap)) lookup[normalizeHeader(h)] = f
+      for (const [h, f] of Object.entries(aliases || {})) lookup[normalizeHeader(h)] = f
       
       const hdrs = (rows[headerRow] as string[]).map(h => (h || '').toString().trim())
+      const unmapped = hdrs.filter(h => h && !(normalizeHeader(h) in lookup))
+      setUnmappedHeaders(unmapped)
+
       const mapped: Record<string, any>[] = []
       for (let i = headerRow + 1; i < rows.length; i++) {
         const row = rows[i]
         if (!row || row.every(c => !c)) continue // skip empty rows
         const obj: Record<string, any> = {}
         hdrs.forEach((h, idx) => {
-          const field = columnMap[h]
+          const field = lookup[normalizeHeader(h)]
           const cell = row[idx]
           if (field && cell !== undefined && cell !== null) {
             if (cell instanceof Date) {
@@ -163,6 +188,14 @@ export default function ImportExcel({ title, templateName, templateUrl, headerRo
             Pilih File
           </button>
         </div>
+
+        {unmappedHeaders.length > 0 && (
+          <div className="mb-4 bg-amber-50 border border-amber-200 rounded-lg p-3 text-sm text-amber-800">
+            <p className="font-semibold mb-1">Kolom tidak dikenali (akan diabaikan):</p>
+            <p className="font-mono text-xs break-words">{unmappedHeaders.join(', ')}</p>
+            <p className="text-xs text-amber-600 mt-1">Sesuaikan nama kolom di file Excel dengan template, atau unduh template baru lalu isi ulang.</p>
+          </div>
+        )}
 
         {preview.length > 0 && (
           <>

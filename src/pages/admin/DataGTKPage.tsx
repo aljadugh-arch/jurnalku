@@ -306,7 +306,17 @@ export default function DataGTKPage() {
             'Jabatan': 'jabatan',
             'Status Kepegawaian': 'status_kepegawaian',
             'Bidang Studi': 'bidang_studi',
+            'Kode Guru': 'kode_guru',
             'Alamat': 'alamat',
+          }}
+          aliases={{
+            'JK': 'jenis_kelamin',
+            'Jenis Kelamin': 'jenis_kelamin',
+            'TGL Lahir': 'tanggal_lahir',
+            'Tanggal Lahir': 'tanggal_lahir',
+            'No. HP': 'no_hp',
+            'Nama': 'nama',
+            'Nama Guru': 'nama',
           }}
           sampleRows={[
             { nik: '3512345678901234', nip: '198501012010011001', nuptk: '1234567890123456', nama: 'Ahmad Fauzi, S.Pd', jenis_kelamin: 'L', tempat_lahir: 'Bondowoso', tanggal_lahir: '1985-01-01', no_hp: '081234567890', email: 'ahmad@email.com', jabatan: 'guru', status_kepegawaian: 'pns', bidang_studi: 'Matematika', alamat: 'Jl. Merdeka No. 1' },
@@ -330,6 +340,7 @@ export default function DataGTKPage() {
                   status_kepegawaian: row.status_kepegawaian || 'honorer',
                   bidang_studi: row.bidang_studi || '',
                   alamat: row.alamat || '',
+                  kode_guru: String(row.kode_guru || '').trim(),
                   status: 'aktif',
                 })
                 ok++
