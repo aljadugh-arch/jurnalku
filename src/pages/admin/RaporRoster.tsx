@@ -74,7 +74,8 @@ export default function RaporRoster({ tahunAjaran, semester, jenis, raporFormat,
 
   const exportBulk = async (rombelId: string | null, label: string, mode: 'cetak' | 'pdf') => {
     if (busy) return
-    if (raporFormat !== 'mtsplus') { setMsg('✗ Cetak massal memakai layout "MTs Plus" — pilih Layout MTs Plus dulu.'); return }
+    // Batch PDF selalu memakai layout MTs Plus (satu-satunya renderer massal),
+    // terlepas dari layout per-siswa yang dipilih di atas.
     setBusy(true); setMsg(`⏳ Membuat PDF ${label}…`)
     try {
       const params: any = { tahun_ajaran: tahunAjaran, semester, jenis, bagian: 'lengkap' }
