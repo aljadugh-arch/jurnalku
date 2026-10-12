@@ -4,6 +4,7 @@ import { FileText, Printer, Save, Zap, FileSpreadsheet, Link2, Download } from '
 import FoundationTenantPicker from '../../components/FoundationTenantPicker'
 import { QRCodeSVG } from 'qrcode.react'
 import { thumbUrl } from '../../lib/thumbUrl'
+import RaporRoster from './RaporRoster'
 
 const emptyPelengkap = {
   prestasi: [] as Array<{ jenis: string; keterangan: string }>,
@@ -499,6 +500,10 @@ export default function RaporPage() {
         </div>
         {msg && <p className={`mt-3 text-sm ${msg.startsWith('✓') ? 'text-green-600' : 'text-red-600'}`}>{msg}</p>}
       </div>
+
+      {kurikulum === 'merdeka' && !foundationTenantId && (
+        <RaporRoster tahunAjaran={tahunAjaran} semester={semester} jenis={jenis} raporFormat={raporFormat} rombelList={rombelList} />
+      )}
 
       {kurikulum === 'k13' && selectedSiswa && !foundationTenantId && (
         <div className="card p-5 print:hidden space-y-6">
