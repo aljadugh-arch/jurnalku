@@ -428,7 +428,11 @@ function registerTenantRoutes(app, db, authMiddleware, uuidv4, SUPER) {
   // Delete foundation (super_admin only)
   app.delete('/api/foundations/:id', authMiddleware, (req, res) => {
     if (req.user.role !== 'super_admin') return res.status(403).json({ error: 'Forbidden' })
-    db.prepare('DELETE FROM foundations WHERE id = ?').run(req.params.id)
+    db.transaction(() => {
+      // Lepas semua lembaga yang tergabung sebelum yayasan dihapus.
+      db.prepare('UPDATE tenants SET foundation_id=NULL WHERE foundation_id=?').run(req.params.id)
+      db.prepare('DELETE FROM foundations WHERE id = ?').run(req.params.id)
+    })()
     res.json({ success: true })
   })
 
@@ -450,6 +454,26 @@ function registerTenantRoutes(app, db, authMiddleware, uuidv4, SUPER) {
     }
     const tenants = db.prepare('SELECT id, slug, nama, domain_custom, aktif FROM tenants WHERE foundation_id = ? AND aktif = 1').all(foundationId)
     res.json(tenants)
+  })
+
+  // Assign/unassign tenants ke sebuah yayasan (super_admin only). Mengganti
+  // daftar anggota yayasan secara utuh: lembaga yang sebelumnya tergabung di
+  // yayasan ini tapi tidak ada di tenant_ids akan dilepas (foundation_id=NULL).
+  app.put('/api/foundations/:id/tenants', authMiddleware, (req, res) => {
+    if (req.user.role !== 'super_admin') return res.status(403).json({ error: 'Forbidden' })
+    const foundationId = req.params.id
+    if (!db.prepare('SELECT id FROM foundations WHERE id=?').get(foundationId)) {
+      return res.status(404).json({ error: 'Yayasan tidak ditemukan' })
+    }
+    const { tenant_ids = [] } = req.body || {}
+    if (!Array.isArray(tenant_ids)) return res.status(400).json({ error: 'tenant_ids harus array id lembaga' })
+    const ids = [...new Set(tenant_ids.map(String).filter(Boolean))]
+    db.transaction(() => {
+      db.prepare('UPDATE tenants SET foundation_id=NULL WHERE foundation_id=?').run(foundationId)
+      const stmt = db.prepare('UPDATE tenants SET foundation_id=? WHERE id=?')
+      for (const id of ids) stmt.run(foundationId, id)
+    })()
+    res.json({ success: true, count: ids.length })
   })
 
   // Cross-tenant: Get rombel from other tenants in same foundation (read-only).

@@ -3,7 +3,7 @@ import {
   ClipboardList, UserCheck, QrCode, MapPin,
   Layers, Activity, Globe, Sparkles, DollarSign, Settings, MessageSquare,
   FileText, ClipboardCheck, ScrollText, School, Wallet, Receipt, DatabaseBackup, Code2, ScanText,
-  FileQuestion, Monitor, Star
+  FileQuestion, Monitor, Star, Building2
 } from 'lucide-react'
 
 export interface MenuItem {
@@ -210,6 +210,7 @@ function filterRoleItems(items: MenuItem[], role?: string): MenuItem[] {
 export const superAdminMenuItems: MenuItem[] = [
   { label: 'Dashboard', icon: <LayoutDashboard size={20} />, path: '/admin' },
   { label: 'Manajemen Lembaga', icon: <Globe size={20} />, path: '/admin/tenants' },
+  { label: 'Manajemen Yayasan', icon: <Building2 size={20} />, path: '/admin/foundations' },
   { label: 'Manajemen Pengguna', icon: <UserCheck size={20} />, path: '/admin/users' },
   { label: 'Backup & Restore', icon: <DatabaseBackup size={20} />, path: '/admin/backup-restore' },
   { label: 'REST API Developer', icon: <Code2 size={20} />, path: '/admin/developer-api' },

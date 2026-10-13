@@ -18,6 +18,7 @@ import type { User } from './types'
 const AdminDashboard = lazy(() => import('./pages/admin/AdminDashboard'))
 const DataSiswaPage = lazy(() => import('./pages/admin/DataSiswaPage'))
 const FoundationSyncPage = lazy(() => import('./pages/admin/FoundationSyncPage'))
+const FoundationManagementPage = lazy(() => import('./pages/admin/FoundationManagementPage'))
 const MonitoringDataPage = lazy(() => import('./pages/admin/MonitoringDataPage'))
 const DataGTKPage = lazy(() => import('./pages/admin/DataGTKPage'))
 const MapelPage = lazy(() => import('./pages/admin/MapelPage'))
@@ -233,6 +234,9 @@ export default function App() {
           } />
           <Route path="foundation-sync" element={
             <ProtectedRoute allowedRoles={['admin', 'super_admin', 'operator', 'kepala']}><FoundationSyncPage /></ProtectedRoute>
+          } />
+          <Route path="foundations" element={
+            <ProtectedRoute allowedRoles={['super_admin']}><FoundationManagementPage /></ProtectedRoute>
           } />
           <Route path="rapor" element={<RaporPage />} />
           <Route path="nilai-ledger" element={
