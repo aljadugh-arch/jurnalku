@@ -29,6 +29,7 @@ const endpoints = [
   ['GET', '/api/external/v1/cashless/balance/:student_id', 'Saldo cashless siswa'],
   ['GET', '/api/external/v1/cashless/transactions/:student_id', 'Transaksi cashless siswa'],
   ['POST', '/api/external/webhook/cashless', 'Kredit/debit cashless dengan idempotency key'],
+  ['POST', '/api/external/v1/absensi/scan', 'Absensi tap (QR/RFID) dari alat — butuh izin absensi:write'],
 ] as const
 
 export default function DeveloperApiPage() {
@@ -37,6 +38,7 @@ export default function DeveloperApiPage() {
   const [days, setDays] = useState(365)
   const [creating, setCreating] = useState(false)
   const [newKey, setNewKey] = useState('')
+  const [perms, setPerms] = useState<Record<string, boolean>>({ read: true, 'absensi:write': false })
   const [copied, setCopied] = useState(false)
 
   const load = async () => {
@@ -49,7 +51,9 @@ export default function DeveloperApiPage() {
     if (!name.trim()) return toast.error('Nama API key wajib diisi')
     setCreating(true)
     try {
-      const response = await api.post('/external/api-keys', { name: name.trim(), expires_in_days: days, permissions: ['read'] })
+      const selected = Object.keys(perms).filter(k => perms[k])
+      if (!selected.length) { setCreating(false); return toast.error('Pilih minimal satu izin') }
+      const response = await api.post('/external/api-keys', { name: name.trim(), expires_in_days: days, permissions: selected })
       setNewKey(response.data.api_key)
       await load()
       toast.success('API key berhasil dibuat')
@@ -88,7 +92,11 @@ export default function DeveloperApiPage() {
           <input aria-label="Masa berlaku hari" type="number" min="1" max="3650" value={days} onChange={e => setDays(Number(e.target.value))} className="rounded-lg border px-3 py-2 text-sm" />
           <button type="button" onClick={createKey} disabled={creating} className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">{creating ? 'Membuat...' : 'Buat Key'}</button>
         </div>
-        <p className="mt-2 text-xs text-gray-500">Key baru memiliki izin baca. API key hanya ditampilkan satu kali; simpan di password manager atau secret manager.</p>
+        <p className="mt-2 text-xs text-gray-500">Key hanya ditampilkan satu kali; simpan di password manager atau secret manager.</p>
+        <div className="mt-3 flex flex-wrap gap-4">
+          <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-200"><input type="checkbox" checked={perms.read} onChange={e => setPerms(p => ({ ...p, read: e.target.checked }))} className="h-4 w-4" /> Baca data (read)</label>
+          <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-200"><input type="checkbox" checked={perms['absensi:write']} onChange={e => setPerms(p => ({ ...p, 'absensi:write': e.target.checked }))} className="h-4 w-4" /> Tulis absensi (absensi:write) — untuk alat tap QR/RFID</label>
+        </div>
         {newKey && (
           <div className="mt-4 rounded-xl border border-amber-300 bg-amber-50 p-4">
             <p className="text-xs font-semibold text-amber-900">API key baru — salin sekarang</p>
