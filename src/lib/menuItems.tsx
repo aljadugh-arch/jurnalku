@@ -20,7 +20,6 @@ export const adminMenuItems: MenuItem[] = [
   { label: 'Monitoring Data', icon: <Activity size={20} />, path: '/admin/monitoring' },
   { label: 'Posting', icon: <FileText size={20} />, path: '/admin/posting' },
   { label: 'Data Siswa', icon: <GraduationCap size={20} />, path: '/admin/siswa' },
-  { label: 'Kartu RFID', icon: <CreditCard size={20} />, path: '/admin/rfid' },
   { label: 'Data GTK', icon: <Users size={20} />, path: '/admin/gtk' },
   { label: 'Mata Pelajaran', icon: <BookOpen size={20} />, path: '/admin/mapel' },
   { label: 'Rombongan Belajar', icon: <Layers size={20} />, path: '/admin/rombel' },
@@ -38,6 +37,8 @@ export const adminMenuItems: MenuItem[] = [
     children: [
       { label: 'Presensi Siswa', path: '/admin/absensi-siswa' },
       { label: 'Absensi QR Siswa', path: '/admin/absensi-qr-siswa' },
+      { label: 'Kartu RFID', path: '/admin/rfid' },
+      { label: 'Panduan Alat Absensi', path: '/admin/panduan-absensi-alat' },
       { label: 'Absensi Guru (Geolokasi)', path: '/admin/absensi-guru' },
       { label: 'Rekapitulasi', path: '/admin/rekap-absensi' },
       { label: 'Ekstrakurikuler', path: '/admin/ekskul' },
@@ -163,7 +164,6 @@ export const kepalaMenuItems: MenuItem[] = [
   { label: 'Ceklok & Rekap', icon: <MapPin size={20} />, path: '/admin/ceklok' },
   { label: 'Absensi Saya', icon: <UserCheck size={20} />, path: '/admin/absensi-saya' },
   { label: 'Data Siswa', icon: <GraduationCap size={20} />, path: '/admin/siswa' },
-  { label: 'Kartu RFID', icon: <CreditCard size={20} />, path: '/admin/rfid' },
   { label: 'Data GTK', icon: <Users size={20} />, path: '/admin/gtk' },
   { label: 'Rapor Siswa', icon: <FileText size={20} />, path: '/admin/rapor' },
   { label: 'Catatan Kepribadian', icon: <ScrollText size={20} />, path: '/admin/catatan-kepribadian' },
@@ -176,6 +176,8 @@ export const kepalaMenuItems: MenuItem[] = [
     children: [
       { label: 'Presensi Siswa', path: '/admin/absensi-siswa' },
       { label: 'Absensi QR Siswa', path: '/admin/absensi-qr-siswa' },
+      { label: 'Kartu RFID', path: '/admin/rfid' },
+      { label: 'Panduan Alat Absensi', path: '/admin/panduan-absensi-alat' },
       { label: 'Absensi Guru (Geolokasi)', path: '/admin/absensi-guru' },
       { label: 'Rekapitulasi', path: '/admin/rekap-absensi' },
     ]

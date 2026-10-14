@@ -20,6 +20,7 @@ const DataSiswaPage = lazy(() => import('./pages/admin/DataSiswaPage'))
 const FoundationSyncPage = lazy(() => import('./pages/admin/FoundationSyncPage'))
 const FoundationManagementPage = lazy(() => import('./pages/admin/FoundationManagementPage'))
 const RfidPage = lazy(() => import('./pages/admin/RfidPage'))
+const PanduanAbsensiAlatPage = lazy(() => import('./pages/admin/PanduanAbsensiAlatPage'))
 const MonitoringDataPage = lazy(() => import('./pages/admin/MonitoringDataPage'))
 const DataGTKPage = lazy(() => import('./pages/admin/DataGTKPage'))
 const MapelPage = lazy(() => import('./pages/admin/MapelPage'))
@@ -241,6 +242,9 @@ export default function App() {
           } />
           <Route path="rfid" element={
             <ProtectedRoute allowedRoles={['admin', 'super_admin', 'operator']}><RfidPage /></ProtectedRoute>
+          } />
+          <Route path="panduan-absensi-alat" element={
+            <ProtectedRoute allowedRoles={['admin', 'super_admin', 'operator']}><PanduanAbsensiAlatPage /></ProtectedRoute>
           } />
           <Route path="rapor" element={<RaporPage />} />
           <Route path="nilai-ledger" element={
