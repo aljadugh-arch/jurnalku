@@ -161,22 +161,26 @@ function nilaiAnak(db, tenantId, siswaId) {
   }))
 }
 
-// Pasangan (mapel, rombel) yang diampu seorang guru (dari jadwal + pengajar).
-function pengajaranGuru(db, tenantId, gtkId) {
+// Nama hari (Indonesia) untuk sebuah tanggal YYYY-MM-DD.
+function dayName(date) {
+  return ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'][new Date(`${date}T12:00:00Z`).getUTCDay()]
+}
+
+// Pasangan (mapel, rombel) yang DIJADWALKAN untuk guru pada tanggal tertentu —
+// inilah "kelas yang diajar hari ini". Sesuai permintaan: bot hanya menampilkan
+// absensi/nilai kelas & mapel yang benar-benar diajar pada hari itu (sesuai
+// jadwal mengajar/mapel), bukan seluruh kelas yang diampu.
+function pengajaranGuruHariIni(db, tenantId, gtkId, date) {
+  const day = dayName(date)
   return db.prepare(`
-    SELECT m.id mapel_id, m.nama mapel, r.id rombel_id, r.nama rombel
+    SELECT m.id mapel_id, m.nama mapel, r.id rombel_id, r.nama rombel, j.jam_mulai, j.jam_selesai
     FROM jadwal j
     JOIN mapel m ON m.id=j.mapel_id AND m.tenant_id=j.tenant_id
     JOIN rombel r ON r.id=j.rombel_id AND r.tenant_id=j.tenant_id
-    WHERE j.gtk_id=? AND j.tenant_id=? AND COALESCE(j.jenis_kegiatan,'mapel')='mapel'
-    UNION
-    SELECT m.id mapel_id, m.nama mapel, r.id rombel_id, r.nama rombel
-    FROM pengajar p
-    JOIN mapel m ON m.id=p.mapel_id AND m.tenant_id=p.tenant_id
-    JOIN rombel r ON r.id=p.rombel_id AND r.tenant_id=p.tenant_id
-    WHERE p.gtk_id=? AND p.tenant_id=?
-    ORDER BY rombel, mapel
-  `).all(gtkId, tenantId, gtkId, tenantId)
+    WHERE j.tenant_id=? AND j.gtk_id=? AND lower(j.hari)=lower(?)
+      AND COALESCE(j.jenis_kegiatan,'mapel')='mapel'
+    ORDER BY j.jam_mulai, r.nama, m.nama
+  `).all(tenantId, gtkId, day)
 }
 
 // Nilai akhir LIVE satu (rombel, mapel) untuk semua siswa aktif — tiap siswa
@@ -320,8 +324,9 @@ function handleIncoming(db, { tenantId, phone, text, date: dateParam }) {
       return `*Kehadiran Terakhir*\n\n${parts.join('\n\n')}`
     }
     if (sender.jenis === 'gtk' && sender.gtkId) {
-      const pairs = pengajaranGuru(db, tenantId, sender.gtkId)
-      if (!pairs.length) return 'Anda belum terdaftar mengampu kelas/mapel apa pun.'
+      // Hanya kelas/mapel yang DIJADWALKAN hari ini (sesuai jadwal mengajar).
+      const pairs = pengajaranGuruHariIni(db, tenantId, sender.gtkId, date)
+      if (!pairs.length) return `Tidak ada jadwal mengajar untuk Anda hari ini (${date}), jadi tidak ada absensi kelas yang bisa ditampilkan.`
       const rombels = [...new Map(pairs.map(p => [p.rombel_id, p])).values()]
       // Deteksi rombel yang disebut di pesan (kalau ada).
       const disebut = rombels.filter(r => r.rombel && lower.includes(String(r.rombel).toLowerCase()))
@@ -338,7 +343,7 @@ function handleIncoming(db, { tenantId, phone, text, date: dateParam }) {
         }
         parts.push(`*${rb.rombel}* (${date}):\n${body}`)
       }
-      return `*Rekap Absensi* — ${sender.nama}\n\n${parts.join('\n\n')}`
+      return `*Absensi Kelas yang Anda Ajar Hari Ini* — ${sender.nama}\n\n${parts.join('\n\n')}`
     }
     return 'Perintah ini hanya untuk wali murid atau guru.'
   }
@@ -356,8 +361,9 @@ function handleIncoming(db, { tenantId, phone, text, date: dateParam }) {
       return `*Nilai Rapor*\n\n${parts.join('\n\n')}`
     }
     if (sender.jenis === 'gtk' && sender.gtkId) {
-      const pairs = pengajaranGuru(db, tenantId, sender.gtkId)
-      if (!pairs.length) return 'Anda belum terdaftar mengampu kelas/mapel apa pun.'
+      // Hanya kelas/mapel yang DIJADWALKAN hari ini (sesuai jadwal mapel).
+      const pairs = pengajaranGuruHariIni(db, tenantId, sender.gtkId, date)
+      if (!pairs.length) return `Tidak ada jadwal mengajar untuk Anda hari ini (${date}), jadi tidak ada nilai kelas yang bisa ditampilkan.`
       // Deteksi mapel dan rombel yang disebut di pesan.
       const mapelSebut = pairs.filter(p => p.mapel && lower.includes(String(p.mapel).toLowerCase()))
       const rombelSebut = pairs.filter(p => p.rombel && lower.includes(String(p.rombel).toLowerCase()))
@@ -366,9 +372,9 @@ function handleIncoming(db, { tenantId, phone, text, date: dateParam }) {
       if (rombelSebut.length) target = target.filter(p => rombelSebut.some(r => r.rombel_id === p.rombel_id))
       const unique = [...new Map(target.map(p => [p.mapel_id + '|' + p.rombel_id, p])).values()]
       if (!unique.length) return 'Tidak ada kelas/mapel yang cocok dengan yang Anda sebutkan.'
-      // Bila tanpa penyebutan dan ampuannya banyak, tampilkan menu ringkas.
-      if (!mapelSebut.length && !rombelSebut.length && pairs.length > 4) {
-        return `*Kelas & Mapel yang Anda ampu:*\n${pairs.map(p => `• ${p.rombel} — ${p.mapel}`).join('\n')}\n\nKetik contoh: *nilai ${pairs[0].rombel} ${pairs[0].mapel}* untuk melihat nilainya.`
+      // Bila tanpa penyebutan dan jadwal hari ini banyak, tampilkan menu ringkas.
+      if (!mapelSebut.length && !rombelSebut.length && unique.length > 4) {
+        return `*Kelas & Mapel yang Anda ajar hari ini (${date}):*\n${unique.map(p => `• ${p.rombel} — ${p.mapel}${p.jam_mulai ? ` (${p.jam_mulai})` : ''}`).join('\n')}\n\nKetik contoh: *nilai ${unique[0].rombel} ${unique[0].mapel}* untuk melihat nilainya.`
       }
       const parts = []
       for (const p of unique) {
@@ -378,7 +384,7 @@ function handleIncoming(db, { tenantId, phone, text, date: dateParam }) {
           : 'Belum ada nilai.'
         parts.push(`*${p.rombel} — ${p.mapel}*:\n${isi}`)
       }
-      return `*Nilai Siswa* — ${sender.nama}\n\n${parts.join('\n\n')}`
+      return `*Nilai Siswa (kelas yang Anda ajar hari ini)* — ${sender.nama}\n\n${parts.join('\n\n')}`
     }
     return 'Perintah nilai untuk guru bisa dilihat lewat aplikasi (menu Ledger/Rekap Nilai).'
   }

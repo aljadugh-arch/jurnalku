@@ -19,6 +19,7 @@ const AdminDashboard = lazy(() => import('./pages/admin/AdminDashboard'))
 const DataSiswaPage = lazy(() => import('./pages/admin/DataSiswaPage'))
 const FoundationSyncPage = lazy(() => import('./pages/admin/FoundationSyncPage'))
 const FoundationManagementPage = lazy(() => import('./pages/admin/FoundationManagementPage'))
+const RfidPage = lazy(() => import('./pages/admin/RfidPage'))
 const MonitoringDataPage = lazy(() => import('./pages/admin/MonitoringDataPage'))
 const DataGTKPage = lazy(() => import('./pages/admin/DataGTKPage'))
 const MapelPage = lazy(() => import('./pages/admin/MapelPage'))
@@ -237,6 +238,9 @@ export default function App() {
           } />
           <Route path="foundations" element={
             <ProtectedRoute allowedRoles={['super_admin']}><FoundationManagementPage /></ProtectedRoute>
+          } />
+          <Route path="rfid" element={
+            <ProtectedRoute allowedRoles={['admin', 'super_admin', 'operator']}><RfidPage /></ProtectedRoute>
           } />
           <Route path="rapor" element={<RaporPage />} />
           <Route path="nilai-ledger" element={

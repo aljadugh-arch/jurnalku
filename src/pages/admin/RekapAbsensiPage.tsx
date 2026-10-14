@@ -60,7 +60,7 @@ function SiswaRecapTable({ data }: { data: any[] }) {
                 </tr>
                 {group.items.map((siswa: any, i: number) => <tr key={siswa.id || i} className="hover:bg-gray-50">
                   <td className="px-4 py-3 text-gray-600">{i + 1}</td>
-                  <td className="px-4 py-3 font-medium text-gray-800">{siswa.nama}</td>
+                  <td className="px-4 py-3 font-medium text-gray-800 whitespace-nowrap">{siswa.nama}</td>
                   <td className="px-4 py-3 text-gray-600 text-xs">{siswa.nis || '-'}</td>
                   <td className="px-4 py-3 text-gray-600">{siswa.rombel_nama || '-'}</td>
                   <td className="px-4 py-3 text-center font-medium text-blue-600">{siswa.hadir}</td>

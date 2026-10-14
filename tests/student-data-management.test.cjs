@@ -82,7 +82,7 @@ test('student import template is a downloadable valid xlsx matching supported fi
   const rows = XLSX.utils.sheet_to_json(wb.Sheets['Data Siswa'], { header: 1 })
   assert.deepEqual(rows[0], ['NIK', 'NIS', 'NISN', 'Nama', 'Nama Panggilan', 'JK', 'Tempat Lahir', 'Tanggal Lahir',
     'Alamat', 'No HP', 'Agama', 'Status Keluarga', 'Anak Ke', 'Asal Sekolah', 'Nama Ortu', 'Nama Ayah',
-    'Pekerjaan Ayah', 'Nama Ibu', 'Pekerjaan Ibu', 'Alamat Ortu', 'Nama Wali', 'Pekerjaan Wali', 'Rombel'])
+    'Pekerjaan Ayah', 'Nama Ibu', 'Pekerjaan Ibu', 'Alamat Ortu', 'Nama Wali', 'Pekerjaan Wali', 'Rombel', 'RFID UID'])
 
   const page = fs.readFileSync(path.join(root, 'src', 'pages', 'admin', 'DataSiswaPage.tsx'), 'utf8')
   const component = fs.readFileSync(path.join(root, 'src', 'components', 'ImportExcel.tsx'), 'utf8')

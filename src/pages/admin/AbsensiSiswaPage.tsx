@@ -419,7 +419,7 @@ export default function AbsensiSiswaPage({ qrMode = false }: { qrMode?: boolean 
                 <tr key={s.id} className="hover:bg-gray-50">
                   <td className="px-4 py-3 text-gray-600">{i + 1}</td>
                   <td className="px-4 py-3 font-mono text-gray-700">{s.nis}</td>
-                  <td className="px-4 py-3 font-medium text-gray-800">{s.nama}</td>
+                  <td className="px-4 py-3 font-medium text-gray-800 whitespace-nowrap">{s.nama}</td>
                   {['hadir', 'sakit', 'izin', 'alpha'].map(st => (
                     <td key={st} className="text-center px-4 py-3">
                       <input type="radio" name={`abs-${s.id}`} checked={absensi[s.id] === st} onChange={() => setStatus(s.id, st)} disabled={readOnly} className="w-4 h-4 text-primary disabled:cursor-not-allowed disabled:opacity-60" />

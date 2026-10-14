@@ -1397,6 +1397,8 @@ for (const col of [
   ['users', 'nis', 'TEXT'],
   ['users', 'nisn', 'TEXT'],
   ['users', 'must_change_password', 'INTEGER DEFAULT 0'],
+  // RFID: UID kartu siswa (EM4100/Mifare) untuk absensi tap kartu.
+  ['siswa', 'rfid_uid', 'TEXT'],
   ['settings', 'kts_template', 'TEXT'],
   ['absensi_guru', 'keterangan', "TEXT DEFAULT ''"],
   // Absensi siswa: pisah masuk & pulang (Item 1)
@@ -3270,8 +3272,8 @@ app.post('/api/siswa/bulk-import', ADMIN, (req, res) => {
         db.prepare(`INSERT INTO siswa (
           id, nik, nis, nisn, nama, jenis_kelamin, tempat_lahir, tanggal_lahir, alamat, no_hp, 
           nama_ortu, nama_panggilan, rombel_id, tenant_id, agama, status_keluarga, anak_ke, 
-          asal_sekolah, nama_ayah, nama_ibu, alamat_ortu, kerja_ayah, kerja_ibu, nama_wali, kerja_wali
-        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(
+          asal_sekolah, nama_ayah, nama_ibu, alamat_ortu, kerja_ayah, kerja_ibu, nama_wali, kerja_wali, rfid_uid
+        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(
           id, nik, nis, nisn, nama,
           (String(row.jenis_kelamin || 'L').charAt(0).toUpperCase()),
           String(row.tempat_lahir || '').trim(),
@@ -3292,7 +3294,8 @@ app.post('/api/siswa/bulk-import', ADMIN, (req, res) => {
           String(row.kerja_ayah || '').trim() || null,
           String(row.kerja_ibu || '').trim() || null,
           String(row.nama_wali || '').trim() || null,
-          String(row.kerja_wali || '').trim() || null
+          String(row.kerja_wali || '').trim() || null,
+          (String(row.rfid_uid || '').trim().toUpperCase() || null)
         )
 
         createdSiswaIds.push(id)
@@ -3371,13 +3374,14 @@ app.put('/api/siswa/:id', ADMIN, (req, res) => {
   const body = req.body || {}
   const fields = [
     'nik', 'nis', 'nisn', 'nama', 'jenis_kelamin', 'tempat_lahir', 'tanggal_lahir', 'alamat', 'no_hp', 'nama_ortu', 'nama_panggilan', 'rombel_id', 'status',
-    'agama', 'status_keluarga', 'anak_ke', 'asal_sekolah', 'nama_ayah', 'nama_ibu', 'alamat_ortu', 'kerja_ayah', 'kerja_ibu', 'nama_wali', 'kerja_wali',
+    'agama', 'status_keluarga', 'anak_ke', 'asal_sekolah', 'nama_ayah', 'nama_ibu', 'alamat_ortu', 'kerja_ayah', 'kerja_ibu', 'nama_wali', 'kerja_wali', 'rfid_uid',
   ]
   const updates = fields.filter(field => Object.prototype.hasOwnProperty.call(body, field))
   if (updates.length === 0) return res.status(400).json({ error: 'Tidak ada data yang diubah' })
   const values = { ...current }
   for (const field of updates) values[field] = body[field]
   if (updates.includes('nama_panggilan')) values.nama_panggilan = (values.nama_panggilan || '').trim() || null
+  if (updates.includes('rfid_uid')) values.rfid_uid = (values.rfid_uid || '').trim().toUpperCase() || null
   if (values.nik && !/^\d{16}$/.test(String(values.nik))) return res.status(400).json({ error: 'NIK harus berupa 16 digit angka.' })
   if (updates.includes('rombel_id')) {
     values.rombel_id = values.rombel_id || null
@@ -4635,6 +4639,30 @@ app.get('/api/siswa/qr-identifiers', STAFF, (req, res) => {
     identifier_type: 'ID SISWA'
   }))
   res.json(data)
+})
+
+// Daftar kartu RFID siswa (untuk pemetaan UID <-> siswa).
+app.get('/api/siswa/rfid', STAFF, (req, res) => {
+  const rombelId = String(req.query.rombel_id || '').trim()
+  let sql = "SELECT id, nis, nisn, nama, rombel_id, rfid_uid FROM siswa WHERE tenant_id=? AND COALESCE(status,'aktif')='aktif'"
+  const params = [req.tenantId]
+  if (rombelId) { sql += ' AND rombel_id=?'; params.push(rombelId) }
+  sql += ' ORDER BY (rfid_uid IS NULL OR rfid_uid=\'\'), nama'
+  res.json(db.prepare(sql).all(...params))
+})
+
+// Set / hapus UID kartu RFID untuk satu siswa.
+app.put('/api/siswa/:id/rfid', STAFF, (req, res) => {
+  const siswa = db.prepare('SELECT id FROM siswa WHERE id=? AND tenant_id=?').get(req.params.id, req.tenantId)
+  if (!siswa) return res.status(404).json({ error: 'Siswa tidak ditemukan' })
+  const raw = req.body?.rfid_uid
+  const uid = raw == null ? '' : String(raw).trim().toUpperCase()
+  if (uid) {
+    const dup = db.prepare('SELECT id, nama FROM siswa WHERE tenant_id=? AND UPPER(rfid_uid)=? AND id<>?').get(req.tenantId, uid, req.params.id)
+    if (dup) return res.status(409).json({ error: `UID kartu sudah dipakai siswa lain: ${dup.nama}` })
+  }
+  db.prepare('UPDATE siswa SET rfid_uid=? WHERE id=? AND tenant_id=?').run(uid || null, req.params.id, req.tenantId)
+  res.json({ success: true, rfid_uid: uid || null })
 })
 
 app.post('/api/siswa/generate-kts', STAFF, async (req, res) => {
@@ -6957,6 +6985,28 @@ function qrSiswaPayload(db, siswa, tenantId) {
     nama_panggilan_unik: uniqueStudentNickname(db, siswa, tenantId),
   }
 }
+// Resolusi identitas pemindaian -> siswa: token QR (id siswa / mapping lama /
+// NIS-NISN) ATAU UID kartu RFID (siswa.rfid_uid). Dipakai absensi QR & RFID.
+function resolveStudentByScan(db, tenantId, { token, rfid_uid }) {
+  if (token) {
+    const t = normalizeQrToken(token)
+    if (!t) return null
+    let siswa = db.prepare('SELECT * FROM siswa WHERE id = ? AND tenant_id = ?').get(t, tenantId)
+    if (!siswa) {
+      const legacy = db.prepare('SELECT siswa_id FROM qr_siswa_identifiers WHERE tenant_id=? AND token=?').get(tenantId, t)
+      if (legacy) siswa = db.prepare('SELECT * FROM siswa WHERE id=? AND tenant_id=?').get(legacy.siswa_id, tenantId)
+    }
+    if (!siswa) siswa = db.prepare('SELECT * FROM siswa WHERE (nis = ? OR nisn = ?) AND tenant_id = ?').get(t, t, tenantId)
+    return siswa || null
+  }
+  if (rfid_uid) {
+    const uid = String(rfid_uid).trim().toUpperCase()
+    if (!uid) return null
+    return db.prepare('SELECT * FROM siswa WHERE tenant_id=? AND UPPER(rfid_uid)=?').get(tenantId, uid) || null
+  }
+  return null
+}
+
 app.post('/api/absensi-siswa/qr-scan', STAFF, (req, res) => {
   const token = normalizeQrToken(req.body.token)
   if (!token) return res.status(400).json({ error: 'Token QR kosong' })
@@ -7000,6 +7050,80 @@ app.post('/api/absensi-siswa/qr-scan', STAFF, (req, res) => {
     sendAbsensiNotifToWali(siswa.id, 'hadir', tanggal).catch(() => {})
   }
   res.json(payload)
+})
+
+// Absensi tap KARTU RFID (reader USB/ESP32). Mengirim UID kartu -> resolve ke
+// siswa via siswa.rfid_uid. Bila UID belum dipetakan, balas 404 dengan kode
+// UNMAPPED_RFID agar alat bisa memberi umpan (buzzer/LED).
+app.post('/api/absensi-siswa/rfid-scan', STAFF, (req, res) => {
+  const uid = String(req.body?.rfid_uid || '').trim()
+  if (!uid) return res.status(400).json({ error: 'UID kartu kosong' })
+  const siswa = resolveStudentByScan(db, req.tenantId, { rfid_uid: uid })
+  if (!siswa) return res.status(404).json({ error: 'Kartu belum terdaftar', code: 'UNMAPPED_RFID' })
+  const tanggal = /^\d{4}-\d{2}-\d{2}$/.test(String(req.body.tanggal || '')) ? String(req.body.tanggal) : todayJakarta()
+  const adminWrite = requireAdminDailyAttendanceWriteAccess(req)
+  if (!adminWrite.allowed) return res.status(adminWrite.status).json({ error: adminWrite.error })
+  const teacherAccess = requireTeacherDailyAttendanceAccess(req, siswa.id, tanggal)
+  if (!teacherAccess.allowed) return res.status(teacherAccess.status).json({ error: teacherAccess.error })
+  try { assertKbmActive(req, tanggal) } catch (e) { return res.status(400).json({ error: e.message }) }
+  const waktu = timeJakarta()
+  const cfg = getTenantSettings(db, req.tenantId, 'sesi_pulang_mulai') || {}
+  const hari = require('./attendance-rules.cjs').hariJakarta()
+  const batas = siswa.rombel_id && db.prepare('SELECT jam_pulang,aktif FROM rombel_jam_pulang WHERE rombel_id=? AND hari=? AND tenant_id=?').get(siswa.rombel_id, hari, req.tenantId)
+  let sesi
+  try { sesi = require('./attendance-rules.cjs').sesiAbsensiSiswa({ waktu, jamPulang: batas?.jam_pulang, fallbackPulang: cfg.sesi_pulang_mulai, explicit: req.body.sesi, aktif: batas && batas.aktif }) }
+  catch (e) { return res.status(400).json({ error: e.message }) }
+  const normalizedJenis = sesi === 'pulang' ? 'pulang' : 'masuk'
+  const result = writeDailyAttendanceSession(db, {
+    id: uuidv4(), tenantId: req.tenantId, siswaId: siswa.id, rombelId: siswa.rombel_id,
+    tanggal, status: 'hadir', waktu, metode: 'rfid', jenis: normalizedJenis,
+  })
+  const payload = { siswa: qrSiswaPayload(db, siswa, req.tenantId), waktu, sesi: normalizedJenis, metode: 'rfid' }
+  if (result.already) return res.json({ ...payload, already: true, status: result.status })
+  try { notificationMonitor.logActivity(db, { tenantId: req.tenantId, eventType: 'student_qr_attendance', actorId: null, entityId: siswa.id, metadata: { sesi: normalizedJenis, metode: 'rfid' } }) } catch {}
+  if (normalizedJenis === 'pulang') {
+    try { waQueue.queueWaliAttendance(db, { tenantId: req.tenantId, studentId: siswa.id, date: tanggal, session: 'pulang', status: 'hadir' }) } catch (e) { console.error('[wa-notif] queueWaliAttendance gagal', e.message) }
+  } else {
+    sendAbsensiNotifToWali(siswa.id, 'hadir', tanggal).catch(() => {})
+  }
+  res.json(payload)
+})
+
+// Absensi TAP via API key — untuk ALAT MANDIRI (ESP32/gate/kiosk) tanpa login
+// staf. Memakai header x-api-key. Menerima { token } (QR) ATAU { rfid_uid }.
+// Balasan ringkas {ok, status, nama} supaya firmware bisa bunyi/nyala LED.
+app.post('/api/external/v1/absensi/scan', apiKeyMiddleware, (req, res) => {
+  const perms = req.apiKey.permissions || []
+  if (!perms.includes('absensi:write') && !perms.includes('write') && !perms.includes('*')) {
+    return res.status(403).json({ error: 'Permission denied: absensi:write required' })
+  }
+  const { token, rfid_uid, sesi: sesiReq } = req.body || {}
+  if (!token && !rfid_uid) return res.status(400).json({ error: 'token atau rfid_uid wajib' })
+  const siswa = resolveStudentByScan(db, req.tenantId, { token, rfid_uid })
+  if (!siswa) return res.status(404).json({ ok: false, error: 'Kartu/QR belum terdaftar', code: rfid_uid ? 'UNMAPPED_RFID' : 'UNKNOWN_QR' })
+  const tanggal = /^\d{4}-\d{2}-\d{2}$/.test(String(req.body.tanggal || '')) ? String(req.body.tanggal) : todayJakarta()
+  try { assertKbmActive({ tenantId: req.tenantId }, tanggal) } catch (e) { return res.status(400).json({ ok: false, error: e.message }) }
+  const waktu = timeJakarta()
+  const cfg = getTenantSettings(db, req.tenantId, 'sesi_pulang_mulai') || {}
+  const hari = require('./attendance-rules.cjs').hariJakarta()
+  const batas = siswa.rombel_id && db.prepare('SELECT jam_pulang,aktif FROM rombel_jam_pulang WHERE rombel_id=? AND hari=? AND tenant_id=?').get(siswa.rombel_id, hari, req.tenantId)
+  let sesi
+  try { sesi = require('./attendance-rules.cjs').sesiAbsensiSiswa({ waktu, jamPulang: batas?.jam_pulang, fallbackPulang: cfg.sesi_pulang_mulai, explicit: sesiReq, aktif: batas && batas.aktif }) }
+  catch (e) { return res.status(400).json({ ok: false, error: e.message }) }
+  const jenis = sesi === 'pulang' ? 'pulang' : 'masuk'
+  const result = writeDailyAttendanceSession(db, {
+    id: uuidv4(), tenantId: req.tenantId, siswaId: siswa.id, rombelId: siswa.rombel_id,
+    tanggal, status: 'hadir', waktu, metode: rfid_uid ? 'rfid' : 'qr', jenis,
+  })
+  const out = { ok: true, siswa_id: siswa.id, nama: siswa.nama, nis: siswa.nis, rombel_id: siswa.rombel_id, tanggal, waktu, sesi: jenis, already: !!result.already, status: result.status }
+  if (result.already) return res.json(out)
+  try { notificationMonitor.logActivity(db, { tenantId: req.tenantId, eventType: 'student_qr_attendance', actorId: null, entityId: siswa.id, metadata: { sesi: jenis, metode: rfid_uid ? 'rfid' : 'qr', via: 'device' } }) } catch {}
+  if (jenis === 'pulang') {
+    try { waQueue.queueWaliAttendance(db, { tenantId: req.tenantId, studentId: siswa.id, date: tanggal, session: 'pulang', status: 'hadir' }) } catch (e) { console.error('[wa-notif] queueWaliAttendance gagal', e.message) }
+  } else {
+    sendAbsensiNotifToWali(siswa.id, 'hadir', tanggal).catch(() => {})
+  }
+  res.json(out)
 })
 
 // ==================== ABSENSI GURU ====================

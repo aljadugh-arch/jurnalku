@@ -14,7 +14,7 @@ const BIODATA_FIELDS = [
   'nama_panggilan', 'nik', 'nis', 'nisn', 'jenis_kelamin', 'tempat_lahir', 'tanggal_lahir',
   'alamat', 'no_hp', 'agama', 'status_keluarga', 'anak_ke', 'asal_sekolah', 'nama_ortu',
   'nama_ayah', 'kerja_ayah', 'nama_ibu', 'kerja_ibu', 'alamat_ortu', 'nama_wali', 'kerja_wali',
-  'rombel_nama',
+  'rombel_nama', 'rfid_uid',
 ]
 
 function parseColumnMap() {

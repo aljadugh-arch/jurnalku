@@ -781,7 +781,7 @@ export default function DataSiswaPage() {
           templateName="template-import-siswa.xlsx"
           templateUrl="/templates/template-import-siswa.xlsx"
           headerRow={0}
-          columnMap={{ 'NIK': 'nik', 'NIS': 'nis', 'NISN': 'nisn', 'Nama': 'nama', 'Nama Panggilan': 'nama_panggilan', 'JK': 'jenis_kelamin', 'Jenis Kelamin': 'jenis_kelamin', 'Tempat Lahir': 'tempat_lahir', 'Tanggal Lahir': 'tanggal_lahir', 'Alamat': 'alamat', 'No HP': 'no_hp', 'Agama': 'agama', 'Status Keluarga': 'status_keluarga', 'Anak Ke': 'anak_ke', 'Asal Sekolah': 'asal_sekolah', 'Nama Ortu': 'nama_ortu', 'Nama Ayah': 'nama_ayah', 'Pekerjaan Ayah': 'kerja_ayah', 'Nama Ibu': 'nama_ibu', 'Pekerjaan Ibu': 'kerja_ibu', 'Alamat Ortu': 'alamat_ortu', 'Nama Wali': 'nama_wali', 'Pekerjaan Wali': 'kerja_wali', 'Rombel': 'rombel_nama' }}
+          columnMap={{ 'NIK': 'nik', 'NIS': 'nis', 'NISN': 'nisn', 'Nama': 'nama', 'Nama Panggilan': 'nama_panggilan', 'JK': 'jenis_kelamin', 'Jenis Kelamin': 'jenis_kelamin', 'Tempat Lahir': 'tempat_lahir', 'Tanggal Lahir': 'tanggal_lahir', 'Alamat': 'alamat', 'No HP': 'no_hp', 'Agama': 'agama', 'Status Keluarga': 'status_keluarga', 'Anak Ke': 'anak_ke', 'Asal Sekolah': 'asal_sekolah', 'Nama Ortu': 'nama_ortu', 'Nama Ayah': 'nama_ayah', 'Pekerjaan Ayah': 'kerja_ayah', 'Nama Ibu': 'nama_ibu', 'Pekerjaan Ibu': 'kerja_ibu', 'Alamat Ortu': 'alamat_ortu', 'Nama Wali': 'nama_wali', 'Pekerjaan Wali': 'kerja_wali', 'Rombel': 'rombel_nama', 'RFID UID': 'rfid_uid' }}
           aliases={{
             'Nama Orang Tua': 'nama_ortu',
             'Nama Orang Tua/Wali': 'nama_ortu',
@@ -816,7 +816,8 @@ export default function DataSiswaPage() {
               kerja_ayah: row.kerja_ayah || '',
               kerja_ibu: row.kerja_ibu || '',
               nama_wali: row.nama_wali || '',
-              kerja_wali: row.kerja_wali || ''
+              kerja_wali: row.kerja_wali || '',
+              rfid_uid: String(row.rfid_uid || '').trim()
             }))
             
             const { data } = await api.post('/siswa/bulk-import', { students: studentData })

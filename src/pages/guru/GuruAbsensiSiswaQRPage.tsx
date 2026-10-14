@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { QrCode, CheckCircle, XCircle, Clock, Camera, Keyboard } from 'lucide-react'
+import { QrCode, CheckCircle, XCircle, Clock, Camera, Keyboard, CreditCard } from 'lucide-react'
 import toast from 'react-hot-toast'
 import api from '../../services/api'
 import { todayWib } from '../../lib/dateFormat'
@@ -29,10 +29,11 @@ export default function GuruAbsensiSiswaQRPage() {
   const [absensi, setAbsensi] = useState<Record<string, string>>({})
   const [loading, setLoading] = useState(false)
   const [qrToken, setQrToken] = useState('')
+  const [rfidUid, setRfidUid] = useState('')
   const [qrOpen, setQrOpen] = useState(false)
   const [lastQr, setLastQr] = useState('')
   const [scanBusy, setScanBusy] = useState(false)
-  const [mode, setMode] = useState<'qr' | 'manual'>('qr')
+  const [mode, setMode] = useState<'qr' | 'manual' | 'rfid'>('qr')
   const [kbmStatus, setKbmStatus] = useState({ aktif: false, libur: false, loading: true })
   const qrRef = useRef<Html5Qrcode | null>(null)
   const scanBusyRef = useRef(false)
@@ -172,6 +173,34 @@ export default function GuruAbsensiSiswaQRPage() {
     setQrToken('')
   }
 
+  // Absensi tap kartu RFID (reader USB/Bluetooth mengirim UID lalu Enter).
+  const submitRfidUid = async (rawUid: string) => {
+    const uid = rawUid.trim().toUpperCase()
+    if (!uid || scanBusyRef.current || uid === lastQrRef.current) return
+    scanBusyRef.current = true
+    lastQrRef.current = uid
+    setScanBusy(true)
+    try {
+      const r = await api.post('/absensi-siswa/rfid-scan', { rfid_uid: uid, sesi, tanggal })
+      announceScanResult(r.data)
+      toast.success(r.data.already ? `${r.data.siswa?.nama || 'Siswa'} sudah tercatat` : `${r.data.siswa?.nama || 'Siswa'} hadir (${r.data.sesi})`)
+      await loadData()
+    } catch (err: any) {
+      playFeedbackSound('error')
+      const code = err.response?.data?.code
+      toast.error(code === 'UNMAPPED_RFID' ? 'Kartu belum dipetakan ke siswa (atur di Data Siswa → RFID)' : (err.response?.data?.error || 'Kartu gagal'))
+    } finally {
+      window.setTimeout(() => { scanBusyRef.current = false; lastQrRef.current = ''; setScanBusy(false); setRfidUid('') }, 1200)
+    }
+  }
+
+  const handleRfidScan = async () => {
+    primeFeedbackSound()
+    if (!kbmStatus.aktif) return toast.error(kbmStatus.libur ? 'Hari libur: absensi nonaktif' : 'Aktifkan KBM tanggal ini')
+    if (!rfidUid.trim()) return toast.error('Tap kartu atau isi UID')
+    await submitRfidUid(rfidUid)
+  }
+
   // Manual save
   const handleSave = async () => {
     if (!kbmStatus.aktif) return toast.error(kbmStatus.libur ? 'Hari libur: absensi nonaktif' : 'Aktifkan KBM tanggal ini')
@@ -209,6 +238,12 @@ export default function GuruAbsensiSiswaQRPage() {
             className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition ${mode === 'manual' ? 'bg-primary text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
           >
             <Keyboard size={16} /> Manual
+          </button>
+          <button
+            onClick={() => setMode('rfid')}
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition ${mode === 'rfid' ? 'bg-primary text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+          >
+            <CreditCard size={16} /> RFID
           </button>
         </div>
       </div>
@@ -274,6 +309,30 @@ export default function GuruAbsensiSiswaQRPage() {
           <div className="flex items-center gap-2 text-xs text-gray-400">
             <QrCode size={14} />
             <span>Arahkan kamera ke QR siswa. Sesi (masuk/pulang) ditentukan otomatis berdasarkan jam.</span>
+          </div>
+        </div>
+      )}
+
+      {/* RFID Mode */}
+      {mode === 'rfid' && (
+        <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100 space-y-4">
+          <div className="flex gap-2">
+            <input
+              value={rfidUid}
+              onChange={e => setRfidUid(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && handleRfidScan()}
+              placeholder="Tap kartu RFID atau ketik UID"
+              autoFocus
+              className="flex-1 px-4 py-3 border border-gray-300 rounded-lg text-sm font-mono"
+            />
+            <button onClick={handleRfidScan} disabled={!kbmStatus.aktif || scanBusy} className="px-4 py-3 bg-primary text-white rounded-lg text-sm disabled:opacity-50">
+              Proses
+            </button>
+          </div>
+          {scanBusy && <p className="text-center text-sm text-primary animate-pulse">Memproses tap kartu...</p>}
+          <div className="flex items-center gap-2 text-xs text-gray-400">
+            <CreditCard size={14} />
+            <span>Reader RFID USB/Bluetooth (mode keyboard) otomatis mengisi UID lalu Enter. Sesi masuk/pulang otomatis dari jam. Kartu yang belum dipetakan balas “belum terdaftar”.</span>
           </div>
         </div>
       )}

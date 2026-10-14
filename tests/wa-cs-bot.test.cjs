@@ -121,6 +121,20 @@ test('guru lihat nilai: hanya kelas/mapel yang diampu, tidak yang lain', () => {
   db.close()
 })
 
+test('guru lihat nilai: mapel yang diampu TAPI tidak dijadwalkan hari itu TIDAK muncul', () => {
+  const db = fixture()
+  db.exec(`CREATE TABLE pengajar (id TEXT, tenant_id TEXT, gtk_id TEXT, mapel_id TEXT, rombel_id TEXT)`)
+  // m2 diampu lewat tabel pengajar, TAPI tidak ada jadwal hari Senin untuknya.
+  db.exec(`INSERT INTO mapel VALUES ('m2','t1','Bahasa Inggris','wajib')`)
+  db.prepare('INSERT INTO pengajar VALUES (?,?,?,?,?)').run('p1', 't1', 'g1', 'm1', 'r1')
+  db.prepare('INSERT INTO pengajar VALUES (?,?,?,?,?)').run('p2', 't1', 'g1', 'm2', 'r1')
+  db.prepare('INSERT INTO rapor VALUES (?,?,?,?,?,?,?,?,?,?,?)').run('rp2', 's1', 'm2', '2026/2027', 'ganjil', 'sas', null, 90, null, null, 't1')
+  const reply = handleIncoming(db, { tenantId: 't1', phone: '081234567890', text: 'nilai', date: '2026-08-24' }) // Senin
+  assert.match(reply, /Matematika/) // dijadwalkan Senin
+  assert.doesNotMatch(reply, /Bahasa Inggris/) // diampu tapi TIDAK dijadwalkan hari itu
+  db.close()
+})
+
 test('guru lihat rekap absensi kelas yang diampunya', () => {
   const db = fixture()
   db.exec(`CREATE TABLE pengajar (id TEXT, tenant_id TEXT, gtk_id TEXT, mapel_id TEXT, rombel_id TEXT)`)

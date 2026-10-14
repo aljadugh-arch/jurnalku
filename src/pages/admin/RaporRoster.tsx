@@ -149,7 +149,7 @@ export default function RaporRoster({ tahunAjaran, semester, jenis, raporFormat,
               <tr key={s.id} className="hover:bg-gray-50">
                 <td className="px-3 py-2 text-gray-400">{i + 1}</td>
                 <td className="px-3 py-2 text-gray-500">{[s.nis, s.nisn].filter(Boolean).join(' / ') || '-'}</td>
-                <td className="px-3 py-2 font-medium text-gray-800">{s.nama}</td>
+                <td className="px-3 py-2 font-medium text-gray-800 whitespace-nowrap">{s.nama}</td>
                 <td className="px-3 py-2">{s.jenis_kelamin === 'P' ? 'P' : 'L'}</td>
                 <td className="px-3 py-2 text-gray-500">{s.rombel_nama || '-'}</td>
                 <td className="px-3 py-2">
