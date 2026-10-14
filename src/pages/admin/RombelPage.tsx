@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react'
-import { Plus, Trash2, X, Users, Pencil, Search, ArrowRightLeft, ChevronRight } from 'lucide-react'
+import { Plus, Trash2, X, Users, Pencil, Search, ArrowRightLeft, ChevronRight, MapPin, LocateFixed } from 'lucide-react'
 import toast from 'react-hot-toast'
 import api from '../../services/api'
 import { createPortal } from 'react-dom'
@@ -8,6 +8,7 @@ import Modal from '../../components/ui/Modal'
 interface Rombel {
   id: string; nama: string; tingkat: string; tahun_ajaran: string
   wali_kelas_id: string; wali_kelas_nama: string; kapasitas: number; jumlah_siswa: number
+  geo_latitude?: number | null; geo_longitude?: number | null; geo_radius?: number | null; geo_lock?: number
 }
 
 interface Siswa {
@@ -21,7 +22,8 @@ export default function RombelPage() {
   const [loading, setLoading] = useState(true)
   const [showModal, setShowModal] = useState(false)
   const [editing, setEditing] = useState<Rombel | null>(null)
-  const [form, setForm] = useState({ nama: '', tingkat: 'VII', tahun_ajaran: '2026/2027', wali_kelas_id: '', kapasitas: 36 })
+  const [form, setForm] = useState({ nama: '', tingkat: 'VII', tahun_ajaran: '2026/2027', wali_kelas_id: '', kapasitas: 36, geo_latitude: '', geo_longitude: '', geo_radius: 50, geo_lock: 0 })
+  const [locating, setLocating] = useState(false)
 
   // Detail siswa panel
   const [selectedRombel, setSelectedRombel] = useState<Rombel | null>(null)
@@ -72,16 +74,37 @@ export default function RombelPage() {
 
   const resetForm = () => {
     setEditing(null)
-    setForm({ nama: '', tingkat: 'VII', tahun_ajaran: '2026/2027', wali_kelas_id: '', kapasitas: 36 })
+    setForm({ nama: '', tingkat: 'VII', tahun_ajaran: '2026/2027', wali_kelas_id: '', kapasitas: 36, geo_latitude: '', geo_longitude: '', geo_radius: 50, geo_lock: 0 })
   }
 
   const openCreate = () => { resetForm(); setShowModal(true) }
   const openEdit = (r: Rombel) => {
     setEditing(r)
-    setForm({ nama: r.nama, tingkat: r.tingkat, tahun_ajaran: r.tahun_ajaran, wali_kelas_id: r.wali_kelas_id || '', kapasitas: r.kapasitas || 36 })
+    setForm({
+      nama: r.nama, tingkat: r.tingkat, tahun_ajaran: r.tahun_ajaran, wali_kelas_id: r.wali_kelas_id || '', kapasitas: r.kapasitas || 36,
+      geo_latitude: r.geo_latitude != null ? String(r.geo_latitude) : '',
+      geo_longitude: r.geo_longitude != null ? String(r.geo_longitude) : '',
+      geo_radius: r.geo_radius != null ? Number(r.geo_radius) : 50,
+      geo_lock: Number(r.geo_lock) ? 1 : 0,
+    })
     setShowModal(true)
   }
   const closeModal = () => { setShowModal(false); resetForm() }
+
+  // Ambil koordinat perangkat saat ini (lokasi ruang kelas) via GPS/peramban.
+  const ambilLokasi = () => {
+    if (!navigator.geolocation) { toast.error('Perangkat tidak mendukung geolokasi'); return }
+    setLocating(true)
+    navigator.geolocation.getCurrentPosition(
+      pos => {
+        setForm(f => ({ ...f, geo_latitude: pos.coords.latitude.toFixed(6), geo_longitude: pos.coords.longitude.toFixed(6) }))
+        setLocating(false)
+        toast.success(`Lokasi terambil (akurasi ±${Math.round(pos.coords.accuracy)}m)`)
+      },
+      err => { setLocating(false); toast.error(err.message || 'Gagal mengambil lokasi. Izinkan akses lokasi.') },
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+    )
+  }
 
   const handleSave = async () => {
     if (!form.nama || !form.tingkat) { toast.error('Nama dan tingkat wajib'); return }
@@ -89,7 +112,7 @@ export default function RombelPage() {
       if (editing) {
         await api.put('/rombel/' + editing.id, form)
         toast.success('Rombel berhasil diperbarui')
-        if (selectedRombel?.id === editing.id) setSelectedRombel({ ...selectedRombel, ...form, wali_kelas_nama: gtk.find(g => g.id === form.wali_kelas_id)?.nama || selectedRombel.wali_kelas_nama })
+        if (selectedRombel?.id === editing.id) setSelectedRombel({ ...selectedRombel, nama: form.nama, tingkat: form.tingkat, tahun_ajaran: form.tahun_ajaran, wali_kelas_id: form.wali_kelas_id, kapasitas: form.kapasitas, geo_latitude: form.geo_latitude ? Number(form.geo_latitude) : null, geo_longitude: form.geo_longitude ? Number(form.geo_longitude) : null, geo_radius: form.geo_radius, geo_lock: form.geo_lock, wali_kelas_nama: gtk.find(g => g.id === form.wali_kelas_id)?.nama || selectedRombel.wali_kelas_nama })
       } else {
         await api.post('/rombel', form)
         toast.success('Rombel berhasil ditambahkan')
@@ -181,7 +204,12 @@ export default function RombelPage() {
                 </div>
                 <div className="min-w-0">
                   <h3 className="font-bold text-gray-800 truncate">{r.nama}</h3>
-                  <p className="text-xs text-gray-500 truncate">{r.wali_kelas_nama || 'Belum ada wali kelas'}</p>
+                  <p className="text-xs text-gray-500 truncate flex items-center gap-1">
+                    {r.wali_kelas_nama || 'Belum ada wali kelas'}
+                    {Number(r.geo_lock) === 1 && r.geo_latitude != null && (
+                      <span className="inline-flex items-center gap-0.5 text-emerald-600" title={`Lock geolokasi aktif (radius ${r.geo_radius || 50}m)`}><MapPin size={11} />Geo</span>
+                    )}
+                  </p>
                 </div>
               </div>
               <div className="flex items-center gap-1 ml-2 flex-shrink-0">
@@ -326,6 +354,32 @@ export default function RombelPage() {
                   <option value="">-- Pilih --</option>
                   {gtk.map(g => <option key={g.id} value={g.id}>{g.nama}</option>)}
                 </select>
+              </div>
+              <div className="border-t pt-3">
+                <div className="flex items-center justify-between mb-2">
+                  <label className="flex items-center gap-2 text-sm font-medium text-gray-700">
+                    <MapPin size={15} className="text-primary" /> Lock Geolokasi Kelas
+                  </label>
+                  <label className="inline-flex items-center gap-2 cursor-pointer">
+                    <input type="checkbox" checked={!!form.geo_lock} onChange={e => setForm({ ...form, geo_lock: e.target.checked ? 1 : 0 })} />
+                    <span className="text-xs text-gray-600">Aktifkan</span>
+                  </label>
+                </div>
+                <p className="text-[11px] text-gray-500 mb-2">Bila aktif, guru hanya bisa "Masuk Kelas" dari dalam radius titik kelas ini.</p>
+                <div className="grid grid-cols-2 gap-2 mb-2">
+                  <input value={form.geo_latitude} onChange={e => setForm({ ...form, geo_latitude: e.target.value })} placeholder="Latitude" className="w-full px-3 py-2 border rounded-lg text-sm" />
+                  <input value={form.geo_longitude} onChange={e => setForm({ ...form, geo_longitude: e.target.value })} placeholder="Longitude" className="w-full px-3 py-2 border rounded-lg text-sm" />
+                </div>
+                <div className="flex items-center gap-2">
+                  <button type="button" onClick={ambilLokasi} disabled={locating} className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-primary/10 text-primary text-xs font-medium hover:bg-primary/20 disabled:opacity-50">
+                    <LocateFixed size={14} />{locating ? 'Mengambil…' : 'Ambil lokasi saat ini'}
+                  </button>
+                  <div className="flex items-center gap-1">
+                    <span className="text-xs text-gray-500">Radius</span>
+                    <input type="number" min={10} value={form.geo_radius} onChange={e => setForm({ ...form, geo_radius: +e.target.value })} className="w-20 px-2 py-1.5 border rounded-lg text-sm" />
+                    <span className="text-xs text-gray-500">m</span>
+                  </div>
+                </div>
               </div>
             </div>
             <div className="flex gap-3 mt-6">

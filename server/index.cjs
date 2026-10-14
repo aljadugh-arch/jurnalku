@@ -1362,6 +1362,13 @@ for (const col of [
   ['settings', 'geo_latitude', 'REAL'],
   ['settings', 'geo_longitude', 'REAL'],
   ['settings', 'geo_radius', 'INTEGER DEFAULT 200'],
+  // Lock geolokasi per rombel/kelas: koordinat ruang kelas + radius + sakelar.
+  // Dipakai "Masuk Kelas" guru: bila geo_lock=1, guru hanya bisa masuk bila
+  // berada dalam radius kelas (fallback ke geofence sekolah bila kosong).
+  ['rombel', 'geo_latitude', 'REAL'],
+  ['rombel', 'geo_longitude', 'REAL'],
+  ['rombel', 'geo_radius', 'INTEGER DEFAULT 50'],
+  ['rombel', 'geo_lock', 'INTEGER DEFAULT 0'],
   ['settings', 'background', "TEXT DEFAULT ''"],
   ['settings', 'jenjang', "TEXT DEFAULT ''"],
   ['settings', 'hari_libur', "TEXT DEFAULT '[]'"],
@@ -1413,6 +1420,8 @@ for (const col of [
     ['jurnal_mengajar', 'signature_type', 'TEXT'],
     ['jurnal_mengajar', 'signature_path', 'TEXT'],
     ['sesi_kelas_guru', 'jadwal_source', "TEXT DEFAULT 'reguler'"],
+    ['sesi_kelas_guru', 'geo_distance', 'INTEGER'],
+    ['sesi_kelas_guru', 'geo_scope', 'TEXT'],
     ['template_jadwal', 'durasi_menit', 'INTEGER DEFAULT 40'],
     ['jadwal', 'guru_piket', "TEXT DEFAULT '[]'"]
     ]) {
@@ -3660,6 +3669,14 @@ app.delete('/api/mapel/:id', ADMIN, (req, res) => {
 })
 
 // ==================== ROMBEL ====================
+// Kembalikan lokasi rombel bila diminta, untuk memvalidasi/mengisi lock geo.
+// Dipakai halaman Rombel ("Ambil lokasi saat ini") dan uji sebelum menyimpan.
+app.get('/api/rombel/:id/lokasi', authMiddleware, (req, res) => {
+  const r = db.prepare('SELECT id, nama, geo_latitude, geo_longitude, geo_radius, geo_lock FROM rombel WHERE id=? AND tenant_id=?').get(req.params.id, req.tenantId)
+  if (!r) return res.status(404).json({ error: 'Rombel tidak ditemukan' })
+  res.json(r)
+})
+
 app.get('/api/rombel', authMiddleware, (req, res) => {
   const rows = db.prepare(`SELECT r.*, g.nama as wali_kelas_nama, (SELECT COUNT(*) FROM siswa WHERE rombel_id = r.id AND tenant_id = r.tenant_id) as jumlah_siswa FROM rombel r LEFT JOIN gtk g ON r.wali_kelas_id = g.id AND g.tenant_id = r.tenant_id WHERE r.tenant_id=? ORDER BY r.tingkat, r.nama`).all(req.tenantId)
   res.json(rows)
@@ -3672,25 +3689,34 @@ app.get('/api/rombel/:id/siswa', ADMIN, (req, res) => {
 
 app.post('/api/rombel', ADMIN, (req, res) => {
   const id = uuidv4()
-  const { nama, tingkat, tahun_ajaran, wali_kelas_id, kapasitas } = req.body
+  const { nama, tingkat, tahun_ajaran, wali_kelas_id, kapasitas, geo_latitude, geo_longitude, geo_radius, geo_lock } = req.body
   if (!nama || !tingkat) return res.status(400).json({ error: 'Nama dan tingkat wajib diisi.' })
   const waliKelasId = wali_kelas_id || null
   if (waliKelasId && !db.prepare('SELECT id FROM gtk WHERE id=? AND tenant_id=?').get(waliKelasId, req.tenantId)) {
     return res.status(400).json({ error: 'Wali kelas tidak ditemukan pada lembaga ini.' })
   }
-  db.prepare('INSERT INTO rombel (id, nama, tingkat, tahun_ajaran, wali_kelas_id, kapasitas, tenant_id) VALUES (?,?,?,?,?,?,?)').run(id, nama, tingkat, tahun_ajaran, waliKelasId, kapasitas, req.tenantId)
+  db.prepare('INSERT INTO rombel (id, nama, tingkat, tahun_ajaran, wali_kelas_id, kapasitas, tenant_id, geo_latitude, geo_longitude, geo_radius, geo_lock) VALUES (?,?,?,?,?,?,?,?,?,?,?)')
+    .run(id, nama, tingkat, tahun_ajaran, waliKelasId, kapasitas, req.tenantId,
+      geo_latitude != null && geo_latitude !== '' ? Number(geo_latitude) : null,
+      geo_longitude != null && geo_longitude !== '' ? Number(geo_longitude) : null,
+      geo_radius != null && geo_radius !== '' ? Number(geo_radius) : 50,
+      Number(geo_lock) ? 1 : 0)
   res.json({ id })
 })
 
 app.put('/api/rombel/:id', ADMIN, (req, res) => {
-  const { nama, tingkat, tahun_ajaran, wali_kelas_id, kapasitas } = req.body
+  const { nama, tingkat, tahun_ajaran, wali_kelas_id, kapasitas, geo_latitude, geo_longitude, geo_radius, geo_lock } = req.body
   if (!nama || !tingkat) return res.status(400).json({ error: 'Nama dan tingkat wajib diisi.' })
   const waliKelasId = wali_kelas_id || null
   if (waliKelasId && !db.prepare('SELECT id FROM gtk WHERE id=? AND tenant_id=?').get(waliKelasId, req.tenantId)) {
     return res.status(400).json({ error: 'Wali kelas tidak ditemukan pada lembaga ini.' })
   }
-  const result = db.prepare('UPDATE rombel SET nama=?, tingkat=?, tahun_ajaran=?, wali_kelas_id=?, kapasitas=? WHERE id=? AND tenant_id=?')
-    .run(nama, tingkat, tahun_ajaran, waliKelasId, kapasitas, req.params.id, req.tenantId)
+  const result = db.prepare('UPDATE rombel SET nama=?, tingkat=?, tahun_ajaran=?, wali_kelas_id=?, kapasitas=?, geo_latitude=?, geo_longitude=?, geo_radius=?, geo_lock=? WHERE id=? AND tenant_id=?')
+    .run(nama, tingkat, tahun_ajaran, waliKelasId, kapasitas,
+      geo_latitude != null && geo_latitude !== '' ? Number(geo_latitude) : null,
+      geo_longitude != null && geo_longitude !== '' ? Number(geo_longitude) : null,
+      geo_radius != null && geo_radius !== '' ? Number(geo_radius) : 50,
+      Number(geo_lock) ? 1 : 0, req.params.id, req.tenantId)
   if (!result.changes) return res.status(404).json({ error: 'Rombel tidak ditemukan.' })
   res.json({ success: true })
 })
@@ -4262,6 +4288,20 @@ function currentTeacherClassSession(tenantId, gtkId, tanggal) {
     ORDER BY sk.waktu_masuk DESC LIMIT 1`).get(tenantId, gtkId, tanggal) || null
 }
 
+// Jarak meter antara dua koordinat (haversine).
+function haversineMeters(lat1, lng1, lat2, lng2) {
+  const toRad = v => v * Math.PI / 180
+  const dLat = toRad(lat2 - lat1)
+  const dLng = toRad(lng2 - lng1)
+  const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2
+  return 6371000 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
+}
+// Validasi lokasi "Masuk Kelas": prioritas lock geolokasi rombel (bila aktif),
+// fallback ke geofence sekolah (settings). Mengembalikan {ok:true} atau {ok:false,status,error}.
+function validateClassGeo(db, tenantId, rombelId, latitude, longitude) {
+  return require('./geo-lock.cjs').validateClassGeo(db, tenantId, rombelId, latitude, longitude)
+}
+
 app.post('/api/guru/sesi-kelas/masuk', TEACHER, (req, res) => {
   const gtk = resolveGtkForUser(req.user.id, req.tenantId)
   if (!gtk) return res.status(400).json({ error: 'Akun guru belum terhubung GTK' })
@@ -4288,6 +4328,10 @@ app.post('/api/guru/sesi-kelas/masuk', TEACHER, (req, res) => {
       gtk.id, today, req.tenantId
     )
   if (!jadwal) return res.status(403).json({ error: 'Jadwal bukan jadwal mengajar Anda hari ini' })
+  // Lock geolokasi: bila rombel/kelas mengaktifkan geo_lock (atau sekolah punya
+  // geofence), guru hanya bisa "Masuk Kelas" dari dalam area. Ditolak bila di luar.
+  const geoCheck = validateClassGeo(db, req.tenantId, jadwal.rombel_id, req.body?.latitude, req.body?.longitude)
+  if (!geoCheck.ok) return res.status(geoCheck.status || 400).json({ error: geoCheck.error, geo: { distance: geoCheck.distance, radius: geoCheck.radius } })
   if (jadwal.sesi_status === 'selesai') return res.status(409).json({ error: 'Kelas ini sudah diselesaikan hari ini', status: 'selesai' })
   const active = currentTeacherClassSession(req.tenantId, gtk.id, today)
   if (active && active.jadwal_id !== jadwal.id) return res.status(409).json({ error: `Selesaikan dahulu kelas ${active.rombel_nama} - ${active.mapel_nama}` })
@@ -4302,13 +4346,15 @@ app.post('/api/guru/sesi-kelas/masuk', TEACHER, (req, res) => {
   const graceMinutes = 10
   const menitTerlambat = Math.max(0, nowMinutes - startMinutes - graceMinutes)
   const id = uuidv4()
-  db.prepare(`INSERT INTO sesi_kelas_guru (id,jadwal_id,guru_id,mapel_id,rombel_id,tanggal,waktu_masuk,waktu_selesai,status,menit_terlambat,tenant_id,updated_at,jadwal_source)
-    VALUES (?,?,?,?,?,?,?,?,?,?,?,datetime('now'),?)
+  db.prepare(`INSERT INTO sesi_kelas_guru (id,jadwal_id,guru_id,mapel_id,rombel_id,tanggal,waktu_masuk,waktu_selesai,status,menit_terlambat,tenant_id,updated_at,jadwal_source,geo_distance,geo_scope)
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,datetime('now'),?,?,?)
     ON CONFLICT(tenant_id,jadwal_id,tanggal) DO UPDATE SET
       guru_id=excluded.guru_id,mapel_id=excluded.mapel_id,rombel_id=excluded.rombel_id,
       waktu_masuk=excluded.waktu_masuk,waktu_selesai=NULL,status='aktif',
-      menit_terlambat=excluded.menit_terlambat,jadwal_source=excluded.jadwal_source,updated_at=datetime('now')`)
-    .run(id, jadwal.id, gtk.id, jadwal.mapel_id, jadwal.rombel_id, today, now, null, 'aktif', menitTerlambat, req.tenantId, jadwal.jadwal_source)
+      menit_terlambat=excluded.menit_terlambat,jadwal_source=excluded.jadwal_source,
+      geo_distance=excluded.geo_distance,geo_scope=excluded.geo_scope,updated_at=datetime('now')`)
+    .run(id, jadwal.id, gtk.id, jadwal.mapel_id, jadwal.rombel_id, today, now, null, 'aktif', menitTerlambat, req.tenantId, jadwal.jadwal_source,
+      geoCheck.distance != null ? geoCheck.distance : null, geoCheck.scope || null)
   try { notificationMonitor.logActivity(db, { tenantId: req.tenantId, eventType: 'class_session_started', actorId: gtk.id, entityId: id, metadata: { jadwal_id: jadwal.id, rombel_id: jadwal.rombel_id } }) } catch {}
   res.json(currentTeacherClassSession(req.tenantId, gtk.id, today))
 })

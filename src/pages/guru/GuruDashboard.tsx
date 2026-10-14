@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { Calendar, ClipboardCheck, ClipboardList, BookOpen, QrCode, MapPin, Users, PenLine, ChevronRight, Clock, DoorOpen, ScrollText, UserCheck } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import api from '../../services/api'
+import { getCurrentPosition } from '../../lib/geo'
 import toast from 'react-hot-toast'
 import { Card, StatCard, Badge, Avatar } from '../../components/ui'
 import MobileGuruDashboard from './MobileGuruDashboard'
@@ -55,7 +56,10 @@ export default function GuruDashboard() {
     if (!jadwal?.id) return toast.error('Tidak ada jadwal mengajar hari ini')
     setClassBusy(true)
     try {
-      await api.post('/guru/sesi-kelas/masuk', { jadwal_id: jadwal.id })
+      // Kirim lokasi bila tersedia — server menolak bila di luar area kelas.
+      let lok: any = {}
+      try { lok = await getCurrentPosition() } catch { lok = {} }
+      await api.post('/guru/sesi-kelas/masuk', { jadwal_id: jadwal.id, latitude: lok.latitude, longitude: lok.longitude })
       toast.success(`Masuk kelas ${jadwal.rombel_nama}`)
       await loadDashboard()
     } catch (err: any) {

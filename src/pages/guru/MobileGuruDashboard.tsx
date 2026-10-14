@@ -5,6 +5,7 @@ import {
 import { useNavigate } from 'react-router-dom'
 import toast from 'react-hot-toast'
 import api from '../../services/api'
+import { getCurrentPosition } from '../../lib/geo'
 import MobileDashboardHeader from '../../components/MobileDashboardHeader'
 import JadwalSholatCard from '../../components/JadwalSholatCard'
 
@@ -71,7 +72,9 @@ export default function MobileGuruDashboard() {
     if (!jadwal?.id) return toast.error('Tidak ada jadwal mengajar hari ini')
     setBusy(true)
     try {
-      await api.post('/guru/sesi-kelas/masuk', { jadwal_id: jadwal.id })
+      let lok: any = {}
+      try { lok = await getCurrentPosition() } catch { lok = {} }
+      await api.post('/guru/sesi-kelas/masuk', { jadwal_id: jadwal.id, latitude: lok.latitude, longitude: lok.longitude })
       toast.success(`Masuk kelas ${jadwal.rombel_nama || ''}`.trim())
       await load()
       navigate(`/guru/jurnal?jadwal_id=${encodeURIComponent(jadwal.id)}`)
