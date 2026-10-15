@@ -35,6 +35,7 @@ export default function BackupRestorePage() {
   const [diag, setDiag] = useState<DriveDiagnostics | null>(null)
   const [driveLoading, setDriveLoading] = useState(false)
   const [running, setRunning] = useState(false)
+  const [downloading, setDownloading] = useState(false)
   const [logs, setLogs] = useState<BackupLog[]>([])
   const [cfg, setCfg] = useState<BackupConfig>({ folder_id: '', auto_enabled: false, retention_days: 14, schedule_time: '23:00', timezone: 'Asia/Jakarta' })
 
@@ -93,8 +94,32 @@ export default function BackupRestorePage() {
       }
       loadLogs()
     } catch (err: any) {
-      toast.error(err.response?.data?.error || 'Backup ke Drive gagal')
+      const msg = err.response?.data?.error || 'Backup ke Drive gagal'
+      // Arahkan ke unduhan lokal supaya data tetap bisa diamankan tanpa Drive.
+      toast.error(`${msg}\nAnda tetap bisa memakai tombol "Unduh backup (lokal)".`, { duration: 9000 })
     } finally { setRunning(false) }
+  }
+
+  // Unduh backup langsung ke komputer (tanpa Google Drive). Selalu bisa dipakai —
+  // bila Drive gagal/kedaluwarsa, file .json.gz ini dapat diunggah manual ke Drive.
+  const downloadLocalBackup = async () => {
+    setDownloading(true)
+    try {
+      const res = await api.get('/backup/download', { responseType: 'blob' })
+      const cd = res.headers?.['content-disposition'] || ''
+      const match = /filename="?([^"]+)"?/.exec(cd)
+      const filename = match?.[1] || `jurnalku-backup-${todayWib()}.json.gz`
+      const url = URL.createObjectURL(res.data)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = filename
+      a.click()
+      URL.revokeObjectURL(url)
+      const omitted = Number(res.headers?.['x-media-omitted'] || 0)
+      toast.success(`Backup diunduh (${filename})${omitted > 0 ? ` — ${omitted} media besar dilewati` : ''}`)
+    } catch (err: any) {
+      toast.error(err.response?.data?.error || 'Unduh backup gagal')
+    } finally { setDownloading(false) }
   }
 
   const saveCfg = async () => {
@@ -253,8 +278,13 @@ export default function BackupRestorePage() {
             {running ? <Loader2 size={16} className="animate-spin" /> : <Cloud size={16} />}
             Backup Sekarang ke Drive
           </button>
+          <button disabled={downloading} onClick={downloadLocalBackup} className="flex items-center gap-2 rounded-lg border border-primary px-4 py-2 text-sm text-primary hover:bg-primary/5 disabled:opacity-50" title="Unduh file backup langsung ke komputer — tetap bisa dipakai walau Google Drive gagal">
+            {downloading ? <Loader2 size={16} className="animate-spin" /> : <Download size={16} />}
+            Unduh backup (lokal)
+          </button>
           <button onClick={saveCfg} className="rounded-lg border px-4 py-2 text-sm text-gray-700 hover:bg-gray-50">Simpan Pengaturan</button>
         </div>
+        <p className="mt-2 text-xs text-gray-500">Tombol <b>Unduh backup (lokal)</b> tidak memerlukan Google Drive — gunakan bila koneksi Drive gagal/kedaluwarsa, lalu unggah manual file <code>.json.gz</code> hasilnya ke Google Drive. File ini juga bisa dipulihkan lewat panel Restore di bawah.</p>
 
         {logs.length > 0 && (
           <div className="mt-5 overflow-x-auto">

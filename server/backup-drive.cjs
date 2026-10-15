@@ -324,12 +324,18 @@ function registerBackupRoutes(app, db, { requireRole, uuid, mediaRoot, now = () 
     return Object.fromEntries(parts.filter(p => p.type !== 'literal').map(p => [p.type, p.value]))
   }
   const isoSqlTime = (date) => date.toISOString().slice(0, 19).replace('T', ' ')
-  const runBackupForTenant = async (tenantId, cfg, filenamePrefix = '') => {
-    const { token } = await resolveAuth(tenantId)
+  // Bangun artefak backup (.json.gz) TANPA menyentuh Google Drive.
+  // Dipakai bersama oleh backup ke Drive dan unduhan lokal.
+  const buildBackup = (tenantId, filenamePrefix = '') => {
     const tenantRow = db.prepare('SELECT slug FROM tenants WHERE id=?').get(tenantId)
     const filename = `${filenamePrefix}jurnal-${(tenantRow?.slug || tenantId).replace(/[^a-z0-9_-]/gi, '_')}-${tsStamp()}.json.gz`
     const artifact = createService(db, { mediaRoot: mediaRoot || process.env.MEDIA_ROOT || path.join(APP_ROOT, 'uploads') }).exportData(tenantId)
     const gz = zlib.gzipSync(Buffer.from(JSON.stringify(artifact), 'utf8'))
+    return { filename, gz, artifact }
+  }
+  const runBackupForTenant = async (tenantId, cfg, filenamePrefix = '') => {
+    const { token } = await resolveAuth(tenantId)
+    const { filename, gz } = buildBackup(tenantId, filenamePrefix)
     const driveFileId = await driveUpload(token, { name: filename, folderId: cfg.folder_id || process.env.GOOGLE_DRIVE_BACKUP_FOLDER_ID || null, buffer: gz, mimeType: 'application/gzip' })
     db.prepare('INSERT INTO backup_log (id, tenant_id, filename, drive_file_id, size, status) VALUES (?,?,?,?,?,?)').run(uuid(), tenantId, filename, driveFileId, gz.length, 'ok')
     return { filename, driveFileId, size: gz.length, token }
@@ -478,8 +484,7 @@ function registerBackupRoutes(app, db, { requireRole, uuid, mediaRoot, now = () 
       const { token } = await resolveAuth(req.tenantId)
       const cfg = getConfig(req.tenantId)
       const folderId = cfg.folder_id || process.env.GOOGLE_DRIVE_BACKUP_FOLDER_ID || null
-      const artifact = createService(db, { mediaRoot: mediaRoot || process.env.MEDIA_ROOT || path.join(APP_ROOT, 'uploads') }).exportData(req.tenantId)
-      const gz = zlib.gzipSync(Buffer.from(JSON.stringify(artifact), 'utf8'))
+      const { gz, artifact } = buildBackup(req.tenantId)
       const driveFileId = await driveUpload(token, { name: filename, folderId, buffer: gz, mimeType: 'application/gzip' })
       db.prepare('INSERT INTO backup_log (id, tenant_id, filename, drive_file_id, size, status) VALUES (?,?,?,?,?,?)')
         .run(id, req.tenantId, filename, driveFileId, gz.length, 'ok')
@@ -498,6 +503,26 @@ function registerBackupRoutes(app, db, { requireRole, uuid, mediaRoot, now = () 
           .run(id, req.tenantId, filename, null, 0, 'error', msg)
       } catch {}
       res.status(500).json({ error: 'Backup gagal: ' + msg })
+    }
+  })
+
+  // Unduh backup langsung (tanpa Google Drive). Selalu bisa dipakai — berguna
+  // saat koneksi Drive gagal/kedaluwarsa: unduh file .json.gz, lalu unggah
+  // manual ke Google Drive. Tidak menulis backup_log (bukan backup ke Drive).
+  app.get('/api/backup/download', kadmin, async (req, res) => {
+    try {
+      const { filename, gz, artifact } = buildBackup(req.tenantId)
+      const omitted = artifact.manifest?.media?.omitted || []
+      res.set({
+        'Content-Type': 'application/gzip',
+        'Content-Disposition': `attachment; filename="${filename}"`,
+        'Content-Length': String(gz.length),
+        'X-Media-Count': String(artifact.manifest?.media?.count || 0),
+        'X-Media-Omitted': String(omitted.length),
+      })
+      res.send(gz)
+    } catch (e) {
+      res.status(500).json({ error: 'Unduh backup gagal: ' + String(e.message || e) })
     }
   })
 
