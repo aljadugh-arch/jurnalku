@@ -33,7 +33,7 @@ test('journal create validates and stores a drawn or uploaded image signature', 
   assert.match(server, /isValidSignatureImage/)
   assert.match(server, /fileSize: 5 \* 1024 \* 1024/)
   assert.match(server, /SIGNATURE_DIR/)
-  assert.match(block, /INSERT INTO jurnal_mengajar \(id, guru_id, mapel_id, rombel_id, tanggal, jam_ke, materi, kegiatan, catatan, status, signature_type, signature_path, tenant_id\)/)
+  assert.match(block, /INSERT INTO jurnal_mengajar \(id, guru_id, mapel_id, rombel_id, tanggal, jam_ke, materi, kegiatan, catatan, status, signature_type, signature_path, tenant_id/)
 })
 
 test('teacher journal UI offers explicit drawing and photo upload choices', () => {

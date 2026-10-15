@@ -487,6 +487,8 @@ db.exec(`
     signature_type TEXT,
     signature_path TEXT,
     created_at TEXT DEFAULT (datetime('now')),
+    updated_at TEXT DEFAULT (datetime('now')),
+    submitted_at TEXT,
     FOREIGN KEY (guru_id) REFERENCES gtk(id),
     FOREIGN KEY (mapel_id) REFERENCES mapel(id),
     FOREIGN KEY (rombel_id) REFERENCES rombel(id)
@@ -1197,6 +1199,21 @@ try {
   if (!raporCols.some(col => col.name === 'nilai_sas'))    db.exec('ALTER TABLE rapor ADD COLUMN nilai_sas INTEGER DEFAULT 0')
   if (!raporCols.some(col => col.name === 'nilai_harian')) db.exec('ALTER TABLE rapor ADD COLUMN nilai_harian INTEGER DEFAULT 0')
 } catch (e) { console.error('[migrate] rapor kolom tambahan failed', e.message) }
+
+// Migrasi jurnal_mengajar: jejak waktu server (audit) — updated_at & submitted_at.
+try {
+  const jurnalCols = db.prepare('PRAGMA table_info(jurnal_mengajar)').all()
+  if (!jurnalCols.some(col => col.name === 'tenant_id'))   db.exec('ALTER TABLE jurnal_mengajar ADD COLUMN tenant_id TEXT')
+  if (!jurnalCols.some(col => col.name === 'updated_at'))   db.exec('ALTER TABLE jurnal_mengajar ADD COLUMN updated_at TEXT')
+  if (!jurnalCols.some(col => col.name === 'submitted_at')) db.exec('ALTER TABLE jurnal_mengajar ADD COLUMN submitted_at TEXT')
+  // Index dibuat SETELAH kolom tenant_id dipastikan ada (db.exec blok awal jalan
+  // sebelum migrasi ini, jadi index tak boleh ditaruh di sana).
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_jurnal_tenant_tanggal_guru ON jurnal_mengajar(tenant_id,tanggal,guru_id);
+    CREATE INDEX IF NOT EXISTS idx_jurnal_tenant_rombel_tanggal ON jurnal_mengajar(tenant_id,rombel_id,tanggal);
+    CREATE INDEX IF NOT EXISTS idx_jurnal_tenant_status ON jurnal_mengajar(tenant_id,status);
+  `)
+} catch (e) { console.error('[migrate] jurnal kolom waktu failed', e.message) }
 
 // Pastikan uniqueness rapor selalu tenant-scoped. SQLite tidak mengubah
 // definisi index yang sudah ada saat CREATE INDEX IF NOT EXISTS dipanggil.
@@ -3435,9 +3452,17 @@ app.delete('/api/siswa/:id', ADMIN, (req, res) => {
       const siswa = db.prepare('SELECT id FROM siswa WHERE id=? AND tenant_id=?').get(req.params.id, req.tenantId)
       if (!siswa) return false
       if (force) {
-        const historyTables = ['absensi_siswa', 'absensi_ekskul', 'absensi_kegiatan', 'beasiswa', 'catatan_kepribadian', 'ekskul_anggota', 'penilaian_harian', 'rapor', 'tabungan', 'tagihan']
+        // Semua tabel ber-FK ke siswa (PRAGMA: 16 tabel) — daftar lama hanya 11
+        // sehingga hapus paksa tetap gagal FOREIGN KEY. Urutan: anak dulu, induk.
+        const historyTables = [
+          // anak dari rapor/ujian (dihapus sebelum induknya)
+          'rapor_pelengkap', 'ujian_proktor_audit', 'jawaban_ujian', 'sesi_ujian',
+          'rapor', 'penilaian_harian', 'penilaian_ekskul', 'absensi_mapel',
+          'absensi_siswa', 'absensi_ekskul', 'absensi_kegiatan',
+          'catatan_kepribadian', 'ekskul_anggota', 'beasiswa', 'tagihan', 'tabungan',
+        ]
         for (const table of historyTables) {
-          db.prepare(`DELETE FROM ${table} WHERE siswa_id=? AND tenant_id=?`).run(req.params.id, req.tenantId)
+          try { db.prepare(`DELETE FROM ${table} WHERE siswa_id=? AND tenant_id=?`).run(req.params.id, req.tenantId) } catch { /* tabel/kolom mungkin tak ada di instalasi lama */ }
         }
       }
       db.prepare('DELETE FROM siswa WHERE id = ? AND tenant_id=?').run(req.params.id, req.tenantId)
@@ -3460,7 +3485,7 @@ app.delete('/api/siswa/:id', ADMIN, (req, res) => {
 // Hapus semua data satu kategori dalam tenant. Admin only, wajib konfirmasi 'HAPUS SEMUA'.
 // Cascade: ikut hapus data turunan yang bergantung, biar tidak kena FOREIGN KEY.
 const BULK_DELETE_MAP = {
-  siswa: { label: 'Siswa', main: 'siswa', cascade: ['absensi_siswa', 'tagihan', 'tabungan', 'ekskul_anggota', 'absensi_ekskul', 'penilaian_harian', 'catatan_kepribadian', 'rapor'] },
+  siswa: { label: 'Siswa', main: 'siswa', cascade: ['rapor_pelengkap', 'ujian_proktor_audit', 'jawaban_ujian', 'sesi_ujian', 'rapor', 'penilaian_harian', 'penilaian_ekskul', 'absensi_mapel', 'absensi_siswa', 'absensi_ekskul', 'absensi_kegiatan', 'catatan_kepribadian', 'ekskul_anggota', 'beasiswa', 'tagihan', 'tabungan'] },
   gtk: { label: 'GTK', main: 'gtk', cascade: ['sesi_kelas_guru', 'jadwal', 'pengajar', 'modul_ajar', 'absensi_guru', 'jurnal_mengajar'] },
   mapel: { label: 'Mapel', main: 'mapel', cascade: ['jadwal', 'pengajar', 'modul_ajar', 'penilaian_harian'] },
   rombel: { label: 'Rombel', main: 'rombel', cascade: ['jadwal', 'siswa'] },
@@ -4880,6 +4905,33 @@ async function sendTenantIcon(req, res, size = 64) {
 }
 app.get('/favicon.ico', (req, res) => sendTenantIcon(req, res, 64))
 app.get('/apple-touch-icon.png', (req, res) => sendTenantIcon(req, res, 192))
+// Ikon PWA 192px dipakai juga sebagai og:image bila og-image.png belum ada
+// (preview WhatsApp/Facebook). Dibuat dari logo tenant, jadi otomatis per-lembaga.
+app.get('/og-image.png', async (req, res) => {
+  const fallback = path.join(__dirname, '..', 'public', 'logo-jurnalku-256.png')
+  // Tanpa tenant (mis. diakses via IP langsung) → pakai logo default, jangan error.
+  let s = {}
+  try { if (req.tenantId) s = getTenantSettings(db, req.tenantId, 'pwa_icon,logo,pwa_bg_color') || {} } catch { s = {} }
+  try {
+    const configured = s.pwa_icon || s.logo || '/logo-jurnalku-256.png'
+    const relative = decodeURIComponent(String(configured).split('?')[0]).replace(/^\/+/, '')
+    const source = relative.startsWith('uploads/')
+      ? path.join(UPLOAD_DIR, path.basename(relative))
+      : path.join(__dirname, '..', 'public', path.basename(relative))
+    const bg = String(s.pwa_bg_color || '#ffffff')
+    const rgb = /^#?([0-9a-f]{6})$/i.exec(bg)
+    const background = rgb ? { r: parseInt(rgb[1].slice(0, 2), 16), g: parseInt(rgb[1].slice(2, 4), 16), b: parseInt(rgb[1].slice(4, 6), 16) } : { r: 255, g: 255, b: 255 }
+    // 1200x630 = rasio kartu OpenGraph.
+    const image = await sharp(fs.existsSync(source) ? source : fallback)
+      .resize(560, 560, { fit: 'contain', background: { ...background, alpha: 1 } })
+      .extend({ top: 35, bottom: 35, left: 320, right: 320, background: { ...background, alpha: 1 } })
+      .png().toBuffer()
+    res.type('image/png').set('Cache-Control', 'no-cache, must-revalidate').send(image)
+  } catch (error) {
+    console.error('[og-image]', error.message)
+    res.sendFile(fallback)
+  }
+})
 
 app.put('/api/settings/pwa', ADMIN, (req, res) => {
   const id = canonicalSettingsId(req.tenantId)
@@ -7374,7 +7426,7 @@ app.post('/api/jurnal', STAFF, signatureUpload.single('signature'), async (req, 
     if (signature_type === 'upload') signature_path = await saveUploadedSignature(req.file, req.tenantId)
   } catch (error) { return next(error) }
   if (!signature_path) return res.status(400).json({ error: 'Tanda tangan tidak valid atau gagal disimpan' })
-  try { db.prepare('INSERT INTO jurnal_mengajar (id, guru_id, mapel_id, rombel_id, tanggal, jam_ke, materi, kegiatan, catatan, status, signature_type, signature_path, tenant_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)').run(id, guru_id, mapel_id, rombel_id, tanggal, jam_ke||1, materi||'', kegiatan||'', catatan||'', status, signature_type || null, signature_path, req.tenantId) }
+  try { db.prepare("INSERT INTO jurnal_mengajar (id, guru_id, mapel_id, rombel_id, tanggal, jam_ke, materi, kegiatan, catatan, status, signature_type, signature_path, tenant_id, created_at, updated_at, submitted_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,datetime('now'),datetime('now'),CASE WHEN ?='submitted' THEN datetime('now') ELSE NULL END)").run(id, guru_id, mapel_id, rombel_id, tanggal, jam_ke||1, materi||'', kegiatan||'', catatan||'', status, signature_type || null, signature_path, req.tenantId, status) }
   catch (error) { removeManagedUpload(signature_path); return next(error) }
   res.json({ id })
 })
@@ -7383,13 +7435,14 @@ app.put('/api/jurnal/:id', STAFF, (req, res) => {
   const { materi, kegiatan, catatan, status } = req.body
   const reviewer = ['admin','super_admin','kepala','operator'].includes(req.user.role)
   if (reviewer && ['approved','rejected'].includes(status)) {
-    const result = db.prepare("UPDATE jurnal_mengajar SET status=? WHERE id=? AND tenant_id=? AND status='submitted'").run(status, req.params.id, req.tenantId)
+    const result = db.prepare("UPDATE jurnal_mengajar SET status=?, updated_at=datetime('now') WHERE id=? AND tenant_id=? AND status='submitted'").run(status, req.params.id, req.tenantId)
     return res.status(result.changes ? 200 : 404).json(result.changes ? { success: true } : { error: 'Jurnal submitted tidak ditemukan' })
   } else {
     if (!isTeacherContext(req) || !['draft','submitted'].includes(status)) return res.status(403).json({ error: 'Status jurnal tidak diizinkan' })
     const gtk = resolveGtkForUser(req.user.id, req.tenantId)
     if (!gtk) return res.status(403).json({ error: 'Akun guru belum terhubung ke GTK' })
-    const result = db.prepare("UPDATE jurnal_mengajar SET materi=?, kegiatan=?, catatan=?, status=? WHERE id=? AND guru_id=? AND tenant_id=? AND status IN ('draft','rejected') AND (? != 'submitted' OR signature_path IS NOT NULL)").run(materi||'', kegiatan||'', catatan||'', status, req.params.id, gtk.id, req.tenantId, status)
+    // updated_at selalu waktu server; submitted_at diisi saat pertama dikirim.
+    const result = db.prepare("UPDATE jurnal_mengajar SET materi=?, kegiatan=?, catatan=?, status=?, updated_at=datetime('now'), submitted_at=CASE WHEN ?='submitted' AND submitted_at IS NULL THEN datetime('now') ELSE submitted_at END WHERE id=? AND guru_id=? AND tenant_id=? AND status IN ('draft','rejected') AND (? != 'submitted' OR signature_path IS NOT NULL)").run(materi||'', kegiatan||'', catatan||'', status, status, req.params.id, gtk.id, req.tenantId, status)
     return res.status(result.changes ? 200 : 404).json(result.changes ? { success: true } : { error: 'Jurnal tidak ditemukan atau tidak dapat diubah' })
   }
 })

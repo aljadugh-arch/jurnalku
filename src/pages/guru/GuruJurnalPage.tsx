@@ -1,14 +1,23 @@
 import { useState, useEffect, useRef } from 'react'
-import { Plus, X, Clock, FileText, Send, PenLine, Upload, Eraser } from 'lucide-react'
+import { Plus, X, Clock, FileText, Send, PenLine, Upload, Eraser, Loader2 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import api from '../../services/api'
 import { todayWib } from '../../lib/dateFormat'
 import { useSearchParams } from 'react-router-dom'
 
+// Autosave draf jurnal ke localStorage: ketikan tidak hilang saat sesi kedaluwarsa,
+// koneksi putus, atau tab tertutup. Dibersihkan hanya setelah server membalas 200.
+const JURNAL_DRAFT_KEY = 'jurnalku_jurnal_draft'
+function loadJurnalDraft() {
+  try { return JSON.parse(localStorage.getItem(JURNAL_DRAFT_KEY) || 'null') } catch { return null }
+}
+function clearJurnalDraft() { try { localStorage.removeItem(JURNAL_DRAFT_KEY) } catch {} }
+
 export default function GuruJurnalPage() {
   const [searchParams, setSearchParams] = useSearchParams()
   const [data, setData] = useState<any[]>([])
   const [showForm, setShowForm] = useState(false)
+  const [submitting, setSubmitting] = useState(false)
   const [mapels, setMapels] = useState<any[]>([])
   const [rombels, setRombels] = useState<any[]>([])
   const [form, setForm] = useState({ mapel_id: '', rombel_id: '', tanggal: todayWib(), jam_ke: 1, materi: '', kegiatan: '', catatan: '' })
@@ -18,8 +27,34 @@ export default function GuruJurnalPage() {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const drawingRef = useRef(false)
   const hasSignatureRef = useRef(false)
+  const draftRestoredRef = useRef(false)
 
   const [jadwalHariIni, setJadwalHariIni] = useState<any[]>([])
+
+  // Pulihkan draf lokal sekali saat halaman dibuka (kecuali datang dari tautan jadwal).
+  useEffect(() => {
+    if (draftRestoredRef.current) return
+    draftRestoredRef.current = true
+    if (searchParams.get('jadwal_id')) return
+    const draft = loadJurnalDraft()
+    if (draft && (draft.form?.materi || draft.form?.mapel_id)) {
+      setForm(f => ({ ...f, ...draft.form }))
+      if (draft.signatureType) setSignatureType(draft.signatureType)
+      if (draft.signatureData) { setSignatureData(draft.signatureData); hasSignatureRef.current = true }
+      toast('Draf jurnal sebelumnya dipulihkan', { icon: '📝' })
+    }
+  }, [])
+
+  // Simpan draf ke localStorage realtime (debounce 600ms) selama form diisi.
+  useEffect(() => {
+    if (!showForm) return
+    const t = setTimeout(() => {
+      try {
+        localStorage.setItem(JURNAL_DRAFT_KEY, JSON.stringify({ form, signatureType, signatureData, savedAt: Date.now() }))
+      } catch {}
+    }, 600)
+    return () => clearTimeout(t)
+  }, [form, signatureType, signatureData, showForm])
 
   useEffect(() => {
     loadData()
@@ -97,21 +132,25 @@ export default function GuruJurnalPage() {
   }
 
   const handleSubmit = async (status: string) => {
+    if (submitting) return
     if (!form.mapel_id || !form.rombel_id) { toast.error('Pilih mapel dan rombel'); return }
     if (!form.materi.trim()) { toast.error('Materi wajib diisi'); return }
     if ((signatureType === 'drawn' && !hasSignatureRef.current) || (signatureType === 'upload' && !signatureFile)) { toast.error('Tanda tangan wajib diisi'); return }
+    setSubmitting(true)
     try {
       const payload = new FormData()
       Object.entries({ ...form, status, signature_type: signatureType, signature_data: signatureType === 'drawn' ? signatureData : '' }).forEach(([key, value]) => payload.append(key, String(value)))
       if (signatureFile) payload.append('signature', signatureFile)
       await api.post('/jurnal', payload)
       toast.success(status === 'submitted' ? 'Jurnal dikirim' : 'Draft disimpan')
+      clearJurnalDraft()
       setShowForm(false)
       setForm({ mapel_id: '', rombel_id: '', tanggal: todayWib(), jam_ke: 1, materi: '', kegiatan: '', catatan: '' })
       setSignatureFile(null)
       clearSignature()
       loadData()
     } catch (err: any) { toast.error(err.response?.data?.error || 'Gagal menyimpan jurnal') }
+    finally { setSubmitting(false) }
   }
 
   const submitDraft = async (id: string) => {
@@ -274,9 +313,9 @@ export default function GuruJurnalPage() {
               </div>
             </div>
             <div className="flex gap-2 mt-5">
-              <button onClick={() => handleSubmit('draft')} className="flex-1 px-4 py-2 bg-gray-200 text-gray-700 rounded-lg text-sm hover:bg-gray-300">Simpan Draft</button>
-              <button onClick={() => handleSubmit('submitted')} className="flex-1 px-4 py-2 bg-primary text-white rounded-lg text-sm hover:bg-primary-dark flex items-center justify-center gap-1">
-                <Send size={14} /> Kirim
+              <button disabled={submitting} onClick={() => handleSubmit('draft')} className="flex-1 px-4 py-2 bg-gray-200 text-gray-700 rounded-lg text-sm hover:bg-gray-300 disabled:opacity-50 disabled:cursor-not-allowed">Simpan Draft</button>
+              <button disabled={submitting} onClick={() => handleSubmit('submitted')} className="flex-1 px-4 py-2 bg-primary text-white rounded-lg text-sm hover:bg-primary-dark flex items-center justify-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed">
+                {submitting ? <><Loader2 size={14} className="animate-spin" /> Menyimpan…</> : <><Send size={14} /> Kirim</>}
               </button>
             </div>
           </div>

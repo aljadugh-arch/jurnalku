@@ -11,10 +11,62 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <meta name="theme-color" content="#1e40af" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+
     <title>JURNALKU - Sistem Informasi Manajemen Sekolah/Madrasah</title>
+    <meta name="description" content="JURNALKU — sistem informasi manajemen sekolah & madrasah: jurnal mengajar, absensi siswa/guru (QR & RFID), penilaian, rapor, keuangan, dan notifikasi WhatsApp." />
+    <meta name="application-name" content="JURNALKU" />
+    <link rel="canonical" href="https://jurnalmadrasah.web.id/" />
+
+    <!-- OpenGraph / WhatsApp preview (diganti dari Settings lembaga via /api/pwa/manifest saat runtime bila perlu) -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="JURNALKU" />
+    <meta property="og:title" content="JURNALKU - Sistem Informasi Manajemen Sekolah/Madrasah" />
+    <meta property="og:description" content="Jurnal mengajar, absensi QR/RFID, penilaian, rapor, keuangan, dan notifikasi WhatsApp dalam satu aplikasi." />
+    <meta property="og:url" content="https://jurnalmadrasah.web.id/" />
+    <meta property="og:image" content="/og-image.png" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="JURNALKU - Sistem Informasi Manajemen Sekolah/Madrasah" />
+    <meta name="twitter:description" content="Jurnal mengajar, absensi QR/RFID, penilaian, rapor, keuangan, dan notifikasi WhatsApp dalam satu aplikasi." />
+    <meta name="twitter:image" content="/og-image.png" />
+
+    <!-- Skeleton awal: mencegah layar putih saat koneksi lambat (Vite mengganti #root saat mount). -->
+    <style>
+      #boot-splash{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;background:#f8fafc;z-index:9999;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif}
+      #boot-splash .boot-logo{width:64px;height:64px;border-radius:16px;background:#1e40af;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:800;font-size:22px;letter-spacing:.5px}
+      #boot-splash .boot-spin{width:34px;height:34px;border:3px solid #cbd5e1;border-top-color:#1e40af;border-radius:50%;animation:bootspin .8s linear infinite}
+      #boot-splash p{margin:0;color:#475569;font-size:13px}
+      #boot-splash .boot-skel{width:min(320px,70vw);display:flex;flex-direction:column;gap:8px;margin-top:4px}
+      #boot-splash .boot-skel span{height:10px;border-radius:6px;background:linear-gradient(90deg,#e2e8f0,#f1f5f9,#e2e8f0);background-size:200% 100%;animation:bootshimmer 1.2s ease-in-out infinite}
+      @keyframes bootspin{to{transform:rotate(360deg)}}
+      @keyframes bootshimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}
+      html.dark #boot-splash{background:#0f172a}
+      html.dark #boot-splash p{color:#94a3b8}
+      html.dark #boot-splash .boot-skel span{background:linear-gradient(90deg,#1e293b,#334155,#1e293b);background-size:200% 100%}
+    </style>
   </head>
   <body>
     <div id="root"></div>
+    <div id="boot-splash" aria-hidden="true">
+      <div class="boot-logo">JK</div>
+      <div class="boot-spin"></div>
+      <div class="boot-skel"><span style="width:100%"></span><span style="width:82%"></span><span style="width:64%"></span></div>
+      <p>Memuat JURNALKU…</p>
+    </div>
+    <script>
+      // Hilangkan splash segera setelah React memasang konten pertamanya.
+      (function(){
+        var splash=document.getElementById('boot-splash');
+        if(!splash) return;
+        var done=false;
+        function hide(){ if(done) return; done=true; splash.style.transition='opacity .25s'; splash.style.opacity='0'; setTimeout(function(){ splash&&splash.remove() },300) }
+        var root=document.getElementById('root');
+        new MutationObserver(function(_m,obs){
+          if(root && root.childNodes.length){ hide(); obs.disconnect() }
+        }).observe(root,{childList:true});
+        // jaring pengaman bila React gagal total (mis. error JS) — tetap tampilkan pesan, jangan splash selamanya.
+        setTimeout(function(){ if(!done && root && root.childNodes.length) hide() },8000);
+      })();
+    </script>
     <script type="module" src="/src/main.tsx"></script>
-</body>
+  </body>
 </html>
