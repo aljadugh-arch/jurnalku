@@ -369,19 +369,37 @@ export default function RekapAbsensiPage() {
     if (!printWindow) { toast.error('Popup blocked'); return }
     const fmt = (x: string) => new Date(x + 'T00:00:00').toLocaleDateString('id-ID', { day: '2-digit', month: '2-digit', year: 'numeric' })
     const logo = tenant.logo ? `<img src="${escapeHtml(tenant.logo)}" alt="Logo ${escapeHtml(tenant.name)}" onerror="this.style.display='none'">` : ''
+    // Rentang hari untuk matriks dihitung lebih dulu; matriks hanya masuk akal sampai
+    // ~31 kolom. Mode semester (180+ hari) memakai rekap RINGKAS agar PDF tetap terbaca
+    // (sebelumnya 184 kolom memenuhi halaman sehingga data tampak "tidak muncul").
+    const rangeDates = (() => {
+      const out: string[] = []
+      const a = mode === 'bulanan' || mode === 'semester' ? reportPeriod.from : from
+      const b = mode === 'bulanan' || mode === 'semester' ? reportPeriod.to : to
+      let cursor = a
+      while (cursor && cursor <= b) { out.push(cursor); cursor = addDaysWib(cursor, 1) }
+      return out
+    })()
+    const useMatrix = category === 'kehadiran' && rangeDates.length <= 31
     // Kategori selain kehadiran memakai tabel datar (Hadir/Sakit/Izin/Alpha),
     // bukan matriks per-tanggal — sebelumnya PDF kategori ini kosong karena selalu
     // memakai layout matriks yang hanya berisi data absensi harian.
-    if (category !== 'kehadiran') {
+    if (category !== 'kehadiran' || !useMatrix) {
       const guruView = category === 'mapel' && mapelView === 'guru'
-      const header = guruView
-        ? ['NO', 'NAMA GURU', 'NIP', 'MATA PELAJARAN DIAMPU', 'HADIR', 'SAKIT', 'IZIN', 'ALFA', 'LAIN', 'TOTAL', '% HADIR']
-        : ['NO', 'NAMA', 'NIS/NISN', 'ROMBEL', 'KEGIATAN/MAPEL', 'HADIR', 'SAKIT', 'IZIN', 'ALFA', 'LAIN', 'TOTAL', '% HADIR']
+      // Kehadiran mode panjang (semester) = ringkas; kategori lain = datar biasa.
+      const kehadiranRingkas = category === 'kehadiran'
+      const header = kehadiranRingkas
+        ? ['NO', 'NAMA LENGKAP', tab === 'siswa' ? 'NISN/NIS' : 'NIP', 'RO/BAGIAN', 'HADIR', 'SAKIT', 'IZIN', 'ALFA', 'PULANG', '% HADIR']
+        : (guruView
+          ? ['NO', 'NAMA GURU', 'NIP', 'MATA PELAJARAN DIAMPU', 'HADIR', 'SAKIT', 'IZIN', 'ALFA', 'LAIN', 'TOTAL', '% HADIR']
+          : ['NO', 'NAMA', 'NIS/NISN', 'ROMBEL', 'KEGIATAN/MAPEL', 'HADIR', 'SAKIT', 'IZIN', 'ALFA', 'LAIN', 'TOTAL', '% HADIR'])
       const pct = (d: any) => d.total > 0 ? Math.round(d.hadir / d.total * 100) + '%' : '0%'
-      const row = (d: any, i: number) => (guruView
-        ? `<tr><td>${i + 1}</td><td class="nama">${escapeHtml(d.nama || '')}</td><td>${escapeHtml(d.nip || '')}</td><td class="nama">${escapeHtml((d.mapel_list || []).join(', '))}</td><td>${d.hadir || 0}</td><td>${d.sakit || 0}</td><td>${d.izin || 0}</td><td>${d.alpha || 0}</td><td>${d.lain || 0}</td><td>${d.total || 0}</td><td>${pct(d)}</td></tr>`
-        : `<tr><td>${i + 1}</td><td class="nama">${escapeHtml(d.nama || '')}</td><td>${escapeHtml(d.nisn || d.nis || '')}</td><td>${escapeHtml(d.rombel_nama || '')}</td><td class="nama">${escapeHtml(d.kegiatan_nama || '')}</td><td>${d.hadir || 0}</td><td>${d.sakit || 0}</td><td>${d.izin || 0}</td><td>${d.alpha || 0}</td><td>${d.lain || 0}</td><td>${d.total || 0}</td><td>${pct(d)}</td></tr>`)
-      const body = guruView
+      const row = (d: any, i: number) => (kehadiranRingkas
+        ? `<tr><td>${i + 1}</td><td class="nama">${escapeHtml(d.nama || '')}</td><td>${escapeHtml(d.nisn || d.nis || d.nip || '')}</td><td>${escapeHtml(d.rombel_nama || d.jabatan || '')}</td><td>${d.hadir || 0}</td><td>${d.sakit || 0}</td><td>${d.izin || 0}</td><td>${d.alpha || 0}</td><td>${d.pulang || 0}</td><td>${pct(d)}</td></tr>`
+        : (guruView
+          ? `<tr><td>${i + 1}</td><td class="nama">${escapeHtml(d.nama || '')}</td><td>${escapeHtml(d.nip || '')}</td><td class="nama">${escapeHtml((d.mapel_list || []).join(', '))}</td><td>${d.hadir || 0}</td><td>${d.sakit || 0}</td><td>${d.izin || 0}</td><td>${d.alpha || 0}</td><td>${d.lain || 0}</td><td>${d.total || 0}</td><td>${pct(d)}</td></tr>`
+          : `<tr><td>${i + 1}</td><td class="nama">${escapeHtml(d.nama || '')}</td><td>${escapeHtml(d.nisn || d.nis || '')}</td><td>${escapeHtml(d.rombel_nama || '')}</td><td class="nama">${escapeHtml(d.kegiatan_nama || '')}</td><td>${d.hadir || 0}</td><td>${d.sakit || 0}</td><td>${d.izin || 0}</td><td>${d.alpha || 0}</td><td>${d.lain || 0}</td><td>${d.total || 0}</td><td>${pct(d)}</td></tr>`))
+      const body = (guruView || kehadiranRingkas || tab === 'gtk')
         ? data.map((d: any, i: number) => row(d, i)).join('')
         : (groupByRombel(data).map(group => `<tr class="rombel"><td colspan="${header.length}">${escapeHtml(group.rombel)} (${group.items.length} siswa)</td></tr>` + group.items.map((d: any, i: number) => row(d, i)).join('')).join(''))
       // Deklarasi lokal: blok non-kehadiran memakai periodeText sementara deklarasi
@@ -393,14 +411,7 @@ export default function RekapAbsensiPage() {
       return
     }
     const who = tab === 'siswa' ? 'SISWA' : 'GTK'
-    const dates = (() => {
-      const out: string[] = []
-      const a = mode === 'bulanan' || mode === 'semester' ? reportPeriod.from : from
-      const b = mode === 'bulanan' || mode === 'semester' ? reportPeriod.to : to
-      let cursor = a
-      while (cursor <= b) { out.push(cursor); cursor = addDaysWib(cursor, 1) }
-      return out
-    })()
+    const dates = rangeDates
     const periodeText = `${fmt(reportPeriod.from)} s/d ${fmt(reportPeriod.to)}`
     const dayHeaders = dates.map(d => `<th class="tgl">${Number(d.slice(8,10))}</th>`).join('')
     const cell = (d: any, i: number) => {
