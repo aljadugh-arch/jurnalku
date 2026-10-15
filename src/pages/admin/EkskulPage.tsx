@@ -186,7 +186,7 @@ export default function EkskulPage() {
       )}
 
       {memberEkskul && (
-        <div className="fixed inset-0 bg-black/50 z-[60] flex items-center justify-center p-3 sm:p-4">
+        <div className="fixed inset-0 bg-black/50 z-[100] flex items-center justify-center p-3 sm:p-4">
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-3xl max-h-[92vh] flex flex-col overflow-hidden">
             <div className="flex items-start justify-between gap-3 px-4 sm:px-6 py-4 border-b">
               <div className="min-w-0">
@@ -234,7 +234,7 @@ export default function EkskulPage() {
       )}
 
       {showModal && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+        <div className="fixed inset-0 bg-black/50 z-[130] flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl w-full max-w-md p-6 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-lg font-bold text-gray-800">{editId ? 'Edit' : 'Tambah'} Ekskul</h2>

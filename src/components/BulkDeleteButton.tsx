@@ -53,7 +53,7 @@ export default function BulkDeleteButton({ kategori, label, onDone, className }:
       </button>
 
       {open && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4" onClick={() => !busy && setOpen(false)}>
+        <div className="fixed inset-0 z-[130] flex items-center justify-center bg-black/50 p-4" onClick={() => !busy && setOpen(false)}>
           <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl" onClick={e => e.stopPropagation()}>
             <div className="flex items-start gap-3">
               <AlertTriangle className="mt-0.5 shrink-0 text-red-600" size={24} />
