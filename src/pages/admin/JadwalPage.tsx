@@ -4,7 +4,7 @@ import { Plus, Trash2, AlertTriangle, X, Download, FileSpreadsheet, Pencil, Sett
 import toast from 'react-hot-toast'
 import api from '../../services/api'
 import * as XLSX from 'xlsx'
-import { generateJamPelajaran, jtmMenit } from '../../lib/jenjang'
+import { generateJamPelajaran, jtmMenit, isGuruKelasJenjang as isGuruKelasJenjangCode } from '../../lib/jenjang'
 import { pilihGuru, pilihMapel } from '../../lib/jadwalSelection'
 import BulkDeleteButton from '../../components/BulkDeleteButton'
 import { useSettingsStore } from '../../stores/settingsStore'
@@ -50,7 +50,7 @@ export default function JadwalPage() {
   const [durasiOverride, setDurasiOverride] = useState<number | ''>('')
   const settings = useSettingsStore(s => s.settings)
   const jenjang = (settings.jenjang as string) || ''
-  const isGuruKelasJenjang = ['mi', 'sd'].includes(jenjang.toLowerCase())
+  const isGuruKelasJenjang = isGuruKelasJenjangCode(jenjang)
   const hariLibur: string[] = useMemo(() => {
     try { return JSON.parse((settings as any).hari_libur || '[]') } catch { return [] }
   }, [settings])
@@ -73,7 +73,9 @@ export default function JadwalPage() {
   useEffect(() => {
     Promise.all([
       api.get('/rombel'), api.get('/mapel'), api.get('/gtk'), api.get('/template-jadwal'), api.get('/pengajar'),
-      api.get('/rombel-jam-pulang').catch(() => ({ data: [] })),
+      // Jam pulang hanya ada untuk jenjang RA/TK & MI/SD; jangan panggil untuk
+      // jenjang lain (endpoint membalas 403 dan mengotori audit).
+      isGuruKelasJenjang ? api.get('/rombel-jam-pulang').catch(() => ({ data: [] })) : Promise.resolve({ data: [] }),
     ]).then(async ([r, m, g, t, p, jp]) => {
       setRombels(r.data); setGtks(g.data); setTemplates(t.data); setPengajar(p.data)
       setJamPulang(Object.fromEntries((jp.data || []).map((x:any)=>[`${x.rombel_id}:${x.hari}`,x.jam_pulang])))

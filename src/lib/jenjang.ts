@@ -54,13 +54,37 @@ export function composeNama(jenjang: string, tingkat: string, paralel: string): 
 // RA:30, MI:35, MTs:40, MA/MAK:45 menit.
 export const JTM_MENIT: Record<string, number> = { RA: 30, MI: 35, MTs: 40, MA: 45 }
 
+// Normalisasi nilai `settings.jenjang` ke kode kanonik. Nilai bisa berupa kode
+// ('MI', 'MTs') ATAU label panjang ('Madrasah Tsanawiyah', 'Sekolah Dasar').
+const JENJANG_ALIAS: Array<[RegExp, string]> = [
+  [/madrasah\s+ibtidaiyah|ibtidaiyah/i, 'MI'],
+  [/madrasah\s+tsanawiyah|tsanawiyah/i, 'MTs'],
+  [/madrasah\s+aliyah|aliyah/i, 'MA'],
+  [/sekolah\s+dasar/i, 'SD'],
+  [/sekolah\s+menengah\s+pertama/i, 'SMP'],
+  [/sekolah\s+menengah\s+atas/i, 'SMA'],
+  [/sekolah\s+menengah\s+kejuruan/i, 'SMK'],
+  [/raudhatul\s+athfal/i, 'RA'],
+  [/taman\s+kanak/i, 'TK'],
+]
+export function canonicalJenjang(jenjang?: string): string {
+  const raw = String(jenjang || '').trim()
+  if (!raw) return ''
+  for (const [re, code] of JENJANG_ALIAS) if (re.test(raw)) return code
+  const upper = raw.toUpperCase()
+  if (['RA', 'TK', 'MI', 'SD', 'MTS', 'SMP', 'MA', 'SMA', 'SMK', 'MAK', 'PT', 'NF'].includes(upper)) {
+    return upper === 'MTS' ? 'MTs' : upper
+  }
+  return raw
+}
+
 /** RA/TK dan MI/SD: absensi siswa via guru kelas/wali kelas (bukan admin). */
 export function isGuruKelasJenjang(jenjang?: string): boolean {
-  return ['RA', 'TK', 'MI', 'SD'].includes(jenjang || '')
+  return ['RA', 'TK', 'MI', 'SD'].includes(canonicalJenjang(jenjang))
 }
 
 export function jtmMenit(jenjang: string): number {
-  return JTM_MENIT[jenjang] || 45 // fallback MA/umum
+  return JTM_MENIT[canonicalJenjang(jenjang)] || 45 // fallback MA/umum
 }
 
 // Generate slot jam pelajaran dari durasi JTM jenjang.

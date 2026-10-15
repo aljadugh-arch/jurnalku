@@ -4120,14 +4120,38 @@ function teacherCanAccessStudentOnDate(req, siswaId, tanggal) {
     .get(siswaId, req.tenantId, gtk.id, req.tenantId, day)
 }
 
+// Nilai `settings.jenjang` bisa berisi kode kanonik ('MI', 'MTs') ATAU label
+// panjang ('Madrasah Tsanawiyah', 'Madrasah Ibtidaiyah', 'Sekolah Dasar').
+// Normalisasi dulu supaya seluruh cabang logika per-jenjang konsisten.
+const JENJANG_ALIAS = [
+  [/madrasah\s+ibtidaiyah|ibtidaiyah/i, 'MI'],
+  [/madrasah\s+tsanawiyah|tsanawiyah/i, 'MTs'],
+  [/madrasah\s+aliyah|aliyah/i, 'MA'],
+  [/sekolah\s+dasar/i, 'SD'],
+  [/sekolah\s+menengah\s+pertama/i, 'SMP'],
+  [/sekolah\s+menengah\s+atas/i, 'SMA'],
+  [/sekolah\s+menengah\s+kejuruan/i, 'SMK'],
+  [/raudhatul\s+athfal/i, 'RA'],
+  [/taman\s+kanak/i, 'TK'],
+]
+function canonicalJenjang(tenantId) {
+  const raw = String(getTenantSettings(db, tenantId, 'jenjang')?.jenjang || '').trim()
+  if (!raw) return ''
+  for (const [re, code] of JENJANG_ALIAS) if (re.test(raw)) return code
+  // Kode kanonik pendek tidak berubah (normalisasi besar/kecil).
+  const upper = raw.toUpperCase()
+  if (['RA', 'TK', 'MI', 'SD', 'MTS', 'SMP', 'MA', 'SMA', 'SMK', 'MAK', 'PT', 'NF'].includes(upper)) {
+    return upper === 'MTS' ? 'MTs' : upper
+  }
+  return raw
+}
+
 function tenantUsesClassTeacherDailyAttendance(tenantId) {
-  const jenjang = String(getTenantSettings(db, tenantId, 'jenjang')?.jenjang || '').trim()
-  return ['RA', 'TK', 'MI', 'SD'].includes(jenjang)
+  return ['RA', 'TK', 'MI', 'SD'].includes(canonicalJenjang(tenantId))
 }
 
 function tenantUsesLegacyStudentQrWindow(tenantId) {
-  const jenjang = String(getTenantSettings(db, tenantId, 'jenjang')?.jenjang || '').trim()
-  return ['MTs', 'SMP', 'MA', 'SMA', 'SMK', 'MAK', 'PT', 'NF'].includes(jenjang)
+  return ['MTs', 'SMP', 'MA', 'SMA', 'SMK', 'MAK', 'PT', 'NF'].includes(canonicalJenjang(tenantId))
 }
 
 // Absensi harian masuk/pulang tersedia untuk seluruh guru. Akses tetap hanya

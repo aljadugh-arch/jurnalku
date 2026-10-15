@@ -56,8 +56,10 @@ test('jenjang QR mencakup alias formal serta fallback PT dan nonformal', () => {
   for (const value of ['TK', 'SD', 'SMP', 'SMA', 'SMK', 'MAK', 'PT', 'NF']) {
     assert.match(jenjang, new RegExp(`value: '${value}'`), `opsi jenjang ${value} hilang`)
   }
-  assert.match(server, /\['RA', 'TK', 'MI', 'SD'\]\.includes\(jenjang\)/)
-  assert.match(server, /\['MTs', 'SMP', 'MA', 'SMA', 'SMK', 'MAK', 'PT', 'NF'\]\.includes\(jenjang\)/)
+  // Cek jenjang kini lewat normalisasi kanonik (label panjang vs kode pendek).
+  assert.match(server, /\['RA', 'TK', 'MI', 'SD'\]\.includes\(canonicalJenjang\(tenantId\)\)/)
+  assert.match(server, /\['MTs', 'SMP', 'MA', 'SMA', 'SMK', 'MAK', 'PT', 'NF'\]\.includes\(canonicalJenjang\(tenantId\)\)/)
+  assert.match(server, /function canonicalJenjang/)
 })
 
 test('switch role kepala-guru terlihat di header desktop, mobile, sidebar, dan bottom nav', () => {
