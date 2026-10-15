@@ -121,17 +121,17 @@ export default function Sidebar() {
 
   const isActive = (path?: string) => path === location.pathname
 
-  // Grouping configuration untuk admin desktop view (sesuai struktur yang diminta user)
-  // Menggunakan label matching karena menuItems sudah di-filter oleh pathEnabled()
+  // Grouping configuration untuk sidebar desktop (semua role manajemen).
+  // Menggunakan label matching karena menuItems sudah di-filter oleh pathEnabled().
   const adminMenuGroups: Array<{ name: string; labels: string[] }> = [
     { name: 'DASHBOARD', labels: ['Dashboard', 'Monitoring Data', 'Posting'] },
-    { name: 'MASTER DATA', labels: ['Data Siswa', 'Data GTK', 'Mata Pelajaran', 'Rombongan Belajar', 'Tahun Ajaran'] },
-    { name: 'AKADEMIK', labels: ['Kalender KBM', 'Jadwal Pelajaran', 'Absensi', 'Ceklok & Rekap', 'Absensi Saya', 'Jurnal Mengajar'] },
-    { name: 'PENILAIAN & EVALUASI', labels: ['Ujian & Bank Soal', 'Ledger Nilai', 'Rekap Nilai per Mapel', 'Rapor Siswa', 'Catatan Kepribadian'] },
-    { name: 'LAYANAN', labels: ['Perpustakaan Digital', 'Generator AI Guru'] },
-    { name: 'KEUANGAN & OPERASIONAL', labels: ['Keuangan', 'E-Kantin & Cashless'] },
+    { name: 'MASTER DATA', labels: ['Data Siswa', 'Data GTK', 'Mata Pelajaran', 'Rombongan Belajar', 'Tahun Ajaran', 'Manajemen Lembaga', 'Manajemen Yayasan', 'Integrasi Se-Yayasan', 'Kartu RFID'] },
+    { name: 'AKADEMIK', labels: ['Kalender KBM', 'Jadwal Pelajaran', 'Kelola Jadwal', 'Jadwal Ujian', 'Pengajar', 'Wali Kelas', 'Absensi', 'Ceklok & Rekap', 'Absensi Saya', 'Jurnal Mengajar', 'Supervisi Guru', 'Erkam'] },
+    { name: 'PENILAIAN & EVALUASI', labels: ['Ujian & Bank Soal', 'Bank Soal', 'Kisi-kisi Soal', 'Paket Ujian', 'Ledger Nilai', 'Rekap Nilai per Mapel', 'Rapor Siswa', 'Catatan Kepribadian', 'Penilaian'] },
+    { name: 'LAYANAN', labels: ['Perpustakaan Digital', 'Generator AI Guru', 'Beasiswa'] },
+    { name: 'KEUANGAN & OPERASIONAL', labels: ['Keuangan', 'E-Kantin & Cashless', 'Buku Kas', 'Bendahara', 'E-Kantin'] },
     { name: 'KOMUNIKASI', labels: ['WhatsApp'] },
-    { name: 'MANAJEMEN LEMBAGA', labels: ['Manajemen Lembaga', 'Pengaturan', 'Manajemen Pengguna', 'Backup & Restore', 'Kelola Website', 'REST API Developer'] },
+    { name: 'PENGATURAN & SISTEM', labels: ['Pengaturan', 'Manajemen Pengguna', 'Backup & Restore', 'Kelola Website', 'REST API Developer', 'Manajemen Lembaga', 'Manajemen Yayasan'] },
   ]
 
   // Safety net: item yang tidak match label manapun di atas (mis. menu baru
@@ -147,8 +147,12 @@ export default function Sidebar() {
     return groupedMenus
   }
 
-  const isAdminRole = ['admin', 'super_admin', 'operator', 'tata_usaha', 'tu'].includes(user?.role || '')
-  const showGrouping = isAdminRole && isOpen
+  // Semua role "manajemen" (bukan guru/siswa/proktor) mendapat pengelompokan di
+  // desktop — sebelumnya hanya admin/operator, sehingga sidebar kepala & bendahara
+  // (dan akun demo) tampil datar tanpa grup.
+  const managementRoles = ['admin', 'super_admin', 'operator', 'tata_usaha', 'tu', 'kepala', 'bendahara']
+  const isManagementRole = managementRoles.includes(user?.role || '')
+  const showGrouping = isManagementRole && isOpen
   const groupedMenus = showGrouping ? getGroupedMenus(adminMenuGroups) : null
 
   return (

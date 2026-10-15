@@ -8,6 +8,7 @@ import { generateJamPelajaran, jtmMenit, isGuruKelasJenjang as isGuruKelasJenjan
 import { pilihGuru, pilihMapel } from '../../lib/jadwalSelection'
 import BulkDeleteButton from '../../components/BulkDeleteButton'
 import { useSettingsStore } from '../../stores/settingsStore'
+import { signatureBlockHtml, SIGNATURE_CSS, tenantSignatureSettings } from '../../utils/pdfSignature'
 
 interface Jadwal {
   id: string; mapel_id: string; rombel_id: string; gtk_id: string; hari: string; jam_mulai: string; jam_selesai: string; ruangan: string; template_id?: string | null; jenis_kegiatan?: string; nama_kegiatan?: string
@@ -535,7 +536,7 @@ export default function JadwalPage() {
       })
       rows += '</tr>'
     })
-    printWindow.document.write(`<!DOCTYPE html><html><head><title>Jadwal ${rombelNama}</title><style>body{font-family:Arial,sans-serif;padding:20px}table{border-collapse:collapse;width:100%}th{background:#f3f4f6;padding:8px;border:1px solid #ddd;font-size:12px}@media print{body{padding:0}}</style></head><body><h2 style="text-align:center">Jadwal Pelajaran</h2><h3 style="text-align:center">${rombelNama}</h3><table><thead><tr><th>Jam</th>${hari.map(h => `<th>${h.charAt(0).toUpperCase() + h.slice(1)}</th>`).join('')}</tr></thead><tbody>${rows}</tbody></table><script>setTimeout(()=>window.print(),500)</script></body></html>`)
+    printWindow.document.write(`<!DOCTYPE html><html><head><title>Jadwal ${rombelNama}</title><style>body{font-family:Arial,sans-serif;padding:20px}table{border-collapse:collapse;width:100%}th{background:#f3f4f6;padding:8px;border:1px solid #ddd;font-size:12px}@media print{body{padding:0}}${SIGNATURE_CSS}</style></head><body><h2 style="text-align:center">Jadwal Pelajaran</h2><h3 style="text-align:center">${rombelNama}</h3><table><thead><tr><th>Jam</th>${hari.map(h => `<th>${h.charAt(0).toUpperCase() + h.slice(1)}</th>`).join('')}</tr></thead><tbody>${rows}</tbody></table>${signatureBlockHtml(tenantSignatureSettings(settings), { leftTitle: 'Wali Kelas', rightTitle: 'Kepala Madrasah' })}<script>setTimeout(()=>window.print(),500)</script></body></html>`)
     printWindow.document.close()
   }
 

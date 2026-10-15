@@ -4,10 +4,14 @@ import { Download, FileSpreadsheet, Eye, CheckCircle, XCircle, Clock } from 'luc
 import toast from 'react-hot-toast'
 import api from '../../services/api'
 import { useAuthStore } from '../../stores/authStore'
+import { useSettingsStore } from '../../stores/settingsStore'
+import { tenantIdentity } from '../../utils/tenantExport'
+import { signatureBlockHtml, SIGNATURE_CSS, tenantSignatureSettings } from '../../utils/pdfSignature'
 import * as XLSX from 'xlsx'
 
 export default function JurnalPage() {
   const user = useAuthStore(s => s.user)
+  const settings = useSettingsStore(s => s.settings)
   const canReview = ['admin', 'super_admin', 'kepala', 'operator'].includes(user?.role || '')
   const [data, setData] = useState<any[]>([])
   const [filter, setFilter] = useState({ tanggal: '', guru_id: '', status: '' })
@@ -81,10 +85,14 @@ export default function JurnalPage() {
   const exportPDF = () => {
     const printWindow = window.open('', '_blank')
     if (!printWindow) { toast.error('Popup blocked'); return }
+    const tenant = tenantIdentity(settings)
+    const sigSettings = tenantSignatureSettings(settings)
+    const logo = tenant.logo ? `<img src="${escapeHtml(tenant.logo)}" alt="Logo" onerror="this.style.display='none'">` : ''
     const rows = data.map((d, i) =>
-      `<tr><td>${i+1}</td><td>${d.tanggal}</td><td>${d.guru_nama||''}</td><td>${d.mapel_nama||''}</td><td>${d.rombel_nama||''}</td><td>${d.jam_ke||''}</td><td>${d.materi||''}</td><td>${d.status}</td></tr>`
+      `<tr><td>${i+1}</td><td>${escapeHtml(String(d.tanggal||''))}</td><td>${escapeHtml(d.guru_nama||'')}</td><td>${escapeHtml(d.mapel_nama||'')}</td><td>${escapeHtml(d.rombel_nama||'')}</td><td>${escapeHtml(String(d.jam_ke||''))}</td><td class="materi">${escapeHtml(d.materi||'')}</td><td>${escapeHtml(String(d.status||''))}</td></tr>`
     ).join('')
-    printWindow.document.write(`<!DOCTYPE html><html><head><title>Jurnal Mengajar</title><style>body{font-family:Arial,sans-serif;padding:20px;font-size:11px}table{border-collapse:collapse;width:100%}th,td{border:1px solid #ddd;padding:5px}th{background:#f3f4f6;font-size:10px}@media print{body{padding:0}}</style></head><body><h2 style="text-align:center">Jurnal Mengajar</h2><table><thead><tr><th>No</th><th>Tanggal</th><th>Guru</th><th>Mapel</th><th>Rombel</th><th>Jam</th><th>Materi</th><th>Status</th></tr></thead><tbody>${rows}</tbody></table><script>setTimeout(()=>window.print(),500)<\/script></body></html>`)
+    const filterInfo = [filter.tanggal ? `Tanggal: ${filter.tanggal}` : '', filter.guru_id ? `Guru: ${gtks.find(g => g.id === filter.guru_id)?.nama || ''}` : '', filter.status ? `Status: ${filter.status}` : ''].filter(Boolean).join(' · ') || 'Semua data'
+    printWindow.document.write(`<!DOCTYPE html><html><head><title>Jurnal Mengajar</title><style>@page{size:landscape;margin:8mm}body{font-family:Arial,sans-serif;padding:14px;font-size:11px}.kop{display:flex;align-items:center;justify-content:center;gap:12px;border-bottom:2px solid #000;padding-bottom:7px;margin-bottom:8px}.kop img{width:58px;height:58px;object-fit:contain}.kop-text{text-align:center}.kop-text h2{margin:0}h3{text-align:center;margin:4px 0}.meta{margin:6px 0;font-size:10px}table{border-collapse:collapse;width:100%}th,td{border:1px solid #999;padding:4px;text-align:center}.materi{text-align:left}th{background:#f3f4f6;font-size:10px}@media print{body{padding:0}}${SIGNATURE_CSS}</style></head><body><div class="kop">${logo}<div class="kop-text"><h2>${escapeHtml(tenant.name)}</h2>${tenant.address ? `<div>${escapeHtml(tenant.address)}</div>` : ''}</div></div><h3>JURNAL KEGIATAN PEMBELAJARAN</h3><div class="meta">${escapeHtml(filterInfo)}</div><table><thead><tr><th>No</th><th>Tanggal</th><th>Guru</th><th>Mapel</th><th>Rombel</th><th>Jam</th><th>Materi</th><th>Status</th></tr></thead><tbody>${rows}</tbody></table>${signatureBlockHtml(sigSettings, { leftTitle: 'Guru Mapel', rightTitle: 'Kepala Madrasah' })}<script>setTimeout(()=>window.print(),500)<\/script></body></html>`)
     printWindow.document.close()
   }
 
