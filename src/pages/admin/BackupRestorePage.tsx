@@ -15,7 +15,7 @@ interface PreviewResult {
   sections: Array<{ key: string; label: string; count: number }>
 }
 
-interface DriveStatus { connected: boolean; email?: string; folder_id?: string | null; folder_ok?: boolean; error?: string; auth_type?: 'oauth2' | 'service_account' }
+interface DriveStatus { connected: boolean; email?: string; folder_id?: string | null; folder_ok?: boolean; error?: string; auth_type?: 'oauth2' | 'service_account'; reauth_required?: boolean }
 interface DriveDiagnostics { credential_dir: string; auth_mode: string; files: { service_account: boolean; oauth_client: boolean; oauth_token_shared: boolean; oauth_token_tenant: boolean } }
 interface BackupLog { id: string; filename: string; drive_file_id: string | null; size: number; status: string; error: string | null; created_at: string }
 interface BackupConfig { folder_id: string; auto_enabled: boolean; retention_days: number; schedule_time: string; timezone: string; last_run_at?: string | null }
@@ -68,6 +68,17 @@ export default function BackupRestorePage() {
       window.location.assign(data.authorization_url)
     } catch (err: any) {
       toast.error(err.response?.data?.error || 'Tidak dapat memulai koneksi Google Drive')
+    }
+  }
+
+  const disconnectDrive = async () => {
+    if (!confirm('Putuskan koneksi Google Drive untuk lembaga ini? Anda perlu menghubungkan ulang untuk backup.')) return
+    try {
+      await api.delete('/google-drive/connection')
+      toast.success('Koneksi Google Drive diputus')
+      loadDrive()
+    } catch (err: any) {
+      toast.error(err.response?.data?.error || 'Gagal memutus koneksi')
     }
   }
 
@@ -176,7 +187,8 @@ export default function BackupRestorePage() {
         <div className="mb-4 flex items-center justify-between">
           <h2 className="flex items-center gap-2 font-semibold text-gray-800"><Cloud size={18} className="text-primary" /> Backup ke Google Drive</h2>
           <div className="flex items-center gap-3">
-            <button onClick={connectDrive} className="text-sm text-primary hover:underline">Hubungkan Google</button>
+            <button onClick={connectDrive} className="text-sm text-primary hover:underline">{drive?.reauth_required ? 'Hubungkan ulang Google' : drive?.connected ? 'Ganti akun Google' : 'Hubungkan Google'}</button>
+            {drive?.connected && <button onClick={disconnectDrive} className="text-sm text-red-600 hover:underline">Putuskan</button>}
             <button onClick={loadDrive} className="flex items-center gap-1 text-sm text-primary hover:underline" title="Cek ulang koneksi">
               <RefreshCw size={14} className={driveLoading ? 'animate-spin' : ''} /> Cek
             </button>
@@ -192,6 +204,14 @@ export default function BackupRestorePage() {
             <span className="flex max-w-full items-start gap-2 break-words rounded-lg bg-red-50 px-3 py-1 text-red-700"><XCircle size={16} className="mt-0.5 shrink-0" /> <span className="min-w-0 break-words">Tidak terhubung{drive?.error ? `: ${drive.error}` : ''}</span></span>
           )}
         </div>
+
+        {drive?.reauth_required && !driveLoading && (
+          <div className="mb-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-900">
+            <p className="font-semibold">Koneksi Google Drive sudah kedaluwarsa / dicabut</p>
+            <p className="mt-1">Token akses Google tidak lagi berlaku (biasanya karena aplikasi OAuth di Google Cloud masih berstatus <b>Testing</b> — token kedaluwarsa otomatis setelah 7 hari). Tekan <b>Hubungkan ulang Google</b> di atas untuk menyambung kembali, lalu jalankan backup lagi.</p>
+            <p className="mt-1 text-red-700">Agar tidak berulang, set status aplikasi OAuth menjadi <b>Published</b> (atau Production) di Google Cloud Console, atau gunakan Service Account.</p>
+          </div>
+        )}
 
         {!drive?.connected && !driveLoading && diag && (
           <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900 space-y-2">

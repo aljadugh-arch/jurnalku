@@ -165,6 +165,19 @@ function b64url(buf) {
   return Buffer.from(buf).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
 }
 
+// Terjemahkan galat token Google jadi pesan yang bisa ditindaklanjuti admin.
+// invalid_grant = refresh token kedaluwarsa/dicabut (mis. aplikasi OAuth masih
+// berstatus "Testing" di Google Cloud → refresh token mati setelah 7 hari)
+// → admin wajib menekan "Hubungkan ulang Google".
+function googleTokenError(mode, data, status) {
+  const code = data?.error || ''
+  const desc = data?.error_description || ''
+  if (code === 'invalid_grant') {
+    return 'Koneksi Google Drive sudah kedaluwarsa atau dicabut (invalid_grant). Buka halaman ini lalu tekan "Hubungkan ulang Google" untuk menyambung kembali.'
+  }
+  return `gagal ambil access token (${mode}): ${desc || code || status}`
+}
+
 // Mint OAuth2 access token via service-account JWT grant (scope drive.file)
 async function getAccessTokenSA(sa) {
   const now = Math.floor(Date.now() / 1000)
@@ -193,7 +206,7 @@ async function getAccessTokenSA(sa) {
     body,
   })
   const data = await resp.json()
-  if (!resp.ok || !data.access_token) throw new Error('gagal ambil access token (SA): ' + (data.error_description || data.error || resp.status))
+  if (!resp.ok || !data.access_token) throw new Error(googleTokenError('SA', data, resp.status))
   return data.access_token
 }
 
@@ -213,7 +226,7 @@ async function getAccessTokenOAuth2(auth) {
     body,
   })
   const data = await resp.json()
-  if (!resp.ok || !data.access_token) throw new Error('gagal ambil access token (OAuth2): ' + (data.error_description || data.error || resp.status))
+  if (!resp.ok || !data.access_token) throw new Error(googleTokenError('OAuth2', data, resp.status))
   
   // Update token file if Google rotates the refresh token.
   if (data.refresh_token && data.refresh_token !== auth.refresh_token) {
@@ -423,8 +436,19 @@ function registerBackupRoutes(app, db, { requireRole, uuid, mediaRoot, now = () 
         return res.json({ connected: false, email, folder_id: folderId, folder_ok: false, error: String(e.message || e), auth_type: auth.type })
       }
     } catch (e) {
-      return res.json({ connected: false, error: String(e.message || e) })
+      const msg = String(e.message || e)
+      // Token kedaluwarsa/dicabut → admin harus menghubungkan ulang.
+      const reauth_required = /kedaluwarsa atau dicabut|invalid_grant|expired or revoked/i.test(msg)
+      return res.json({ connected: false, error: msg, reauth_required })
     }
+  })
+
+  // Putuskan koneksi Google Drive tenant ini (hapus token). Admin lalu dapat
+  // menekan "Hubungkan Google" untuk membuat token baru.
+  app.delete('/api/google-drive/connection', kadmin, (req, res) => {
+    const file = tenantTokenPath(req.tenantId)
+    try { if (fs.existsSync(file)) fs.unlinkSync(file) } catch (e) { return res.status(500).json({ error: String(e.message || e) }) }
+    res.json({ disconnected: true })
   })
 
   // Diagnostik konfigurasi (tanpa membocorkan isi kredensial)
