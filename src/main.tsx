@@ -22,7 +22,7 @@ async function configurePwa() {
     const response = await fetch('/api/pwa/manifest')
     if (response.status === 204 || !response.ok) {
       // Lembaga ini tidak mengaktifkan PWA: pertahankan manifest statis
-      // (/manifest.webmanifest) agar audit PWABuilder tetap menemukan manifest.
+      // (/manifest.json) agar audit PWABuilder tetap menemukan manifest.
       // Hanya ikon/favicon yang di-scope ke lembaga.
       const stamp = Date.now()
       document.querySelectorAll('link[rel="icon"], link[rel="shortcut icon"]')

@@ -4907,9 +4907,13 @@ function selectLinkedStudent(req) {
   return id
 }
 
-app.get('/api/pwa/manifest', (req, res) => {
+// Manifest PWA per-lembaga. Dipakai DUA jalur: GET /api/pwa/manifest (dibaca
+// klien saat PWA lembaga aktif) dan POST /api/settings/pwa-manifest (tombol
+// "Regenerate" di Pengaturan) — satu pembangun supaya bentuknya tak pernah
+// menyimpang ('any maskable' pada satu entri ikon tidak valid menurut spec).
+function bangunManifestPwa(req) {
   const s = getTenantSettings(db, req.tenantId, 'pwa_enabled,pwa_name,pwa_icon,nama_lembaga,logo,primary_color,pwa_bg_color,pwa_theme_color,updated_at') || {}
-  if (s.pwa_enabled === 0) return res.status(204).end()
+  if (s.pwa_enabled === 0) return null
   const t = req.tenant || db.prepare('SELECT nama FROM tenants WHERE id=?').get(req.tenantId) || {}
   const name = s.pwa_name || (t.nama ? t.nama + ' Apps' : 'Jurnalku')
   const version = String(s.updated_at || Date.now()).replace(/[^0-9]/g, '')
@@ -4920,7 +4924,7 @@ app.get('/api/pwa/manifest', (req, res) => {
   const deskripsi = s.nama_lembaga
     ? `Aplikasi ${s.nama_lembaga}: jurnal mengajar, absensi QR/RFID, penilaian, rapor, keuangan, dan notifikasi WhatsApp.`
     : 'JURNALKU — sistem informasi manajemen sekolah & madrasah.'
-  res.type('application/manifest+json').set('Cache-Control', 'no-store').json({
+  return {
     id: '/',
     name, short_name: name.slice(0, 24), description: deskripsi,
     lang: 'id', dir: 'ltr',
@@ -4945,7 +4949,12 @@ app.get('/api/pwa/manifest', (req, res) => {
       { name: 'Absensi QR siswa', url: '/admin/absensi-qr-siswa', icons: [{ src: `/api/pwa/icon/192?v=${version}`, sizes: '192x192' }] },
       { name: 'Masuk & keluar kelas', url: '/guru/absensi-saya', icons: [{ src: `/api/pwa/icon/192?v=${version}`, sizes: '192x192' }] },
     ],
-  })
+  }
+}
+app.get('/api/pwa/manifest', (req, res) => {
+  const m = bangunManifestPwa(req)
+  if (!m) return res.status(204).end()
+  res.type('application/manifest+json').set('Cache-Control', 'no-store').json(m)
 })
 app.get('/api/pwa/icon/:size', async (req, res) => {
   const size = Number(req.params.size)
@@ -5026,6 +5035,20 @@ app.get('/og-image.png', async (req, res) => {
   }
 })
 
+// Digital Asset Links untuk aplikasi Android (Play Store / TWA). Berkas ini baru
+// ADA setelah PWABuilder menghasilkan APK/AAB dan memberi sidik jari SHA-256
+// sertifikat; selama belum ada balas 404 JSON — bukan HTML SPA — supaya
+// verifikasi Google gagal dengan jelas, bukan salah baca.
+app.get('/.well-known/assetlinks.json', (req, res) => {
+  const kandidat = [
+    path.join(__dirname, '..', 'dist', '.well-known', 'assetlinks.json'),
+    path.join(__dirname, '..', 'public', '.well-known', 'assetlinks.json'),
+  ]
+  const berkas = kandidat.find(f => { try { return fs.existsSync(f) } catch { return false } })
+  if (berkas) return res.type('application/json').sendFile(berkas)
+  res.status(404).json({ error: 'assetlinks.json belum tersedia — unggah setelah sidik jari sertifikat APK diketahui.' })
+})
+
 app.put('/api/settings/pwa', ADMIN, (req, res) => {
   const id = canonicalSettingsId(req.tenantId)
   db.prepare(`INSERT INTO settings (id,tenant_id,updated_at) VALUES (?,?,datetime('now')) ON CONFLICT(id) DO NOTHING`).run(id, req.tenantId)
@@ -5035,12 +5058,14 @@ app.put('/api/settings/pwa', ADMIN, (req, res) => {
   res.json({ success: true })
 })
 
-// Regenerate PWA manifest - just returns current manifest (dynamic)
+// Tombol "Regenerate Manifest" di Pengaturan → kembalikan manifest kanonis yang
+// sama persis dengan GET /api/pwa/manifest (dulu versi ringkas dengan
+// 'any maskable' yang tidak valid, sehingga hasil "regenerate" berbeda dari
+// manifest yang benar-benar dilayani ke peramban).
 app.post('/api/settings/pwa-manifest', ADMIN, (req, res) => {
-  const s = getTenantSettings(db, req.tenantId, 'pwa_name,pwa_icon,nama_lembaga,logo,primary_color,pwa_bg_color,pwa_theme_color') || {}
-  const t = req.tenant || db.prepare('SELECT nama FROM tenants WHERE id=?').get(req.tenantId) || {}
-  const name = s.pwa_name || (t.nama ? t.nama + ' Apps' : 'Jurnalku')
-  res.type('application/manifest+json').set('Cache-Control', 'no-store').json({ name, short_name: name.slice(0, 24), id: '/', start_url: req.isRegisteredTenantHost ? '/login' : '/', scope: '/', display: 'standalone', background_color: s.pwa_bg_color || '#ffffff', theme_color: s.pwa_theme_color || s.primary_color || '#2563eb', icons: [{ src: '/api/pwa/icon/192', sizes: '192x192', type: 'image/png', purpose: 'any maskable' }, { src: '/api/pwa/icon/512', sizes: '512x512', type: 'image/png', purpose: 'any maskable' }] })
+  const m = bangunManifestPwa(req)
+  if (!m) return res.status(204).end()
+  res.type('application/manifest+json').set('Cache-Control', 'no-store').json(m)
 })
 
 // ==================== WEB PUSH: notifikasi adzan di perangkat ====================
@@ -10178,6 +10203,9 @@ function renderIndexSeo(req) {
 // SPA fallback - serve index.html for non-API GET routes
 app.use((req, res, next) => {
   if (req.path.startsWith('/api')) return res.status(404).json({ error: 'Not found' })
+  // /.well-known/* bukan halaman aplikasi (mis. assetlinks.json untuk Play Store):
+  // jangan pernah disajikan sebagai HTML SPA agar verifikasi Google tidak salah baca.
+  if (req.path.startsWith('/.well-known/')) return res.status(404).json({ error: 'Not found' })
   if (req.method !== 'GET') return next()
   const seo = renderIndexSeo(req)
   if (seo) return res.type('html').send(seo)

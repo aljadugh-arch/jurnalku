@@ -40,7 +40,7 @@ test('manifest PWA yang dinonaktifkan tidak menghasilkan request browser 404', (
   assert.match(main, /daftarkanServiceWorker\(\)/)
   assert.doesNotMatch(main, /document\.head\.appendChild\(linkEl\)/)
   assert.doesNotMatch(server, /if \(s\.pwa_enabled === 0\) return res\.status\(404\)\.json\(\{ error: 'PWA dinonaktifkan' \}\)/)
-  assert.match(server, /if \(s\.pwa_enabled === 0\) return res\.status\(204\)\.end\(\)/)
+  assert.match(server, /if \(!m\) return res\.status\(204\)\.end\(\)/)
   assert.match(main, /response\.status === 204/)
 })
 

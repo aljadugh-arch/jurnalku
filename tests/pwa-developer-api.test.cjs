@@ -31,7 +31,12 @@ test('manifest tenant memakai endpoint ikon persegi dengan ukuran yang benar', (
   assert.match(server, /\/api\/pwa\/icon\/512/)
   assert.match(server, /sizes: '192x192'/)
   assert.match(server, /sizes: '512x512'/)
-  assert.match(server, /purpose: 'any maskable'/)
+  // 'any maskable' pada satu entri ikon tidak valid menurut spec → tujuan dipisah,
+  // dan manifest dinamis + endpoint "regenerate" memakai satu pembangun yang sama.
+  assert.match(server, /purpose: 'any'/)
+  assert.match(server, /purpose: 'maskable'/)
+  assert.match(server, /function bangunManifestPwa/)
+  assert.doesNotMatch(server, /purpose: 'any maskable'/)
   assert.match(server, /sharp\(/)
   assert.doesNotMatch(server, /sizes: '256x256'[\s\S]{0,100}sizes: '512x512'/)
 })

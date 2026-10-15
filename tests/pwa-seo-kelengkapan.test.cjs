@@ -148,3 +148,30 @@ test('klien: helper push memakai kunci publik server + endpoint yang benar', () 
   assert.match(h, /pushManager\.subscribe/)
   assert.match(h, /urlBase64KeUint8/)
 })
+
+test('dua manifest statis (manifest.json + manifest.webmanifest) sinkron', () => {
+  // index.html menautkan /manifest.json (agar Caddy kirim Content-Type application/json),
+  // sementara tes & beberapa klien lama memakai /manifest.webmanifest. Keduanya harus
+  // identik supaya audit PWABuilder tidak melihat dua bentuk berbeda.
+  assert.ok(ada('public/manifest.json'), 'public/manifest.json harus ada')
+  assert.ok(ada('public/manifest.webmanifest'), 'public/manifest.webmanifest harus ada')
+  assert.equal(baca('public/manifest.json'), baca('public/manifest.webmanifest'))
+})
+
+test('server: Digital Asset Links (/.well-known/assetlinks.json) tidak pernah jadi HTML SPA', () => {
+  const s = baca('server/index.cjs')
+  // Route khusus: balas berkas JSON bila ada, kalau belum → 404 JSON (bukan index.html),
+  // supaya verifikasi Google Play "Digital Asset Links" gagal dengan jelas.
+  assert.match(s, /app\.get\('\/\.well-known\/assetlinks\.json'/)
+  assert.match(s, /assetlinks\.json belum tersedia/)
+  // Fallback SPA harus melewati /.well-known/*.
+  assert.match(s, /req\.path\.startsWith\('\/\.well-known\/'\)/)
+})
+
+test('server: manifest dinamis (GET + regenerate) memakai satu pembangun', () => {
+  const s = baca('server/index.cjs')
+  assert.match(s, /function bangunManifestPwa\(req\)/)
+  assert.match(s, /app\.get\('\/api\/pwa\/manifest',[\s\S]{0,120}bangunManifestPwa\(req\)/)
+  assert.match(s, /app\.post\('\/api\/settings\/pwa-manifest', ADMIN,[\s\S]{0,120}bangunManifestPwa\(req\)/)
+  assert.doesNotMatch(s, /purpose: 'any maskable'/, "manifest dinamis tidak boleh memakai 'any maskable'")
+})

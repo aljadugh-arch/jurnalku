@@ -600,7 +600,7 @@ export default function NotifSettingsPage() {
             <div className="min-w-0">
               <p className="flex items-center gap-1.5 text-sm font-medium text-gray-700"><Smartphone size={14} /> Notifikasi perangkat (HP/tablet)</p>
               <p className="mt-0.5 break-words text-xs text-gray-400">
-                Lewat Web Push dari server, jadi adzan tetap muncul di baki notifikasi walau aplikasi ditutup atau layar terkunci — timer di halaman berhenti saat tab dibawa ke latar. Nyalakan sekali di setiap perangkat.
+                Lewat Web Push dari server, jadi adzan tetap muncul di baki notifikasi walau aplikasi ditutup atau layar terkunci — timer di halaman berhenti saat tab dibawa ke latar. Nyalakan sekali di setiap perangkat. Sakelar adzan di Kanal 1 juga harus aktif, kalau tidak hanya notifikasi uji yang terkirim.
               </p>
             </div>
             <span data-adzan-push-badge="true" className={'shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold ' + (push.terdaftar ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-200 text-gray-600')}>
