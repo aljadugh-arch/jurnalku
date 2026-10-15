@@ -5,29 +5,48 @@
     <link rel="icon" type="image/png" sizes="64x64" href="/favicon.ico" />
     <link rel="shortcut icon" type="image/png" href="/favicon.ico" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
     <link rel="apple-touch-icon" sizes="192x192" href="/apple-touch-icon.png" />
+    <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png" />
+    <link rel="icon" type="image/png" sizes="512x512" href="/icon-512.png" />
+    <!-- Manifest ditautkan STATIS, bukan hanya disuntik lewat JS: PWABuilder dan
+         Lighthouse membacanya dari HTML mentah. main.tsx mengganti href ini ke
+         /api/pwa/manifest milik lembaga begitu PWA lembaga diaktifkan di Pengaturan. -->
+    <link id="pwa-manifest" rel="manifest" href="/manifest.json" />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-title" content="JURNALKU" />
     <meta name="theme-color" content="#1e40af" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
 
+    <!-- Isi di antara penanda SEO:START/SEO:END diganti per permintaan oleh server
+         (renderIndexSeo di server/index.cjs) mengikuti lembaga pemilik domain —
+         jadi setiap domain menyajikan judul, deskripsi, canonical, dan og:* miliknya
+         sendiri. JANGAN hapus penandanya. Nilai di bawah adalah cadangan untuk dev. -->
+    <!--SEO:START-->
     <title>JURNALKU - Sistem Informasi Manajemen Sekolah/Madrasah</title>
     <meta name="description" content="JURNALKU — sistem informasi manajemen sekolah & madrasah: jurnal mengajar, absensi siswa/guru (QR & RFID), penilaian, rapor, keuangan, dan notifikasi WhatsApp." />
     <meta name="application-name" content="JURNALKU" />
     <link rel="canonical" href="https://jurnalmadrasah.web.id/" />
-
-    <!-- OpenGraph / WhatsApp preview (diganti dari Settings lembaga via /api/pwa/manifest saat runtime bila perlu) -->
+    <meta name="robots" content="index, follow" />
+    <meta name="author" content="JURNALKU" />
+    <meta name="keywords" content="aplikasi sekolah, sistem informasi madrasah, jurnal mengajar, absensi QR, absensi RFID, rapor digital, e-rapor, manajemen sekolah, jurnalku" />
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="JURNALKU" />
     <meta property="og:title" content="JURNALKU - Sistem Informasi Manajemen Sekolah/Madrasah" />
     <meta property="og:description" content="Jurnal mengajar, absensi QR/RFID, penilaian, rapor, keuangan, dan notifikasi WhatsApp dalam satu aplikasi." />
     <meta property="og:url" content="https://jurnalmadrasah.web.id/" />
     <meta property="og:image" content="/og-image.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="JURNALKU - Sistem Informasi Manajemen Sekolah/Madrasah" />
+    <meta property="og:locale" content="id_ID" />
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="JURNALKU - Sistem Informasi Manajemen Sekolah/Madrasah" />
     <meta name="twitter:description" content="Jurnal mengajar, absensi QR/RFID, penilaian, rapor, keuangan, dan notifikasi WhatsApp dalam satu aplikasi." />
     <meta name="twitter:image" content="/og-image.png" />
+    <!--SEO:END-->
 
     <!-- Skeleton awal: mencegah layar putih saat koneksi lambat (Vite mengganti #root saat mount). -->
     <style>

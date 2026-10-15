@@ -141,6 +141,20 @@ app.get('/api/thumb/:filename', async (req, res) => {
     res.status(500).end()
   }
 })
+app.get('/robots.txt', (req, res) => {
+  const base = `${skemaPermintaan(req)}://${hostPermintaan(req)}`
+  res.type('text/plain').send(['User-agent: *', 'Allow: /', 'Disallow: /api/', 'Disallow: /admin/', 'Disallow: /guru/', 'Disallow: /siswa/', 'Disallow: /wali/', `Sitemap: ${base}/sitemap.xml`, ''].join('\n'))
+})
+app.get('/sitemap.xml', (req, res) => {
+  const base = `${skemaPermintaan(req)}://${hostPermintaan(req)}`
+  const halaman = [['/', '1.0', 'daily'], ['/login', '0.8', 'monthly'], ['/register', '0.7', 'monthly'], ['/panduan', '0.6', 'monthly']]
+  const urls = halaman.map(([loc, pri, freq]) => `  <url><loc>${base}${loc}</loc><changefreq>${freq}</changefreq><priority>${pri}</priority></url>`).join('\n')
+  res.type('application/xml').send(`<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urls}\n</urlset>\n`)
+})
+
+// SEO: didaftarkan SEBELUM express.static agar versi dinamis per-domain menang
+// ketika permintaan sampai ke Node; public/robots.txt & public/sitemap.xml tetap
+// ada sebagai cadangan bila Caddy melayani berkas dist/ secara langsung.
 app.use(express.static(path.join(__dirname, '..', 'dist'), {
   index: false,
   fallthrough: true,
@@ -1131,6 +1145,40 @@ db.exec(`
     error TEXT,
     sent_at TEXT,
     FOREIGN KEY (broadcast_id) REFERENCES broadcast_log(id)
+  );
+
+  -- ==================== WEB PUSH (notifikasi adzan di HP/tablet) ====================
+  -- Pasangan kunci VAPID disimpan di DB supaya ikut ter-backup dan tidak hilang
+  -- saat deploy menimpa berkas server/.
+  CREATE TABLE IF NOT EXISTS app_config (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL,
+    updated_at TEXT DEFAULT (datetime('now'))
+  );
+
+  CREATE TABLE IF NOT EXISTS push_subscriptions (
+    id TEXT PRIMARY KEY,
+    tenant_id TEXT NOT NULL,
+    user_id TEXT,
+    endpoint TEXT NOT NULL UNIQUE,
+    p256dh TEXT NOT NULL,
+    auth TEXT NOT NULL,
+    ua TEXT,
+    created_at TEXT DEFAULT (datetime('now')),
+    last_ok_at TEXT,
+    last_err TEXT,
+    fail_count INTEGER DEFAULT 0
+  );
+  CREATE INDEX IF NOT EXISTS idx_push_sub_tenant ON push_subscriptions(tenant_id);
+  CREATE INDEX IF NOT EXISTS idx_push_sub_user ON push_subscriptions(user_id);
+
+  -- Idempotensi kiriman: satu notifikasi per (tenant, tanggal, waktu).
+  CREATE TABLE IF NOT EXISTS adzan_push_log (
+    tenant_id TEXT NOT NULL,
+    tanggal TEXT NOT NULL,
+    waktu TEXT NOT NULL,
+    sent_at TEXT DEFAULT (datetime('now')),
+    PRIMARY KEY (tenant_id, tanggal, waktu)
   );
 `);
 
@@ -4865,12 +4913,44 @@ app.get('/api/pwa/manifest', (req, res) => {
   const t = req.tenant || db.prepare('SELECT nama FROM tenants WHERE id=?').get(req.tenantId) || {}
   const name = s.pwa_name || (t.nama ? t.nama + ' Apps' : 'Jurnalku')
   const version = String(s.updated_at || Date.now()).replace(/[^0-9]/g, '')
-  res.type('application/manifest+json').set('Cache-Control', 'no-store').json({ name, short_name: name.slice(0, 24), id: '/', start_url: req.isRegisteredTenantHost ? '/login' : '/', scope: '/', display: 'standalone', background_color: s.pwa_bg_color || '#ffffff', theme_color: s.pwa_theme_color || s.primary_color || '#2563eb', version, icons: [{ src: `/api/pwa/icon/192?v=${version}`, sizes: '192x192', type: 'image/png', purpose: 'any maskable' }, { src: `/api/pwa/icon/512?v=${version}`, sizes: '512x512', type: 'image/png', purpose: 'any maskable' }] })
+  // Field lengkap agar lolos audit PWABuilder/Lighthouse dan bisa dibungkus jadi
+  // APK Play Store: tujuan ikon dipisah (any vs maskable — 'any maskable' satu entri
+  // dianggap tidak valid), plus screenshots (form_factor narrow & wide), kategori,
+  // bahasa, dan prefer_related_applications:false.
+  const deskripsi = s.nama_lembaga
+    ? `Aplikasi ${s.nama_lembaga}: jurnal mengajar, absensi QR/RFID, penilaian, rapor, keuangan, dan notifikasi WhatsApp.`
+    : 'JURNALKU — sistem informasi manajemen sekolah & madrasah.'
+  res.type('application/manifest+json').set('Cache-Control', 'no-store').json({
+    id: '/',
+    name, short_name: name.slice(0, 24), description: deskripsi,
+    lang: 'id', dir: 'ltr',
+    start_url: req.isRegisteredTenantHost ? '/login' : '/',
+    scope: '/', display: 'standalone', display_override: ['standalone', 'minimal-ui'],
+    orientation: 'any',
+    background_color: s.pwa_bg_color || '#ffffff',
+    theme_color: s.pwa_theme_color || s.primary_color || '#2563eb',
+    categories: ['education', 'productivity', 'utilities'],
+    prefer_related_applications: false, related_applications: [],
+    version,
+    icons: [
+      { src: `/api/pwa/icon/192?v=${version}`, sizes: '192x192', type: 'image/png', purpose: 'any' },
+      { src: `/api/pwa/icon/512?v=${version}`, sizes: '512x512', type: 'image/png', purpose: 'any' },
+      { src: `/api/pwa/icon/512?maskable=1&v=${version}`, sizes: '512x512', type: 'image/png', purpose: 'maskable' },
+    ],
+    screenshots: [
+      { src: '/screenshot-narrow.png', sizes: '390x844', type: 'image/png', form_factor: 'narrow', label: `Aplikasi ${name} di ponsel` },
+      { src: '/screenshot-wide.png', sizes: '1280x720', type: 'image/png', form_factor: 'wide', label: `Dashboard ${name} di desktop` },
+    ],
+    shortcuts: [
+      { name: 'Absensi QR siswa', url: '/admin/absensi-qr-siswa', icons: [{ src: `/api/pwa/icon/192?v=${version}`, sizes: '192x192' }] },
+      { name: 'Masuk & keluar kelas', url: '/guru/absensi-saya', icons: [{ src: `/api/pwa/icon/192?v=${version}`, sizes: '192x192' }] },
+    ],
+  })
 })
 app.get('/api/pwa/icon/:size', async (req, res) => {
   const size = Number(req.params.size)
   if (![192, 512].includes(size)) return res.status(404).end()
-  const s = getTenantSettings(db, req.tenantId, 'pwa_enabled,pwa_icon,logo') || {}
+  const s = getTenantSettings(db, req.tenantId, 'pwa_enabled,pwa_icon,logo,pwa_bg_color') || {}
   if (s.pwa_enabled === 0) return res.status(404).end()
   const fallback = path.join(__dirname, '..', 'public', 'logo-jurnalku-256.png')
   try {
@@ -4880,7 +4960,20 @@ app.get('/api/pwa/icon/:size', async (req, res) => {
       ? path.join(UPLOAD_DIR, path.basename(relative))
       : path.join(__dirname, '..', 'public', path.basename(relative))
     const input = fs.existsSync(source) ? source : fallback
-    const image = await sharp(input).resize(size, size, { fit: 'contain', background: { r: 255, g: 255, b: 255, alpha: 0 } }).png().toBuffer()
+    // ?maskable=1 → ikon adaptive Android: latar opak penuh + logo 72% (aman di
+    // zona tengah 80% yang tidak dipotong masker bulat/persegi).
+    const maskable = String(req.query.maskable || '') === '1'
+    let image
+    if (maskable) {
+      const m = /^#?([0-9a-f]{6})$/i.exec(String(s.pwa_bg_color || '#ffffff'))
+      const latar = m ? { r: parseInt(m[1].slice(0, 2), 16), g: parseInt(m[1].slice(2, 4), 16), b: parseInt(m[1].slice(4, 6), 16), alpha: 1 } : { r: 255, g: 255, b: 255, alpha: 1 }
+      const dalam = Math.round(size * 0.72)
+      const logo = await sharp(input).resize(dalam, dalam, { fit: 'contain', background: { r: 0, g: 0, b: 0, alpha: 0 } }).png().toBuffer()
+      image = await sharp({ create: { width: size, height: size, channels: 4, background: latar } })
+        .composite([{ input: logo, gravity: 'center' }]).png().toBuffer()
+    } else {
+      image = await sharp(input).resize(size, size, { fit: 'contain', background: { r: 255, g: 255, b: 255, alpha: 0 } }).png().toBuffer()
+    }
     res.type('image/png').set({ 'Cache-Control': 'no-cache, must-revalidate', 'X-Content-Type-Options': 'nosniff' }).send(image)
   } catch (error) {
     console.error('[PWA icon]', error.message)
@@ -4948,6 +5041,48 @@ app.post('/api/settings/pwa-manifest', ADMIN, (req, res) => {
   const t = req.tenant || db.prepare('SELECT nama FROM tenants WHERE id=?').get(req.tenantId) || {}
   const name = s.pwa_name || (t.nama ? t.nama + ' Apps' : 'Jurnalku')
   res.type('application/manifest+json').set('Cache-Control', 'no-store').json({ name, short_name: name.slice(0, 24), id: '/', start_url: req.isRegisteredTenantHost ? '/login' : '/', scope: '/', display: 'standalone', background_color: s.pwa_bg_color || '#ffffff', theme_color: s.pwa_theme_color || s.primary_color || '#2563eb', icons: [{ src: '/api/pwa/icon/192', sizes: '192x192', type: 'image/png', purpose: 'any maskable' }, { src: '/api/pwa/icon/512', sizes: '512x512', type: 'image/png', purpose: 'any maskable' }] })
+})
+
+// ==================== WEB PUSH: notifikasi adzan di perangkat ====================
+// Dipakai klien (src/lib/pushNotif.ts) untuk mendaftarkan perangkat. Notifikasi
+// tetap bisa masuk saat aplikasi TERTUTUP, yang tidak mungkin dilakukan timer
+// di halaman (HP/tablet menangguhkan timer saat tab di-latar atau layar mati).
+app.get('/api/push/public-key', authMiddleware, (req, res) => {
+  try { res.json({ key: require('./adzan-push.cjs').ambilVapid(db).publicKey }) }
+  catch (e) { res.status(500).json({ error: e.message }) }
+})
+
+app.post('/api/push/subscribe', authMiddleware, (req, res) => {
+  const endpoint = String(req.body?.endpoint || '')
+  const p256dh = String(req.body?.keys?.p256dh || '')
+  const auth = String(req.body?.keys?.auth || '')
+  if (!endpoint || !p256dh || !auth) return res.status(400).json({ error: 'endpoint dan keys wajib' })
+  // Satu endpoint boleh pindah pengguna (ganti akun di perangkat yang sama).
+  db.prepare(`INSERT INTO push_subscriptions (id,tenant_id,user_id,endpoint,p256dh,auth,ua,fail_count)
+      VALUES (?,?,?,?,?,?,?,0)
+    ON CONFLICT(endpoint) DO UPDATE SET tenant_id=excluded.tenant_id, user_id=excluded.user_id,
+      p256dh=excluded.p256dh, auth=excluded.auth, ua=excluded.ua, fail_count=0, last_err=NULL`)
+    .run(uuidv4(), req.tenantId, req.user.id, endpoint, p256dh, auth, String(req.headers['user-agent'] || '').slice(0, 300))
+  res.json({ success: true })
+})
+
+app.post('/api/push/unsubscribe', authMiddleware, (req, res) => {
+  const endpoint = String(req.body?.endpoint || '')
+  if (!endpoint) return res.status(400).json({ error: 'endpoint wajib' })
+  db.prepare('DELETE FROM push_subscriptions WHERE endpoint=? AND tenant_id=?').run(endpoint, req.tenantId)
+  res.json({ success: true })
+})
+
+app.get('/api/push/status', authMiddleware, (req, res) => {
+  const saya = db.prepare('SELECT COUNT(*) c FROM push_subscriptions WHERE tenant_id=? AND user_id=?').get(req.tenantId, req.user.id).c
+  const lembaga = db.prepare('SELECT COUNT(*) c FROM push_subscriptions WHERE tenant_id=?').get(req.tenantId).c
+  res.json({ perangkat_saya: saya, perangkat_lembaga: lembaga })
+})
+
+// Kirim-uji dari halaman Pengaturan → Notifikasi.
+app.post('/api/push/test', STAFF, async (req, res) => {
+  try { res.json({ success: true, ...(await require('./adzan-push.cjs').kirimUjiPush(db, { tenantId: req.tenantId, userId: req.user.id })) }) }
+  catch (e) { res.status(500).json({ error: e.message }) }
 })
 
 app.post('/api/jamaah/sesi', ADMIN, (req, res) => {
@@ -9967,11 +10102,86 @@ registerTenantRoutes(app, db, authMiddleware, uuidv4, requireRole('super_admin')
 // tenant.cjs#registerTenantRoutes untuk versi yang lebih aman dengan
 // initial_password acak + flag must_change_password.
 
+// ==================== SEO: robots, sitemap, meta per-lembaga ====================
+// Blok <head> di dist/index.html ditandai <!--SEO:START-->…<!--SEO:END--> lalu
+// diganti per permintaan, jadi setiap domain (jurnal.cc.cd, jurnalmadrasah.web.id,
+// atau host lembaga) menyajikan judul/deskripsi/canonical/og yang sesuai pemiliknya.
+const DIST_INDEX = path.join(__dirname, '..', 'dist', 'index.html')
+const SEO_DESC_DEFAULT = 'JURNALKU — sistem informasi manajemen sekolah & madrasah: jurnal mengajar, absensi siswa/guru (QR & RFID), penilaian, rapor, keuangan, dan notifikasi WhatsApp.'
+function hostPermintaan(req) {
+  const fwd = String(req.headers['x-forwarded-host'] || '').split(',')[0].trim()
+  const host = String(fwd || req.headers.host || '')
+  return host.split(':')[0].trim() || 'jurnal.cc.cd'
+}
+function skemaPermintaan(req) {
+  const fwd = String(req.headers['x-forwarded-proto'] || '').split(',')[0].trim().toLowerCase()
+  return fwd === 'http' ? 'http' : 'https'
+}
+const escHtml = (v) => String(v == null ? '' : v).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]))
+let seoCacheIndex = { mtimeMs: 0, html: '' }
+function bacaIndexTemplate() {
+  try {
+    const st = fs.statSync(DIST_INDEX)
+    if (seoCacheIndex.mtimeMs !== st.mtimeMs) seoCacheIndex = { mtimeMs: st.mtimeMs, html: fs.readFileSync(DIST_INDEX, 'utf8') }
+  } catch { /* belum dibangun (dev): pakai cache terakhir */ }
+  return seoCacheIndex.html
+}
+function renderIndexSeo(req) {
+  const html = bacaIndexTemplate()
+  if (!html) return null
+  let s = {}
+  try { if (req.tenantId) s = getTenantSettings(db, req.tenantId, 'nama_lembaga,pwa_name') || {} } catch { s = {} }
+  const nama = String(s.nama_lembaga || '').trim()
+  const base = `${skemaPermintaan(req)}://${hostPermintaan(req)}`
+  const judul = nama ? `${nama} — JURNALKU` : 'JURNALKU - Sistem Informasi Manajemen Sekolah/Madrasah'
+  const deskripsi = nama
+    ? `Sistem informasi manajemen ${nama}: jurnal mengajar, absensi QR/RFID, penilaian, rapor, keuangan, dan notifikasi WhatsApp untuk guru, siswa, dan wali murid.`
+    : SEO_DESC_DEFAULT
+  const gambar = `${base}/og-image.png`
+  const namaAplikasi = String(s.pwa_name || nama || 'JURNALKU')
+  const ld = {
+    '@context': 'https://schema.org', '@type': 'SoftwareApplication',
+    name: namaAplikasi, applicationCategory: 'BusinessApplication', operatingSystem: 'Web, Android',
+    url: `${base}/`, image: gambar, description: deskripsi,
+    offers: { '@type': 'Offer', price: '0', priceCurrency: 'IDR' },
+  }
+  if (nama) { ld.author = { '@type': 'EducationalOrganization', name: nama }; ld.isPartOf = { '@type': 'WebSite', name: 'JURNALKU', url: `${base}/` } }
+  const blok = [
+    `<title>${escHtml(judul)}</title>`,
+    `<meta name="description" content="${escHtml(deskripsi)}" />`,
+    `<meta name="application-name" content="${escHtml(namaAplikasi)}" />`,
+    `<link rel="canonical" href="${escHtml(base + '/')}" />`,
+    `<meta name="robots" content="index, follow" />`,
+    `<meta name="author" content="JURNALKU" />`,
+    `<meta name="keywords" content="aplikasi sekolah, sistem informasi madrasah, jurnal mengajar, absensi QR, absensi RFID, rapor digital, e-rapor, manajemen sekolah, jurnalku" />`,
+    `<meta property="og:type" content="website" />`,
+    `<meta property="og:site_name" content="${escHtml(namaAplikasi)}" />`,
+    `<meta property="og:title" content="${escHtml(judul)}" />`,
+    `<meta property="og:description" content="${escHtml(deskripsi)}" />`,
+    `<meta property="og:url" content="${escHtml(base + '/')}" />`,
+    `<meta property="og:image" content="${escHtml(gambar)}" />`,
+    `<meta property="og:image:width" content="1200" />`,
+    `<meta property="og:image:height" content="630" />`,
+    `<meta property="og:image:alt" content="${escHtml(judul)}" />`,
+    `<meta property="og:locale" content="id_ID" />`,
+    `<meta name="twitter:card" content="summary_large_image" />`,
+    `<meta name="twitter:title" content="${escHtml(judul)}" />`,
+    `<meta name="twitter:description" content="${escHtml(deskripsi)}" />`,
+    `<meta name="twitter:image" content="${escHtml(gambar)}" />`,
+    `<script type="application/ld+json">${JSON.stringify(ld)}</script>`,
+  ].join('\n    ')
+  if (html.includes('<!--SEO:START-->') && html.includes('<!--SEO:END-->')) {
+    return html.replace(/<!--SEO:START-->[\s\S]*?<!--SEO:END-->/, `<!--SEO:START-->\n    ${blok}\n    <!--SEO:END-->`)
+  }
+  return html
+}
 // SPA fallback - serve index.html for non-API GET routes
 app.use((req, res, next) => {
   if (req.path.startsWith('/api')) return res.status(404).json({ error: 'Not found' })
   if (req.method !== 'GET') return next()
-  res.sendFile(path.join(__dirname, '..', 'dist', 'index.html'))
+  const seo = renderIndexSeo(req)
+  if (seo) return res.type('html').send(seo)
+  res.sendFile(DIST_INDEX)
 })
 
 // Global error handler: cegah crash 500 kosong, kembalikan JSON error yang bisa dibaca frontend
@@ -10025,6 +10235,12 @@ setInterval(async () => {
         // Notifikasi adzan saat masuk waktu sholat (tetap jalan walau hari libur)
         waQueue.queueAdzanReminders(db, { tenantId: t.id, date, time })
       } catch {}
+    }
+    // Notifikasi adzan ke PERANGKAT (HP/tablet) lewat Web Push. Hanya tenant yang
+    // sudah punya pelanggan perangkat yang disisir, jadi loop tenant tidak berat.
+    const adzanPush = require('./adzan-push.cjs')
+    for (const tenantId of adzanPush.tenantBerlangganan(db)) {
+      try { await adzanPush.queueAdzanPush(db, { tenantId, date, time }) } catch {}
     }
   } catch {}
 }, 60 * 1000) // setiap 1 menit

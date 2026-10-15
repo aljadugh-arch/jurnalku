@@ -1,9 +1,10 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { Link } from 'react-router-dom'
-import { Bell, BellRing, MessageSquare, Save, Loader2, AlertTriangle, Volume2, Square, Clock } from 'lucide-react'
+import { Bell, BellRing, MessageSquare, Save, Loader2, AlertTriangle, Volume2, Square, Clock, Smartphone } from 'lucide-react'
 import toast from 'react-hot-toast'
 import api from '../../services/api'
 import Toggle from '../../components/ui/Toggle'
+import { statusPush, aktifkanPush, matikanPush, kirimUjiLewatServer, type StatusPush } from '../../lib/pushNotif'
 
 export default function NotifSettingsPage() {
   const [settings, setSettings] = useState({
@@ -111,6 +112,40 @@ export default function NotifSettingsPage() {
     if (!dipilih.length) return toast.error('Minimal satu waktu harus dipilih')
     setSettings({ ...settings, adzan_waktu: URUT_WAKTU.filter(x => dipilih.includes(x)).join(',') })
   }
+  // ── Notifikasi perangkat (HP/tablet) lewat Web Push ──
+  // Ini kanal yang benar-benar sampai saat aplikasi tertutup: timer di halaman
+  // ditangguhkan begitu tab di-latar/layar dikunci, jadi server yang membangunkan
+  // perangkat. Server menjadwalkannya di server/adzan-push.cjs.
+  const [push, setPush] = useState<StatusPush>({ didukung: false, izin: 'tidak-didukung', terdaftar: false })
+  const [pushSibuk, setPushSibuk] = useState(false)
+  const muatStatusPush = useCallback(async () => { try { setPush(await statusPush()) } catch { /* abaikan */ } }, [])
+  useEffect(() => { void muatStatusPush() }, [muatStatusPush])
+  const aktifkanNotifPerangkat = async () => {
+    setPushSibuk(true)
+    try {
+      const r = await aktifkanPush()
+      if (!r.ok) { toast.error(r.alasan || 'Gagal mengaktifkan notifikasi perangkat'); return }
+      toast.success('Notifikasi perangkat aktif')
+      await muatStatusPush()
+    } catch (e: any) { toast.error(e?.response?.data?.error || e?.message || 'Gagal mengaktifkan notifikasi') }
+    finally { setPushSibuk(false) }
+  }
+  const matikanNotifPerangkat = async () => {
+    setPushSibuk(true)
+    try { await matikanPush(); toast.success('Notifikasi perangkat dimatikan'); await muatStatusPush() }
+    catch { toast.error('Gagal mematikan notifikasi perangkat') }
+    finally { setPushSibuk(false) }
+  }
+  const ujiNotifPerangkat = async () => {
+    setPushSibuk(true)
+    try {
+      const r = await kirimUjiLewatServer()
+      if (r.reason === 'no_subscribers') toast.error('Belum ada perangkat terdaftar. Aktifkan dulu notifikasi di perangkat ini.')
+      else toast.success(`Uji dikirim ke ${r.dikirim} perangkat${r.gagal ? ` (${r.gagal} gagal)` : ''}`)
+    } catch { toast.error('Gagal mengirim uji notifikasi') }
+    finally { setPushSibuk(false) }
+  }
+
   const ujiAdzan = async (waktu: string) => {
     setTesting(true)
     try {
@@ -557,6 +592,61 @@ export default function NotifSettingsPage() {
                 </span>
               )}
             </div>
+          </div>
+        </div>
+        {/* ── Kanal 3: Notifikasi perangkat (HP/tablet) lewat Web Push ── */}
+        <div className="rounded-xl border border-gray-100 bg-gray-50/60 p-3">
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <p className="flex items-center gap-1.5 text-sm font-medium text-gray-700"><Smartphone size={14} /> Notifikasi perangkat (HP/tablet)</p>
+              <p className="mt-0.5 break-words text-xs text-gray-400">
+                Lewat Web Push dari server, jadi adzan tetap muncul di baki notifikasi walau aplikasi ditutup atau layar terkunci — timer di halaman berhenti saat tab dibawa ke latar. Nyalakan sekali di setiap perangkat.
+              </p>
+            </div>
+            <span data-adzan-push-badge="true" className={'shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold ' + (push.terdaftar ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-200 text-gray-600')}>
+              {push.terdaftar ? 'Aktif' : 'Belum aktif'}
+            </span>
+          </div>
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            {!push.terdaftar && (
+              <button
+                type="button"
+                data-adzan-push-aktifkan="true"
+                disabled={pushSibuk || !push.didukung}
+                onClick={aktifkanNotifPerangkat}
+                className="inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
+              >
+                <BellRing size={13} /> Aktifkan di perangkat ini
+              </button>
+            )}
+            {push.terdaftar && (
+              <button
+                type="button"
+                data-adzan-push-uji="true"
+                disabled={pushSibuk}
+                onClick={ujiNotifPerangkat}
+                className="inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
+              >
+                <Bell size={13} /> Kirim uji
+              </button>
+            )}
+            {push.terdaftar && (
+              <button
+                type="button"
+                data-adzan-push-matikan="true"
+                disabled={pushSibuk}
+                onClick={matikanNotifPerangkat}
+                className="inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg bg-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-300 disabled:opacity-50"
+              >
+                Matikan
+              </button>
+            )}
+            {!push.didukung && (
+              <span className="break-words text-xs text-amber-700">Peramban ini belum mendukung notifikasi web. Di iPhone, pasang dulu aplikasinya ke layar utama (iOS 16.4 ke atas).</span>
+            )}
+            {push.didukung && push.izin === 'denied' && (
+              <span className="break-words text-xs text-amber-700">Izin notifikasi diblokir. Buka setelan situs di peramban lalu izinkan notifikasi.</span>
+            )}
           </div>
         </div>
       </div>

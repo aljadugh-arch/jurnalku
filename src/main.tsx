@@ -3,37 +3,37 @@ import { createRoot } from 'react-dom/client'
 import './index.css'
 import App from './App'
 import { applyTheme } from './stores/themeStore'
+import { daftarkanServiceWorker } from './lib/pushNotif'
 
 // Apply dark mode from persisted store before first render
 applyTheme()
 
-// Enable PWA discovery and its service worker only for tenants that opted in.
+// Service worker SELALU didaftarkan (tidak lagi hanya saat PWA lembaga aktif):
+// notifikasi adzan di HP/tablet bergantung padanya — server mengirim Web Push ke
+// service worker, bukan ke halaman, karena halaman ditangguhkan saat tab di-latar.
+void daftarkanServiceWorker()
+
+// Metadata milik lembaga (tema/judul/ikon) dipakai bila PWA lembaga diaktifkan.
+// Manifest tetap tertaut statis di index.html supaya PWABuilder selalu menemukannya.
 async function configurePwa() {
-  let linkEl = document.querySelector('link[rel="manifest"]') as HTMLLinkElement | null
+  const linkEl = document.querySelector('link[rel="manifest"]') as HTMLLinkElement | null
 
   try {
     const response = await fetch('/api/pwa/manifest')
     if (response.status === 204 || !response.ok) {
-      linkEl?.remove()
-      // PWA may be disabled, but favicon remains tenant-scoped and server-backed.
-      const favicons = document.querySelectorAll('link[rel="icon"], link[rel="shortcut icon"]')
-      favicons.forEach(el => { el.setAttribute('href', `/favicon.ico?v=${Date.now()}`) })
+      // Lembaga ini tidak mengaktifkan PWA: pertahankan manifest statis
+      // (/manifest.webmanifest) agar audit PWABuilder tetap menemukan manifest.
+      // Hanya ikon/favicon yang di-scope ke lembaga.
+      const stamp = Date.now()
+      document.querySelectorAll('link[rel="icon"], link[rel="shortcut icon"]')
+        .forEach(el => { el.setAttribute('href', `/favicon.ico?v=${stamp}`) })
       const appleIcon = document.querySelector('link[rel="apple-touch-icon"]')
-      if (appleIcon) appleIcon.setAttribute('href', `/apple-touch-icon.png?v=${Date.now()}`)
-      if ('serviceWorker' in navigator) {
-        const registrations = await navigator.serviceWorker.getRegistrations()
-        await Promise.all(registrations.map(registration => registration.unregister()))
-      }
+      if (appleIcon) appleIcon.setAttribute('href', `/apple-touch-icon.png?v=${stamp}`)
       return
     }
 
     const data = await response.json()
-    if (!linkEl) {
-      linkEl = document.createElement('link')
-      linkEl.rel = 'manifest'
-      document.head.appendChild(linkEl)
-    }
-    linkEl.href = '/api/pwa/manifest'
+    if (linkEl) linkEl.href = '/api/pwa/manifest'
     const tc = document.querySelector('meta[name="theme-color"]') as HTMLMetaElement | null
     if (tc && data.theme_color) tc.content = data.theme_color
     if (data.name) document.title = data.name
@@ -43,11 +43,6 @@ async function configurePwa() {
       : baseIconUrl
     const favicons = document.querySelectorAll('link[rel="icon"], link[rel="shortcut icon"], link[rel="apple-touch-icon"]')
     favicons.forEach(el => { el.setAttribute('href', iconUrl) })
-
-    if ('serviceWorker' in navigator) {
-      const registration = await navigator.serviceWorker.register('/sw.js', { updateViaCache: 'none' })
-      await registration.update()
-    }
   } catch {
     // Keep the application usable when PWA discovery is temporarily unavailable.
   }

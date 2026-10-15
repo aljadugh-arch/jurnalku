@@ -55,15 +55,18 @@ test('wali kelas tidak lagi diduplikasi di kelompok jadwal atau navigasi mobile 
 test('regenerate manifest memakai base URL API dengan benar dan manifest memakai URL stabil', () => {
   assert.match(settings, /api\.post\('\/settings\/pwa-manifest'/)
   assert.doesNotMatch(settings, /api\.post\('\/api\/settings\/pwa-manifest'/)
-  assert.doesNotMatch(indexHtml, /rel="manifest"/)
+  // Kontrak diperbarui: manifest kini ditautkan STATIS (PWABuilder membaca HTML
+  // mentah) lalu href-nya dialihkan ke manifest lembaga. Tidak lagi membuat
+  // <link> lewat JS, dan tidak lagi menghapus tautan atau meng-unregister worker.
+  assert.match(indexHtml, /<link id="pwa-manifest" rel="manifest" href="\/manifest\.json" \/>/)
   assert.doesNotMatch(indexHtml, /navigator\.serviceWorker\.register/)
-  assert.match(main, /document\.createElement\('link'\)/)
-  assert.match(main, /linkEl\.rel = 'manifest'/)
+  assert.doesNotMatch(main, /document\.createElement\('link'\)/)
   assert.match(main, /linkEl\.href = '\/api\/pwa\/manifest'/)
-  assert.match(main, /navigator\.serviceWorker\.register\('\/sw\.js', \{ updateViaCache: 'none' \}\)/)
-  assert.match(main, /navigator\.serviceWorker\.getRegistrations\(\)/)
-  assert.match(main, /registration\.unregister\(\)/)
-  assert.match(main, /linkEl\?\.remove\(\)/)
+  assert.match(main, /daftarkanServiceWorker\(\)/)
+  assert.doesNotMatch(main, /linkEl\?\.remove\(\)/)
+  const pushNotif = fs.readFileSync(path.join(__dirname, '..', 'src/lib/pushNotif.ts'), 'utf8')
+  assert.match(pushNotif, /navigator\.serviceWorker\.register\('\/sw\.js', \{ updateViaCache: 'none' \}\)/)
+  assert.match(pushNotif, /reg\.update\(\)/)
   assert.doesNotMatch(main, /URL\.createObjectURL/)
   assert.doesNotMatch(serviceWorker, /manifest\.webmanifest/)
   assert.match(serviceWorker, /pathname\.startsWith\('\/api\/'\)[^\n]*return/)

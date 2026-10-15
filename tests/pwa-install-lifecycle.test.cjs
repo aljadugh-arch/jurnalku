@@ -19,13 +19,17 @@ test('PWA install prompt tidak menggantung setelah prompt ditutup atau gagal', (
   assert.match(prompt, /window\.setTimeout\(/)
 })
 
-test('registrasi PWA menunggu manifest, memperbarui worker, dan memakai scope tenant', () => {
-  assert.doesNotMatch(html, /rel="manifest"/)
-  assert.match(main, /document\.createElement\('link'\)/)
-  assert.match(main, /linkEl\.rel = 'manifest'/)
+test('manifest tertaut statis (untuk PWABuilder) DAN dilempar ke manifest lembaga saat PWA aktif', () => {
+  // Kontrak diperbarui: manifest sekarang ditautkan STATIS di index.html supaya
+  // PWABuilder/Lighthouse menemukannya pada HTML mentah — bukan hanya disuntik JS.
+  assert.match(html, /<link id="pwa-manifest" rel="manifest" href="\/manifest\.json" \/>/)
   assert.match(main, /linkEl\.href = '\/api\/pwa\/manifest'/)
-  assert.match(main, /navigator\.serviceWorker\.register\('\/sw\.js', \{ updateViaCache: 'none' \}\)/)
-  assert.match(main, /registration\.update\(\)/)
+  assert.match(main, /daftarkanServiceWorker\(\)/)
+  assert.doesNotMatch(main, /linkEl\?\.remove\(\)/, 'manifest statis tidak boleh dihapus')
+  // Service worker didaftarkan dari helper supaya selalu aktif (syarat notifikasi push).
+  const push = read('src/lib/pushNotif.ts')
+  assert.match(push, /navigator\.serviceWorker\.register\('\/sw\.js', \{ updateViaCache: 'none' \}\)/)
+  assert.match(push, /reg\.update\(\)/)
   assert.match(server, /start_url: req\.isRegisteredTenantHost \? '\/login' : '\/'/)
   assert.match(server, /scope: '\/'/)
 })
@@ -33,9 +37,12 @@ test('registrasi PWA menunggu manifest, memperbarui worker, dan memakai scope te
 test('ikon PWA dan favicon memakai format serta ukuran deklarasi yang benar', () => {
   assert.match(html, /rel="icon" type="image\/png" sizes="64x64" href="\/favicon\.ico"/)
   assert.match(html, /rel="icon" type="image\/svg\+xml" href="\/favicon\.svg"/)
-  assert.match(html, /rel="apple-touch-icon" sizes="192x192" href="\/apple-touch-icon\.png"/)
-  assert.deepEqual(manifest.icons.map(icon => icon.sizes), ['256x256', '192x192'])
-  assert.ok(manifest.icons.every(icon => icon.type === 'image/png' && icon.purpose === 'any maskable'))
+  assert.match(html, /rel="apple-touch-icon" sizes="180x180" href="\/apple-touch-icon\.png"/)
+  // Kontrak diperbarui untuk Play Store/PWABuilder: 512 wajib ada dan tujuan ikon
+  // harus dipisah ('any' vs 'maskable'); entri gabungan 'any maskable' tidak valid.
+  assert.deepEqual(manifest.icons.map(icon => icon.sizes), ['192x192', '512x512', '512x512'])
+  assert.ok(manifest.icons.every(icon => icon.type === 'image/png'))
+  assert.ok(manifest.icons.some(icon => icon.purpose === 'any') && manifest.icons.some(icon => icon.purpose === 'maskable'))
   assert.match(server, /Cache-Control': 'no-cache, must-revalidate'/)
 })
 

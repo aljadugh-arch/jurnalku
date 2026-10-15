@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { BellRing, Volume2, VolumeX, X } from 'lucide-react'
 import api from '../services/api'
 import { useAuthStore } from '../stores/authStore'
+import { tampilkanNotifikasiLokal } from '../lib/pushNotif'
 
 const WAKTU = ['subuh', 'dzuhur', 'ashar', 'maghrib', 'isya'] as const
 const LABEL: Record<string, string> = {
@@ -108,6 +109,13 @@ export default function AdzanNotifier() {
   const bunyikan = useCallback(async (waktu: string, jam: string) => {
     setBunyi({ waktu, jam })
     setMatikan(false)
+    // Notifikasi di baki sistem (HP/tablet) — supaya pesan tetap terlihat walau
+    // aplikasi sedang di latar, dan tetap sampai bila autoplay suara diblokir.
+    void tampilkanNotifikasiLokal(
+      `Waktu ${LABEL[waktu] || waktu} telah masuk`,
+      `${jadwal?.kota ? jadwal.kota + ' · ' : ''}pukul ${jam} WIB`,
+      { tag: `adzan-${tanggalWib()}-${waktu}`, url: '/' },
+    )
     const a = audioRef.current
     if (!a) return
     try {
@@ -118,7 +126,9 @@ export default function AdzanNotifier() {
       // Autoplay diblokir: tampilkan panel dengan tombol putar manual.
       setTerkunci(true)
     }
-  }, [])
+    // `jadwal?.kota` ikut dihitung: baru terisi setelah /jadwal-sholat selesai,
+    // dan efek pemeriksa harus ikut berjalan saat itu supaya tidak melewatkan adzan.
+  }, [jadwal?.kota])
 
   /* ── pemeriksa waktu tiap 20 detik ── */
   useEffect(() => {
@@ -158,8 +168,20 @@ export default function AdzanNotifier() {
     }
 
     periksa()
+    // Di HP/tablet timer ditangguhkan begitu tab di-latar atau layar dikunci,
+    // jadi pemeriksaan diulang SEGERA saat aplikasi kembali ke depan — tanpa ini
+    // adzan yang jatuh selagi aplikasi di latar tidak pernah diperiksa sama sekali.
+    const saatKembali = () => { if (document.visibilityState !== 'hidden') periksa() }
+    document.addEventListener('visibilitychange', saatKembali)
+    window.addEventListener('focus', saatKembali)
+    window.addEventListener('pageshow', saatKembali)
     const t = setInterval(periksa, 20000)
-    return () => clearInterval(t)
+    return () => {
+      clearInterval(t)
+      document.removeEventListener('visibilitychange', saatKembali)
+      window.removeEventListener('focus', saatKembali)
+      window.removeEventListener('pageshow', saatKembali)
+    }
   }, [staf, jadwal, conf, bunyikan])
 
   if (!staf) return null

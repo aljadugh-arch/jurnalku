@@ -33,10 +33,12 @@ test('CTA Lihat Demo memiliki anchor yang digulir dan difokuskan setelah navigas
 })
 
 test('manifest PWA yang dinonaktifkan tidak menghasilkan request browser 404', () => {
-  assert.doesNotMatch(index, /<link rel="manifest"/)
-  assert.match(main, /document\.createElement\('link'\)/)
-  assert.match(main, /linkEl\.rel = 'manifest'/)
-  assert.match(main, /document\.head\.appendChild\(linkEl\)/)
+  // Kontrak diperbarui: /manifest.webmanifest kini berkas statis yang SELALU ada,
+  // jadi tidak mungkin 404; manifest per-lembaga tetap 204 saat PWA dimatikan.
+  assert.match(index, /<link id="pwa-manifest" rel="manifest" href="\/manifest\.json" \/>/)
+  assert.ok(fs.existsSync(path.join(__dirname, '..', 'public/manifest.webmanifest')))
+  assert.match(main, /daftarkanServiceWorker\(\)/)
+  assert.doesNotMatch(main, /document\.head\.appendChild\(linkEl\)/)
   assert.doesNotMatch(server, /if \(s\.pwa_enabled === 0\) return res\.status\(404\)\.json\(\{ error: 'PWA dinonaktifkan' \}\)/)
   assert.match(server, /if \(s\.pwa_enabled === 0\) return res\.status\(204\)\.end\(\)/)
   assert.match(main, /response\.status === 204/)

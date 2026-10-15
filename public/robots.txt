@@ -1,0 +1,8 @@
+User-agent: *
+Allow: /
+Disallow: /api/
+Disallow: /admin/
+Disallow: /guru/
+Disallow: /siswa/
+Disallow: /wali/
+Sitemap: https://jurnalmadrasah.web.id/sitemap.xml
