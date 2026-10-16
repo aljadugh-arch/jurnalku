@@ -128,13 +128,13 @@ export default function Sidebar() {
   // Menggunakan label matching karena menuItems sudah di-filter oleh pathEnabled().
   const adminMenuGroups: Array<{ name: string; labels: string[] }> = [
     { name: 'DASHBOARD', labels: ['Dashboard', 'Monitoring Data', 'Posting'] },
-    { name: 'MASTER DATA', labels: ['Data Siswa', 'Data GTK', 'Mata Pelajaran', 'Rombongan Belajar', 'Tahun Ajaran', 'Manajemen Lembaga', 'Manajemen Yayasan', 'Integrasi Se-Yayasan', 'Kartu RFID'] },
+    { name: 'MASTER DATA', labels: ['Data Siswa', 'PPDB', 'Data GTK', 'Mata Pelajaran', 'Rombongan Belajar', 'Tahun Ajaran', 'Manajemen Lembaga', 'Manajemen Yayasan', 'Integrasi Se-Yayasan', 'Kartu RFID'] },
     { name: 'AKADEMIK', labels: ['Kalender KBM', 'Jadwal Pelajaran', 'Kelola Jadwal', 'Jadwal Ujian', 'Pengajar', 'Wali Kelas', 'Absensi', 'Ceklok & Rekap', 'Absensi Saya', 'Jurnal Mengajar', 'Supervisi', 'Program Belajar', 'Erkam'] },
     { name: 'PENILAIAN & EVALUASI', labels: ['Ujian & Bank Soal', 'Bank Soal', 'Kisi-kisi Soal', 'Paket Ujian', 'Ledger Nilai', 'Rekap Nilai per Mapel', 'Rapor Siswa', 'Catatan Kepribadian', 'Penilaian'] },
     { name: 'ADMINISTRASI', labels: ['Administrasi Surat'] },
     { name: 'LAYANAN', labels: ['Perpustakaan Digital', 'Generator AI Guru', 'Beasiswa'] },
     { name: 'KEUANGAN & OPERASIONAL', labels: ['Keuangan', 'E-Kantin & Cashless', 'Buku Kas', 'Bendahara', 'E-Kantin'] },
-    { name: 'KOMUNIKASI', labels: ['WhatsApp'] },
+    { name: 'KOMUNIKASI', labels: ['WhatsApp', 'WhatsApp Platform'] },
     { name: 'PENGATURAN & SISTEM', labels: ['Pengaturan', 'SMTP & IMAP', 'Manajemen Pengguna', 'Backup & Restore', 'Manajemen Data', 'Kelola Website', 'REST API Developer', 'Manajemen Lembaga', 'Manajemen Yayasan'] },
   ]
 

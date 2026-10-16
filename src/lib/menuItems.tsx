@@ -20,6 +20,7 @@ export const adminMenuItems: MenuItem[] = [
   { label: 'Monitoring Data', icon: <Activity size={20} />, path: '/admin/monitoring' },
   { label: 'Posting', icon: <FileText size={20} />, path: '/admin/posting' },
   { label: 'Data Siswa', icon: <GraduationCap size={20} />, path: '/admin/siswa' },
+  { label: 'PPDB', icon: <ClipboardList size={20} />, path: '/admin/ppdb' },
   { label: 'Data GTK', icon: <Users size={20} />, path: '/admin/gtk' },
   { label: 'Mata Pelajaran', icon: <BookOpen size={20} />, path: '/admin/mapel' },
   { label: 'Rombongan Belajar', icon: <Layers size={20} />, path: '/admin/rombel' },
@@ -169,6 +170,7 @@ export const kepalaMenuItems: MenuItem[] = [
   { label: 'Ceklok & Rekap', icon: <MapPin size={20} />, path: '/admin/ceklok' },
   { label: 'Absensi Saya', icon: <UserCheck size={20} />, path: '/admin/absensi-saya' },
   { label: 'Data Siswa', icon: <GraduationCap size={20} />, path: '/admin/siswa' },
+  { label: 'PPDB', icon: <ClipboardList size={20} />, path: '/admin/ppdb' },
   { label: 'Data GTK', icon: <Users size={20} />, path: '/admin/gtk' },
   { label: 'Rapor Siswa', icon: <FileText size={20} />, path: '/admin/rapor' },
   { label: 'Catatan Kepribadian', icon: <ScrollText size={20} />, path: '/admin/catatan-kepribadian' },
@@ -226,6 +228,16 @@ export const superAdminMenuItems: MenuItem[] = [
   { label: 'Manajemen Pengguna', icon: <UserCheck size={20} />, path: '/admin/users' },
   { label: 'Backup & Restore', icon: <DatabaseBackup size={20} />, path: '/admin/backup-restore' },
   { label: 'Manajemen Data', icon: <Database size={20} />, path: '/admin/manajemen-data' },
+  // WhatsApp platform: sesi tenant `default` = nomor superadmin. Tanpa menu ini
+  // superadmin tidak punya cara memindai QR untuk notifikasi platform.
+  {
+    label: 'WhatsApp Platform', icon: <MessageSquare size={20} />,
+    children: [
+      { label: 'Sambungkan WA Platform', path: '/admin/wa-gateway' },
+      { label: 'Notifikasi Otomatis', path: '/admin/notif-settings' },
+    ]
+  },
+  { label: 'SMTP & IMAP', icon: <Mail size={20} />, path: '/admin/smtp' },
   { label: 'REST API Developer', icon: <Code2 size={20} />, path: '/admin/developer-api' },
   { label: 'Pengaturan', icon: <Settings size={20} />, path: '/admin/settings' },
 ]

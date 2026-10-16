@@ -26,6 +26,7 @@ const { detectJadwalConflicts } = require('./jadwal-conflicts.cjs')
 const { importJadwalRows } = require('./jadwal-import.cjs')
 const { setupPortalCashless, registerPortalRoutes, registerKantinRoutes, selectPenilaianStudentId, normalizeStoredImageDataUrl } = require('./portal-cashless.cjs')
 const { setupPaymentGateway, registerPaymentGatewayRoutes } = require('./payment-gateway-routes.cjs')
+const { registerRoutes: registerPpdbRoutes, setupPpdbTables } = require('./ppdb.cjs')
 const { buatLayananSmtp } = require('./smtp-tenant.cjs')
 const { setupAdministrasi, registerAdministrasiRoutes } = require('./administrasi-routes.cjs')
 const { setupSupervisi, registerSupervisiRoutes } = require('./supervisi-routes.cjs')
@@ -2145,6 +2146,8 @@ registerFinanceExcelRoutes(app, db, { authorize: requireRole('bendahara', 'admin
 registerPortalRoutes(app, db, { auth: authMiddleware, requireRole, uuid: uuidv4, bcrypt })
 registerKantinRoutes(app, db, { requireRole, uuid: uuidv4, bcrypt })
 registerPaymentGatewayRoutes(app, db, { requireRole, hostPermintaan })
+setupPpdbTables(db)
+registerPpdbRoutes(app, db, { requireRole, authMiddleware })
 
 // ---- SMTP/IMAP per lembaga ----
 const smtpLayanan = buatLayananSmtp(db, { rahasia: JWT_SECRET, logger: console })
@@ -2225,6 +2228,12 @@ app.get('/api/bendahara/dashboard', BENDAHARA, (req,res) => {
 app.get('/api/panduan', (_req, res) => {
   try { res.json({ kelompok: require('./panduan-data.cjs').KELOMPOK }) }
   catch (e) { res.status(500).json({ error: e.message }) }
+})
+
+// Daftar domain kanonik platform (publik) — dipakai halaman registrasi agar
+// calon pengguna bisa memilih alamat subdomain lembaganya.
+app.get('/api/tenant/domains', (_req, res) => {
+  res.json({ domains: BASE_DOMAINS.map(d => ({ domain: d })), utama: BASE_DOMAIN })
 })
 
 app.get('/api/health', (_req, res) => {
@@ -2833,7 +2842,7 @@ app.get('/api/auth/me/foto', authMiddleware, (req, res) => {
 })
 
 app.post('/api/auth/register', accountLimiter, (req, res) => {
-  const { nama_lembaga, nama, email, password, no_hp, domain_type, custom_domain, slug: slugInput } = req.body
+  const { nama_lembaga, nama, email, password, no_hp, domain_type, custom_domain, slug: slugInput, base_domain } = req.body
   const vErr = vRegister(req.body); if (vErr) return res.status(400).json({ error: vErr })
   const exists = db.prepare('SELECT id FROM users WHERE email = ?').get(email)
   if (exists) return res.status(400).json({ error: 'Email sudah terdaftar' })
@@ -2862,10 +2871,15 @@ app.post('/api/auth/register', accountLimiter, (req, res) => {
     domainStatus = 'pending' // menunggu DNS resolve + provisioning
   }
 
-  // base_domain: domain kanonik untuk branding link tenant baru. Diambil dari host
-  // request (domain publik tempat user mendaftar), fallback ke BASE_DOMAIN utama.
+  // base_domain: domain kanonik untuk branding link tenant baru.
+  // Prioritas: pilihan sah dari klien (dropdown) > host request > domain utama.
+  // Hanya domain yang ADA di BASE_DOMAINS yang diterima — mencegah klien
+  // menyuntikkan domain asing sebagai basis subdomain.
   const regHost = (req.headers['host'] || req.headers['x-forwarded-host'] || '').split(':')[0].toLowerCase()
-  const regBaseDomain = BASE_DOMAINS.find(bd => regHost === bd || regHost.endsWith('.' + bd)) || BASE_DOMAIN
+  const mintaBase = String(base_domain || '').trim().toLowerCase()
+  const regBaseDomain = (mintaBase && BASE_DOMAINS.includes(mintaBase))
+    ? mintaBase
+    : (BASE_DOMAINS.find(bd => regHost === bd || regHost.endsWith('.' + bd)) || BASE_DOMAIN)
 
   db.prepare("INSERT INTO tenants (id, slug, nama, email, domain_custom, domain_status, plan, trial_ends_at, base_domain) VALUES (?,?,?,?,?,?,'trial',datetime('now','+1 month'),?)")
     .run(tenantId, slug, nama_lembaga || nama, email, domainVal, domainStatus, regBaseDomain)
@@ -2900,8 +2914,7 @@ app.post('/api/auth/register', accountLimiter, (req, res) => {
   // Auto-login: return token + user so FE can go straight to dashboard.
   const token = jwt.sign({ id, role: 'admin', nama, email, tenant_id: tenantId }, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN })
   const reqHost = (req.headers['host'] || req.headers['x-forwarded-host'] || '').split(':')[0]
-  const subdomainBase = reqHost === 'jurnalmadrasah.web.id' || reqHost.endsWith('.jurnalmadrasah.web.id')
-    ? 'jurnalmadrasah.web.id' : 'jurnal.cc.cd'
+  const subdomainBase = regBaseDomain
   const appUrl = domainVal
     ? `https://${domainVal}`
     : `https://${slug}.${subdomainBase}`

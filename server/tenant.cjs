@@ -13,11 +13,19 @@
 
 const BASE_DOMAIN = process.env.BASE_DOMAIN || 'jurnal.cc.cd'
 const customDomain = require('./custom-domain.cjs')
-// Platform kini menerima registrasi/subdomain di lebih dari satu domain kanonik
-// (jurnal.cc.cd dan jurnalmadrasah.web.id) yang berbagi satu database tenant.
-// BASE_DOMAIN tetap dipertahankan untuk backward-compat (mis. link admin@slug.jurnal.cc.cd),
-// BASE_DOMAINS adalah daftar semua domain kanonik yang sah sebagai basis subdomain-per-tenant.
-const BASE_DOMAINS = (process.env.BASE_DOMAINS || `${BASE_DOMAIN},jurnalmadrasah.web.id`)
+// Platform menerima registrasi/subdomain di lebih dari satu domain kanonik yang
+// berbagi satu database tenant. Daftar ini menentukan domain mana yang SAH
+// sebagai basis subdomain-per-tenant (mis. slug.<domain>).
+// BASE_DOMAIN tetap dipertahankan untuk backward-compat (link admin@slug.<utama>).
+// Tambahkan domain baru di sini SETELAH DNS wildcard-nya mengarah ke server ini.
+const DOMAIN_BAWAAN = [
+  'jurnal.cc.cd',
+  'jurnalmadrasah.web.id',
+  'jurnalku.biz.id',
+  'idjurnal.my.id',
+  'idjurnal.web.id',
+]
+const BASE_DOMAINS = (process.env.BASE_DOMAINS || DOMAIN_BAWAAN.join(','))
   .split(',').map(d => d.trim().toLowerCase()).filter(Boolean)
 
 /**

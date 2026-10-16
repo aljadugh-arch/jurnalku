@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { School, Eye, EyeOff, Globe, Link2, CheckCircle, MessageCircle, Mail, Loader2, PartyPopper, ArrowRight } from 'lucide-react'
 import toast from 'react-hot-toast'
@@ -19,12 +19,26 @@ type HasilRegistrasi = {
 }
 
 export default function RegisterPage() {
+  // Domain basis subdomain: daftar dari server (satu sumber dengan BASE_DOMAINS),
+  // fallback ke domain host saat ini bila endpoint belum termuat.
+  const [baseDomains, setBaseDomains] = useState<string[]>([])
   const SUBDOMAIN_BASE = useMemo(() => {
     const host = window.location.hostname
+    // Utamakan domain yang sedang dibuka, bila termasuk daftar sah.
+    const cocok = baseDomains.find(d => host === d || host.endsWith('.' + d))
+    if (cocok) return cocok
     if (host === 'jurnalmadrasah.web.id' || host.endsWith('.jurnalmadrasah.web.id')) return 'jurnalmadrasah.web.id'
-    return 'jurnal.cc.cd'
-  }, [])
+    return baseDomains[0] || 'jurnal.cc.cd'
+  }, [baseDomains])
+  const [pilihBase, setPilihBase] = useState('')
   const navigate = useNavigate()
+
+  // Ambil daftar domain kanonik dari server (satu sumber dengan BASE_DOMAINS).
+  useEffect(() => {
+    api.get('/tenant/domains')
+      .then(({ data }) => { if (Array.isArray(data?.domains) && data.domains.length) setBaseDomains(data.domains.map((d: any) => d.domain)) })
+      .catch(() => { /* fallback ke domain host */ })
+  }, [])
   const login = useAuthStore(s => s.login)
   const [domainMode, setDomainMode] = useState<DomainMode>('subdomain')
   const [slugTouched, setSlugTouched] = useState(false)
@@ -85,7 +99,7 @@ export default function RegisterPage() {
       }
       if (domainMode === 'subdomain') {
         payload.slug = form.slug
-        payload.base_domain = SUBDOMAIN_BASE
+        payload.base_domain = pilihBase || SUBDOMAIN_BASE
       } else {
         // `domain_type: 'custom'` WAJIB dikirim — tanpa ini server mengabaikan
         // `domain_custom` dan lembaga diam-diam jatuh ke subdomain platform.
@@ -266,11 +280,20 @@ export default function RegisterPage() {
                       placeholder="nama-lembaga"
                       className="min-w-0 flex-1 px-3 py-2 text-sm outline-none"
                     />
-                    <span className="px-3 py-2 bg-gray-50 text-gray-400 text-sm border-l whitespace-nowrap">{`.${SUBDOMAIN_BASE}`}</span>
+                    <select
+                      value={pilihBase || SUBDOMAIN_BASE}
+                      onChange={e => setPilihBase(e.target.value)}
+                      className="px-2 py-2 bg-gray-50 text-gray-600 text-sm border-l outline-none max-w-[150px] whitespace-nowrap"
+                      title="Pilih domain lembaga"
+                    >
+                      {(baseDomains.length ? baseDomains : [SUBDOMAIN_BASE]).map(d => (
+                        <option key={d} value={d}>.{d}</option>
+                      ))}
+                    </select>
                   </div>
                   {form.slug && (
                     <p className="text-xs text-primary mt-1">
-                      Akses: {`https://${form.slug}.${SUBDOMAIN_BASE}`}
+                      Akses: {`https://${form.slug}.${pilihBase || SUBDOMAIN_BASE}`}
                     </p>
                   )}
                 </div>

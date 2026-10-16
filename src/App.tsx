@@ -61,6 +61,8 @@ const CashlessPage = lazy(() => import('./pages/admin/CashlessPage'))
 const BackupRestorePage = lazy(() => import('./pages/admin/BackupRestorePage'))
 const ManajemenDataPage = lazy(() => import('./pages/admin/ManajemenDataPage'))
 const SmtpSettingsPage = lazy(() => import('./pages/admin/SmtpSettingsPage'))
+const PpdbPage = lazy(() => import('./pages/admin/PpdbPage'))
+const PpdbPublikPage = lazy(() => import('./pages/PpdbPublikPage'))
 const CekLokAdminPage = lazy(() => import('./pages/admin/CekLokAdminPage'))
 const GuruAbsensiPage = lazy(() => import('./pages/guru/GuruAbsensiPage'))
 const BendaharaDashboard = lazy(() => import('./pages/admin/BendaharaDashboard'))
@@ -194,6 +196,7 @@ export default function App() {
         <Route path="/register" element={<RegisterPage />} />
         <Route path="/forgot-password" element={<ForgotPasswordPage />} />
         <Route path="/panduan" element={<PanduanPage />} />
+        <Route path="/ppdb" element={<PpdbPublikPage />} />
 
         {/* Admin Routes */}
         <Route path="/admin" element={
@@ -291,6 +294,9 @@ export default function App() {
           } />
           <Route path="smtp" element={
             <ProtectedRoute allowedRoles={['admin', 'super_admin']}><SmtpSettingsPage /></ProtectedRoute>
+          } />
+          <Route path="ppdb" element={
+            <ProtectedRoute allowedRoles={['admin', 'super_admin', 'operator', 'tata_usaha', 'tu', 'kepala']}><PpdbPage /></ProtectedRoute>
           } />
           <Route path="ceklok" element={<CekLokAdminPage />} />
           <Route path="absensi-saya" element={<GuruAbsensiPage />} />
