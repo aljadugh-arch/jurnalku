@@ -49,7 +49,8 @@ const kepalaMenuItems: MenuItem[] = [
   { label: 'Catatan Kepribadian', icon: <NotebookPen size={20} />, path: '/admin/catatan-kepribadian' },
   { label: 'Rombongan Belajar', icon: <Layers size={20} />, path: '/admin/rombel' },
   { label: 'Jurnal Mengajar', icon: <ClipboardList size={20} />, path: '/admin/jurnal' },
-  { label: 'Supervisi Guru', icon: <ClipboardCheck size={20} />, path: '/admin/supervisi' },
+  { label: 'Supervisi', icon: <ClipboardCheck size={20} />, path: '/admin/supervisi' },
+  { label: 'Administrasi Surat', icon: <NotebookPen size={20} />, path: '/admin/administrasi' },
   { label: 'Perpustakaan Digital', icon: <BookOpen size={20} />, path: '/admin/perpustakaan' },
   {
     label: 'Absensi', icon: <UserCheck size={20} />,
@@ -126,8 +127,9 @@ export default function Sidebar() {
   const adminMenuGroups: Array<{ name: string; labels: string[] }> = [
     { name: 'DASHBOARD', labels: ['Dashboard', 'Monitoring Data', 'Posting'] },
     { name: 'MASTER DATA', labels: ['Data Siswa', 'Data GTK', 'Mata Pelajaran', 'Rombongan Belajar', 'Tahun Ajaran', 'Manajemen Lembaga', 'Manajemen Yayasan', 'Integrasi Se-Yayasan', 'Kartu RFID'] },
-    { name: 'AKADEMIK', labels: ['Kalender KBM', 'Jadwal Pelajaran', 'Kelola Jadwal', 'Jadwal Ujian', 'Pengajar', 'Wali Kelas', 'Absensi', 'Ceklok & Rekap', 'Absensi Saya', 'Jurnal Mengajar', 'Supervisi Guru', 'Erkam'] },
+    { name: 'AKADEMIK', labels: ['Kalender KBM', 'Jadwal Pelajaran', 'Kelola Jadwal', 'Jadwal Ujian', 'Pengajar', 'Wali Kelas', 'Absensi', 'Ceklok & Rekap', 'Absensi Saya', 'Jurnal Mengajar', 'Supervisi', 'Erkam'] },
     { name: 'PENILAIAN & EVALUASI', labels: ['Ujian & Bank Soal', 'Bank Soal', 'Kisi-kisi Soal', 'Paket Ujian', 'Ledger Nilai', 'Rekap Nilai per Mapel', 'Rapor Siswa', 'Catatan Kepribadian', 'Penilaian'] },
+    { name: 'ADMINISTRASI', labels: ['Administrasi Surat'] },
     { name: 'LAYANAN', labels: ['Perpustakaan Digital', 'Generator AI Guru', 'Beasiswa'] },
     { name: 'KEUANGAN & OPERASIONAL', labels: ['Keuangan', 'E-Kantin & Cashless', 'Buku Kas', 'Bendahara', 'E-Kantin'] },
     { name: 'KOMUNIKASI', labels: ['WhatsApp'] },

@@ -24,6 +24,8 @@ const { detectJadwalConflicts } = require('./jadwal-conflicts.cjs')
 const { importJadwalRows } = require('./jadwal-import.cjs')
 const { setupPortalCashless, registerPortalRoutes, registerKantinRoutes, selectPenilaianStudentId, normalizeStoredImageDataUrl } = require('./portal-cashless.cjs')
 const { setupPaymentGateway, registerPaymentGatewayRoutes } = require('./payment-gateway-routes.cjs')
+const { setupAdministrasi, registerAdministrasiRoutes } = require('./administrasi-routes.cjs')
+const { setupSupervisi, registerSupervisiRoutes } = require('./supervisi-routes.cjs')
 const { startPaymentPoller } = require('./payment-poller.cjs')
 const waQueue = require('./wa-queue.cjs')
 const notificationMonitor = require('./notification-monitor.cjs')
@@ -1227,6 +1229,9 @@ setupAiConfigTables(db)
 migrateTenantSettings(db)
 // Payment gateway QRIS: tabel konfigurasi + intent, dan satu token webhook per lembaga.
 setupPaymentGateway(db)
+// Menu Administrasi (surat-menyurat) + Supervisi kepala lembaga.
+setupAdministrasi(db)
+setupSupervisi(db)
 
 // Sesi kelas lama memiliki FK ke tabel jadwal reguler, sedangkan jadwal ujian
 // memakai tabel terpisah. Rebuild satu kali agar keduanya dapat direferensikan
@@ -2047,6 +2052,8 @@ registerFinanceExcelRoutes(app, db, { authorize: requireRole('bendahara', 'admin
 registerPortalRoutes(app, db, { auth: authMiddleware, requireRole, uuid: uuidv4, bcrypt })
 registerKantinRoutes(app, db, { requireRole, uuid: uuidv4, bcrypt })
 registerPaymentGatewayRoutes(app, db, { requireRole, hostPermintaan })
+registerAdministrasiRoutes(app, db, { requireRole })
+registerSupervisiRoutes(app, db, { requireRole })
 const backupScheduler = registerBackupRoutes(app, db, { requireRole, uuid: uuidv4, mediaRoot: UPLOAD_DIR })
 const BEASISWA_ROLES = requireRole('admin', 'super_admin', 'bendahara')
 const BEASISWA_SELECT = `SELECT b.*, s.nama siswa_nama, s.nis siswa_nis
@@ -7130,7 +7137,7 @@ app.post('/api/absensi-siswa', STAFF, (req, res) => {
   const result = writeDailyAttendanceSession(db, {
     id: uuidv4(), tenantId: req.tenantId, siswaId: siswa_id, rombelId: rombel_id || null,
     tanggal, status, waktu: waktu_absen || null, metode: metode || 'manual',
-    keterangan: keterangan || '', jenis: normalizedJenis, overwrite: true,
+    keterangan: keterangan || '', jenis: normalizedJenis, sumber: 'manual',
   })
   if (!result.already) sendAbsensiNotifToWali(siswa_id, normalizedJenis === 'pulang' ? `${status} (pulang)` : status, tanggal).catch(() => {})
   res.json(result)
@@ -7158,7 +7165,7 @@ app.post('/api/absensi-siswa/bulk', STAFF, (req, res) => {
     const result = writeDailyAttendanceSession(db, {
       id: uuidv4(), tenantId: req.tenantId, siswaId: d.siswa_id, rombelId: rombel_id || null,
       tanggal, status: d.status, waktu: d.waktu_absen || null, metode: d.metode || 'manual',
-      keterangan: d.keterangan || '', jenis: isPulang ? 'pulang' : 'masuk', overwrite: true,
+      keterangan: d.keterangan || '', jenis: isPulang ? 'pulang' : 'masuk', sumber: 'manual',
     })
     if (result.already) { already++; continue }
     count++
@@ -7185,7 +7192,7 @@ app.post('/api/absensi-siswa/bulk-range', STAFF, (req, res) => {
     for (const x of siswa) {
       const result = writeDailyAttendanceSession(db, {
         id: uuidv4(), tenantId: req.tenantId, siswaId: x.id, rombelId: rombel_id,
-        tanggal, status: status || 'hadir', metode: 'batch-range', jenis: normalizedJenis,
+        tanggal, status: status || 'hadir', metode: 'batch-range', jenis: normalizedJenis, sumber: 'manual',
       })
       if (result.already) already++
       else count++
@@ -7346,7 +7353,7 @@ app.post('/api/absensi-siswa/qr-scan', STAFF, (req, res) => {
   const normalizedJenis = sesi === 'pulang' ? 'pulang' : 'masuk'
   const result = writeDailyAttendanceSession(db, {
   id: uuidv4(), tenantId: req.tenantId, siswaId: siswa.id, rombelId: siswa.rombel_id,
-  tanggal, status: 'hadir', waktu, metode: 'qr', jenis: normalizedJenis,
+  tanggal, status: 'hadir', waktu, metode: 'qr', jenis: normalizedJenis, sumber: 'scan',
   })
   // Both sessions are routed through the same first-writer-wins helper; a pulang-only row keeps masuk empty.
   const payload = { siswa: qrSiswaPayload(db, siswa, req.tenantId), waktu, sesi: normalizedJenis }
@@ -7384,7 +7391,7 @@ app.post('/api/absensi-siswa/rfid-scan', STAFF, (req, res) => {
   const normalizedJenis = sesi === 'pulang' ? 'pulang' : 'masuk'
   const result = writeDailyAttendanceSession(db, {
     id: uuidv4(), tenantId: req.tenantId, siswaId: siswa.id, rombelId: siswa.rombel_id,
-    tanggal, status: 'hadir', waktu, metode: 'rfid', jenis: normalizedJenis,
+    tanggal, status: 'hadir', waktu, metode: 'rfid', jenis: normalizedJenis, sumber: 'scan',
   })
   const payload = { siswa: qrSiswaPayload(db, siswa, req.tenantId), waktu, sesi: normalizedJenis, metode: 'rfid' }
   if (result.already) return res.json({ ...payload, already: true, status: result.status })
@@ -7421,7 +7428,7 @@ app.post('/api/external/v1/absensi/scan', apiKeyMiddleware, (req, res) => {
   const jenis = sesi === 'pulang' ? 'pulang' : 'masuk'
   const result = writeDailyAttendanceSession(db, {
     id: uuidv4(), tenantId: req.tenantId, siswaId: siswa.id, rombelId: siswa.rombel_id,
-    tanggal, status: 'hadir', waktu, metode: rfid_uid ? 'rfid' : 'qr', jenis,
+    tanggal, status: 'hadir', waktu, metode: rfid_uid ? 'rfid' : 'qr', jenis, sumber: 'scan',
   })
   const out = { ok: true, siswa_id: siswa.id, nama: siswa.nama, nis: siswa.nis, rombel_id: siswa.rombel_id, tanggal, waktu, sesi: jenis, already: !!result.already, status: result.status }
   if (result.already) return res.json(out)

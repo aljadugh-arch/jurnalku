@@ -37,38 +37,50 @@ function dateRange(start, end) {
   return out
 }
 
+// Status yang berarti siswa TIDAK hadir. Edit manual ke salah satu status ini
+// selalu menang — inilah pengecualian yang diminta: petugas boleh mengoreksi
+// anak yang terlanjur tercatat 'hadir' oleh scan menjadi sakit/izin/alpha.
+const STATUS_NON_HADIR = new Set(['sakit', 'izin', 'alpha'])
+// Metode yang menandakan baris lahir dari SCAN (QR / kartu RFID / alat mandiri).
+const METODE_SCAN = new Set(['qr', 'rfid', 'device'])
+
+// Menulis satu sesi absensi (masuk atau pulang). Aturan prioritas:
+//   1. Hasil scan QR/RFID/alat adalah acuan ('hadir').
+//   2. Edit manual ke sakit/izin/alpha SELALU menimpa, termasuk hasil scan.
+//   3. Edit manual ke 'hadir' tidak menimpa catatan hasil scan (hanya boleh
+//      mengoreksi catatan yang lahir dari input manual).
+//   4. Tulis hasil scan tidak pernah menimpa apa pun yang sudah terisi.
+// Nilai sama dengan yang tersimpan = tidak menulis ulang (hemat + tidak
+// memicu notifikasi WA ganda).
+//
+// `sumber`: 'scan' | 'manual'. Parameter lama `overwrite=true` tetap didukung
+// dan dipetakan ke sumber 'manual'.
 function writeDailyAttendanceSession(db, {
   id, tenantId, siswaId, rombelId = null, tanggal, status, waktu = null,
-  metode = 'manual', keterangan = '', jenis = 'masuk', overwrite = false,
+  metode = 'manual', keterangan = '', jenis = 'masuk', sumber = null, overwrite,
 }) {
   const isPulang = jenis === 'pulang'
   const sessionField = isPulang ? 'status_pulang' : 'status'
-  const existing = db.prepare('SELECT id, status, status_pulang FROM absensi_siswa WHERE siswa_id=? AND tanggal=? AND tenant_id=?')
+  const asal = sumber || (overwrite === true ? 'manual' : 'scan')
+  const existing = db.prepare('SELECT id, status, status_pulang, metode FROM absensi_siswa WHERE siswa_id=? AND tanggal=? AND tenant_id=?')
     .get(siswaId, tanggal, tenantId)
-  // Tanpa overwrite, baris yang sudah punya nilai di sesi ini dibiarkan (first-writer-wins):
-  // scan QR/RFID tidak boleh menimpa 'sakit' yang sudah diinput manual, dan sebaliknya.
-  // Dengan overwrite (input manual per siswa), nilai lama DIGANTI — inilah yang membuat
-  // absensi bisa DIEDIT setelah disimpan.
-  if (existing?.[sessionField] && !overwrite) return { id: existing.id, already: true, status: existing[sessionField], jenis: isPulang ? 'pulang' : 'masuk' }
 
-  // overwrite dengan nilai yang SAMA = tidak ada perubahan nyata. Jangan menulis ulang,
-  // supaya menyimpan ulang layar tanpa mengubah apa pun tidak memicu notif WA berulang.
-  if (existing && overwrite && existing[sessionField] === status) {
-    return { id: existing.id, already: true, status, jenis: isPulang ? 'pulang' : 'masuk' }
+  if (existing?.[sessionField]) {
+    const lama = String(existing[sessionField])
+    const bolehMenimpa = STATUS_NON_HADIR.has(status)
+      || (asal === 'manual' && !METODE_SCAN.has(String(existing.metode || '')))
+    if (!bolehMenimpa || lama === status) {
+      return { id: existing.id, already: true, status: lama, jenis: isPulang ? 'pulang' : 'masuk' }
+    }
   }
 
   if (existing) {
+    const sql = isPulang
+      ? "UPDATE absensi_siswa SET status_pulang=?, waktu_pulang=?, keterangan_pulang=?, metode=COALESCE(NULLIF(?,''),metode) WHERE id=? AND tenant_id=?"
+      : "UPDATE absensi_siswa SET status=?, waktu_absen=?, waktu_masuk=?, metode=?, keterangan=? WHERE id=? AND tenant_id=?"
     const result = isPulang
-      ? (overwrite
-          ? db.prepare("UPDATE absensi_siswa SET status_pulang=?, waktu_pulang=?, keterangan_pulang=?, metode=COALESCE(NULLIF(?,''),metode) WHERE id=? AND tenant_id=?")
-              .run(status, waktu, keterangan, metode, existing.id, tenantId)
-          : db.prepare("UPDATE absensi_siswa SET status_pulang=?, waktu_pulang=?, keterangan_pulang=?, metode=COALESCE(NULLIF(?,''),metode) WHERE id=? AND tenant_id=? AND trim(COALESCE(status_pulang,''))='' ")
-              .run(status, waktu, keterangan, metode, existing.id, tenantId))
-      : (overwrite
-          ? db.prepare("UPDATE absensi_siswa SET status=?, waktu_absen=?, waktu_masuk=?, metode=?, keterangan=? WHERE id=? AND tenant_id=?")
-              .run(status, waktu, waktu, metode, keterangan, existing.id, tenantId)
-          : db.prepare("UPDATE absensi_siswa SET status=?, waktu_absen=?, waktu_masuk=?, metode=?, keterangan=? WHERE id=? AND tenant_id=? AND trim(COALESCE(status,''))='' ")
-              .run(status, waktu, waktu, metode, keterangan, existing.id, tenantId))
+      ? db.prepare(sql).run(status, waktu, keterangan, metode, existing.id, tenantId)
+      : db.prepare(sql).run(status, waktu, waktu, metode, keterangan, existing.id, tenantId)
     const saved = db.prepare('SELECT id, status, status_pulang FROM absensi_siswa WHERE id=? AND tenant_id=?').get(existing.id, tenantId)
     return { id: saved.id, already: !result.changes, status: saved[sessionField], jenis: isPulang ? 'pulang' : 'masuk' }
   }
@@ -88,7 +100,7 @@ function writeDailyAttendanceSession(db, {
   if (result.changes) return { id, already: false, status, jenis: isPulang ? 'pulang' : 'masuk' }
 
   // A concurrent writer won the unique-key race. Re-enter through the update/skip path.
-  return writeDailyAttendanceSession(db, { id, tenantId, siswaId, rombelId, tanggal, status, waktu, metode, keterangan, jenis })
+  return writeDailyAttendanceSession(db, { id, tenantId, siswaId, rombelId, tanggal, status, waktu, metode, keterangan, jenis, sumber: asal })
 }
 
 module.exports = { HARI, hariJakarta, sesiAbsensiSiswa, dateRange, writeDailyAttendanceSession }

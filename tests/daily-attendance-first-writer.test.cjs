@@ -74,19 +74,21 @@ test('first writer wins independently for pulang', () => {
   assert.equal(row.waktu_pulang, '11:00')
 })
 
-test('admin manual absen lebih dulu membuat scan QR guru melaporkan sudah tercatat, dan sebaliknya', () => {
+test('edit manual sakit/izin/alpha menang atas hasil scan QR (prioritas diubah)', () => {
   const db = makeDb()
   // Skenario 1: admin absen manual duluan, guru scan QR belakangan.
   const adminFirst = writeDailyAttendanceSession(db, { ...base, jenis: 'masuk', id: 'admin-1', status: 'hadir', metode: 'manual' })
-  const guruQrAfter = writeDailyAttendanceSession(db, { ...base, jenis: 'masuk', id: 'guru-qr-1', status: 'hadir', metode: 'qr' })
+  const guruQrAfter = writeDailyAttendanceSession(db, { ...base, jenis: 'masuk', id: 'guru-qr-1', status: 'hadir', metode: 'qr', sumber: 'scan' })
   assert.equal(adminFirst.already, false)
   assert.equal(guruQrAfter.already, true)
   assert.equal(db.prepare('SELECT count(*) n FROM absensi_siswa').get().n, 1)
 
-  // Skenario 2: guru scan QR duluan (siswa lain), admin absen manual belakangan.
-  const guruQrFirst = writeDailyAttendanceSession(db, { ...base, siswaId: 's2', jenis: 'masuk', id: 'guru-qr-2', status: 'hadir', metode: 'qr' })
-  const adminAfter = writeDailyAttendanceSession(db, { ...base, siswaId: 's2', jenis: 'masuk', id: 'admin-2', status: 'sakit', metode: 'manual' })
+  // Skenario 2: guru scan QR duluan (hadir), lalu admin mengoreksi ke sakit.
+  // Prioritas baru: edit manual sakit/izin/alpha MENANG atas hasil scan.
+  const guruQrFirst = writeDailyAttendanceSession(db, { ...base, siswaId: 's2', jenis: 'masuk', id: 'guru-qr-2', status: 'hadir', metode: 'qr', sumber: 'scan' })
+  const adminAfter = writeDailyAttendanceSession(db, { ...base, siswaId: 's2', jenis: 'masuk', id: 'admin-2', status: 'sakit', metode: 'manual', sumber: 'manual' })
   assert.equal(guruQrFirst.already, false)
-  assert.equal(adminAfter.already, true)
-  assert.equal(adminAfter.status, 'hadir')
+  assert.equal(adminAfter.already, false)
+  assert.equal(adminAfter.status, 'sakit')
+  assert.equal(db.prepare("SELECT status FROM absensi_siswa WHERE siswa_id='s2'").get().status, 'sakit')
 })

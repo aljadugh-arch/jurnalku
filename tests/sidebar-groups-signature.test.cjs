@@ -33,7 +33,7 @@ test('sidebar desktop: pengelompokan berlaku utk SEMUA role manajemen (kepala/be
 })
 
 test('grup sidebar mencakup menu kepala & bendahara (tidak ada yang tercecer)', () => {
-  for (const label of ['Supervisi Guru', 'Jurnal Mengajar', 'Rapor Siswa', 'Erkam', 'Buku Kas', 'Bendahara', 'Manajemen Yayasan', 'Kartu RFID', 'Beasiswa']) {
+  for (const label of ['Supervisi', 'Administrasi Surat', 'Jurnal Mengajar', 'Rapor Siswa', 'Erkam', 'Buku Kas', 'Bendahara', 'Manajemen Yayasan', 'Kartu RFID', 'Beasiswa']) {
     assert.ok(sidebar.includes(`'${label}'`), `label "${label}" ada di grup`)
   }
 })

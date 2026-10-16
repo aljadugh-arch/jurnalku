@@ -70,19 +70,21 @@ test('overwrite pada sesi pulang tidak merusak status masuk yang sudah ada', () 
 
 // --- Pemasangan di route -------------------------------------------------
 
-test('route manual mengirim overwrite=true, scan QR/RFID/alat tetap first-writer-wins', () => {
+test('route manual mengirim sumber=manual, scan QR/RFID/alat mengirim sumber=scan', () => {
   const idx = fs.readFileSync('server/index.cjs', 'utf8')
-  // Dua jalur manual (single + bulk) harus menimpa.
+  // Tiga jalur manual (single + bulk + bulk-range) harus menandai sumbernya manual.
   const singleManual = idx.slice(idx.indexOf("app.post('/api/absensi-siswa', STAFF"), idx.indexOf("app.post('/api/absensi-siswa/bulk'"))
   const bulkManual = idx.slice(idx.indexOf("app.post('/api/absensi-siswa/bulk'"), idx.indexOf("app.post('/api/absensi-siswa/bulk-range'"))
-  assert.match(singleManual, /overwrite: true/)
-  assert.match(bulkManual, /overwrite: true/)
+  const bulkRange = idx.slice(idx.indexOf("app.post('/api/absensi-siswa/bulk-range'"), idx.indexOf('function normalizeQrToken'))
+  assert.match(singleManual, /sumber: 'manual'/)
+  assert.match(bulkManual, /sumber: 'manual'/)
+  assert.match(bulkRange, /sumber: 'manual'/)
 
-  // Jalur scan tidak menyertakan overwrite:true — default false tetap berlaku.
+  // Jalur scan menandai sumber='scan' supaya tidak pernah menimpa catatan manual.
   const qrScan = idx.slice(idx.indexOf("app.post('/api/absensi-siswa/qr-scan'"), idx.indexOf("app.post('/api/absensi-siswa/rfid-scan'"))
   const rfidScan = idx.slice(idx.indexOf("app.post('/api/absensi-siswa/rfid-scan'"), idx.indexOf("app.post('/api/external/v1/absensi/scan'"))
   const deviceScan = idx.slice(idx.indexOf("app.post('/api/external/v1/absensi/scan'"), idx.indexOf('// ==================== ABSENSI GURU'))
-  assert.doesNotMatch(qrScan, /overwrite: true/)
-  assert.doesNotMatch(rfidScan, /overwrite: true/)
-  assert.doesNotMatch(deviceScan, /overwrite: true/)
+  assert.match(qrScan, /sumber: 'scan'/)
+  assert.match(rfidScan, /sumber: 'scan'/)
+  assert.match(deviceScan, /sumber: 'scan'/)
 })
