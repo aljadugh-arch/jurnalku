@@ -1,10 +1,11 @@
 import { useState, useEffect } from 'react'
 import { escapeHtml } from '../../utils/escapeHtml'
-import { Search, X, Pencil, Trash2 } from 'lucide-react'
+import { Search, X, Pencil, Trash2, QrCode } from 'lucide-react'
 import toast from 'react-hot-toast'
 import api from '../../services/api'
 import ResponsiveTable from '../../components/ui/ResponsiveTable'
 import FinanceExcelPanel from '../../components/FinanceExcelPanel'
+import QrisPayModal, { type QrisTarget } from '../../components/QrisPayModal'
 
 interface Tagihan {
   id: string; siswa_id: string; siswa_nama: string; nis: string
@@ -115,6 +116,7 @@ export default function TagihanPage() {
   const [genForm, setGenForm] = useState({ jenis_nama: '', rombel_id: '', siswa_id: '', bulan: '', tahun: '2026', nominal: '' })
   const [editTagihan, setEditTagihan] = useState<Tagihan | null>(null)
   const [editTagihanForm, setEditTagihanForm] = useState({ nominal: 0, keterangan: '' })
+  const [qris, setQris] = useState<QrisTarget | null>(null)
 
   const fetchData = async () => {
     try {
@@ -295,6 +297,7 @@ export default function TagihanPage() {
                 <button onClick={() => handleEditTagihan(t)} className="px-2 py-1 text-xs rounded-lg bg-blue-50 text-blue-600 hover:bg-blue-100"><Pencil size={12} className="inline" /></button>
                 <button onClick={() => handleDeleteTagihan(t)} className="px-2 py-1 text-xs rounded-lg bg-red-50 text-red-600 hover:bg-red-100"><Trash2 size={12} className="inline" /></button>
                 {t.status !== 'lunas' && <button onClick={() => handleBayar(t.id)} className="px-3 py-1 bg-green-600 text-white rounded text-xs hover:bg-green-700">Bayar</button>}
+                {t.status !== 'lunas' && <button onClick={() => setQris({ ref_type: 'tagihan', ref_id: t.id, student_id: t.siswa_id, nominal: t.nominal, label: `${t.jenis_nama} — ${t.siswa_nama}` })} className="px-2 py-1 bg-indigo-600 text-white rounded text-xs hover:bg-indigo-700 inline-flex items-center gap-1"><QrCode size={12} className="inline" /> QRIS</button>}
                 {t.status === 'lunas' && <button onClick={() => handleKuitansi(t)} className="px-3 py-1 bg-blue-600 text-white rounded text-xs hover:bg-blue-700">Kuitansi</button>}
               </div>
             )}
@@ -383,6 +386,11 @@ export default function TagihanPage() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Bayar lewat QRIS dinamis (payment gateway lembaga) */}
+      {qris && (
+        <QrisPayModal target={qris} onClose={() => setQris(null)} onPaid={() => { setQris(null); fetchData() }} />
       )}
     </div>
   )

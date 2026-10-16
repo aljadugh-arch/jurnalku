@@ -99,6 +99,7 @@ const KantinOrdersPage = lazy(() => import('./pages/admin/KantinOrdersPage'))
 const CashlessTopupPage = lazy(() => import('./pages/admin/CashlessTopupPage'))
 const CashlessBankConfigPage = lazy(() => import('./pages/admin/CashlessBankConfigPage'))
 const KantinScannerPage = lazy(() => import('./pages/admin/KantinScannerPage'))
+const PaymentGatewayPage = lazy(() => import('./pages/admin/PaymentGatewayPage'))
 const DeveloperApiPage = lazy(() => import('./pages/admin/DeveloperApiPage'))
 const MobileCeklok = lazy(() => import('./pages/admin/MobileCeklok'))
 const BankSoalPage = lazy(() => import('./pages/admin/BankSoalPage'))
@@ -281,6 +282,7 @@ export default function App() {
           <Route path="kantin-orders" element={<KantinOrdersPage />} />
           <Route path="cashless-topup" element={<CashlessTopupPage />} />
           <Route path="cashless-bank-config" element={<CashlessBankConfigPage />} />
+          <Route path="payment-gateway" element={<PaymentGatewayPage />} />
           <Route path="kantin-scanner" element={<KantinScannerPage />} />
           {/* Routes baru dari GitHub */}
           <Route path="erkam" element={<ErkamPage />} />

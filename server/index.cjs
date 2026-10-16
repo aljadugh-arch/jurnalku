@@ -23,6 +23,8 @@ const { bulkAssignGuru } = require('./jadwal-guru-repair.cjs')
 const { detectJadwalConflicts } = require('./jadwal-conflicts.cjs')
 const { importJadwalRows } = require('./jadwal-import.cjs')
 const { setupPortalCashless, registerPortalRoutes, registerKantinRoutes, selectPenilaianStudentId, normalizeStoredImageDataUrl } = require('./portal-cashless.cjs')
+const { setupPaymentGateway, registerPaymentGatewayRoutes } = require('./payment-gateway-routes.cjs')
+const { startPaymentPoller } = require('./payment-poller.cjs')
 const waQueue = require('./wa-queue.cjs')
 const notificationMonitor = require('./notification-monitor.cjs')
 const ExcelJS = require('exceljs')
@@ -1221,6 +1223,8 @@ setupEkskulMembership(db)
 setupSubscriptionTables(db)
 setupAiConfigTables(db)
 migrateTenantSettings(db)
+// Payment gateway QRIS: tabel konfigurasi + intent, dan satu token webhook per lembaga.
+setupPaymentGateway(db)
 
 // Sesi kelas lama memiliki FK ke tabel jadwal reguler, sedangkan jadwal ujian
 // memakai tabel terpisah. Rebuild satu kali agar keduanya dapat direferensikan
@@ -1746,6 +1750,10 @@ function getTenantAccess(tenantId) {
 }
 
 function isSubscriptionBypass(req) {
+  // Webhook pembayaran harus tetap tembus walau langganan lembaga sedang terkunci —
+  // uang yang sudah masuk tidak boleh hilang hanya karena paket kedaluwarsa. Route-nya
+  // sendiri tetap wajib lolos HMAC atas byte mentah, jadi ini bukan pintu terbuka.
+  if (req.path.startsWith('/api/payment/webhook/')) return true
   return req.path.startsWith('/api/auth') || req.path === '/api/health' || req.path === '/api/settings' || req.path === '/api/subscription/status' || req.path === '/api/subscription/plans' || req.path === '/api/subscription/unlock' || req.path === '/api/tenant/info' || req.path.startsWith('/api/tenants')
 }
 
@@ -1975,6 +1983,7 @@ registerBackupRestoreRoutes(app, db, { ADMIN, upload: backupUpload, dbPath, medi
 registerFinanceExcelRoutes(app, db, { authorize: requireRole('bendahara', 'admin', 'super_admin', 'operator'), upload: multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024, files: 1 } }) })
 registerPortalRoutes(app, db, { auth: authMiddleware, requireRole, uuid: uuidv4, bcrypt })
 registerKantinRoutes(app, db, { requireRole, uuid: uuidv4, bcrypt })
+registerPaymentGatewayRoutes(app, db, { requireRole, hostPermintaan })
 const backupScheduler = registerBackupRoutes(app, db, { requireRole, uuid: uuidv4, mediaRoot: UPLOAD_DIR })
 const BEASISWA_ROLES = requireRole('admin', 'super_admin', 'bendahara')
 const BEASISWA_SELECT = `SELECT b.*, s.nama siswa_nama, s.nis siswa_nis
@@ -10240,6 +10249,12 @@ app.use((err, req, res, next) => {
 // Start server
 app.listen(PORT, () => {
   startBackupScheduler(backupScheduler)
+
+  // Poller cadangan payment gateway QRIS: webhook adalah jalur utama, poller menutup
+  // webhook yang hilang. Dimatikan saat pengujian supaya suite tidak memanggil jaringan.
+  if (process.env.NODE_ENV !== 'test') {
+    try { startPaymentPoller(db) } catch (e) { console.error('[payment-poller] gagal start:', e.message) }
+  }
 
 // ==================== WA AUTO SCHEDULER ====================
 // Jalankan notif otomatis setiap 1 menit untuk semua tenant aktif

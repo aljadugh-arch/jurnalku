@@ -71,6 +71,7 @@ export const adminMenuItems: MenuItem[] = [
     children: [
       { label: 'Tagihan & Pembayaran', path: '/admin/tagihan' },
       { label: 'Tabungan Siswa', path: '/admin/tabungan' },
+      { label: 'Payment Gateway QRIS', path: '/admin/payment-gateway' },
     ]
   },
   {
@@ -151,6 +152,7 @@ export const bendaharaMenuItems: MenuItem[] = [
     children: [
       { label: 'Tagihan & Pembayaran', path: '/admin/tagihan' },
       { label: 'Tabungan Siswa', path: '/admin/tabungan' },
+      { label: 'Payment Gateway QRIS', path: '/admin/payment-gateway' },
     ]
   },
   { label: 'Perpustakaan Digital', icon: <BookOpen size={20} />, path: '/admin/perpustakaan' },
