@@ -1,6 +1,6 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { escapeHtml } from '../../utils/escapeHtml'
-import { Download, FileSpreadsheet, Eye, CheckCircle, XCircle, Clock } from 'lucide-react'
+import { Download, FileSpreadsheet, Eye, CheckCircle, XCircle, Clock, Loader2, ChevronLeft, ChevronRight } from 'lucide-react'
 import toast from 'react-hot-toast'
 import api from '../../services/api'
 import { useAuthStore } from '../../stores/authStore'
@@ -9,44 +9,103 @@ import { tenantIdentity } from '../../utils/tenantExport'
 import { signatureBlockHtml, SIGNATURE_CSS, tenantSignatureSettings } from '../../utils/pdfSignature'
 import * as XLSX from 'xlsx'
 
+// Satu halaman = 24 kartu. Dulu endpoint mengirim SELURUH riwayat sekaligus
+// (lembaga besar: 947 baris / 578 KB) dan browser merender semuanya — itulah
+// penyebab halaman Jurnal terasa lama memuat.
+const PER_HALAMAN = 24
+
 export default function JurnalPage() {
   const user = useAuthStore(s => s.user)
   const settings = useSettingsStore(s => s.settings)
   const canReview = ['admin', 'super_admin', 'kepala', 'operator'].includes(user?.role || '')
   const [data, setData] = useState<any[]>([])
+  const [total, setTotal] = useState(0)
+  const [page, setPage] = useState(1)
+  const [hasMore, setHasMore] = useState(false)
+  const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState({ tanggal: '', guru_id: '', status: '' })
   const [gtks, setGtks] = useState<any[]>([])
   const [detail, setDetail] = useState<any>(null)
   const [bulkSaving, setBulkSaving] = useState(false)
+  const [jumlahSubmitted, setJumlahSubmitted] = useState(0)
+  // Penanda agar request lama tidak menimpa hasil request baru (race saat
+  // filter diketik cepat).
+  const reqSeq = useRef(0)
 
   useEffect(() => {
-    api.get('/gtk').then(res => setGtks(res.data))
-    loadData()
+    api.get('/gtk').then(res => setGtks(res.data)).catch(() => {})
   }, [])
 
-  useEffect(() => { loadData() }, [filter])
+  const loadData = useCallback(async (halaman = 1) => {
+    const seq = ++reqSeq.current
+    setLoading(true)
+    try {
+      const params: any = { page: halaman, limit: PER_HALAMAN }
+      if (filter.tanggal) params.tanggal = filter.tanggal
+      if (filter.guru_id) params.guru_id = filter.guru_id
+      if (filter.status) params.status = filter.status
+      const res = await api.get('/jurnal', { params })
+      if (seq !== reqSeq.current) return // sudah usang, abaikan
+      const rows = Array.isArray(res.data) ? res.data : (res.data.rows || [])
+      setData(rows)
+      setTotal(Array.isArray(res.data) ? rows.length : (res.data.total || rows.length))
+      setHasMore(Array.isArray(res.data) ? false : !!res.data.has_more)
+    } catch (err: any) {
+      if (seq === reqSeq.current) toast.error(err.response?.data?.error || 'Gagal memuat jurnal')
+    } finally {
+      if (seq === reqSeq.current) setLoading(false)
+    }
+  }, [filter])
 
-  const loadData = async () => {
-    const params: any = {}
+  // Hitung jurnal berstatus submitted pada filter aktif (untuk tombol bulk).
+  // Dihitung di server lewat limit=1 + status filter agar tidak perlu memuat semua.
+  useEffect(() => {
+    let batal = false
+    const params: any = { page: 1, limit: 1, status: 'submitted' }
+    if (filter.tanggal) params.tanggal = filter.tanggal
+    if (filter.guru_id) params.guru_id = filter.guru_id
+    api.get('/jurnal', { params })
+      .then(res => { if (!batal) setJumlahSubmitted(res.data?.total ?? 0) })
+      .catch(() => { if (!batal) setJumlahSubmitted(0) })
+    return () => { batal = true }
+  }, [filter, data])
+
+  // Reset ke halaman 1 tiap filter berubah, lalu muat dengan debounce 300ms.
+  useEffect(() => {
+    setPage(1)
+    const t = setTimeout(() => loadData(1), 300)
+    return () => clearTimeout(t)
+  }, [loadData])
+
+  const gantiHalaman = (baru: number) => {
+    const p = Math.max(1, baru)
+    setPage(p)
+    loadData(p)
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+
+  // Ambil SEMUA baris (untuk ekspor) memakai limit=0 di server.
+  const ambilSemuaUntukEkspor = async (): Promise<any[]> => {
+    const params: any = { limit: 0 }
     if (filter.tanggal) params.tanggal = filter.tanggal
     if (filter.guru_id) params.guru_id = filter.guru_id
     if (filter.status) params.status = filter.status
     const res = await api.get('/jurnal', { params })
-    setData(res.data)
+    return Array.isArray(res.data) ? res.data : (res.data.rows || [])
   }
 
   const updateStatus = async (id: string, status: string) => {
     await api.put('/jurnal/' + id, { status })
     toast.success(`Status diubah ke ${status}`)
-    loadData()
+    loadData(page)
     if (detail?.id === id) setDetail({ ...detail, status })
   }
 
   const bulkUpdateStatus = async (status: 'approved' | 'rejected') => {
-    const submittedCount = data.filter(j => j.status === 'submitted').length
+    const submittedCount = jumlahSubmitted
     if (!submittedCount) return toast.error('Tidak ada jurnal submitted pada filter ini')
     const action = status === 'approved' ? 'Setujui' : 'Tolak'
-    if (!confirm(`${action} ${submittedCount} jurnal submitted yang sedang tampil?`)) return
+    if (!confirm(`${action} ${submittedCount} jurnal submitted pada filter ini?`)) return
     const confirmation = status === 'approved' ? 'SETUJUI SEMUA' : 'TOLAK SEMUA'
     setBulkSaving(true)
     try {
@@ -57,7 +116,7 @@ export default function JurnalPage() {
         confirmation,
       })
       toast.success(`${result.count} jurnal berhasil ${status === 'approved' ? 'disetujui' : 'ditolak'}`)
-      await loadData()
+      await loadData(page)
     } catch (err: any) {
       toast.error(err.response?.data?.error || 'Gagal memproses jurnal')
     } finally {
@@ -65,8 +124,9 @@ export default function JurnalPage() {
     }
   }
 
-  const exportExcel = () => {
-    const rows = data.map((d, i) => [
+  const exportExcel = async () => {
+    const semua = await ambilSemuaUntukEkspor()
+    const rows = semua.map((d, i) => [
       i + 1, d.tanggal, d.guru_nama || '', d.mapel_nama || '', d.rombel_nama || '',
       `Jam ${d.jam_ke}`, d.materi || '', d.kegiatan || '', d.catatan || '', d.status
     ])
@@ -79,16 +139,17 @@ export default function JurnalPage() {
     const wb = XLSX.utils.book_new()
     XLSX.utils.book_append_sheet(wb, ws, 'Jurnal')
     XLSX.writeFile(wb, 'Jurnal_Mengajar.xlsx')
-    toast.success('Excel diunduh')
+    toast.success(`Excel diunduh (${semua.length} baris)`)
   }
 
-  const exportPDF = () => {
+  const exportPDF = async () => {
+    const semua = await ambilSemuaUntukEkspor()
     const printWindow = window.open('', '_blank')
     if (!printWindow) { toast.error('Popup blocked'); return }
     const tenant = tenantIdentity(settings)
     const sigSettings = tenantSignatureSettings(settings)
     const logo = tenant.logo ? `<img src="${escapeHtml(tenant.logo)}" alt="Logo" onerror="this.style.display='none'">` : ''
-    const rows = data.map((d, i) =>
+    const rows = semua.map((d, i) =>
       `<tr><td>${i+1}</td><td>${escapeHtml(String(d.tanggal||''))}</td><td>${escapeHtml(d.guru_nama||'')}</td><td>${escapeHtml(d.mapel_nama||'')}</td><td>${escapeHtml(d.rombel_nama||'')}</td><td>${escapeHtml(String(d.jam_ke||''))}</td><td class="materi">${escapeHtml(d.materi||'')}</td><td>${escapeHtml(String(d.status||''))}</td></tr>`
     ).join('')
     const filterInfo = [filter.tanggal ? `Tanggal: ${filter.tanggal}` : '', filter.guru_id ? `Guru: ${gtks.find(g => g.id === filter.guru_id)?.nama || ''}` : '', filter.status ? `Status: ${filter.status}` : ''].filter(Boolean).join(' · ') || 'Semua data'
@@ -130,32 +191,76 @@ export default function JurnalPage() {
       </div>
 
       {canReview && <div className="flex flex-col sm:flex-row gap-2">
-        <button onClick={() => bulkUpdateStatus('approved')} disabled={bulkSaving || !data.some(j => j.status === 'submitted')} className="inline-flex items-center justify-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg text-sm hover:bg-green-700 disabled:opacity-50">
+        <button onClick={() => bulkUpdateStatus('approved')} disabled={bulkSaving || jumlahSubmitted === 0} className="inline-flex items-center justify-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg text-sm hover:bg-green-700 disabled:opacity-50">
           <CheckCircle size={16} /> Setujui Semua
         </button>
-        <button onClick={() => bulkUpdateStatus('rejected')} disabled={bulkSaving || !data.some(j => j.status === 'submitted')} className="inline-flex items-center justify-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg text-sm hover:bg-red-700 disabled:opacity-50">
+        <button onClick={() => bulkUpdateStatus('rejected')} disabled={bulkSaving || jumlahSubmitted === 0} className="inline-flex items-center justify-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg text-sm hover:bg-red-700 disabled:opacity-50">
           <XCircle size={16} /> Tolak Semua
         </button>
         <p className="self-center text-xs text-gray-500">Hanya jurnal submitted pada filter tanggal dan guru yang aktif.</p>
       </div>}
 
-      {/* Tiles */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
-        {data.length === 0 ? <p className="col-span-full py-8 text-center text-gray-400">Belum ada jurnal</p> : data.map(j => (
-          <article key={j.id} className="rounded-xl border border-gray-100 bg-white p-4 shadow-sm">
-            <div className="flex items-start justify-between gap-3">
-              <div className="min-w-0"><p className="font-semibold text-gray-800 truncate">{j.guru_nama}</p><p className="text-xs text-gray-500 truncate">{j.mapel_nama} · {j.rombel_nama}</p></div>
-              <span className={`shrink-0 px-2 py-1 rounded-full text-xs font-medium ${j.status === 'approved' ? 'bg-green-100 text-green-700' : j.status === 'submitted' ? 'bg-blue-100 text-blue-700' : j.status === 'rejected' ? 'bg-red-100 text-red-700' : 'bg-yellow-100 text-yellow-700'}`}>{j.status}</span>
-            </div>
-            <p className="mt-3 text-xs text-gray-500">{j.tanggal} · Jam {j.jam_ke || '-'}</p>
-            <p className="mt-2 line-clamp-2 text-sm text-gray-700">{j.materi || 'Materi belum diisi'}</p>
-            <div className="mt-3 flex items-center justify-end gap-1 border-t border-gray-50 pt-3">
-              <button onClick={() => setDetail(j)} className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg" title="Detail"><Eye size={16} /></button>
-              {canReview && j.status === 'submitted' && <><button onClick={() => updateStatus(j.id, 'approved')} className="p-1.5 text-green-600 hover:bg-green-50 rounded-lg" title="Approve"><CheckCircle size={16} /></button><button onClick={() => updateStatus(j.id, 'rejected')} className="p-1.5 text-red-600 hover:bg-red-50 rounded-lg" title="Reject"><XCircle size={16} /></button></>}
-            </div>
-          </article>
-        ))}
+      {/* Info jumlah + status pemuatan */}
+      <div className="flex flex-wrap items-center justify-between gap-2 text-sm text-gray-500">
+        <span>
+          {loading ? 'Memuat…' : `${data.length} dari ${total} jurnal ditampilkan`}
+        </span>
+        {total > PER_HALAMAN && !loading && (
+          <span>Halaman {page} dari {Math.max(1, Math.ceil(total / PER_HALAMAN))}</span>
+        )}
       </div>
+
+      {/* Tiles */}
+      {loading ? (
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3" aria-busy="true">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <div key={i} className="rounded-xl border border-gray-100 bg-white p-4 shadow-sm animate-pulse">
+              <div className="h-4 w-32 rounded bg-gray-200" />
+              <div className="mt-2 h-3 w-24 rounded bg-gray-100" />
+              <div className="mt-3 h-3 w-20 rounded bg-gray-100" />
+              <div className="mt-2 h-3 w-full rounded bg-gray-100" />
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+          {data.length === 0 ? <p className="col-span-full py-8 text-center text-gray-400">Belum ada jurnal</p> : data.map(j => (
+            <article key={j.id} className="rounded-xl border border-gray-100 bg-white p-4 shadow-sm">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0"><p className="font-semibold text-gray-800 truncate">{j.guru_nama}</p><p className="text-xs text-gray-500 truncate">{j.mapel_nama} · {j.rombel_nama}</p></div>
+                <span className={`shrink-0 px-2 py-1 rounded-full text-xs font-medium ${j.status === 'approved' ? 'bg-green-100 text-green-700' : j.status === 'submitted' ? 'bg-blue-100 text-blue-700' : j.status === 'rejected' ? 'bg-red-100 text-red-700' : 'bg-yellow-100 text-yellow-700'}`}>{j.status}</span>
+              </div>
+              <p className="mt-3 text-xs text-gray-500">{j.tanggal} · Jam {j.jam_ke || '-'}</p>
+              <p className="mt-2 line-clamp-2 text-sm text-gray-700">{j.materi || 'Materi belum diisi'}</p>
+              <div className="mt-3 flex items-center justify-end gap-1 border-t border-gray-50 pt-3">
+                <button onClick={() => setDetail(j)} className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg" title="Detail"><Eye size={16} /></button>
+                {canReview && j.status === 'submitted' && <><button onClick={() => updateStatus(j.id, 'approved')} className="p-1.5 text-green-600 hover:bg-green-50 rounded-lg" title="Approve"><CheckCircle size={16} /></button><button onClick={() => updateStatus(j.id, 'rejected')} className="p-1.5 text-red-600 hover:bg-red-50 rounded-lg" title="Reject"><XCircle size={16} /></button></>}
+              </div>
+            </article>
+          ))}
+        </div>
+      )}
+
+      {/* Paginasi */}
+      {!loading && total > PER_HALAMAN && (
+        <div className="flex items-center justify-center gap-3">
+          <button
+            onClick={() => gantiHalaman(page - 1)}
+            disabled={page <= 1}
+            className="inline-flex items-center gap-1 rounded-lg border px-3 py-2 text-sm disabled:opacity-40 hover:bg-gray-50"
+          >
+            <ChevronLeft size={16} /> Sebelumnya
+          </button>
+          <span className="text-sm text-gray-600">{page} / {Math.max(1, Math.ceil(total / PER_HALAMAN))}</span>
+          <button
+            onClick={() => gantiHalaman(page + 1)}
+            disabled={!hasMore}
+            className="inline-flex items-center gap-1 rounded-lg border px-3 py-2 text-sm disabled:opacity-40 hover:bg-gray-50"
+          >
+            Berikutnya <ChevronRight size={16} />
+          </button>
+        </div>
+      )}
 
       {/* Detail Modal */}
       {detail && (

@@ -31,6 +31,7 @@ const { setupSupervisi, registerSupervisiRoutes } = require('./supervisi-routes.
 const { setupProgramBelajar, registerProgramBelajarRoutes } = require('./program-belajar-routes.cjs')
 const { startPaymentPoller } = require('./payment-poller.cjs')
 const waQueue = require('./wa-queue.cjs')
+const { notifikasiRegistrasi } = require('./register-notify.cjs')
 const notificationMonitor = require('./notification-monitor.cjs')
 const ExcelJS = require('exceljs')
 const { generateRaporForRombel, refreshGeneratedRapor, loadBobot, pickBobot, BOBOT_DEFAULT, computeRaporLive, predikatFromNilai } = require('./rapor-grade-service.cjs')
@@ -2830,6 +2831,28 @@ app.post('/api/auth/register', accountLimiter, (req, res) => {
   const appUrl = domainVal
     ? `https://${domainVal}`
     : `https://${slug}.${subdomainBase}`
+
+  // Notifikasi pendaftaran ke WA + email pendaftar. Dijalankan TANPA menunggu
+  // (fire-and-forget) dan tidak pernah menggagalkan respons: kalau WA/email
+  // gagal, pendaftaran tetap sukses dan statusnya dicatat di log server.
+  notifikasiRegistrasi(db, {
+    tenantId,
+    namaLembaga: nama_lembaga || nama,
+    namaAdmin: nama,
+    email,
+    noHp: no_hp,
+    url: appUrl,
+    slug,
+    domainCustom: domainVal,
+    domainStatus,
+  }).then(hasil => {
+    if (!hasil.wa.ok || !hasil.email.ok) {
+      console.warn('[register-notify]', tenantId, JSON.stringify(hasil))
+    } else {
+      console.log('[register-notify]', tenantId, 'WA', hasil.wa.reason, '| email terkirim')
+    }
+  }).catch(e => console.error('[register-notify] gagal total:', e.message))
+
   res.json({
     success: true,
     message: domainVal
@@ -7685,7 +7708,16 @@ async function saveUploadedSignature(file, tenantId) {
 
 app.get('/api/jurnal', requireRole('admin', 'super_admin', 'kepala', 'operator', 'bendahara', 'tata_usaha', 'tu'), (req, res) => {
   const { tanggal, gtk_id, guru_id, status } = req.query
-  let sql = `SELECT j.*, COALESCE((
+  // Klausa WHERE dibangun TERPISAH dari SELECT — query punya subquery dengan
+  // WHERE di dalamnya, jadi memotong string SQL di 'WHERE' akan salah.
+  const where = ['j.tenant_id = ?']
+  const params = [req.tenantId]
+  if (tanggal) { where.push('j.tanggal = ?'); params.push(tanggal) }
+  if (gtk_id || guru_id) { where.push('j.guru_id = ?'); params.push(gtk_id || guru_id) }
+  if (status) { where.push('j.status = ?'); params.push(status) }
+  const whereSql = ' WHERE ' + where.join(' AND ')
+
+  const selectSql = `SELECT j.*, COALESCE((
       SELECT jg.nama
       FROM jadwal jd
       JOIN gtk jg ON jg.id = jd.gtk_id AND jg.tenant_id = jd.tenant_id
@@ -7700,14 +7732,33 @@ app.get('/api/jurnal', requireRole('admin', 'super_admin', 'kepala', 'operator',
     FROM jurnal_mengajar j
     LEFT JOIN gtk g ON j.guru_id = g.id AND g.tenant_id = j.tenant_id
     LEFT JOIN mapel m ON j.mapel_id = m.id AND m.tenant_id = j.tenant_id
-    LEFT JOIN rombel r ON j.rombel_id = r.id AND r.tenant_id = j.tenant_id
-    WHERE j.tenant_id = ?`
-  const params = [req.tenantId]
-  if (tanggal) { sql += ' AND j.tanggal = ?'; params.push(tanggal) }
-  if (gtk_id || guru_id) { sql += ' AND j.guru_id = ?'; params.push(gtk_id || guru_id) }
-  if (status) { sql += ' AND j.status = ?'; params.push(status) }
-  sql += ' ORDER BY j.tanggal DESC, j.jam_ke'
-  res.json(db.prepare(sql).all(...params))
+    LEFT JOIN rombel r ON j.rombel_id = r.id AND r.tenant_id = j.tenant_id` + whereSql
+
+  const sql = selectSql + ' ORDER BY j.tanggal DESC, j.jam_ke'
+
+  // Paginasi: tanpa ini lembaga besar mengirim SELURUH riwayat dalam satu
+  // respons (947 baris / 578 KB terukur) dan browser merender ratusan kartu
+  // sekaligus — itulah "loading lama" pada halaman Jurnal. `limit=0` berarti
+  // minta semua (dipakai ekspor), dibatasi maksimum 5000 demi keselamatan.
+  const adaPaginasi = req.query.page !== undefined || req.query.limit !== undefined
+  if (!adaPaginasi) {
+    // Klien lama tetap dapat bentuk array penuh seperti sebelumnya.
+    return res.json(db.prepare(sql).all(...params))
+  }
+
+  const limitMinta = Number(req.query.limit)
+  const limit = Number.isFinite(limitMinta) && limitMinta >= 0
+    ? Math.min(5000, Math.max(0, Math.floor(limitMinta)))
+    : 50
+  const page = Math.max(1, Math.floor(Number(req.query.page) || 1))
+
+  const total = db.prepare(`SELECT COUNT(*) AS n FROM jurnal_mengajar j${whereSql}`).get(...params).n
+
+  if (limit === 0) {
+    return res.json({ rows: db.prepare(sql).all(...params), total, page: 1, limit: 0, has_more: false })
+  }
+  const rows = db.prepare(sql + ' LIMIT ? OFFSET ?').all(...params, limit, (page - 1) * limit)
+  res.json({ rows, total, page, limit, has_more: (page - 1) * limit + rows.length < total })
 })
 
 app.post('/api/jurnal/bulk-status', JOURNAL_REVIEWER, (req, res) => {
