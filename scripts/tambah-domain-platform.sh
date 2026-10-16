@@ -15,7 +15,7 @@
 # dengan --terapkan. Aman diulang: blok yang sudah ada tidak diduplikasi.
 set -euo pipefail
 
-DOMAIN_PLATFORM=("jurnalku.biz.id" "idjurnal.my.id" "idjurnal.web.id")
+DOMAIN_PLATFORM=("jurnalku.biz.id" "idjurnal.my.id" "idjurnal.web.id" "idjurnal.biz.id")
 CADDYFILE="${CADDYFILE:-/etc/caddy/Caddyfile}"
 ROOT_DIST="${ROOT_DIST:-/www/wwwroot/jurnal.cc.cd/dist}"
 TERAPKAN=0

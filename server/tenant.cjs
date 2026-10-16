@@ -24,6 +24,7 @@ const DOMAIN_BAWAAN = [
   'jurnalku.biz.id',
   'idjurnal.my.id',
   'idjurnal.web.id',
+  'idjurnal.biz.id',
 ]
 const BASE_DOMAINS = (process.env.BASE_DOMAINS || DOMAIN_BAWAAN.join(','))
   .split(',').map(d => d.trim().toLowerCase()).filter(Boolean)

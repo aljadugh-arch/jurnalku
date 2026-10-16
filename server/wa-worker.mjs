@@ -24,7 +24,20 @@ async function connect(tenantId){
   // eslint-disable-next-line react-hooks/rules-of-hooks -- Baileys auth helper, not a React Hook
   const {state,saveCreds}=await useMultiFileAuthState(authDir)
   const version=await resolveVersion()
-  const sock=makeWASocket({version,auth:state,logger:log.child({tenantId}),printQRInTerminal:false}); sockets.set(tenantId,sock); session(tenantId,'connecting')
+  // OPSI ANTI-OOM (penting):
+  //  - syncFullHistory:false  → JANGAN tarik seluruh riwayat chat. Dengan
+  //    `true`, Baileys mengunduh puluhan chunk riwayat (masing-masing >1 MB)
+  //    dan menyimpan ribuan file kunci; heap Node tembus ~2 GB lalu CRASH
+  //    ("Reached heap limit"). Gejalanya: status macet di 'connecting' dan
+  //    folder wa-auth membengkak (pernah 10.832 file / 160 MB per tenant).
+  //  - markOnlineOnConnect:false → jangan tandai online (mengurangi trafik).
+  //  - getMessage / cachedGroupMetadata: stub agar Baileys tidak meminta
+  //    pesan lama ke store yang tidak kita sediakan.
+  const sock=makeWASocket({
+    version, auth:state, logger:log.child({tenantId}), printQRInTerminal:false,
+    syncFullHistory:false, markOnlineOnConnect:false,
+    getMessage:async()=>undefined, cachedGroupMetadata:async()=>undefined,
+  }); sockets.set(tenantId,sock); session(tenantId,'connecting')
   sock.ev.on('creds.update',saveCreds)
   sock.ev.on('messages.upsert', async ({messages, type}) => {
     if (type !== 'notify') return
@@ -88,4 +101,21 @@ async function tick(){
 }
 function schedule(){const n=nowWib(); for(const c of db.prepare("SELECT tenant_id FROM wa_gateway_config WHERE enabled=1").all())try{queue.queueDueTeachers(db,{tenantId:c.tenant_id,...n});queue.queueDueSchedules(db,{tenantId:c.tenant_id,...n});queue.queueDueExamSchedules(db,{tenantId:c.tenant_id,...n});queue.queueDueEkskul(db,{tenantId:c.tenant_id,...n});queue.queueFinanceReports(db,{tenantId:c.tenant_id,...n});queue.queueAdzanReminders(db,{tenantId:c.tenant_id,...n})}catch(e){log.error({tenantId:c.tenant_id,err:e.message},'teacher scheduler')}}
 setInterval(()=>tick().catch(e=>log.error({err:e.message},'queue tick')),2000); setInterval(schedule,60000); schedule(); tick()
+
+// PENJAGA HEAP: Baileys bisa menembus batas heap Node saat menangani riwayat
+// atau lampiran besar. Tanpa ini, proses mati dengan "Reached heap limit" dan
+// status tenant tertinggal di 'connecting' (tampak seperti macet).
+// Ambang ditekan sedikit di bawah batas V8 agar kita sempat mencatat + keluar
+// rapi; PM2 akan menghidupkan ulang prosesnya.
+const HEAP_LIMIT_MB = Number(process.env.WA_HEAP_LIMIT_MB || 1400)
+setInterval(() => {
+  const mb = process.memoryUsage().heapUsed / 1048576
+  if (mb > HEAP_LIMIT_MB) {
+    log.error({ heapUsedMb: Math.round(mb), limitMb: HEAP_LIMIT_MB }, 'WA worker heap melewati ambang — keluar agar PM2 menghidupkan ulang')
+    for (const [id, s] of sockets) { stopping.add(id); try { s.end(undefined) } catch { /* abaikan */ } }
+    try { db.close() } catch { /* abaikan */ }
+    process.exit(1)
+  }
+}, 30000).unref()
+
 process.on('SIGTERM',()=>{for(const [id,s] of sockets){stopping.add(id);s.end(undefined)} db.close();process.exit(0)})
