@@ -155,3 +155,37 @@ test('domain: endpoint /api/tenant/domains mengembalikan daftar dari BASE_DOMAIN
   const jumlah = (tenant.match(/^  '[a-z0-9.-]+',$/gm) || []).length
   assert.ok(jumlah >= 6, `harus ada minimal 6 domain terdaftar (ditemukan ${jumlah})`)
 })
+
+test('paket: migrasi ADITIF menambahkan fitur baru tanpa mencabut penyesuaian manual', () => {
+  const Database = require('better-sqlite3')
+  const os = require('node:os')
+  const f = path.join(os.tmpdir(), 'migrasi-aditif-' + Date.now() + '.db')
+  const db = new Database(f)
+  try {
+    db.exec('CREATE TABLE IF NOT EXISTS tenants (id TEXT PRIMARY KEY, plan TEXT, trial_ends_at TEXT, subscription_ends_at TEXT, expired_at TEXT, features_json TEXT)')
+    sub.setupSubscriptionTables(db)
+    // Simulasikan baris DB produksi: fitur LAMA saja (belum ada fitur baru),
+    // dan 'lite' sudah disesuaikan manual (punya rest_api).
+    const lamaLite = [...sub.FEATURE_KEYS.filter(k => !['backup_drive','website','rest_api','cashless','ekantin','ppdb','administrasi','perpustakaan','ujian','program_belajar','smtp','monitoring','foundation'].includes(k)), 'rest_api']
+    db.prepare("UPDATE subscription_plans SET fitur_json=? WHERE plan='lite'").run(JSON.stringify(Object.fromEntries(lamaLite.map(k => [k, true]))))
+    const lamaPro = sub.FEATURE_KEYS.filter(k => !['cashless','ekantin','ppdb','administrasi','perpustakaan','ujian','program_belajar','smtp','monitoring','foundation'].includes(k))
+    db.prepare("UPDATE subscription_plans SET fitur_json=? WHERE plan='pro'").run(JSON.stringify(Object.fromEntries(lamaPro.map(k => [k, true]))))
+
+    sub.setupSubscriptionPlans(db)
+    const map = sub.planFeatureMap(db)
+    const ambil = (p) => new Set(Array.isArray(map[p]) ? map[p] : map[p].fitur)
+
+    // Lite: dapat fitur inti baru, TIDAK dapat fitur lanjutan, rest_api manual tetap ada
+    assert.ok(ambil('lite').has('ppdb'), 'lite harus dapat ppdb')
+    assert.ok(ambil('lite').has('administrasi'), 'lite harus dapat administrasi')
+    assert.ok(!ambil('lite').has('smtp'), 'lite TIDAK boleh dapat smtp')
+    assert.ok(!ambil('lite').has('ujian'), 'lite TIDAK boleh dapat ujian')
+    assert.ok(ambil('lite').has('rest_api'), 'penyesuaian manual (rest_api) tidak boleh dicabut')
+    // Pro: dapat fitur lanjutan, tetap tanpa cashless
+    assert.ok(ambil('pro').has('smtp') && ambil('pro').has('ujian'), 'pro harus dapat smtp & ujian')
+    assert.ok(!ambil('pro').has('cashless'), 'pro tetap tanpa cashless')
+    // Bertingkat
+    assert.ok(ambil('lite').size < ambil('pro').size)
+    assert.ok(ambil('pro').size < ambil('premium').size)
+  } finally { db.close(); fs.rmSync(f, { force: true }) }
+})

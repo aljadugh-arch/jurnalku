@@ -105,9 +105,14 @@ export default function ProgramBelajarPage() {
       </div>
 
       {!nonformal && (
-        <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-700">
-          Jenjang lembaga ini belum diset <b>Lembaga Nonformal (NF)</b> di Pengaturan. Program belajar tetap bisa
-          dikelola, tetapi paket bawaan hanya diisi otomatis untuk lembaga nonformal.
+        <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+          <b>Modul ini hanya untuk lembaga nonformal.</b> Lembaga Anda terdaftar sebagai sekolah formal,
+          jadi Program Belajar tidak dapat digunakan. Sekolah formal memakai menu <b>Mata Pelajaran</b> dan
+          <b> Rombongan Belajar</b>.
+          <div className="text-xs mt-2">
+            Jika lembaga Anda memang lembaga kursus/bimbel/sanggar/diklat, ubah <b>Jenjang</b> menjadi
+            <b> Lembaga Nonformal (NF)</b> di menu Pengaturan — setelah itu modul ini aktif.
+          </div>
         </div>
       )}
 

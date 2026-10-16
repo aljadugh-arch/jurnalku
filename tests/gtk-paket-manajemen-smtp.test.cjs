@@ -92,13 +92,15 @@ test('paket: lite < pro < premium (bertingkat nyata, bukan semua fitur)', () => 
   } finally { db.close(); fs.rmSync(f, { force: true }) }
 })
 
-test('paket: sinkronisasi memperbarui definisi lama tetapi MENGHORMATI yang sudah disesuaikan manual', () => {
+test('paket: migrasi MENGHORMATI penyesuaian manual dan tetap mengisi fitur yang berhak', () => {
   const { db, f } = dbKosong()
   try {
     resetPaket(db)
-    // Simulasikan definisi lama 'pro' = SEMUA fitur (bentuk sebelum diperbaiki).
+    // Simulasikan 'pro' yang sudah disesuaikan manual: berisi SEMUA fitur LAMA
+    // (tanpa fitur baru) + cashless yang sengaja diberikan admin platform.
+    const proManual = subscription.FEATURE_KEYS.filter(k => !['ppdb','administrasi','perpustakaan','ujian','program_belajar','smtp','monitoring','foundation'].includes(k))
     db.prepare("UPDATE subscription_plans SET fitur_json=? WHERE plan='pro'")
-      .run(JSON.stringify(Object.fromEntries(subscription.FEATURE_KEYS.map(k => [k, true]))))
+      .run(JSON.stringify(Object.fromEntries(proManual.map(k => [k, true]))))
     // Simulasikan 'lite' yang sudah disesuaikan admin (menambah rest_api).
     const liteManual = [...subscription.PLAN_FEATURES.lite, 'rest_api']
     db.prepare("UPDATE subscription_plans SET fitur_json=? WHERE plan='lite'")
@@ -106,10 +108,17 @@ test('paket: sinkronisasi memperbarui definisi lama tetapi MENGHORMATI yang suda
     subscription.setupSubscriptionPlans(db)
     const map = subscription.planFeatureMap(db)
     const ambil = (p) => new Set(Array.isArray(map[p]) ? map[p] : map[p].fitur)
-    // 'pro' kembali ke definisi baru (tanpa cashless/ekantin).
-    assert.ok(!ambil('pro').has('cashless'), 'pro harus disinkronkan ke definisi baru')
-    // 'lite' yang disesuaikan manual TIDAK diubah.
-    assert.ok(ambil('lite').has('rest_api'), 'lite yang disesuaikan manual tidak boleh ditimpa')
+
+    // INVARIAN 1: fitur BARU yang menjadi hak paket ditambahkan (migrasi aditif).
+    for (const k of ['smtp', 'ujian', 'program_belajar', 'ppdb', 'administrasi']) {
+      assert.ok(ambil('pro').has(k), `pro harus mendapat fitur baru ${k}`)
+    }
+    // INVARIAN 2: penyesuaian manual TIDAK dicabut — 'cashless' yang diberikan
+    // admin platform ke pro tetap ada walau definisi kode pro tanpa cashless.
+    assert.ok(ambil('pro').has('cashless'), 'penyesuaian manual (cashless di pro) tidak boleh dicabut')
+    // INVARIAN 3: fitur di luar hak paket tidak ditambahkan (lite tetap tanpa smtp).
+    assert.ok(!ambil('lite').has('smtp'), 'lite tidak boleh mendapat smtp')
+    assert.ok(ambil('lite').has('rest_api'), 'penyesuaian manual lite (rest_api) dipertahankan')
   } finally { db.close(); fs.rmSync(f, { force: true }) }
 })
 

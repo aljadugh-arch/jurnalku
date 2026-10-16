@@ -16,6 +16,11 @@ const FEATURE_KEYS = [
   'foundation',     // Integrasi se-yayasan (multi-lembaga)
 ]
 
+// Fitur yang BARU ditambahkan ke sistem paket. Dipakai migrasi agar fitur ini
+// bisa ditambahkan ke baris paket yang sudah ada di DB TANPA mencabut
+// penyesuaian manual admin platform.
+const FITUR_BARU = ['ppdb', 'administrasi', 'perpustakaan', 'ujian', 'program_belajar', 'smtp', 'monitoring', 'foundation']
+
 // Fitur per paket. Prinsip: paket lebih tinggi = fitur lebih banyak, dan ada
 // perbedaan NYATA antar tingkat.
 //
@@ -184,16 +189,21 @@ function setupSubscriptionPlans(db) {
     ins.run(p.plan, p.label, p.harga, p.masa_nilai, p.masa_satuan, p.aktif, JSON.stringify(PLAN_FEATURES[p.plan] || FEATURE_KEYS), p.urutan)
   }
 
-  // Sinkronisasi fitur paket bawaan. Baris yang fitur AKTIF-nya masih PERSIS
-  // sama dengan definisi lama (belum pernah diubah admin platform) diperbarui
-  // ke definisi baru; baris yang sudah disesuaikan manual TIDAK disentuh.
-  // Tanpa ini, perubahan PLAN_FEATURES di kode tidak pernah sampai ke produksi
-  // karena accessForTenant lebih memilih fitur_json dari DB.
+  // Sinkronisasi fitur paket bawaan.
   //
-  // PENTING: DB bisa menyimpan dua bentuk — array `["jurnal",...]` (bentuk
-  // penulisan kita) atau objek `{"jurnal":true,...}` (bentuk yang ditulis UI
-  // admin). Perbandingan di bawah dinormalkan ke HIMPUNAN fitur aktif sehingga
-  // kedua bentuk dikenali.
+  // Dua hal yang harus ditangani, dan keduanya bersifat ADITIF (tidak pernah
+  // mencabut hak yang sudah disesuaikan admin platform):
+  //  1. FITUR BARU: fitur yang ada di definisi kode tapi belum ada sama sekali
+  //     di baris DB (mis. fitur yang baru ditambahkan) → ditambahkan bila paket
+  //     memang berhak memilikinya.
+  //  2. DEFINISI LAMA: baris yang fitur aktifnya masih persis sama dengan
+  //     definisi lama (belum pernah disesuaikan manual) → diganti definisi baru.
+  //
+  // Tanpa (1), fitur baru tidak pernah sampai ke produksi karena accessForTenant
+  // lebih memilih fitur_json dari DB.
+  //
+  // PENTING: DB bisa menyimpan dua bentuk — array `["jurnal",...]` atau objek
+  // `{"jurnal":true,...}`. Perbandingan dinormalkan ke HIMPUNAN fitur aktif.
   try {
     const aktifDari = (mentah) => {
       if (!mentah) return null
@@ -206,13 +216,13 @@ function setupSubscriptionPlans(db) {
     const sama = (a, b) => a && b && a.size === b.size && [...a].every(k => b.has(k))
     const DEFINISI_LAMA = {
       // Bentuk lama yang harus dianggap "belum diubah manual".
-      lite: FEATURE_KEYS.filter(k => !['backup_drive', 'website'].includes(k)),
-      pro: FEATURE_KEYS,
-      premium: FEATURE_KEYS,
-      trial: FEATURE_KEYS,
+      lite: FEATURE_KEYS.filter(k => !['backup_drive', 'website', 'rest_api', 'cashless', 'ekantin'].includes(k)),
+      pro: FEATURE_KEYS.filter(k => !['cashless', 'ekantin'].includes(k)),
+      premium: FEATURE_KEYS.filter(k => !FITUR_BARU.includes(k)),
+      trial: FEATURE_KEYS.filter(k => !FITUR_BARU.includes(k)),
     }
     const upd = db.prepare("UPDATE subscription_plans SET fitur_json=?, updated_at=datetime('now') WHERE plan=?")
-    let disinkron = 0
+    let ditambah = 0, diganti = 0
     const jalan = db.transaction(() => {
       for (const p of DEFAULT_PLANS) {
         const row = db.prepare('SELECT fitur_json FROM subscription_plans WHERE plan=?').get(p.plan)
@@ -220,15 +230,28 @@ function setupSubscriptionPlans(db) {
         const baruArr = PLAN_FEATURES[p.plan] || FEATURE_KEYS
         const baru = new Set(baruArr)
         const isi = aktifDari(row.fitur_json)
+        if (!isi) continue
         const lama = new Set(DEFINISI_LAMA[p.plan] || [])
+
+        // (2) Baris yang belum pernah disesuaikan manual → ganti ke definisi baru.
         if (sama(isi, lama) && !sama(isi, baru)) {
           upd.run(JSON.stringify(Object.fromEntries(FEATURE_KEYS.map(k => [k, baru.has(k)]))), p.plan)
-          disinkron++
+          diganti++
+          continue
+        }
+        // (1) Aditif: tambahkan fitur BARU yang belum ada di baris ini, hanya bila
+        //     paket ini berhak. Fitur lama tidak pernah dimatikan di sini.
+        const kurang = FITUR_BARU.filter(k => baru.has(k) && !isi.has(k))
+        if (kurang.length) {
+          const gabung = { ...Object.fromEntries(FEATURE_KEYS.map(k => [k, isi.has(k)])), ...Object.fromEntries(kurang.map(k => [k, true])) }
+          upd.run(JSON.stringify(gabung), p.plan)
+          ditambah++
         }
       }
     })
     jalan()
-    if (disinkron) console.log(`[migrate] fitur paket disinkronkan: ${disinkron} paket`)
+    if (diganti) console.log(`[migrate] fitur paket disinkronkan: ${diganti} paket`)
+    if (ditambah) console.log(`[migrate] fitur baru ditambahkan ke ${ditambah} paket`)
   } catch (e) { console.error('[migrate] sinkronisasi fitur paket failed', e.message) }
 }
 
