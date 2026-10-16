@@ -1,3 +1,4 @@
+import { useSettingsStore } from '../stores/settingsStore'
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Grid3X3 } from 'lucide-react'
@@ -31,9 +32,10 @@ function MenuLink({ item, index, onClick }: { item: FlatMenu; index: number; onC
 export default function MobileMenuGrid() {
   const { user } = useAuthStore()
   const features = useSubscriptionStore(s => s.subscription?.features)
+  const settings = useSettingsStore(s => s.settings)
   const [showAll, setShowAll] = useState(false)
-  const items = flattenMenu(menuForRole(user?.role)).filter(item => !['/admin', '/guru', '/siswa'].includes(item.path) && pathEnabled(item.path, features))
-  const primary = primaryGridForRole(user?.role).filter(item => pathEnabled(item.path, features))
+  const items = flattenMenu(menuForRole(user?.role)).filter(item => !['/admin', '/guru', '/siswa'].includes(item.path) && pathEnabled(item.path, features, settings.jenjang))
+  const primary = primaryGridForRole(user?.role).filter(item => pathEnabled(item.path, features, settings.jenjang))
 
   return (
     <>

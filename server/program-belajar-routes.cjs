@@ -50,6 +50,29 @@ function registerProgramBelajarRoutes(app, db, { requireRole }) {
   const aman = (res, fn) => { try { fn() } catch (e) { res.status(400).json({ error: e.message }) } }
   const buatId = () => crypto.randomUUID()
 
+  /** Apakah jenjang lembaga ini nonformal (kursus/bimbel/sanggar/diklat)? */
+  function jenjangNonformal(tenantId) {
+    try {
+      const row = db.prepare("SELECT COALESCE(jenjang,'') jenjang FROM settings WHERE tenant_id=?").get(tenantId)
+      const j = String(row?.jenjang || '').trim().toUpperCase()
+      return j === 'NF' || j.includes('NONFORMAL') || j.includes('NON-FORMAL') || j.includes('KURSUS') || j.includes('DIKLAT') || j.includes(' BIMBEL') || j === 'BIMBEL'
+    } catch { return false }
+  }
+
+  // Modul ini HANYA untuk lembaga nonformal. Sekolah formal memakai mapel +
+  // rombel; membiarkan mereka membuka Program Belajar hanya membingungkan dan
+  // mengotori data. Gerbang ini melindungi SEMUA route (termasuk GET), bukan
+  // hanya seed — jadi sekolah formal tidak bisa membuka halaman/menunya.
+  function hanyaNonformal(req, res, next) {
+    if (!jenjangNonformal(req.tenantId)) {
+      return res.status(403).json({
+        error: 'Program Belajar hanya tersedia untuk lembaga nonformal (kursus, bimbel, sanggar, diklat). Sekolah formal memakai Mata Pelajaran & Rombongan Belajar.',
+        code: 'NONFORMAL_ONLY',
+      })
+    }
+    next()
+  }
+
   // Lembaga yang BARU diset jenjang nonformal di Pengaturan belum punya paket
   // bawaan sampai server di-restart. Seed malas di GET menutup celah itu tanpa
   // memaksa restart; penanda `program_belajar_seed` menjaga agar hanya sekali.
@@ -58,24 +81,20 @@ function registerProgramBelajarRoutes(app, db, { requireRole }) {
     try {
       const sudah = db.prepare('SELECT tenant_id FROM program_belajar_seed WHERE tenant_id=?').get(tenantId)
       if (sudah) return
-      const row = db.prepare("SELECT COALESCE(jenjang,'') jenjang FROM settings WHERE tenant_id=?").get(tenantId)
-      const j = String(row?.jenjang || '').toUpperCase()
-      if (j === 'NF' || j.includes('NONFORMAL') || j.includes('NON-FORMAL') || j.includes('KURSUS')) {
-        seedProgramBawaan(db, tenantId, buatId)
-      }
+      if (jenjangNonformal(tenantId)) seedProgramBawaan(db, tenantId, buatId)
     } catch { /* kolom/tenant hilang → lewati, ini hanya kemudahan */ }
   }
 
   // ---- Program -----------------------------------------------------------
 
-  app.get('/api/program-belajar', LIHAT, (req, res) => {
+  app.get('/api/program-belajar', LIHAT, hanyaNonformal, (req, res) => {
     aman(res, () => {
       seedJikaPerlu(req.tenantId)
       res.json({ success: true, program: daftarProgram(db, req.tenantId) })
     })
   })
 
-  app.post('/api/program-belajar', KELOLA, (req, res) => {
+  app.post('/api/program-belajar', KELOLA, hanyaNonformal, (req, res) => {
     aman(res, () => {
       const nilai = normalizeProgramInput(req.body || {})
       const duplikat = db.prepare('SELECT id FROM program_belajar WHERE tenant_id=? AND lower(nama)=lower(?)').get(req.tenantId, nilai.nama)
@@ -90,7 +109,7 @@ function registerProgramBelajarRoutes(app, db, { requireRole }) {
     })
   })
 
-  app.put('/api/program-belajar/:id', KELOLA, (req, res) => {
+  app.put('/api/program-belajar/:id', KELOLA, hanyaNonformal, (req, res) => {
     aman(res, () => {
       const row = db.prepare('SELECT * FROM program_belajar WHERE id=? AND tenant_id=?').get(req.params.id, req.tenantId)
       if (!row) throw new Error('Program tidak ditemukan')
@@ -105,7 +124,7 @@ function registerProgramBelajarRoutes(app, db, { requireRole }) {
     })
   })
 
-  app.delete('/api/program-belajar/:id', KELOLA, (req, res) => {
+  app.delete('/api/program-belajar/:id', KELOLA, hanyaNonformal, (req, res) => {
     aman(res, () => {
       const row = db.prepare('SELECT id FROM program_belajar WHERE id=? AND tenant_id=?').get(req.params.id, req.tenantId)
       if (!row) throw new Error('Program tidak ditemukan')
@@ -120,7 +139,7 @@ function registerProgramBelajarRoutes(app, db, { requireRole }) {
 
   // ---- Level / grade -----------------------------------------------------
 
-  app.post('/api/program-belajar/:id/level', KELOLA, (req, res) => {
+  app.post('/api/program-belajar/:id/level', KELOLA, hanyaNonformal, (req, res) => {
     aman(res, () => {
       const program = db.prepare('SELECT id FROM program_belajar WHERE id=? AND tenant_id=?').get(req.params.id, req.tenantId)
       if (!program) throw new Error('Program tidak ditemukan')
@@ -136,7 +155,7 @@ function registerProgramBelajarRoutes(app, db, { requireRole }) {
     })
   })
 
-  app.put('/api/program-level/:id', KELOLA, (req, res) => {
+  app.put('/api/program-level/:id', KELOLA, hanyaNonformal, (req, res) => {
     aman(res, () => {
       const row = db.prepare('SELECT * FROM program_level WHERE id=? AND tenant_id=?').get(req.params.id, req.tenantId)
       if (!row) throw new Error('Level tidak ditemukan')
@@ -151,7 +170,7 @@ function registerProgramBelajarRoutes(app, db, { requireRole }) {
     })
   })
 
-  app.delete('/api/program-level/:id', KELOLA, (req, res) => {
+  app.delete('/api/program-level/:id', KELOLA, hanyaNonformal, (req, res) => {
     aman(res, () => {
       const info = db.prepare('DELETE FROM program_level WHERE id=? AND tenant_id=?').run(req.params.id, req.tenantId)
       if (!info.changes) throw new Error('Level tidak ditemukan')

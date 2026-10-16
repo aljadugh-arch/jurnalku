@@ -98,7 +98,10 @@ test('operator and TU restrictions are shared by desktop and mobile navigation',
 })
 
 test('website menu obeys the website subscription feature flag', () => {
-  assert.match(FEATURES, /\['website',\['\/admin\/website-lembaga'\]\]/)
+  // Kontrak diperbarui: entri 'website' kini memuat dua halaman (website-lembaga
+  // + domain), jadi tes mengunci INVARIAN (website digerbang & halaman utamanya
+  // terdaftar), bukan format literal lama.
+  assert.match(FEATURES, /\['website',\s*\[[^\]]*\/admin\/website-lembaga/)
 })
 
 test('all-menu sheet derives from the complete role menu and retains settings and teaching schedule', () => {

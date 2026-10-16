@@ -175,9 +175,9 @@ export default function BottomNavigation() {
   const navigationRole = bisaModeGuru(user) && location.pathname.startsWith('/guru') ? 'guru' : role
   const items = useMemo(() => {
     const base = roleItems(navigationRole, isDemo)
-    if (!['operator', 'tata_usaha', 'tu'].includes(navigationRole || '')) return base.filter(item => pathEnabled(item.path, features))
+    if (!['operator', 'tata_usaha', 'tu'].includes(navigationRole || '')) return base.filter(item => pathEnabled(item.path, features, settings.jenjang))
     const allowedPaths = new Set(flattenMenu(menuForRole(navigationRole)).map(item => item.path))
-    return base.filter(item => allowedPaths.has(item.path) && pathEnabled(item.path, features))
+    return base.filter(item => allowedPaths.has(item.path) && pathEnabled(item.path, features, settings.jenjang))
   }, [navigationRole, isDemo, features])
   const primary = items.slice(0, 4)
   const more = items.slice(4)

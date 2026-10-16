@@ -109,8 +109,8 @@ export default function Sidebar() {
               : siswaMenuItems
   )
     // menuForRole membatasi /guru/rombel hanya ketika user?.role === 'wali_kelas'.
-    .map(item => ({ ...item, children: item.children?.filter(child => pathEnabled(child.path, features)) }))
-    .filter(item => item.path ? pathEnabled(item.path, features) : !!item.children?.length)
+    .map(item => ({ ...item, children: item.children?.filter(child => pathEnabled(child.path, features, settings.jenjang)) }))
+    .filter(item => item.path ? pathEnabled(item.path, features, settings.jenjang) : !!item.children?.length)
 
   const handleNav = () => {
     if (typeof window !== 'undefined' && window.innerWidth < 1024) close()

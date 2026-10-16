@@ -48,6 +48,15 @@ const FEATURE_LABELS: Record<string, string> = {
   cashless: 'Cashless',
   ekantin: 'E-Kantin',
   rest_api: 'REST API Developer',
+  // Fitur baru — sebelumnya tidak ada di daftar sehingga tidak bisa diatur paketnya.
+  ppdb: 'PPDB (Siswa Baru)',
+  administrasi: 'Administrasi Surat',
+  perpustakaan: 'Perpustakaan Digital',
+  ujian: 'Ujian & Bank Soal',
+  program_belajar: 'Program Belajar (Nonformal)',
+  smtp: 'SMTP/IMAP Lembaga',
+  monitoring: 'Monitoring & Ledger Nilai',
+  foundation: 'Integrasi Se-Yayasan',
 }
 
 type PlanDraft = { label: string; harga: number; masa_nilai: number; masa_satuan: string; aktif: boolean; fitur: Record<string, boolean> }

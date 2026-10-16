@@ -1,3 +1,4 @@
+import { useSettingsStore } from '../stores/settingsStore'
 import { Link } from 'react-router-dom'
 import PortalSheet from './ui/PortalSheet'
 import { useAuthStore } from '../stores/authStore'
@@ -32,8 +33,9 @@ function MenuLink({ item, index, onClose }: { item: FlatMenu; index: number; onC
 export default function MobileMenuSheet({ open, onClose, variant = 'all' }: { open: boolean; onClose: () => void; variant?: 'all' | 'settings' }) {
   const role = useAuthStore(s => s.user?.role)
   const features = useSubscriptionStore(s => s.subscription?.features)
+  const settings = useSettingsStore(s => s.settings)
   const adminRole = ['admin', 'kepala', 'super_admin', 'operator', 'tata_usaha', 'tu', 'bendahara'].includes(role || '')
-  const allItems = flattenMenu(menuForRole(role)).filter(item => !['/admin', '/guru', '/siswa'].includes(item.path) && pathEnabled(item.path.split('#')[0], features))
+  const allItems = flattenMenu(menuForRole(role)).filter(item => !['/admin', '/guru', '/siswa'].includes(item.path) && pathEnabled(item.path.split('#')[0], features, settings.jenjang))
   const items = variant === 'settings'
     ? allItems.filter(item => /Pengaturan|Tahun Ajaran|Backup|Gateway|Notifikasi|REST API/.test(item.label))
     : allItems

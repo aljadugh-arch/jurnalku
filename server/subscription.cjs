@@ -1,35 +1,58 @@
 const crypto = require('node:crypto')
 
-const FEATURE_KEYS = ['master_data', 'jadwal', 'absensi', 'jurnal', 'penilaian', 'keuangan', 'whatsapp', 'posting', 'modul_ajar', 'backup_drive', 'website', 'rest_api', 'cashless', 'ekantin']
+const FEATURE_KEYS = [
+  'master_data', 'jadwal', 'absensi', 'jurnal', 'penilaian', 'keuangan', 'whatsapp', 'posting', 'modul_ajar',
+  'backup_drive', 'website', 'rest_api', 'cashless', 'ekantin',
+  // Fitur yang sebelumnya TIDAK digerbang paket sama sekali (bisa dipakai semua
+  // paket walau secara komersial seharusnya bertingkat). Ditambahkan agar paket
+  // benar-benar menentukan apa yang tersedia.
+  'ppdb',           // Penerimaan Peserta Didik Baru
+  'administrasi',   // Administrasi surat (surat masuk/keluar, arsip)
+  'perpustakaan',   // Perpustakaan digital (Google Drive)
+  'ujian',          // Bank soal, kisi-kisi, paket ujian, CBT
+  'program_belajar',// Program & level untuk lembaga NONFORMAL (kursus/bimbel)
+  'smtp',           // SMTP/IMAP domain sendiri milik lembaga
+  'monitoring',     // Monitoring data & ledger nilai
+  'foundation',     // Integrasi se-yayasan (multi-lembaga)
+]
 
 // Fitur per paket. Prinsip: paket lebih tinggi = fitur lebih banyak, dan ada
-// perbedaan NYATA antar tingkat (dulu trial/pro/premium semuanya = SEMUA fitur,
-// sehingga lembaga paket lite bisa punya fitur pro/premium tanpa sengaja).
+// perbedaan NYATA antar tingkat.
 //
 // Label fitur (untuk ditampilkan di UI):
-//   master_data   Data siswa, GTK, mapel, rombel, pengguna, tahun ajaran
-//   jadwal        Jadwal pelajaran, ujian, kalender KBM, pengajar, wali kelas
-//   absensi       Absensi siswa/guru (QR, RFID, GPS), ceklok, ekskul, jamaah
-//   jurnal        Jurnal mengajar guru
-//   penilaian     Nilai, rapor, catatan kepribadian, supervisi
-//   keuangan      Tagihan, tabungan, bendahara, beasiswa, cashless
-//   whatsapp      Notifikasi & broadcast WhatsApp
-//   posting       Postingan/feed lembaga
-//   modul_ajar    Generator AI guru & modul ajar
-//   backup_drive  Backup otomatis ke Google Drive
-//   website       Domain sendiri & website publik lembaga
-//   rest_api      REST API Developer (integrasi alat eksternal)
-//   cashless      E-Kantin & cashless penuh
-//   ekantin       Modul kantin (menu, pesanan, pemindai)
+//   master_data     Data siswa, GTK, mapel, rombel, pengguna, tahun ajaran
+//   jadwal          Jadwal pelajaran, ujian, kalender KBM, pengajar, wali kelas
+//   absensi         Absensi siswa/guru (QR, RFID, GPS), ceklok, ekskul, jamaah
+//   jurnal          Jurnal mengajar guru
+//   penilaian       Nilai, rapor, catatan kepribadian, supervisi
+//   keuangan        Tagihan, tabungan, bendahara, beasiswa, cashless
+//   whatsapp        Notifikasi & broadcast WhatsApp
+//   posting         Postingan/feed lembaga
+//   modul_ajar      Generator AI guru & modul ajar
+//   backup_drive    Backup otomatis ke Google Drive
+//   website         Domain sendiri & website publik lembaga
+//   rest_api        REST API Developer (integrasi alat eksternal)
+//   cashless        E-Kantin & cashless penuh
+//   ekantin         Modul kantin (menu, pesanan, pemindai)
+//   ppdb            Pendaftaran siswa baru online
+//   administrasi    Administrasi surat menyurat
+//   perpustakaan    Perpustakaan digital
+//   ujian           Bank soal, kisi-kisi, paket ujian, CBT
+//   program_belajar Program & level lembaga nonformal (kursus/bimbel/sanggar)
+//   smtp            Kirim email dari domain lembaga sendiri
+//   monitoring      Monitoring data & ledger nilai
+//   foundation      Integrasi se-yayasan (khusus yayasan multi-lembaga)
 const PLAN_FEATURES = {
   // Trial: semua fitur boleh dicoba, TAPI masa aktifnya pendek (default 1 bulan).
   trial: FEATURE_KEYS,
-  // Lite: inti operasional harian. TANPA backup Drive, domain sendiri,
-  // REST API, cashless penuh, dan modul kantin.
-  lite: FEATURE_KEYS.filter(k => !['backup_drive', 'website', 'rest_api', 'cashless', 'ekantin'].includes(k)),
-  // Pro: inti + domain sendiri + backup Drive + REST API. TANPA cashless & kantin.
-  pro: FEATURE_KEYS.filter(k => !['cashless', 'ekantin'].includes(k)),
-  // Premium: SEMUA fitur (cashless & kantin penuh).
+  // Lite: inti operasional harian + PPDB + administrasi surat + perpustakaan.
+  // TANPA domain sendiri, backup Drive, REST API, SMTP, ujian/CBT, program
+  // belajar nonformal, cashless, kantin, monitoring, integrasi yayasan.
+  lite: FEATURE_KEYS.filter(k => !['backup_drive', 'website', 'rest_api', 'smtp', 'ujian', 'program_belajar', 'cashless', 'ekantin', 'monitoring', 'foundation'].includes(k)),
+  // Pro: semua Lite + domain sendiri, backup Drive, REST API, SMTP, ujian/CBT,
+  // program belajar nonformal, monitoring. TANPA cashless, kantin, yayasan.
+  pro: FEATURE_KEYS.filter(k => !['cashless', 'ekantin', 'foundation'].includes(k)),
+  // Premium: SEMUA fitur (cashless, kantin, integrasi yayasan penuh).
   premium: FEATURE_KEYS,
 }
 const FEATURE_PREFIXES = {
@@ -47,6 +70,18 @@ const FEATURE_PREFIXES = {
   cashless: ['/api/cashless'],
   ekantin: ['/api/kantin'],
   rest_api: ['/api/external'],
+  // Fitur baru — sebelumnya tidak digerbang sama sekali.
+  // CATATAN: '/api/ppdb/publik/' TIDAK digerbang karena pendaftaran calon siswa
+  // harus tetap bisa diakses publik (halaman pendaftaran), bukan fungsi panitia.
+  ppdb: ['/api/ppdb/gelombang', '/api/ppdb/pendaftar', '/api/ppdb/ringkasan', '/api/ppdb/antrian'],
+  administrasi: ['/api/administrasi'],
+  perpustakaan: ['/api/library'],
+  ujian: ['/api/bank-soal', '/api/kisi-kisi', '/api/paket-ujian', '/api/ujian'],
+  program_belajar: ['/api/program-belajar', '/api/program-level'],
+  smtp: ['/api/smtp'],
+  // 'monitoring' & 'foundation' hanya punya halaman FE (tidak ada route
+  // /api/monitoring atau /api/foundation) — gerbangnya lewat featureAccess.ts,
+  // jadi tidak ada prefix server di sini.
 }
 
 function addMonthsIso(from, months = 1) {
