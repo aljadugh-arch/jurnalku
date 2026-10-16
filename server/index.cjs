@@ -1578,11 +1578,25 @@ function ensureStudentUser(siswa, tenantId, opts = {}) {
   const byNisn = siswa.nisn ? db.prepare("SELECT * FROM users WHERE role = 'siswa' AND nisn = ? AND tenant_id = ?").get(siswa.nisn, tenantId) : null
   const user = byStudent || byNis || byNisn
 
+  // Tautan user_students WAJIB dibuat di sini. Halaman Nilai Siswa
+  // (/api/siswa/penilaian, /api/siswa/penilaian/rekap) dan seluruh portal
+  // (/api/portal/*: tabungan, tagihan, QRIS, kantin) membaca siswa HANYA dari
+  // tabel ini. Akun siswa yang dibuat otomatis dari Data Siswa sebelumnya hanya
+  // mengisi users.siswa_id/nis — akibatnya semua endpoint itu menolak dengan
+  // "Akun siswa harus tertaut tepat satu siswa" / mengembalikan daftar kosong,
+  // padahal datanya ada. Tanpa baris ini, fitur siswa tampak kosong.
+  const tautkan = userId => {
+    try {
+      db.prepare('INSERT OR IGNORE INTO user_students(tenant_id,user_id,student_id) VALUES(?,?,?)').run(tenantId, userId, siswa.id)
+    } catch { /* tabel dibuat setupPortalCashless; aman diabaikan bila belum ada */ }
+  }
+
   if (user) {
     const shouldResetPassword = opts.resetPassword || (opts.resetDefaultPassword && user.must_change_password)
     const nextPassword = shouldResetPassword ? bcrypt.hashSync(initial, 10) : user.password
     db.prepare('UPDATE users SET nama=?, nis=?, nisn=?, siswa_id=?, password=?, must_change_password=? WHERE id=? AND tenant_id=?')
       .run(siswa.nama, siswa.nis, siswa.nisn || null, siswa.id, nextPassword, shouldResetPassword ? 1 : (user.must_change_password || 0), user.id, tenantId)
+    tautkan(user.id)
     return db.prepare('SELECT * FROM users WHERE id = ? AND tenant_id = ?').get(user.id, tenantId)
   }
 
@@ -1590,6 +1604,7 @@ function ensureStudentUser(siswa, tenantId, opts = {}) {
   const email = studentLocalEmail(tenantId, siswa.nis)
   db.prepare('INSERT INTO users (id, nama, email, password, role, nis, nisn, siswa_id, tenant_id, must_change_password) VALUES (?,?,?,?,?,?,?,?,?,?)')
     .run(id, siswa.nama, email, bcrypt.hashSync(initial, 10), 'siswa', siswa.nis, siswa.nisn || null, siswa.id, tenantId, 1)
+  tautkan(id)
   return db.prepare('SELECT * FROM users WHERE id = ? AND tenant_id = ?').get(id, tenantId)
 }
 
@@ -1729,6 +1744,22 @@ try { db.prepare("UPDATE broadcast_detail SET tenant_id='default' WHERE tenant_i
 try {
   db.prepare(`UPDATE users SET siswa_id=(SELECT s.id FROM siswa s WHERE s.tenant_id=users.tenant_id AND s.nis=users.nis LIMIT 1)
     WHERE role='siswa' AND (siswa_id IS NULL OR siswa_id='') AND nis IS NOT NULL AND nis<>''`).run()
+} catch {}
+
+// Backfill tautan user_students untuk akun siswa lama. Tanpa baris di tabel ini,
+// halaman Nilai Siswa dan seluruh portal (tabungan/tagihan/QRIS/kantin) menganggap
+// akun tidak tertaut ke siswa mana pun sehingga menampilkan data kosong atau
+// menolak dengan "Akun siswa harus tertaut tepat satu siswa", padahal nilai,
+// absensi, tagihan, dan tabungan siswa itu ada.
+try {
+  db.prepare(`INSERT OR IGNORE INTO user_students(tenant_id,user_id,student_id)
+    SELECT u.tenant_id, u.id, u.siswa_id FROM users u
+    WHERE u.role='siswa' AND u.siswa_id IS NOT NULL AND u.siswa_id<>''`).run()
+  // Jalur kedua: akun siswa yang hanya punya NIS/NISN (siswa_id belum terisi).
+  db.prepare(`INSERT OR IGNORE INTO user_students(tenant_id,user_id,student_id)
+    SELECT u.tenant_id, u.id, s.id FROM users u
+    JOIN siswa s ON s.tenant_id=u.tenant_id AND (s.nis=u.nis OR (u.nisn IS NOT NULL AND u.nisn<>'' AND s.nisn=u.nisn))
+    WHERE u.role='siswa' AND (u.siswa_id IS NULL OR u.siswa_id='') AND u.nis IS NOT NULL AND u.nis<>''`).run()
 } catch {}
 
 // Ensure a WA config row exists per tenant (lazy: create on demand in getWaConfig)
@@ -5009,6 +5040,26 @@ function linkedStudentIds(req) {
   }
   return ids
 }
+
+/**
+ * Daftar siswa tertaut untuk sebuah AKUN (bukan request), dengan fallback
+ * NIS/NISN/siswa_id. Dipakai route nilai siswa: kalau tabel user_students
+ * kosong (akun lama), akun tetap dapat melihat nilai miliknya sendiri —
+ * sebelumnya endpoint ini menolak dengan "Akun siswa harus tertaut tepat satu
+ * siswa" padahal data nilainya ada.
+ */
+function linkedStudentIdsFor(tenantId, userId, role, nis) {
+  const ids = db.prepare('SELECT student_id FROM user_students WHERE tenant_id=? AND user_id=? ORDER BY student_id').all(tenantId, userId).map(x => x.student_id)
+  if (role !== 'siswa' || ids.length) return ids
+  const u = db.prepare('SELECT siswa_id, nis, nisn FROM users WHERE id=? AND tenant_id=?').get(userId, tenantId)
+  const sid = u?.siswa_id || null
+  if (sid) { ids.push(sid); return ids }
+  const nilai = nis || u?.nis
+  if (!nilai) return ids
+  const s = db.prepare('SELECT id FROM siswa WHERE tenant_id=? AND (nis=? OR nisn=?) LIMIT 1').get(tenantId, nilai, u?.nisn || nilai)
+  if (s) ids.push(s.id)
+  return ids
+}
 function selectLinkedStudent(req) {
   const ids = linkedStudentIds(req)
   const id = req.query.student_id || ids[0]
@@ -5557,7 +5608,11 @@ app.get('/api/siswa/dashboard', authMiddleware, enforceTenantAccess, (req, res) 
   }
   let selected = req.query.student_id
   if (!selected && req.user.role === 'siswa') selected = linked[0]
-  if (!selected && req.user.role === 'wali_murid' && linked.length === 1) selected = linked[0]
+  // Wali murid: tampilkan anak pertama sebagai default supaya dashboard langsung
+  // berisi data. Sebelumnya wali dengan LEBIH DARI SATU anak tidak mendapat data
+  // sama sekali (selected tetap kosong -> payload semua nol), padahal daftar anak
+  // dikirim. UI tetap bisa memilih anak lain lewat query student_id.
+  if (!selected && req.user.role === 'wali_murid' && linked.length >= 1) selected = linked[0]
   const children = linked.map(id => db.prepare('SELECT id,nama,nis,foto,rombel_id FROM siswa WHERE id=? AND tenant_id=?').get(id, req.tenantId)).filter(Boolean)
   if (!selected) return res.json({ children, siswa: null, jadwal_hari_ini: [], rekap: { hadir: 0, sakit: 0, izin: 0, alpha: 0 }, absensi_detail: [], tagihan_detail: [], nilai_detail: [], tabungan_detail: [], tagihan: { total: 0, belum_bayar: 0, lunas: 0 }, tabungan: { saldo: 0, setor: 0, tarik: 0 } })
   if (!linked.includes(String(selected))) return res.status(403).json({ error: 'Bukan siswa/anak tertaut' })
@@ -5674,7 +5729,7 @@ app.get('/bendahara/dashboard', authMiddleware, (req, res) => {
 // ==================== SISWA EKSKUL ====================
 app.get('/api/siswa/penilaian', authMiddleware, (req, res) => {
   if (!['siswa', 'wali_murid'].includes(req.user.role)) return res.status(403).json({ error: 'Akses ditolak' })
-  const linked = db.prepare('SELECT student_id FROM user_students WHERE tenant_id=? AND user_id=? ORDER BY student_id').all(req.tenantId, req.user.id).map(row => row.student_id)
+  const linked = linkedStudentIdsFor(req.tenantId, req.user.id, req.user.role, req.user.nis)
   let studentId
   try { studentId = selectPenilaianStudentId(req.user.role, linked, req.query.student_id) }
   catch (error) { return res.status(403).json({ error: error.message }) }
@@ -5688,7 +5743,7 @@ app.get('/api/siswa/penilaian', authMiddleware, (req, res) => {
 // Rekap nilai per-mapel untuk siswa (rata-rata harian, ditampilkan di dashboard siswa)
 app.get('/api/siswa/penilaian/rekap', authMiddleware, (req, res) => {
   if (!['siswa', 'wali_murid'].includes(req.user.role)) return res.status(403).json({ error: 'Akses ditolak' })
-  const linked = db.prepare('SELECT student_id FROM user_students WHERE tenant_id=? AND user_id=? ORDER BY student_id').all(req.tenantId, req.user.id).map(row => row.student_id)
+  const linked = linkedStudentIdsFor(req.tenantId, req.user.id, req.user.role, req.user.nis)
   let studentId
   try { studentId = selectPenilaianStudentId(req.user.role, linked, req.query.student_id) }
   catch (error) { return res.status(403).json({ error: error.message }) }
@@ -7918,7 +7973,13 @@ app.get('/api/penilaian-harian', authMiddleware, (req, res) => {
 
 app.post('/api/penilaian-harian', STAFF, (req, res) => {
   const id = uuidv4()
-  const { jurnal_id, siswa_id, mapel_id, tanggal, sikap, keaktifan, pengetahuan, catatan } = req.body
+  const { jurnal_id, siswa_id, mapel_id, tanggal, catatan } = req.body
+  // Nilai wajib 0-100. Kolom input HTML punya min/max, tapi itu tidak mengikat:
+  // permintaan langsung ke API (atau tempel-lewat) bisa mengirim 909/1001 dan
+  // nilainya tampil apa adanya di dashboard siswa/wali. Dibulatkan ke rentang.
+  const sikap = clampNilai(req.body.sikap)
+  const keaktifan = clampNilai(req.body.keaktifan)
+  const pengetahuan = clampNilai(req.body.pengetahuan)
   if (isTeacherContext(req)) {
     const gtk = resolveGtkForUser(req.user.id, req.tenantId)
     const siswa = db.prepare('SELECT rombel_id FROM siswa WHERE id=? AND tenant_id=?').get(siswa_id, req.tenantId)
@@ -7928,7 +7989,7 @@ app.post('/api/penilaian-harian', STAFF, (req, res) => {
   // tidak boleh ada nilai masuk tanpa rapor ikut diperbarui (atau sebaliknya).
   const raporUpdated = db.transaction(() => {
     db.prepare(`INSERT INTO penilaian_harian (id, jurnal_id, siswa_id, mapel_id, tanggal, sikap, keaktifan, pengetahuan, catatan, tenant_id)
-      VALUES (?,?,?,?,?,?,?,?,?,?)`).run(id, jurnal_id||null, siswa_id, mapel_id, tanggal, sikap||0, keaktifan||0, pengetahuan||0, catatan||'', req.tenantId)
+      VALUES (?,?,?,?,?,?,?,?,?,?)`).run(id, jurnal_id||null, siswa_id, mapel_id, tanggal, sikap, keaktifan, pengetahuan, catatan||'', req.tenantId)
     return refreshRaporSetelahNilaiBerubah({ tenantId: req.tenantId, siswaId: siswa_id, mapelId: mapel_id, tanggal })
   })()
   res.json({ id, count: 1, rapor_updated: raporUpdated })
@@ -7937,21 +7998,30 @@ app.post('/api/penilaian-harian', STAFF, (req, res) => {
 app.post('/api/penilaian-harian/bulk', STAFF, (req, res) => {
   const { jurnal_id, mapel_id, tanggal, data } = req.body
   if (!data || !Array.isArray(data)) return res.status(400).json({ error: 'Data harus array' })
+  // Sama seperti endpoint satuan: nilai dibulatkan ke 0-100 di server, bukan
+  // hanya diandalkan pada min/max kolom input HTML.
+  const bersih = data.map(d => ({
+    siswa_id: d.siswa_id,
+    sikap: clampNilai(d.sikap),
+    keaktifan: clampNilai(d.keaktifan),
+    pengetahuan: clampNilai(d.pengetahuan),
+    catatan: d.catatan || '',
+  }))
   if (isTeacherContext(req)) {
     const gtk = resolveGtkForUser(req.user.id, req.tenantId)
-    if (!gtk || data.some(d => {
+    if (!gtk || bersih.some(d => {
       const siswa = db.prepare('SELECT rombel_id FROM siswa WHERE id=? AND tenant_id=?').get(d.siswa_id, req.tenantId)
       return !siswa || !teacherCanTeachPair(gtk.id, req.tenantId, mapel_id, siswa.rombel_id, tanggal)
     })) return res.status(403).json({ error: 'Terdapat siswa di luar jadwal mengajar Anda' })
   }
   const result = db.transaction(() => {
     let count = 0
-    for (const d of data) {
+    for (const d of bersih) {
       const exists = db.prepare('SELECT id FROM penilaian_harian WHERE siswa_id = ? AND mapel_id = ? AND tanggal = ? AND tenant_id=?').get(d.siswa_id, mapel_id, tanggal, req.tenantId)
       if (exists) {
-        db.prepare('UPDATE penilaian_harian SET sikap=?, keaktifan=?, pengetahuan=?, catatan=? WHERE id=? AND tenant_id=?').run(d.sikap||0, d.keaktifan||0, d.pengetahuan||0, d.catatan||'', exists.id, req.tenantId)
+        db.prepare('UPDATE penilaian_harian SET sikap=?, keaktifan=?, pengetahuan=?, catatan=? WHERE id=? AND tenant_id=?').run(d.sikap, d.keaktifan, d.pengetahuan, d.catatan, exists.id, req.tenantId)
       } else {
-        db.prepare('INSERT INTO penilaian_harian (id, jurnal_id, siswa_id, mapel_id, tanggal, sikap, keaktifan, pengetahuan, catatan, tenant_id) VALUES (?,?,?,?,?,?,?,?,?,?)').run(uuidv4(), jurnal_id||null, d.siswa_id, mapel_id, tanggal, d.sikap||0, d.keaktifan||0, d.pengetahuan||0, d.catatan||'', req.tenantId)
+        db.prepare('INSERT INTO penilaian_harian (id, jurnal_id, siswa_id, mapel_id, tanggal, sikap, keaktifan, pengetahuan, catatan, tenant_id) VALUES (?,?,?,?,?,?,?,?,?,?)').run(uuidv4(), jurnal_id||null, d.siswa_id, mapel_id, tanggal, d.sikap, d.keaktifan, d.pengetahuan, d.catatan, req.tenantId)
       }
       count++
     }
@@ -7962,11 +8032,14 @@ app.post('/api/penilaian-harian/bulk', STAFF, (req, res) => {
 })
 
 app.put('/api/penilaian-harian/:id', STAFF, (req, res) => {
-  const { sikap, keaktifan, pengetahuan, catatan } = req.body
+  const { catatan } = req.body
+  const sikap = clampNilai(req.body.sikap)
+  const keaktifan = clampNilai(req.body.keaktifan)
+  const pengetahuan = clampNilai(req.body.pengetahuan)
   const existing = db.prepare('SELECT siswa_id, mapel_id, tanggal FROM penilaian_harian WHERE id=? AND tenant_id=?').get(req.params.id, req.tenantId)
   if (!existing) return res.status(404).json({ error: 'Penilaian tidak ditemukan' })
   const raporUpdated = db.transaction(() => {
-    db.prepare('UPDATE penilaian_harian SET sikap=?, keaktifan=?, pengetahuan=?, catatan=? WHERE id=? AND tenant_id=?').run(sikap||0, keaktifan||0, pengetahuan||0, catatan||'', req.params.id, req.tenantId)
+    db.prepare('UPDATE penilaian_harian SET sikap=?, keaktifan=?, pengetahuan=?, catatan=? WHERE id=? AND tenant_id=?').run(sikap, keaktifan, pengetahuan, catatan||'', req.params.id, req.tenantId)
     return refreshRaporSetelahNilaiBerubah({ tenantId: req.tenantId, siswaId: existing.siswa_id, mapelId: existing.mapel_id, tanggal: existing.tanggal })
   })()
   res.json({ success: true, count: 1, rapor_updated: raporUpdated })

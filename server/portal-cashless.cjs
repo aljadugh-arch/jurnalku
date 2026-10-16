@@ -126,7 +126,22 @@ const assertStaticQrisSubmissionAvailable = (db, tenantId, declaration) => {
   const collision = db.prepare("SELECT id FROM cashless_topup_manual WHERE tenant_id=? AND provider=? AND transfer_amount=? AND status='pending' LIMIT 1").get(tenantId, declaration.provider, declaration.transfer_amount)
   if (collision) throw Error('Kode unik sudah digunakan transaksi pending lain; muat ulang halaman untuk mendapatkan kode baru')
 }
-const linkedStudentIds = (db, t, u) => db.prepare('SELECT student_id FROM user_students WHERE tenant_id=? AND user_id=? ORDER BY student_id').all(t, u).map(x => x.student_id)
+const linkedStudentIds = (db, t, u) => {
+  const ids = db.prepare('SELECT student_id FROM user_students WHERE tenant_id=? AND user_id=? ORDER BY student_id').all(t, u).map(x => x.student_id)
+  if (ids.length) return ids
+  // Fallback akun lama: tautan user_students belum ada, tapi users.siswa_id/nis
+  // sudah menunjuk siswa. Tanpa ini seluruh portal (children, tagihan, tabungan,
+  // QRIS, kantin) mengembalikan daftar kosong / "Bukan siswa/anak tertaut"
+  // walaupun datanya ada — termasuk untuk akun wali murid yang dibuat admin.
+  const row = db.prepare('SELECT role, siswa_id, nis, nisn FROM users WHERE id=? AND tenant_id=?').get(u, t)
+  if (!row) return ids
+  if (row.siswa_id) { ids.push(row.siswa_id); return ids }
+  if (row.role === 'siswa' && row.nis) {
+    const s = db.prepare('SELECT id FROM siswa WHERE tenant_id=? AND (nis=? OR nisn=?) LIMIT 1').get(t, row.nis, row.nisn || row.nis)
+    if (s) ids.push(s.id)
+  }
+  return ids
+}
 
 function selectPenilaianStudentId(role, linked, requested) {
   if (requested && !linked.includes(String(requested))) throw Error('Bukan siswa/anak tertaut')

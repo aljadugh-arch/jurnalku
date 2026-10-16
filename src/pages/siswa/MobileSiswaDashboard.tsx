@@ -11,6 +11,7 @@ import {
   ChevronRight,
   CheckCircle2,
   Sparkles,
+  Receipt,
 } from 'lucide-react'
 import api from '../../services/api'
 import MobileDashboardHeader from '../../components/MobileDashboardHeader'
@@ -40,6 +41,16 @@ function toMinutes(t: string) {
   const m = parseInt(parts[1] || '0', 10)
   if (isNaN(h)) return -1
   return h * 60 + m
+}
+
+const rupiah = (n: number) => 'Rp ' + Number(n || 0).toLocaleString('id-ID')
+
+// Nominal ringkas untuk kartu 3 kolom di layar kecil (Rp 1,2 jt / Rp 360 rb).
+function rupiahSingkat(n: number) {
+  const v = Number(n || 0)
+  if (v >= 1_000_000) return `Rp ${(v / 1_000_000).toFixed(v % 1_000_000 === 0 ? 0 : 1).replace('.', ',')} jt`
+  if (v >= 1_000) return `Rp ${Math.round(v / 1_000)} rb`
+  return rupiah(v)
 }
 
 // ─── SVG circular progress ring ────────────────────────────────────────────────
@@ -120,6 +131,7 @@ export default function MobileSiswaDashboard() {
   const { siswa, jadwal_hari_ini, rekap } = data
   const totalHari = (rekap.hadir || 0) + (rekap.sakit || 0) + (rekap.izin || 0) + (rekap.alpha || 0)
   const attendancePct = totalHari > 0 ? ((rekap.hadir || 0) / totalHari) * 100 : 100
+  const nilaiCount = (data?.nilai_detail || []).length
   const hero = heroColors(settings, dark)
 
   return (
@@ -184,6 +196,111 @@ export default function MobileSiswaDashboard() {
             })}
           </div>
         </div>
+
+        {/* ─── 4b. RINGKASAN NILAI / TAGIHAN / TABUNGAN ─────────────── */}
+        <div className="grid grid-cols-3 gap-2.5">
+          <button
+            onClick={() => navigate('/siswa/nilai')}
+            className="rounded-2xl bg-white dark:bg-gray-900 border border-slate-100 dark:border-gray-800 p-3 text-left shadow-sm active:scale-95 transition"
+          >
+            <div className="w-8 h-8 rounded-xl bg-purple-50 dark:bg-purple-950/40 text-purple-600 flex items-center justify-center mb-2">
+              <Award size={16} />
+            </div>
+            <p className="text-[10px] font-medium text-slate-400">Nilai Harian</p>
+            <p className="text-sm font-bold text-slate-900 dark:text-white">
+              {nilaiCount > 0 ? nilaiCount : '—'}
+              {nilaiCount > 0 && <span className="text-[10px] font-normal text-slate-400"> entri</span>}
+            </p>
+          </button>
+          <button
+            onClick={() => navigate('/siswa/tagihan')}
+            className="rounded-2xl bg-white dark:bg-gray-900 border border-slate-100 dark:border-gray-800 p-3 text-left shadow-sm active:scale-95 transition"
+          >
+            <div className="w-8 h-8 rounded-xl bg-rose-50 dark:bg-rose-950/40 text-rose-600 flex items-center justify-center mb-2">
+              <Wallet size={16} />
+            </div>
+            <p className="text-[10px] font-medium text-slate-400">Belum Bayar</p>
+            <p className="text-sm font-bold text-slate-900 dark:text-white truncate">
+              {rupiahSingkat(data?.tagihan?.belum_bayar)}
+            </p>
+          </button>
+          <button
+            onClick={() => navigate('/siswa/tabungan')}
+            className="rounded-2xl bg-white dark:bg-gray-900 border border-slate-100 dark:border-gray-800 p-3 text-left shadow-sm active:scale-95 transition"
+          >
+            <div className="w-8 h-8 rounded-xl bg-sky-50 dark:bg-sky-950/40 text-sky-600 flex items-center justify-center mb-2">
+              <Wallet size={16} />
+            </div>
+            <p className="text-[10px] font-medium text-slate-400">Saldo Tabungan</p>
+            <p className="text-sm font-bold text-slate-900 dark:text-white truncate">
+              {rupiahSingkat(data?.tabungan?.saldo)}
+            </p>
+          </button>
+        </div>
+
+        {/* ─── 4c. NILAI TERBARU ─────────────────────────────────────── */}
+        {(data?.nilai_detail || []).length > 0 && (
+          <div className="bg-white dark:bg-gray-900 rounded-2xl p-3.5 shadow-sm border border-slate-100 dark:border-gray-800">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <Award size={16} className="text-purple-600" />
+                <h2 className="text-sm font-bold text-slate-900 dark:text-white">Nilai Terbaru</h2>
+              </div>
+              <button
+                onClick={() => navigate('/siswa/nilai')}
+                className="text-xs font-semibold text-purple-600 flex items-center gap-0.5 active:opacity-70 transition"
+              >
+                Lihat Semua
+                <ChevronRight size={13} />
+              </button>
+            </div>
+            <div className="divide-y divide-slate-100 dark:divide-gray-800">
+              {(data.nilai_detail || []).slice(0, 4).map((n: any, idx: number) => (
+                <div key={idx} className="py-2 first:pt-0 last:pb-0 flex items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="text-xs font-bold text-slate-900 dark:text-white truncate">{n.mapel_nama || 'Mata Pelajaran'}</p>
+                    <p className="text-[11px] text-slate-400">{n.tanggal || '-'}</p>
+                  </div>
+                  <div className="flex gap-1.5 shrink-0 text-[10px]">
+                    <span className="px-1.5 py-0.5 rounded-md bg-purple-50 dark:bg-purple-950/40 text-purple-700 dark:text-purple-300 font-semibold">P {n.pengetahuan ?? '-'}</span>
+                    <span className="px-1.5 py-0.5 rounded-md bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 font-semibold">K {n.keaktifan ?? '-'}</span>
+                    <span className="px-1.5 py-0.5 rounded-md bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 font-semibold">S {n.sikap ?? '-'}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* ─── 4d. TAGIHAN BELUM BAYAR ───────────────────────────────── */}
+        {(data?.tagihan_detail || []).some((t: any) => t.status !== 'lunas') && (
+          <div className="bg-white dark:bg-gray-900 rounded-2xl p-3.5 shadow-sm border border-slate-100 dark:border-gray-800">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <Receipt size={16} className="text-rose-600" />
+                <h2 className="text-sm font-bold text-slate-900 dark:text-white">Tagihan</h2>
+              </div>
+              <button
+                onClick={() => navigate('/siswa/tagihan')}
+                className="text-xs font-semibold text-rose-600 flex items-center gap-0.5 active:opacity-70 transition"
+              >
+                Lihat Semua
+                <ChevronRight size={13} />
+              </button>
+            </div>
+            <div className="divide-y divide-slate-100 dark:divide-gray-800">
+              {(data.tagihan_detail || []).filter((t: any) => t.status !== 'lunas').slice(0, 3).map((t: any, idx: number) => (
+                <div key={t.id || idx} className="py-2 first:pt-0 last:pb-0 flex items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="text-xs font-bold text-slate-900 dark:text-white truncate">{t.jenis_nama || 'Tagihan'}</p>
+                    <p className="text-[11px] text-slate-400 truncate">{t.bulan || '-'} {t.tahun || ''}</p>
+                  </div>
+                  <p className="text-xs font-bold text-rose-600 shrink-0">{rupiah(t.nominal)}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* ─── 5. JADWAL HARI INI ───────────────────────────────────── */}
         <div className="bg-white dark:bg-gray-900 rounded-2xl p-3.5 shadow-sm border border-slate-100 dark:border-gray-800">

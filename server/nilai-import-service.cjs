@@ -126,7 +126,14 @@ function findSiswa(ident, type, maps) {
   return maps.siswaByNama.get(v.toLowerCase()) || null
 }
 
-function clampNilai(v) { return Math.max(0, Math.min(100, Math.round(Number(v)))) }
+function clampNilai(v) {
+  const n = Math.round(Number(v))
+  // Nilai non-numerik (undefined/NaN/kosong) tidak boleh lolos menjadi NaN:
+  // NaN yang dikirim ke better-sqlite3 melempar TypeError, dan lewat jalur lain
+  // bisa tersimpan sebagai NULL sehingga nilai tampil kosong di dashboard.
+  if (!Number.isFinite(n)) return 0
+  return Math.max(0, Math.min(100, n))
+}
 
 // Parse buffer .xlsx/.xls menjadi { headers, rows } memakai ExcelJS.
 async function parseExcelBuffer(buffer) {
