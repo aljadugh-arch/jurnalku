@@ -40,9 +40,12 @@ test('JWT signing secret is mandatory and has no literal fallback', () => {
 })
 
 test('domain verification passes tenant-controlled domains without shell interpolation', () => {
-  const server = read('server/index.cjs')
+  // Penerapan domain dipusatkan di server/custom-domain.cjs (dipakai route
+  // verify-domain, panel superadmin, dan registrasi) — cek kedua berkas supaya
+  // pemindahan modul tidak membuat jaminan keamanan ini hilang tanpa suara.
+  const server = read('server/index.cjs') + read('server/custom-domain.cjs')
   assert.match(server, /execFileSync\('dig', \['\+short', domain, 'A', '@8\.8\.8\.8'\]/)
-  assert.match(server, /execFileSync\('bash', \[script, domain\]/)
+  assert.match(server, /execFileSync\('bash', \[script, d\]/)
   assert.doesNotMatch(server, /execSync\(`dig[^`]*\$\{domain\}/)
   assert.doesNotMatch(server, /execSync\(`bash[^`]*\$\{domain\}/)
 })

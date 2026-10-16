@@ -12,7 +12,7 @@ const Database = require('better-sqlite3')
 
 const {
   setupInvoiceTables, nomorInvoiceBaru, buildInvoiceHtml, renderInvoicePdf, renderInvoiceJpeg,
-  resolveChromium, barisInvoice, isiInvoice, formatRp, formatTanggalId, escapeHtml,
+  resolveChromium, barisInvoice, isiInvoice, hitungNominal, formatRp, formatTanggalId, escapeHtml,
 } = require('../server/invoice-service.cjs')
 
 function dbUji() {
@@ -68,10 +68,58 @@ test('isiInvoice mengisi harga & label dari paket bila tidak dikirim, dan nomor 
   const inv = isiInvoice(db, { tenantId: 't1', plan: 'pro', createdBy: 'op' })
   assert.equal(inv.plan, 'pro')
   assert.equal(inv.plan_label, 'Pro')
+  assert.equal(inv.harga_satuan, 80000)
   assert.equal(inv.harga, 80000)
   assert.equal(inv.tenant_nama, 'MTs Plus Sunan Drajat')
   assert.match(inv.nomor, /^INV-/)
   assert.equal(barisInvoice(db, inv.id).harga, 80000)
+})
+
+test('nominal invoice otomatis: harga satuan paket x masa aktif', () => {
+  // Lite Rp40.000/bulan: 2 bulan -> 80.000, 3 bulan -> 120.000, 12 bulan -> 480.000.
+  assert.equal(hitungNominal(40000, 1), 40000)
+  assert.equal(hitungNominal(40000, 2), 80000)
+  assert.equal(hitungNominal(40000, 3), 120000)
+  assert.equal(hitungNominal(40000, 12), 480000)
+  // Satuan hari juga berlaku sama, dan masa tidak valid tidak menghasilkan 0.
+  assert.equal(hitungNominal(5000, 7), 35000)
+  assert.equal(hitungNominal(40000, 0), 40000)
+  assert.equal(hitungNominal(40000, null), 40000)
+  assert.equal(hitungNominal(40000, 2.4), 80000)
+
+  const db = dbUji()
+  const tigaBulan = isiInvoice(db, { tenantId: 't1', plan: 'pro', masaNilai: 3, masaSatuan: 'bulan', createdBy: 'op' })
+  assert.equal(tigaBulan.harga_satuan, 80000)
+  assert.equal(tigaBulan.harga, 240000, 'Pro 80.000/bulan x 3 bulan harus 240.000')
+  assert.match(buildInvoiceHtml(tigaBulan), /Rp 80\.000\/bulan × 3 bulan/)
+  assert.match(buildInvoiceHtml(tigaBulan), /Rp 240\.000/)
+})
+
+test('route invoice mengabaikan nominal kiriman klien (dihitung server)', () => {
+  const idx = fs.readFileSync('server/index.cjs', 'utf8')
+  const blok = idx.slice(idx.indexOf("app.post('/api/admin/invoices'"), idx.indexOf("app.get('/api/admin/invoices/:id'"))
+  assert.doesNotMatch(blok, /harga:\s*req\.body\.harga/, 'nominal tidak boleh diambil dari body')
+  assert.match(blok, /masaNilai:\s*req\.body\.masa_nilai/)
+})
+
+test('migrasi invoice lama mengisi harga_satuan dari total/masa', () => {
+  const Database = require('better-sqlite3')
+  const db = new Database(':memory:')
+  // Tabel versi LAMA (tanpa harga_satuan) + satu invoice 3 bulan.
+  db.exec(`CREATE TABLE tenants (id TEXT PRIMARY KEY, slug TEXT, nama TEXT, alamat TEXT, plan TEXT DEFAULT 'trial');
+    CREATE TABLE subscription_plans (plan TEXT PRIMARY KEY, label TEXT, harga INTEGER, masa_nilai INTEGER, masa_satuan TEXT, aktif INTEGER, fitur_json TEXT, urutan INTEGER);
+    CREATE TABLE subscription_invoices (id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL, nomor TEXT NOT NULL, tanggal TEXT NOT NULL,
+      plan TEXT NOT NULL, plan_label TEXT NOT NULL DEFAULT '', harga INTEGER NOT NULL DEFAULT 0, masa_nilai INTEGER NOT NULL DEFAULT 1,
+      masa_satuan TEXT NOT NULL DEFAULT 'bulan', periode_mulai TEXT NOT NULL DEFAULT '', periode_selesai TEXT NOT NULL DEFAULT '',
+      keterangan TEXT NOT NULL DEFAULT '', created_by TEXT, created_at TEXT NOT NULL DEFAULT (datetime('now')));`)
+  db.prepare("INSERT INTO subscription_invoices (id,tenant_id,nomor,tanggal,plan,harga,masa_nilai,masa_satuan) VALUES ('i1','t1','INV-202610-001','2026-10-16','lite',120000,3,'bulan')").run()
+  setupInvoiceTables(db)
+  const inv = db.prepare("SELECT harga, harga_satuan, masa_nilai FROM subscription_invoices WHERE id='i1'").get()
+  assert.equal(inv.harga_satuan, 40000, 'harga_satuan invoice lama harus 120000/3 = 40000')
+  assert.equal(inv.harga, 120000, 'total invoice lama tidak boleh berubah')
+  // Idempoten: memanggil ulang tidak mengubah apa pun.
+  setupInvoiceTables(db)
+  assert.equal(db.prepare("SELECT harga_satuan FROM subscription_invoices WHERE id='i1'").get().harga_satuan, 40000)
 })
 
 test('formatRp dan formatTanggalId stabil', () => {

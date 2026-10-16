@@ -28,6 +28,7 @@ function setupInvoiceTables(db) {
       plan TEXT NOT NULL,
       plan_label TEXT NOT NULL DEFAULT '',
       harga INTEGER NOT NULL DEFAULT 0,
+      harga_satuan INTEGER NOT NULL DEFAULT 0,
       masa_nilai INTEGER NOT NULL DEFAULT 1,
       masa_satuan TEXT NOT NULL DEFAULT 'bulan',
       periode_mulai TEXT NOT NULL DEFAULT '',
@@ -39,6 +40,18 @@ function setupInvoiceTables(db) {
     CREATE UNIQUE INDEX IF NOT EXISTS idx_subscription_invoices_nomor ON subscription_invoices(nomor);
     CREATE INDEX IF NOT EXISTS idx_subscription_invoices_tenant ON subscription_invoices(tenant_id);
   `)
+  // Migrasi idempoten untuk invoice yang dibuat sebelum nominal otomatis:
+  // harga_satuan menyimpan harga paket per bulan/hari agar rincian
+  // "<harga satuan> x <masa>" bisa ditampilkan tanpa menebak dari total.
+  const kolom = db.prepare('PRAGMA table_info(subscription_invoices)').all().map(c => c.name)
+  if (!kolom.includes('harga_satuan')) {
+    db.exec('ALTER TABLE subscription_invoices ADD COLUMN harga_satuan INTEGER NOT NULL DEFAULT 0')
+    // Isi ulang invoice lama: harga_satuan = total / masa aktif (dibulatkan),
+    // sehingga dokumen lama pun menampilkan rincian satuan x masa.
+    db.prepare(`UPDATE subscription_invoices
+      SET harga_satuan = CAST(ROUND(CAST(harga AS REAL) / MAX(1, masa_nilai)) AS INTEGER)
+      WHERE harga_satuan = 0 AND harga > 0`).run()
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -65,6 +78,18 @@ function masaTeks(nilai, satuan) {
   return `${n} ${s}`
 }
 
+/**
+ * Nominal invoice = harga satuan paket x masa aktif.
+ * Paket lite Rp40.000/bulan, langganan 3 bulan -> Rp120.000. Berlaku sama untuk
+ * satuan 'hari' (harga paket per hari x jumlah hari). `masa` dibulatkan ke
+ * bilangan bulat >= 1 supaya nominal tidak pernah jadi pecahan rupiah.
+ */
+function hitungNominal(hargaSatuan, masaNilai) {
+  const satuan = Math.max(0, Math.round(Number(hargaSatuan) || 0))
+  const masa = Math.max(1, Math.round(Number(masaNilai) || 1))
+  return satuan * masa
+}
+
 /** Nomor invoice: INV-<YYYYMM>-<NNN> (1-based per bulan). Aman untuk pemakai tunggal. */
 function nomorInvoiceBaru(db) {
   const now = new Date()
@@ -87,10 +112,18 @@ function escapeHtml(s) {
 
 /** HTML invoice mandiri (inline CSS, tanpa aset eksternal) — satu sumber untuk PDF & JPEG. */
 function buildInvoiceHtml(inv) {
+  const satuanHarga = Number(inv.harga_satuan || 0)
+  const masaNilai = Math.max(1, Math.round(Number(inv.masa_nilai) || 1))
+  const satuanTeks = SATUAN_LABEL[inv.masa_satuan] || 'bulan'
+  // Baris rincian: "<harga satuan>/<satuan> x <masa>" supaya nominal otomatis
+  // (mis. Rp40.000/bulan x 3 bulan = Rp120.000) bisa diaudit dari dokumennya.
+  const rincian = satuanHarga > 0
+    ? `${formatRp(satuanHarga)}/${satuanTeks} × ${masaNilai} ${satuanTeks}`
+    : '—'
   const baris = `
     <tr>
       <td class="desc">Paket langganan <strong>${escapeHtml(inv.plan_label || inv.plan)}</strong></td>
-      <td class="qty">${escapeHtml(masaTeks(inv.masa_nilai, inv.masa_satuan))}</td>
+      <td class="qty">${escapeHtml(rincian)}</td>
       <td class="amt">${formatRp(inv.harga)}</td>
     </tr>`
   const keterangan = inv.keterangan
@@ -145,7 +178,7 @@ function buildInvoiceHtml(inv) {
       </div>
     </div>
     <table>
-      <thead><tr><th>Deskripsi</th><th class="qty">Masa</th><th class="amt">Jumlah</th></tr></thead>
+      <thead><tr><th>Deskripsi</th><th class="qty">Rincian</th><th class="amt">Jumlah</th></tr></thead>
       <tbody>${baris}</tbody>
     </table>
     <div class="total"><div class="box">
@@ -253,24 +286,30 @@ function barisInvoice(db, id) {
   }
 }
 
-function isiInvoice(db, { tenantId, plan, harga, masaNilai, masaSatuan, periodeMulai, periodeSelesai, keterangan, createdBy }) {
+function isiInvoice(db, { tenantId, plan, hargaSatuan, masaNilai, masaSatuan, periodeMulai, periodeSelesai, keterangan, createdBy }) {
   const tenant = db.prepare('SELECT * FROM tenants WHERE id=?').get(tenantId)
   if (!tenant) throw new Error('Lembaga tidak ditemukan')
   const plans = getPlans(db)
   const planRow = plans.find(p => p.plan === plan) || plans.find(p => p.plan === tenant.plan) || plans[0]
   const finalPlan = planRow.plan
   const finalLabel = planRow.label || plan
-  const finalHarga = harga !== undefined && harga !== null && harga !== '' ? Math.max(0, Math.round(Number(harga))) : Number(planRow.harga || 0)
-  const finalMasaNilai = Number(masaNilai || planRow.masa_nilai || 1)
+  // Harga satuan = harga paket per bulan/hari dari konfigurasi paket. Nominal
+  // TIDAK dikirim klien: selalu dihitung harga_satuan x masa aktif supaya
+  // langganan 3 bulan paket lite otomatis Rp120.000 (bukan diisi manual).
+  const finalSatuan = hargaSatuan !== undefined && hargaSatuan !== null && hargaSatuan !== ''
+    ? Math.max(0, Math.round(Number(hargaSatuan)))
+    : Math.max(0, Math.round(Number(planRow.harga || 0)))
+  const finalMasaNilai = Math.max(1, Math.round(Number(masaNilai || planRow.masa_nilai || 1)))
   const finalMasaSatuan = masaSatuan || planRow.masa_satuan || 'bulan'
+  const finalHarga = hitungNominal(finalSatuan, finalMasaNilai)
 
   const id = crypto.randomUUID()
   const tanggal = new Date().toISOString().slice(0, 10)
   const nomor = nomorInvoiceBaru(db)
   db.prepare(`INSERT INTO subscription_invoices
-    (id, tenant_id, nomor, tanggal, plan, plan_label, harga, masa_nilai, masa_satuan, periode_mulai, periode_selesai, keterangan, created_by)
-    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`)
-    .run(id, tenantId, nomor, tanggal, finalPlan, finalLabel, finalHarga, finalMasaNilai, finalMasaSatuan,
+    (id, tenant_id, nomor, tanggal, plan, plan_label, harga, harga_satuan, masa_nilai, masa_satuan, periode_mulai, periode_selesai, keterangan, created_by)
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
+    .run(id, tenantId, nomor, tanggal, finalPlan, finalLabel, finalHarga, finalSatuan, finalMasaNilai, finalMasaSatuan,
       String(periodeMulai || ''), String(periodeSelesai || ''), String(keterangan || ''), String(createdBy || ''))
   return barisInvoice(db, id)
 }
@@ -284,6 +323,7 @@ module.exports = {
   resolveChromium,
   barisInvoice,
   isiInvoice,
+  hitungNominal,
   formatRp,
   formatTanggalId,
   masaTeks,

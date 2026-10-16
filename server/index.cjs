@@ -1,5 +1,6 @@
 const express = require('express')
 try { require('dotenv').config({ path: require('path').join(__dirname, '.env') }) } catch {}
+const os = require('node:os')
 const cors = require('cors')
 const helmet = require('helmet')
 const rateLimit = require('express-rate-limit')
@@ -14,6 +15,7 @@ const jwt = require('jsonwebtoken')
 const { v4: uuidv4 } = require('uuid')
 const multer = require('multer')
 const { execFileSync } = require('child_process')
+const customDomain = require('./custom-domain.cjs')
 const { setupTenantTables, tenantMiddleware, registerTenantRoutes, BASE_DOMAIN, BASE_DOMAINS } = require('./tenant.cjs')
 const { canonicalSettingsId, getTenantSettings, ensureTenantSettings, migrateTenantSettings } = require('./tenant-settings.cjs')
 const { normalizeHolidayDays } = require('./holiday-rules.cjs')
@@ -1980,10 +1982,12 @@ app.get('/api/admin/invoices', SUPER, (req, res) => {
 
 app.post('/api/admin/invoices', SUPER, (req, res) => {
   try {
+    // Nominal TIDAK diterima dari klien: server menghitungnya sebagai
+    // harga satuan paket x masa aktif (lite Rp40.000/bulan x 3 = Rp120.000)
+    // supaya tidak bisa diubah dari browser.
     const inv = invoiceService.isiInvoice(db, {
       tenantId: req.body.tenant_id,
       plan: req.body.plan,
-      harga: req.body.harga,
       masaNilai: req.body.masa_nilai,
       masaSatuan: req.body.masa_satuan,
       periodeMulai: req.body.periode_mulai,
@@ -2759,6 +2763,24 @@ app.post('/api/auth/register', accountLimiter, (req, res) => {
   ensureTenantSettings(db, tenantId, { nama_lembaga: nama_lembaga || nama })
   db.prepare('INSERT OR IGNORE INTO notif_settings (id, tenant_id) VALUES (?,?)').run('main_' + tenantId, tenantId)
 
+  // Domain sendiri: coba pasang blok Caddy sekarang (DNS sering sudah diarahkan
+  // sebelum mendaftar). Kalau DNS belum siap, tetap 'pending' — TIDAK boleh
+  // 'active', karena status itu mengalihkan subdomain platform (redirect 301)
+  // dan lembaga jadi kehilangan akses di dua alamat sekaligus.
+  let provisioned = false
+  let domainPesan = ''
+  if (domainVal) {
+    const hasil = customDomain.terapkanDomain(domainVal)
+    provisioned = hasil.ok
+    domainPesan = hasil.ok
+      ? `Domain ${domainVal} sudah dilayani server.`
+      : `Domain ${domainVal} terdaftar sebagai pending: ${hasil.message}`
+    if (hasil.ok) {
+      db.prepare('UPDATE tenants SET domain_status = ? WHERE id = ?').run('active', tenantId)
+      domainStatus = 'active'
+    }
+  }
+
   // Auto-login: return token + user so FE can go straight to dashboard.
   const token = jwt.sign({ id, role: 'admin', nama, email, tenant_id: tenantId }, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN })
   const reqHost = (req.headers['host'] || req.headers['x-forwarded-host'] || '').split(':')[0]
@@ -2770,11 +2792,15 @@ app.post('/api/auth/register', accountLimiter, (req, res) => {
   res.json({
     success: true,
     message: domainVal
-      ? 'Registrasi berhasil! Silakan atur DNS domain Anda untuk mengaktifkan.'
+      ? (provisioned
+        ? 'Registrasi berhasil! Domain Anda sudah aktif.'
+        : 'Registrasi berhasil! Domain Anda menunggu DNS: buat record A ke server, lalu klik Verifikasi di menu Pengaturan Domain.')
       : 'Registrasi berhasil',
     slug,
     domain_custom: domainVal,
     domain_status: domainStatus,
+    domain_provisioned: provisioned,
+    domain_message: domainPesan,
     url: appUrl,
     token,
     user: { id, nama, email, role: 'admin' }
@@ -2782,7 +2808,7 @@ app.post('/api/auth/register', accountLimiter, (req, res) => {
 })
 
 // Verify & activate custom domain (admin only, must own tenant)
-app.post('/api/tenant/verify-domain', authMiddleware, (req, res) => {
+app.post('/api/tenant/verify-domain', authMiddleware, async (req, res) => {
   const tenant = db.prepare('SELECT * FROM tenants WHERE id = ?').get(req.user.tenant_id)
   if (!tenant || !tenant.domain_custom) {
     return res.status(400).json({ error: 'Tidak ada domain custom yang terdaftar' })
@@ -2791,48 +2817,52 @@ app.post('/api/tenant/verify-domain', authMiddleware, (req, res) => {
     return res.status(403).json({ error: 'Hanya admin yang bisa aktivasi domain' })
   }
 
-  const domain = tenant.domain_custom
-  // Check DNS resolve
+  const domain = customDomain.normalisasiDomain(tenant.domain_custom)
+  const publicIp = customDomain.publicIp()
+  if (!publicIp) return res.status(503).json({ error: 'IP publik server tidak terdeteksi' })
+
+  // Cek DNS: A record domain harus mengarah ke IP server ini. Dicek via resolver
+  // sistem (bukan hanya `dig`) supaya tidak bergantung pada paket dnsutils.
+  let ips = []
   try {
-    const publicIp = process.env.PUBLIC_IP
-    if (!publicIp) return res.status(503).json({ error: 'PUBLIC_IP belum dikonfigurasi di server' })
-    const out = execFileSync('dig', ['+short', domain, 'A', '@8.8.8.8'], { timeout: 10000 }).toString().trim()
-    const ips = out.split('\n').map(s => s.trim()).filter(Boolean)
-    if (!ips.includes(publicIp)) {
-      return res.json({
-        success: false,
-        status: 'dns_pending',
-        message: `DNS belum mengarah ke server. Periksa Record A (saat ini: ${ips.join(', ') || 'belum ada record'})`,
-        expected_ip: publicIp,
-        current_ips: ips
-      })
+    ips = await customDomain.resolveA(domain)
+  } catch { ips = [] }
+  if (!ips.length) {
+    try {
+      const out = execFileSync('dig', ['+short', domain, 'A', '@8.8.8.8'], { timeout: 10000 }).toString().trim()
+      ips = out.split('\n').map(s => s.trim()).filter(Boolean)
+    } catch { /* resolver sistem sudah cukup */ }
+  }
+  if (!ips.includes(publicIp)) {
+    // Status tetap 'pending' — jangan pernah 'active' sebelum vhost benar-benar
+    // terpasang, karena 'active' membuat subdomain platform dialihkan 301.
+    if (tenant.domain_status !== 'active') {
+      db.prepare('UPDATE tenants SET domain_status = ? WHERE id = ?').run('pending', tenant.id)
     }
-  } catch (e) {
     return res.json({
       success: false,
-      status: 'dns_error',
-      message: 'Gagal cek DNS: ' + (e.message || 'timeout')
+      status: 'dns_pending',
+      message: `DNS belum mengarah ke server. Buat record A: ${domain} -> ${publicIp} (saat ini: ${ips.join(', ') || 'belum ada record'}), tunggu propagasi lalu klik Verifikasi lagi.`,
+      expected_ip: publicIp,
+      current_ips: ips,
     })
   }
 
-  // DNS OK — trigger provisioning script
-  try {
-    const script = path.join(__dirname, 'scripts', 'provision-domain.sh')
-    execFileSync('bash', [script, domain], { timeout: 120000, stdio: 'pipe' })
-    db.prepare('UPDATE tenants SET domain_status = ? WHERE id = ?').run('active', tenant.id)
-    res.json({ success: true, status: 'active', message: `Domain ${domain} berhasil diaktifkan!`, url: `https://${domain}` })
-  } catch (e) {
-    const msg = e.stderr ? e.stderr.toString().slice(-300) : e.message
+  // DNS sudah benar — pasang blok Caddy untuk domain ini.
+  const hasil = customDomain.terapkanDomain(domain)
+  if (!hasil.ok) {
     db.prepare('UPDATE tenants SET domain_status = ? WHERE id = ?').run('error', tenant.id)
-    res.status(500).json({ success: false, status: 'error', message: 'Gagal provisioning: ' + msg })
+    return res.status(500).json({ success: false, status: 'error', message: 'Gagal provisioning: ' + hasil.message })
   }
+  db.prepare('UPDATE tenants SET domain_status = ? WHERE id = ?').run('active', tenant.id)
+  res.json({ success: true, status: 'active', message: `Domain ${domain} berhasil diaktifkan!`, url: `https://${domain}` })
 })
 
 // Get domain status for current tenant (admin)
 app.get('/api/tenant/domain-status', authMiddleware, (req, res) => {
   const t = db.prepare('SELECT domain_custom, domain_status, slug FROM tenants WHERE id = ?').get(req.user.tenant_id)
   if (!t) return res.status(404).json({ error: 'Tenant tidak ditemukan' })
-  res.json({ ...t, dns_target_ip: process.env.PUBLIC_IP || null })
+  res.json({ ...t, dns_target_ip: customDomain.publicIp() })
 })
 
 app.post('/api/auth/forgot-password', accountLimiter, (req, res) => {
@@ -8605,13 +8635,39 @@ app.post('/api/rapor/import/apply', STAFF, (req, res) => {
 
 // POST /api/rapor/rdm/sas — tarik SAS RDM lalu cocokkan ke siswa Jurnalku.
 // Default preview-only; tulis ke Jurnalku hanya jika commit=true dan admin.
+//
+// base_url diisi admin tenant, jadi ia BUKAN batas kepercayaan: tanpa penjaga
+// SSRF, siapa pun yang bisa membuka halaman ini dapat memaksa server memanggil
+// alamat internal (loopback, jaringan privat, metadata cloud) dengan kredensial
+// RDM yang ikut terkirim. Kedua endpoint di bawah memakai assertSafeOutboundUrl.
+async function jagaBaseUrlRdm(base_url) {
+  await assertSafeOutboundUrl(String(base_url || ''), 'URL tenant RDM')
+}
+
 app.post('/api/rapor/rdm/options', STAFF, async (req, res) => {
   const { base_url, username, password } = req.body || {}
   if (!base_url || !username || !password) return res.status(400).json({ error: 'URL tenant RDM, user, dan password wajib diisi' })
   try {
+    await jagaBaseUrlRdm(base_url)
     const client = createRdmClient({ baseUrl: base_url, username, password })
     const scope = await client.getKelas()
-    res.json({ success: true, ajars: scope.ajars.map(a => ({ ajar_id: a.ajar_id, mapel_id: a.mapel_id, mapel_nama: a.mapel_nama, nama_kelas: a.nama_kelas, kelas_id: a.kelas_id, tingkat_nama: a.tingkat_nama, semester_nama: a.semester_nama })) })
+    // Teruskan field yang dipakai UI untuk mengisi konteks otomatis: tanpa
+    // tahunajaran_id/semester_id, kolom "Tahun Ajaran" tetap kosong dan commit
+    // SAS selalu ditolak validasi wajib-isi.
+    res.json({
+      success: true,
+      ajars: scope.ajars.map(a => ({
+        ajar_id: a.ajar_id,
+        mapel_id: a.mapel_id,
+        mapel_nama: a.mapel_nama,
+        nama_kelas: a.nama_kelas,
+        kelas_id: a.kelas_id,
+        tingkat_nama: a.tingkat_nama,
+        semester_nama: a.semester_nama,
+        semester_id: a.semester_id ?? a.semester ?? null,
+        tahunajaran_id: a.tahunajaran_id ?? a.tahun_ajaran ?? null,
+      })),
+    })
   } catch (error) { res.status(error.status && error.status >= 400 ? error.status : 502).json({ error: error.message }) }
 })
 
@@ -8631,6 +8687,7 @@ app.post('/api/rapor/rdm/sas', STAFF, async (req, res) => {
   const mapel = db.prepare('SELECT id FROM mapel WHERE id=? AND tenant_id=?').get(String(mapel_id), req.tenantId)
   if (!mapel) return res.status(404).json({ error: 'Mapel Jurnalku tidak ditemukan' })
   try {
+    await jagaBaseUrlRdm(base_url)
     const client = createRdmClient({ baseUrl: base_url, username, password })
     const pulled = await client.pullSas({ ajarId: String(ajar_id) })
     const siswa = db.prepare('SELECT id, nis, nisn, nama FROM siswa WHERE tenant_id=? AND rombel_id=? AND status=?')

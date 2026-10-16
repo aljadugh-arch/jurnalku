@@ -12,6 +12,7 @@
  */
 
 const BASE_DOMAIN = process.env.BASE_DOMAIN || 'jurnal.cc.cd'
+const customDomain = require('./custom-domain.cjs')
 // Platform kini menerima registrasi/subdomain di lebih dari satu domain kanonik
 // (jurnal.cc.cd dan jurnalmadrasah.web.id) yang berbagi satu database tenant.
 // BASE_DOMAIN tetap dipertahankan untuk backward-compat (mis. link admin@slug.jurnal.cc.cd),
@@ -319,12 +320,19 @@ function registerTenantRoutes(app, db, authMiddleware, uuidv4, SUPER) {
     // "Ubah Paket Langganan" yang hanya mengirim {plan}) menghapus domain custom tenant
     // yang sudah aktif. Sekarang: hanya diubah jika field domain_custom eksplisit ada di body.
     const domainProvided = Object.prototype.hasOwnProperty.call(req.body, 'domain_custom')
-    const domainCustomVal = domainProvided ? (domain_custom ? String(domain_custom).trim().toLowerCase() : null) : undefined
-    const domainStatusVal = domainProvided ? (domainCustomVal ? 'active' : null) : undefined
+    const domainCustomVal = domainProvided ? (domain_custom ? String(domain_custom).trim().toLowerCase().replace(/^https?:\/\//, '').replace(/\/+$/, '') : null) : undefined
+    let domainStatusVal = domainProvided ? (domainCustomVal ? 'active' : null) : undefined
 
     if (domainProvided && domainCustomVal) {
+      if (!/^[a-z0-9]([a-z0-9.-]*[a-z0-9])?\.[a-z]{2,}$/.test(domainCustomVal)) {
+        return res.status(400).json({ error: 'Format domain custom tidak valid' })
+      }
       const dupDomain = db.prepare('SELECT id FROM tenants WHERE domain_custom = ? AND id != ?').get(domainCustomVal, req.params.id)
       if (dupDomain) return res.status(409).json({ error: 'Domain sudah dipakai tenant lain' })
+      // Pasang vhost-nya lebih dulu; 'active' tanpa blok Caddy membuat subdomain
+      // platform dialihkan 301 ke alamat yang tidak dilayani.
+      const hasil = customDomain.terapkanDomain(domainCustomVal)
+      domainStatusVal = hasil.ok ? 'active' : 'pending'
     }
 
     db.prepare(`UPDATE tenants SET nama=COALESCE(?,nama),
@@ -342,18 +350,36 @@ function registerTenantRoutes(app, db, authMiddleware, uuidv4, SUPER) {
   app.put('/api/tenants/:id/domain', authMiddleware, (req, res) => {
     if (req.user.role !== 'super_admin') return res.status(403).json({ error: 'Forbidden' })
     const { domain_custom } = req.body
-    if (domain_custom) {
-      const existing = db.prepare('SELECT id FROM tenants WHERE domain_custom = ? AND id != ?').get(domain_custom, req.params.id)
+    const d = domain_custom ? String(domain_custom).trim().toLowerCase().replace(/^https?:\/\//, '').replace(/\/+$/, '') : null
+    if (d) {
+      if (!/^[a-z0-9]([a-z0-9.-]*[a-z0-9])?\.[a-z]{2,}$/.test(d)) {
+        return res.status(400).json({ error: 'Format domain custom tidak valid' })
+      }
+      const existing = db.prepare('SELECT id FROM tenants WHERE domain_custom = ? AND id != ?').get(d, req.params.id)
       if (existing) return res.status(400).json({ error: 'Domain sudah digunakan tenant lain' })
     }
-    // BUG LAMA: kolom domain_status tidak pernah di-set di sini, sehingga domain_custom
-    // terisi tapi statusnya tetap NULL/pending selamanya — tenantMiddleware mengandalkan
-    // domain_status='active' untuk memutuskan mana host resmi tenant (lihat root cause
-    // tenant jurnal.mtsplussd7.cc.cd yang terdaftar tapi tidak pernah resolve ke tenant-nya).
-    // Set domain_status secara eksplisit: 'active' saat mengisi domain, NULL saat dihapus.
-    const domainStatusVal = domain_custom ? 'active' : null
-    db.prepare('UPDATE tenants SET domain_custom = ?, domain_status = ? WHERE id = ?').run(domain_custom || null, domainStatusVal, req.params.id)
-    res.json({ success: true, domain_custom, domain_status: domainStatusVal })
+    // BUG LAMA: domain_status tidak pernah di-set di sini sehingga domain_custom
+    // terisi tapi statusnya NULL selamanya — dan lebih buruk lagi, saat status
+    // sudah 'active' tanpa blok Caddy, seluruh trafik dialihkan 301 ke domain
+    // yang tidak dilayani. Sekarang: pasang vhost-nya dulu, baru tandai 'active'.
+    if (!d) {
+      db.prepare('UPDATE tenants SET domain_custom = NULL, domain_status = NULL WHERE id = ?').run(req.params.id)
+      return res.json({ success: true, domain_custom: null, domain_status: null })
+    }
+    const tenant = db.prepare('SELECT * FROM tenants WHERE id = ?').get(req.params.id)
+    if (!tenant) return res.status(404).json({ error: 'Tenant tidak ditemukan' })
+    const hasil = customDomain.terapkanDomain(d)
+    const status = hasil.ok ? 'active' : 'pending'
+    db.prepare('UPDATE tenants SET domain_custom = ?, domain_status = ? WHERE id = ?').run(d, status, req.params.id)
+    res.json({
+      success: true,
+      domain_custom: d,
+      domain_status: status,
+      provisioned: hasil.ok,
+      message: hasil.ok
+        ? `Blok Caddy untuk ${d} terpasang. Pastikan record A ${d} -> ${customDomain.publicIp() || 'IP server'} sebelum diberitahukan ke lembaga.`
+        : `Domain disimpan sebagai pending: ${hasil.message}`,
+    })
   })
 
   // Delete tenant (cascade all data)

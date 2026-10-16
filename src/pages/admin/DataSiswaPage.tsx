@@ -287,6 +287,24 @@ export default function DataSiswaPage() {
     finally { setRdmLoadingOptions(false) }
   }
 
+  // Konteks (tahun ajaran + semester) diisi dari ajar RDM yang dipilih supaya
+  // kolom wajib tidak pernah kosong saat "Simpan SAS" ditekan. Kalau RDM tidak
+  // mengirim tahunajaran_id, operator tetap bisa mengetik manual.
+  const pilihAjarRdm = (ajarId: string) => {
+    const a = rdmOptions.find(x => x.ajar_id === ajarId)
+    const taId = a?.tahunajaran_id
+    const semId = String(a?.semester_id ?? '')
+    const semNama = String(a?.semester_nama ?? '').toLowerCase()
+    const semester = semId === '1' ? 'ganjil' : semId === '2' ? 'genap'
+      : semNama.includes('genap') ? 'genap' : semNama.includes('ganjil') ? 'ganjil' : rdmForm.semester
+    setRdmForm(v => ({
+      ...v,
+      ajar_id: ajarId,
+      tahun_ajaran: taId ? `${taId}/${Number(taId) + 1}` : v.tahun_ajaran,
+      semester,
+    }))
+  }
+
   const handleRdmCommit = async () => {
     const selected = rdmOptions.find(a => a.ajar_id === rdmForm.ajar_id)
     if (!selected || !rdmForm.rombel_id || !rdmForm.mapel_id || !rdmForm.tahun_ajaran) { toast.error('Pilih ajar RDM, mapel, rombel, dan tahun ajaran'); return }
@@ -765,7 +783,7 @@ export default function DataSiswaPage() {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             {([['base_url','URL Tenant RDM'],['username','User RDM'],['password','Password RDM']] as const).map(([key,label]) => <label key={key} className="text-sm"><span className="block font-medium mb-1">{label}</span><input type={key === 'password' ? 'password' : 'text'} value={rdmForm[key]} onChange={e => setRdmForm(v => ({ ...v, [key]: e.target.value }))} className="w-full border rounded-lg px-3 py-2" /></label>)}
             {rdmOptions.length > 0 && <>
-              <label className="text-sm sm:col-span-2"><span className="block font-medium mb-1">Ajar / Mapel / Kelas RDM</span><select value={rdmForm.ajar_id} onChange={e => { const a = rdmOptions.find(x => x.ajar_id === e.target.value); setRdmForm(v => ({ ...v, ajar_id: e.target.value, tahun_ajaran: a?.tahunajaran_id ? `${a.tahunajaran_id}/${Number(a.tahunajaran_id) + 1}` : v.tahun_ajaran })) }} className="w-full border rounded-lg px-3 py-2"><option value="">Pilih dari RDM</option>{rdmOptions.map(a => <option key={a.ajar_id} value={a.ajar_id}>{a.mapel_nama || a.mapel_id} — {a.nama_kelas || a.kelas_id}</option>)}</select></label>
+              <label className="text-sm sm:col-span-2"><span className="block font-medium mb-1">Ajar / Mapel / Kelas RDM</span><select value={rdmForm.ajar_id} onChange={e => pilihAjarRdm(e.target.value)} className="w-full border rounded-lg px-3 py-2"><option value="">Pilih dari RDM</option>{rdmOptions.map(a => <option key={a.ajar_id} value={a.ajar_id}>{a.mapel_nama || a.mapel_id} — {a.nama_kelas || a.kelas_id}</option>)}</select></label>
               <label className="text-sm"><span className="block font-medium mb-1">Mapel Jurnalku</span><select value={rdmForm.mapel_id} onChange={e => setRdmForm(v => ({ ...v, mapel_id: e.target.value }))} className="w-full border rounded-lg px-3 py-2"><option value="">Pilih mapel</option>{mapelList.map(m => <option key={m.id} value={m.id}>{m.nama}</option>)}</select></label>
               <label className="text-sm"><span className="block font-medium mb-1">Rombel Jurnalku</span><select value={rdmForm.rombel_id} onChange={e => setRdmForm(v => ({ ...v, rombel_id: e.target.value }))} className="w-full border rounded-lg px-3 py-2"><option value="">Pilih rombel</option>{rombels.map(r => <option key={r.id} value={r.id}>{r.nama}</option>)}</select></label>
               <label className="text-sm"><span className="block font-medium mb-1">Tahun Ajaran</span><input value={rdmForm.tahun_ajaran} onChange={e => setRdmForm(v => ({ ...v, tahun_ajaran: e.target.value }))} className="w-full border rounded-lg px-3 py-2" /></label>

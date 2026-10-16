@@ -22,6 +22,12 @@ function tambahMasa(iso: string, nilai: number, satuan: string) {
   return d.toISOString().slice(0, 10)
 }
 
+// Nominal = harga satuan paket x masa aktif (mis. lite Rp40.000/bulan x 3 = Rp120.000).
+// Harga satuan TIDAK diisi manual: selalu ikut konfigurasi paket di server.
+function nominalDari(hargaSatuan: number, masaNilai: number) {
+  return Math.max(0, Math.round(Number(hargaSatuan) || 0)) * Math.max(1, Math.round(Number(masaNilai) || 1))
+}
+
 export default function InvoicePage() {
   const [tenants, setTenants] = useState<Tenant[]>([])
   const [plans, setPlans] = useState<Plan[]>([])
@@ -30,9 +36,17 @@ export default function InvoicePage() {
   const [open, setOpen] = useState(false)
   const [saving, setSaving] = useState(false)
   const [form, setForm] = useState({
-    tenant_id: '', plan: 'pro', harga: 80000, masa_nilai: 1, masa_satuan: 'bulan',
+    tenant_id: '', plan: 'pro', masa_nilai: 1, masa_satuan: 'bulan',
     periode_mulai: todayIso(), periode_selesai: tambahMasa(todayIso(), 1, 'bulan'), keterangan: '',
   })
+
+  // Harga satuan paket terpilih — dari konfigurasi paket (subscription_plans),
+  // bukan diketik operator. Nominal diturunkan otomatis: satuan x masa.
+  const hargaSatuan = useMemo(
+    () => Number(plans.find(p => p.plan === form.plan)?.harga ?? 0),
+    [plans, form.plan]
+  )
+  const nominalOtomatis = useMemo(() => nominalDari(hargaSatuan, form.masa_nilai), [hargaSatuan, form.masa_nilai])
 
   const muat = useCallback(async () => {
     try {
@@ -50,7 +64,7 @@ export default function InvoicePage() {
     const t = tenants.find(x => x.id === id)
     const plan = plans.find(p => p.plan === (t?.plan || 'pro')) || plans.find(p => p.plan === 'pro') || plans[0]
     setForm(f => ({
-      ...f, tenant_id: id, plan: plan?.plan || 'pro', harga: plan?.harga ?? 0,
+      ...f, tenant_id: id, plan: plan?.plan || 'pro',
       masa_nilai: plan?.masa_nilai ?? 1, masa_satuan: plan?.masa_satuan || 'bulan',
       periode_selesai: tambahMasa(f.periode_mulai, plan?.masa_nilai ?? 1, plan?.masa_satuan || 'bulan'),
     }))
@@ -59,7 +73,7 @@ export default function InvoicePage() {
   const pilihPlan = (planKey: string) => {
     const plan = plans.find(p => p.plan === planKey)
     setForm(f => ({
-      ...f, plan: planKey, harga: plan?.harga ?? 0,
+      ...f, plan: planKey,
       masa_nilai: plan?.masa_nilai ?? 1, masa_satuan: plan?.masa_satuan || 'bulan',
       periode_selesai: tambahMasa(f.periode_mulai, plan?.masa_nilai ?? 1, plan?.masa_satuan || 'bulan'),
     }))
@@ -67,10 +81,11 @@ export default function InvoicePage() {
 
   const buat = async () => {
     if (!form.tenant_id) return toast.error('Pilih lembaga')
+    if (hargaSatuan <= 0) return toast.error('Harga paket belum diatur — atur di Paket Langganan')
     setSaving(true)
     try {
       const res = await api.post('/admin/invoices', form)
-      toast.success('Invoice diterbitkan: ' + res.data.invoice.nomor)
+      toast.success(`Invoice diterbitkan: ${res.data.invoice.nomor} — ${rupiah(res.data.invoice.harga)}`)
       setOpen(false)
       muat()
     } catch (e: any) { toast.error(e.response?.data?.error || 'Gagal menerbitkan') }
@@ -170,19 +185,25 @@ export default function InvoicePage() {
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">Nominal (Rp)</label>
-                  <input type="number" min={0} value={form.harga} onChange={e => setForm({ ...form, harga: Number(e.target.value) })} className="w-full px-3 py-2 border rounded-lg text-sm" />
+                  <label className="block text-xs font-medium text-gray-600 mb-1">Harga satuan paket</label>
+                  <div className="w-full px-3 py-2 border rounded-lg text-sm bg-gray-50 text-gray-600">
+                    {rupiah(hargaSatuan)} <span className="text-xs">/{form.masa_satuan}</span>
+                  </div>
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-1">Masa aktif</label>
                   <div className="flex gap-2">
-                    <input type="number" min={1} value={form.masa_nilai} onChange={e => setForm({ ...form, masa_nilai: Number(e.target.value), periode_selesai: tambahMasa(form.periode_mulai, Number(e.target.value), form.masa_satuan) })} className="w-full px-3 py-2 border rounded-lg text-sm" />
+                    <input type="number" min={1} value={form.masa_nilai} onChange={e => setForm({ ...form, masa_nilai: Math.max(1, Number(e.target.value) || 1), periode_selesai: tambahMasa(form.periode_mulai, Math.max(1, Number(e.target.value) || 1), form.masa_satuan) })} className="w-full px-3 py-2 border rounded-lg text-sm" />
                     <select value={form.masa_satuan} onChange={e => setForm({ ...form, masa_satuan: e.target.value, periode_selesai: tambahMasa(form.periode_mulai, form.masa_nilai, e.target.value) })} className="px-2 py-2 border rounded-lg text-sm">
                       <option value="bulan">bulan</option>
                       <option value="hari">hari</option>
                     </select>
                   </div>
                 </div>
+              </div>
+              <div className="bg-indigo-50 border border-indigo-100 rounded-lg px-3 py-2 text-sm flex items-center justify-between">
+                <span className="text-gray-600">Nominal otomatis</span>
+                <span className="font-bold text-indigo-700">{rupiah(nominalOtomatis)}</span>
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
