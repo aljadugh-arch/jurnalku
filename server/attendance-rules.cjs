@@ -39,20 +39,36 @@ function dateRange(start, end) {
 
 function writeDailyAttendanceSession(db, {
   id, tenantId, siswaId, rombelId = null, tanggal, status, waktu = null,
-  metode = 'manual', keterangan = '', jenis = 'masuk',
+  metode = 'manual', keterangan = '', jenis = 'masuk', overwrite = false,
 }) {
   const isPulang = jenis === 'pulang'
   const sessionField = isPulang ? 'status_pulang' : 'status'
   const existing = db.prepare('SELECT id, status, status_pulang FROM absensi_siswa WHERE siswa_id=? AND tanggal=? AND tenant_id=?')
     .get(siswaId, tanggal, tenantId)
-  if (existing?.[sessionField]) return { id: existing.id, already: true, status: existing[sessionField], jenis: isPulang ? 'pulang' : 'masuk' }
+  // Tanpa overwrite, baris yang sudah punya nilai di sesi ini dibiarkan (first-writer-wins):
+  // scan QR/RFID tidak boleh menimpa 'sakit' yang sudah diinput manual, dan sebaliknya.
+  // Dengan overwrite (input manual per siswa), nilai lama DIGANTI — inilah yang membuat
+  // absensi bisa DIEDIT setelah disimpan.
+  if (existing?.[sessionField] && !overwrite) return { id: existing.id, already: true, status: existing[sessionField], jenis: isPulang ? 'pulang' : 'masuk' }
+
+  // overwrite dengan nilai yang SAMA = tidak ada perubahan nyata. Jangan menulis ulang,
+  // supaya menyimpan ulang layar tanpa mengubah apa pun tidak memicu notif WA berulang.
+  if (existing && overwrite && existing[sessionField] === status) {
+    return { id: existing.id, already: true, status, jenis: isPulang ? 'pulang' : 'masuk' }
+  }
 
   if (existing) {
     const result = isPulang
-      ? db.prepare("UPDATE absensi_siswa SET status_pulang=?, waktu_pulang=?, keterangan_pulang=?, metode=COALESCE(NULLIF(?,''),metode) WHERE id=? AND tenant_id=? AND trim(COALESCE(status_pulang,''))='' ")
-          .run(status, waktu, keterangan, metode, existing.id, tenantId)
-      : db.prepare("UPDATE absensi_siswa SET status=?, waktu_absen=?, waktu_masuk=?, metode=?, keterangan=? WHERE id=? AND tenant_id=? AND trim(COALESCE(status,''))='' ")
-          .run(status, waktu, waktu, metode, keterangan, existing.id, tenantId)
+      ? (overwrite
+          ? db.prepare("UPDATE absensi_siswa SET status_pulang=?, waktu_pulang=?, keterangan_pulang=?, metode=COALESCE(NULLIF(?,''),metode) WHERE id=? AND tenant_id=?")
+              .run(status, waktu, keterangan, metode, existing.id, tenantId)
+          : db.prepare("UPDATE absensi_siswa SET status_pulang=?, waktu_pulang=?, keterangan_pulang=?, metode=COALESCE(NULLIF(?,''),metode) WHERE id=? AND tenant_id=? AND trim(COALESCE(status_pulang,''))='' ")
+              .run(status, waktu, keterangan, metode, existing.id, tenantId))
+      : (overwrite
+          ? db.prepare("UPDATE absensi_siswa SET status=?, waktu_absen=?, waktu_masuk=?, metode=?, keterangan=? WHERE id=? AND tenant_id=?")
+              .run(status, waktu, waktu, metode, keterangan, existing.id, tenantId)
+          : db.prepare("UPDATE absensi_siswa SET status=?, waktu_absen=?, waktu_masuk=?, metode=?, keterangan=? WHERE id=? AND tenant_id=? AND trim(COALESCE(status,''))='' ")
+              .run(status, waktu, waktu, metode, keterangan, existing.id, tenantId))
     const saved = db.prepare('SELECT id, status, status_pulang FROM absensi_siswa WHERE id=? AND tenant_id=?').get(existing.id, tenantId)
     return { id: saved.id, already: !result.changes, status: saved[sessionField], jenis: isPulang ? 'pulang' : 'masuk' }
   }

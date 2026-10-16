@@ -56,6 +56,7 @@ const { normalizePiketIds, attachPiketNames, MAKS_GURU_PIKET } = require('./jadw
 const { registerRoutes: registerBackupRestoreRoutes, LIMITS: BACKUP_LIMITS } = require('./backup-restore.cjs')
 const { registerFinanceExcelRoutes } = require('./finance-excel.cjs')
 const { FEATURE_KEYS, PLAN_KEYS, addMonthsIso, computeExpiry, accessForTenant, featureForPath, normalizeFeatureSelection, generateUnlockCode, hashUnlockCode, setupSubscriptionTables, getPlans, planFeatureMap, updatePlan } = require('./subscription.cjs')
+const invoiceService = require('./invoice-service.cjs')
 const { setupBackupTables, registerBackupRoutes, startBackupScheduler } = require('./backup-drive.cjs')
 const { DOCUMENT_TYPES, buildPrompt, validateGenerateInput, createTemplateContent, createDocumentDocx, callAi, clean } = require('./ai-documents.cjs')
 const { encryptSecret, decryptSecret, maskKey, PROVIDER_ENDPOINTS, setupAiConfigTables, resolveAiConfig } = require('./ai-config.cjs')
@@ -1221,6 +1222,7 @@ setupTenantTables(db)
 ensureTenantSettings(db, 'default')
 setupEkskulMembership(db)
 setupSubscriptionTables(db)
+invoiceService.setupInvoiceTables(db)
 setupAiConfigTables(db)
 migrateTenantSettings(db)
 // Payment gateway QRIS: tabel konfigurasi + intent, dan satu token webhook per lembaga.
@@ -1957,6 +1959,67 @@ app.post('/api/tenants/:id/unlock-keys', SUPER, (req, res) => {
   do { code = generateUnlockCode(); hash = hashUnlockCode(code) } while (db.prepare('SELECT 1 FROM subscription_unlock_keys WHERE code_hash=?').get(hash))
   db.prepare('INSERT INTO subscription_unlock_keys(id,code_hash,tenant_id,plan,months,created_by) VALUES(?,?,?,?,?,?)').run(uuidv4(), hash, req.params.id, plan, months, req.user.id)
   res.status(201).json({ code, plan, months, tenant_id: req.params.id, note: 'Kunci hanya ditampilkan sekali. Simpan dan kirim kepada admin lembaga.' })
+})
+
+// ==================== INVOICE LANGGANAN (super admin) ====================
+// Bukti tagihan langganan per lembaga, dirender dari HTML yang sama menjadi PDF & JPEG.
+
+app.get('/api/admin/invoices', SUPER, (req, res) => {
+  const tenant_id = req.query.tenant_id ? String(req.query.tenant_id) : null
+  const sql = `SELECT i.*, t.nama AS tenant_nama FROM subscription_invoices i
+    LEFT JOIN tenants t ON t.id = i.tenant_id
+    ${tenant_id ? 'WHERE i.tenant_id = ?' : ''}
+    ORDER BY i.created_at DESC LIMIT 300`
+  res.json(db.prepare(sql).all(...(tenant_id ? [tenant_id] : [])))
+})
+
+app.post('/api/admin/invoices', SUPER, (req, res) => {
+  try {
+    const inv = invoiceService.isiInvoice(db, {
+      tenantId: req.body.tenant_id,
+      plan: req.body.plan,
+      harga: req.body.harga,
+      masaNilai: req.body.masa_nilai,
+      masaSatuan: req.body.masa_satuan,
+      periodeMulai: req.body.periode_mulai,
+      periodeSelesai: req.body.periode_selesai,
+      keterangan: req.body.keterangan,
+      createdBy: req.user.id,
+    })
+    res.json({ success: true, invoice: inv })
+  } catch (e) { res.status(400).json({ error: e.message }) }
+})
+
+app.get('/api/admin/invoices/:id', SUPER, (req, res) => {
+  const inv = invoiceService.barisInvoice(db, req.params.id)
+  if (!inv) return res.status(404).json({ error: 'Invoice tidak ditemukan' })
+  res.json(inv)
+})
+
+app.get('/api/admin/invoices/:id/pdf', SUPER, async (req, res) => {
+  const inv = invoiceService.barisInvoice(db, req.params.id)
+  if (!inv) return res.status(404).json({ error: 'Invoice tidak ditemukan' })
+  try {
+    const buf = await invoiceService.renderInvoicePdf(invoiceService.buildInvoiceHtml(inv))
+    res.set({ 'Content-Type': 'application/pdf', 'Content-Disposition': `inline; filename="${inv.nomor}.pdf"` })
+    res.send(buf)
+  } catch (e) { res.status(500).json({ error: 'Gagal render PDF: ' + e.message }) }
+})
+
+app.get('/api/admin/invoices/:id/jpeg', SUPER, async (req, res) => {
+  const inv = invoiceService.barisInvoice(db, req.params.id)
+  if (!inv) return res.status(404).json({ error: 'Invoice tidak ditemukan' })
+  try {
+    const buf = await invoiceService.renderInvoiceJpeg(invoiceService.buildInvoiceHtml(inv))
+    res.set({ 'Content-Type': 'image/jpeg', 'Content-Disposition': `inline; filename="${inv.nomor}.jpg"` })
+    res.send(buf)
+  } catch (e) { res.status(500).json({ error: 'Gagal render JPEG: ' + e.message }) }
+})
+
+app.delete('/api/admin/invoices/:id', SUPER, (req, res) => {
+  const info = db.prepare('DELETE FROM subscription_invoices WHERE id=?').run(req.params.id)
+  if (!info.changes) return res.status(404).json({ error: 'Invoice tidak ditemukan' })
+  res.json({ success: true })
 })
 
 // ---- Jadwal sholat (dihitung lokal, tanpa ketergantungan API luar) ----
@@ -7067,7 +7130,7 @@ app.post('/api/absensi-siswa', STAFF, (req, res) => {
   const result = writeDailyAttendanceSession(db, {
     id: uuidv4(), tenantId: req.tenantId, siswaId: siswa_id, rombelId: rombel_id || null,
     tanggal, status, waktu: waktu_absen || null, metode: metode || 'manual',
-    keterangan: keterangan || '', jenis: normalizedJenis,
+    keterangan: keterangan || '', jenis: normalizedJenis, overwrite: true,
   })
   if (!result.already) sendAbsensiNotifToWali(siswa_id, normalizedJenis === 'pulang' ? `${status} (pulang)` : status, tanggal).catch(() => {})
   res.json(result)
@@ -7095,7 +7158,7 @@ app.post('/api/absensi-siswa/bulk', STAFF, (req, res) => {
     const result = writeDailyAttendanceSession(db, {
       id: uuidv4(), tenantId: req.tenantId, siswaId: d.siswa_id, rombelId: rombel_id || null,
       tanggal, status: d.status, waktu: d.waktu_absen || null, metode: d.metode || 'manual',
-      keterangan: d.keterangan || '', jenis: isPulang ? 'pulang' : 'masuk',
+      keterangan: d.keterangan || '', jenis: isPulang ? 'pulang' : 'masuk', overwrite: true,
     })
     if (result.already) { already++; continue }
     count++
