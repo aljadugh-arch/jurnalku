@@ -25,6 +25,16 @@ const { bangunPesan, alamatAman, bersihHeader } = require('../server/mailer.cjs'
 const { pesanWaRegistrasi, htmlEmailRegistrasi, notifikasiRegistrasi } = require('../server/register-notify.cjs')
 const { setupWA } = require('../server/wa-queue.cjs')
 
+// Worker WA hanya memproses antrean untuk tenant ber-`wa_gateway_config.enabled=1`
+// dengan sesi 'connected'. Notifikasi registrasi WAJIB mengantre lewat tenant itu,
+// bukan tenant yang baru mendaftar (yang belum punya sesi apa pun) — kalau tidak,
+// pesan menggantung di antrean selamanya.
+function siapkanSesiWA(db, tenantId = 'default') {
+  db.exec(`CREATE TABLE IF NOT EXISTS wa_gateway_config (tenant_id TEXT PRIMARY KEY, enabled INTEGER DEFAULT 0, provider TEXT DEFAULT 'baileys');`)
+  db.prepare("INSERT OR REPLACE INTO wa_gateway_config (tenant_id, enabled, provider) VALUES (?,1,'baileys')").run(tenantId)
+  db.prepare("INSERT OR REPLACE INTO wa_sessions (tenant_id, status, updated_at) VALUES (?,'connected',datetime('now'))").run(tenantId)
+}
+
 // ─── Paginasi Jurnal ────────────────────────────────────────────────────────
 
 test('GET /api/jurnal mendukung page & limit, klien lama tetap dapat array penuh', () => {
@@ -130,15 +140,18 @@ test('email registrasi berisi HTML dengan data lembaga (ter-escape)', () => {
 test('notifikasiRegistrasi mengantre WA dan mencatat status email (tidak melempar)', async () => {
   const db = new Database(':memory:')
   setupWA(db)
+  siapkanSesiWA(db)
   const hasil = await notifikasiRegistrasi(db, {
     tenantId: 't1', namaLembaga: 'MTs Contoh', namaAdmin: 'Budi',
     email: 'budi@x.id', noHp: '081234567890', slug: 'contoh', url: 'https://contoh.jurnal.cc.cd',
   })
   assert.equal(hasil.wa.ok, true, 'WA harus masuk antrean')
-  const baris = db.prepare('SELECT * FROM wa_queue WHERE tenant_id=?').all('t1')
-  assert.equal(baris.length, 1, 'satu pesan WA diantrekan')
+  const baris = db.prepare('SELECT * FROM wa_queue WHERE tenant_id=?').all('default')
+  assert.equal(baris.length, 1, 'satu pesan WA diantrekan lewat tenant pengirim (default)')
   assert.equal(baris[0].phone, '6281234567890', 'nomor dinormalisasi ke 62')
   assert.match(baris[0].message, /MTs Contoh/)
+  // Tidak boleh diantrekan atas nama tenant baru (belum punya sesi WA).
+  assert.equal(db.prepare('SELECT COUNT(*) c FROM wa_queue WHERE tenant_id=?').get('t1').c, 0)
   // MAIL_DISABLED=1 → email tidak dikirim, tapi status dilaporkan (bukan error).
   assert.equal(hasil.email.ok, false)
   assert.match(hasil.email.error, /dimatikan/)
@@ -147,6 +160,7 @@ test('notifikasiRegistrasi mengantre WA dan mencatat status email (tidak melempa
 test('notifikasiRegistrasi idempoten: dua panggilan tidak menggandakan WA', async () => {
   const db = new Database(':memory:')
   setupWA(db)
+  siapkanSesiWA(db)
   const arg = {
     tenantId: 't1', namaLembaga: 'MTs Contoh', namaAdmin: 'Budi',
     email: 'budi@x.id', noHp: '081234567890', slug: 'contoh',
@@ -155,18 +169,30 @@ test('notifikasiRegistrasi idempoten: dua panggilan tidak menggandakan WA', asyn
   const kedua = await notifikasiRegistrasi(db, arg)
   assert.equal(kedua.wa.ok, true)
   assert.match(kedua.wa.reason, /sudah pernah/)
-  assert.equal(db.prepare('SELECT COUNT(*) c FROM wa_queue WHERE tenant_id=?').get('t1').c, 1)
+  assert.equal(db.prepare("SELECT COUNT(*) c FROM wa_queue WHERE tenant_id='default'").get().c, 1)
 })
 
 test('notifikasiRegistrasi tahan nomor WA kosong (email tetap diproses)', async () => {
   const db = new Database(':memory:')
   setupWA(db)
+  siapkanSesiWA(db)
   const hasil = await notifikasiRegistrasi(db, {
     tenantId: 't2', namaLembaga: 'X', namaAdmin: 'Y', email: 'y@x.id', noHp: '',
   })
   assert.equal(hasil.wa.ok, false)
   assert.match(hasil.wa.reason, /tidak valid|kosong/)
-  assert.equal(db.prepare('SELECT COUNT(*) c FROM wa_queue WHERE tenant_id=?').get('t2').c, 0)
+  assert.equal(db.prepare("SELECT COUNT(*) c FROM wa_queue WHERE tenant_id='default'").get().c, 0)
+})
+
+test('tanpa sesi WA aktif, notifikasi WA gagal dengan alasan jelas (bukan menggantung)', async () => {
+  const db = new Database(':memory:')
+  setupWA(db) // sengaja TANPA sesi/gateway
+  const hasil = await notifikasiRegistrasi(db, {
+    tenantId: 't3', namaLembaga: 'X', namaAdmin: 'Y', email: 'y@x.id', noHp: '081234567890',
+  })
+  assert.equal(hasil.wa.ok, false)
+  assert.match(hasil.wa.reason, /tidak ada sesi WhatsApp aktif/)
+  assert.equal(db.prepare('SELECT COUNT(*) c FROM wa_queue').get().c, 0, 'jangan antre kalau tak ada pengirim')
 })
 
 // ─── Alur registrasi ───────────────────────────────────────────────────────

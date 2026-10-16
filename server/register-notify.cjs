@@ -79,22 +79,47 @@ async function notifikasiRegistrasi(db, {
   const data = { namaLembaga, namaAdmin, email, url, slug, domainCustom, domainStatus }
 
   // --- WhatsApp ---
+  // PENTING: antrekan lewat tenant yang PUNYA sesi WA aktif, bukan tenant baru.
+  // Worker (wa-worker.mjs) hanya memproses antrean untuk tenant dengan baris
+  // `wa_gateway_config.enabled=1`; tenant yang baru mendaftar belum punya itu,
+  // jadi pesan akan menggantung selamanya bila diantrekan atas namanya.
+  // Kita pilih tenant yang sesinya 'connected' (platform didahulukan), dan
+  // pemberitahuannya menyebut lembaga baru sebagai isi pesan — bukan pengirim.
+  let tenantPengirim = null
   try {
-    const pesan = pesanWaRegistrasi(data)
-    const r = enqueue(db, {
-      tenantId: tenantId || 'default',
-      phone: noHp,
-      message: pesan,
-      key: `register:${tenantId || email}`,
-      targetType: 'registrasi',
-      targetId: tenantId || email,
-    })
-    if (r.queued) hasil.wa = { ok: true, reason: 'diantrekan' }
-    else if (r.reason === 'duplicate') hasil.wa = { ok: true, reason: 'sudah pernah diantrekan' }
-    else if (r.reason === 'whitelisted') hasil.wa = { ok: true, reason: 'nomor di-whitelist (tidak dikirim)' }
-    else hasil.wa = { ok: false, reason: 'nomor WA tidak valid atau kosong' }
-  } catch (e) {
-    hasil.wa = { ok: false, reason: `galat antrean WA: ${e.message}` }
+    const kandidat = db.prepare(`
+      SELECT s.tenant_id FROM wa_sessions s
+      JOIN wa_gateway_config g ON g.tenant_id = s.tenant_id AND g.enabled = 1
+      WHERE s.status = 'connected'
+      ORDER BY CASE WHEN s.tenant_id = 'default' THEN 0 ELSE 1 END, s.updated_at DESC
+      LIMIT 1`).get()
+    if (kandidat) tenantPengirim = kandidat.tenant_id
+    else {
+      const mana = db.prepare("SELECT tenant_id FROM wa_gateway_config WHERE enabled=1 LIMIT 1").get()
+      tenantPengirim = mana?.tenant_id || null
+    }
+  } catch { tenantPengirim = null }
+
+  if (!tenantPengirim) {
+    hasil.wa = { ok: false, reason: 'tidak ada sesi WhatsApp aktif yang bisa mengirim (hubungkan WA platform dulu)' }
+  } else {
+    try {
+      const pesan = pesanWaRegistrasi(data)
+      const r = enqueue(db, {
+        tenantId: tenantPengirim,
+        phone: noHp,
+        message: pesan,
+        key: `register:${tenantId || email}`,
+        targetType: 'registrasi',
+        targetId: tenantId || email,
+      })
+      if (r.queued) hasil.wa = { ok: true, reason: `diantrekan via ${tenantPengirim}` }
+      else if (r.reason === 'duplicate') hasil.wa = { ok: true, reason: 'sudah pernah diantrekan' }
+      else if (r.reason === 'whitelisted') hasil.wa = { ok: true, reason: 'nomor di-whitelist (tidak dikirim)' }
+      else hasil.wa = { ok: false, reason: 'nomor WA tidak valid atau kosong' }
+    } catch (e) {
+      hasil.wa = { ok: false, reason: `galat antrean WA: ${e.message}` }
+    }
   }
 
   // --- Email ---
