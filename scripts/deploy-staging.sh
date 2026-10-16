@@ -43,6 +43,13 @@ if [[ -d server/scripts ]]; then
   mapfile -t SERVER_SCRIPTS < <(find server/scripts -maxdepth 1 -type f -printf '%f\n' | sort)
 fi
 
+# Aset brand di public/ dibaca LANGSUNG oleh runtime Node (bukan lewat dist):
+# /favicon.ico, /apple-touch-icon.png, /og-image.png, /api/pwa/icon/:size memakai
+# path.join(__dirname,'..','public',...). Kalau public/ tidak ikut dikirim, ikon
+# default tetap versi lama walau build & dist sudah baru. server/uploads TIDAK
+# ikut (data runtime, bukan aset kode).
+mapfile -t BRAND_FILES < <(find public -maxdepth 1 -type f \( -name '*.png' -o -name '*.ico' -o -name '*.svg' -o -name 'manifest.json' -o -name 'robots.txt' -o -name 'sitemap.xml' \) -printf 'public/%f\n' | sort)
+
 echo "[1/5] Syntax check server (${#SERVER_FILES[@]} modul, ${#SERVER_SCRIPTS[@]} skrip)..."
 for f in "${SERVER_FILES[@]}"; do
   node -c "server/$f"
@@ -61,6 +68,7 @@ for f in "${SERVER_FILES[@]}"; do
 done
 TAR_ARGS=(dist "${TAR_SERVER_ARGS[@]}")
 [[ ${#SERVER_SCRIPTS[@]} -eq 0 ]] || TAR_ARGS+=(server/scripts)
+[[ ${#BRAND_FILES[@]} -eq 0 ]] || TAR_ARGS+=("${BRAND_FILES[@]}")
 tar -czf "$LOCAL_ARCHIVE" "${TAR_ARGS[@]}"
 sshpass -e scp "${SSH_OPTS[@]}" "$LOCAL_ARCHIVE" "$TARGET:$REMOTE_ARCHIVE"
 
@@ -70,6 +78,7 @@ set -euo pipefail
 STG="$1"; ARCHIVE="$2"; DEPLOY_ID="$3"; PM2_APP="$4"; HEALTH_URL="$5"; STG_PORT="$6"
 WORK="$STG/.deploy-$DEPLOY_ID"
 BACKUP_SERVER="$STG/.server-backup-$DEPLOY_ID"
+BACKUP_PUBLIC="$STG/.public-backup-$DEPLOY_ID"
 ACTIVATED=0
 
 # Restart, atau buat prosesnya bila belum ada (mis. dibersihkan setelah smoke
@@ -91,9 +100,10 @@ rollback() {
     rm -rf "$STG/dist"
     [[ ! -d "$STG/dist.previous" ]] || mv "$STG/dist.previous" "$STG/dist"
     cp -a "$BACKUP_SERVER/." "$STG/server/"
+    [[ ! -d "$BACKUP_PUBLIC" ]] || cp -a "$BACKUP_PUBLIC/." "$STG/public/"
     ensure_pm2 >/dev/null 2>&1 || true
   fi
-  rm -rf "$BACKUP_SERVER"
+  rm -rf "$BACKUP_SERVER" "$BACKUP_PUBLIC"
   exit "$status"
 }
 trap rollback ERR
@@ -131,6 +141,19 @@ if [[ -d "$WORK/server/scripts" ]]; then
     esac
   done
 fi
+# Aset brand: runtime Node membaca public/ (bukan dist/) untuk /favicon.ico,
+# /apple-touch-icon.png, /og-image.png, dan /api/pwa/icon/:size. Versi lama
+# dicadangkan supaya rollback benar-benar utuh.
+if [[ -d "$WORK/public" ]]; then
+  mkdir -p "$STG/public" "$BACKUP_PUBLIC"
+  for f in "$WORK"/public/*; do
+    [[ -f "$f" ]] || continue
+    base="$(basename "$f")"
+    [[ ! -f "$STG/public/$base" ]] || cp -a "$STG/public/$base" "$BACKUP_PUBLIC/$base"
+    install -m 0644 "$f" "$STG/public/$base"
+  done
+  echo "aset brand dipasang: $(ls -1 "$WORK/public" | wc -l) berkas"
+fi
 ensure_pm2
 for attempt in {1..10}; do
   curl --fail --silent --show-error --max-time 15 "$HEALTH_URL" >/dev/null && break
@@ -138,7 +161,7 @@ for attempt in {1..10}; do
   sleep 1
 done
 ACTIVATED=0
-rm -rf "$BACKUP_SERVER"
+rm -rf "$BACKUP_SERVER" "$BACKUP_PUBLIC"
 REMOTE
 
 echo "[5/5] STAGING sehat: $STG_HEALTH_URL"

@@ -51,7 +51,7 @@
     <!-- Skeleton awal: mencegah layar putih saat koneksi lambat (Vite mengganti #root saat mount). -->
     <style>
       #boot-splash{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;background:#f8fafc;z-index:9999;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif}
-      #boot-splash .boot-logo{width:64px;height:64px;border-radius:16px;background:#1e40af;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:800;font-size:22px;letter-spacing:.5px}
+      #boot-splash .boot-logo{width:76px;height:76px;object-fit:contain}
       #boot-splash .boot-spin{width:34px;height:34px;border:3px solid #cbd5e1;border-top-color:#1e40af;border-radius:50%;animation:bootspin .8s linear infinite}
       #boot-splash p{margin:0;color:#475569;font-size:13px}
       #boot-splash .boot-skel{width:min(320px,70vw);display:flex;flex-direction:column;gap:8px;margin-top:4px}
@@ -66,7 +66,7 @@
   <body>
     <div id="root"></div>
     <div id="boot-splash" aria-hidden="true">
-      <div class="boot-logo">JK</div>
+      <img class="boot-logo" src="/logo-jurnalku-256.png" alt="JURNALKU" width="76" height="76" />
       <div class="boot-spin"></div>
       <div class="boot-skel"><span style="width:100%"></span><span style="width:82%"></span><span style="width:64%"></span></div>
       <p>Memuat JURNALKU…</p>

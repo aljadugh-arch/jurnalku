@@ -44,6 +44,10 @@ rollback() {
       rm -rf "$LIVE/server/scripts"
       cp -a "$BACKUP/server/scripts" "$LIVE/server/scripts"
     fi
+    # Aset brand (public/) juga dikembalikan supaya ikon/favicon konsisten
+    # dengan dist hasil rollback.
+    [[ ! -d "$BACKUP/public" ]] || cp -a "$BACKUP/public/." "$LIVE/public/"
+    [[ ! -d "$SECONDARY_BACKUP/public" ]] || cp -a "$SECONDARY_BACKUP/public/." "$SECONDARY_LIVE/public/"
     if [[ -d "$SECONDARY_BACKUP/dist" ]]; then
       rm -rf "$SECONDARY_LIVE/dist"
       mv "$SECONDARY_BACKUP/dist" "$SECONDARY_LIVE/dist"
@@ -93,6 +97,21 @@ if [[ -d "$STG/server/scripts" ]]; then
       *)    install -m 0644 "$f" "$LIVE/server/scripts/$(basename "$f")" ;;
     esac
   done
+fi
+# Aset brand dari staging → LIVE & SECONDARY. Runtime Node menyajikan
+# /favicon.ico, /apple-touch-icon.png, /og-image.png, dan /api/pwa/icon/:size
+# langsung dari public/ (bukan dist/), jadi public/ harus ikut dipromosikan.
+if [[ -d "$STG/public" ]]; then
+  mkdir -p "$LIVE/public" "$SECONDARY_LIVE/public" "$BACKUP/public" "$SECONDARY_BACKUP/public"
+  for f in "$STG"/public/*; do
+    [[ -f "$f" ]] || continue
+    base="$(basename "$f")"
+    [[ ! -f "$LIVE/public/$base" ]] || cp -a "$LIVE/public/$base" "$BACKUP/public/$base"
+    [[ ! -f "$SECONDARY_LIVE/public/$base" ]] || cp -a "$SECONDARY_LIVE/public/$base" "$SECONDARY_BACKUP/public/$base"
+    install -m 0644 "$f" "$LIVE/public/$base"
+    install -m 0644 "$f" "$SECONDARY_LIVE/public/$base"
+  done
+  echo "aset brand dipromosikan ke LIVE: $(ls -1 "$STG/public" | wc -l) berkas"
 fi
 pm2 restart "$PM2_APP" --update-env
 for attempt in {1..10}; do
