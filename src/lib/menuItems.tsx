@@ -66,6 +66,7 @@ export const adminMenuItems: MenuItem[] = [
   { label: 'Generator AI Guru', icon: <Sparkles size={20} />, path: '/admin/modul-ajar' },
   { label: 'Perpustakaan Digital', icon: <BookOpen size={20} />, path: '/admin/perpustakaan' },
   { label: 'Administrasi Surat', icon: <ScrollText size={20} />, path: '/admin/administrasi' },
+  { label: 'Program Belajar', icon: <BookOpen size={20} />, path: '/admin/program-belajar' },
   { label: 'Tahun Ajaran', icon: <School size={20} />, path: '/admin/tahun-ajaran' },
   {
     label: 'Keuangan', icon: <DollarSign size={20} />,
@@ -174,6 +175,7 @@ export const kepalaMenuItems: MenuItem[] = [
   { label: 'Jurnal Mengajar', icon: <ClipboardList size={20} />, path: '/admin/jurnal' },
   { label: 'Supervisi', icon: <ClipboardCheck size={20} />, path: '/admin/supervisi' },
   { label: 'Administrasi Surat', icon: <ScrollText size={20} />, path: '/admin/administrasi' },
+  { label: 'Program Belajar', icon: <BookOpen size={20} />, path: '/admin/program-belajar' },
   { label: 'Perpustakaan Digital', icon: <BookOpen size={20} />, path: '/admin/perpustakaan' },
   {
     label: 'Absensi', icon: <UserCheck size={20} />,

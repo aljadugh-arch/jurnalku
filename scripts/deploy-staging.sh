@@ -55,7 +55,10 @@ for f in "${SERVER_FILES[@]}"; do
   node -c "server/$f"
 done
 for f in "${SERVER_SCRIPTS[@]}"; do
-  bash -n "server/scripts/$f"
+  case "$f" in
+    *.sh) bash -n "server/scripts/$f" ;;
+    *.cjs|*.js) node -c "server/scripts/$f" ;;
+  esac
 done
 
 echo "[2/5] Build frontend..."
@@ -116,7 +119,10 @@ for f in "$WORK"/server/*.cjs; do
 done
 for f in "$WORK"/server/scripts/*; do
   [[ -f "$f" ]] || continue
-  bash -n "$f"
+  case "$f" in
+    *.sh) bash -n "$f" ;;
+    *.cjs|*.js) node -c "$f" ;;
+  esac
 done
 
 mkdir -p "$BACKUP_SERVER"

@@ -28,6 +28,7 @@ const { setupPortalCashless, registerPortalRoutes, registerKantinRoutes, selectP
 const { setupPaymentGateway, registerPaymentGatewayRoutes } = require('./payment-gateway-routes.cjs')
 const { setupAdministrasi, registerAdministrasiRoutes } = require('./administrasi-routes.cjs')
 const { setupSupervisi, registerSupervisiRoutes } = require('./supervisi-routes.cjs')
+const { setupProgramBelajar, registerProgramBelajarRoutes } = require('./program-belajar-routes.cjs')
 const { startPaymentPoller } = require('./payment-poller.cjs')
 const waQueue = require('./wa-queue.cjs')
 const notificationMonitor = require('./notification-monitor.cjs')
@@ -1234,6 +1235,8 @@ setupPaymentGateway(db)
 // Menu Administrasi (surat-menyurat) + Supervisi kepala lembaga.
 setupAdministrasi(db)
 setupSupervisi(db)
+// Program belajar + level untuk lembaga nonformal (kursus/bimbel/sanggar).
+setupProgramBelajar(db)
 
 // Sesi kelas lama memiliki FK ke tabel jadwal reguler, sedangkan jadwal ujian
 // memakai tabel terpisah. Rebuild satu kali agar keduanya dapat direferensikan
@@ -2089,6 +2092,7 @@ registerKantinRoutes(app, db, { requireRole, uuid: uuidv4, bcrypt })
 registerPaymentGatewayRoutes(app, db, { requireRole, hostPermintaan })
 registerAdministrasiRoutes(app, db, { requireRole })
 registerSupervisiRoutes(app, db, { requireRole })
+registerProgramBelajarRoutes(app, db, { requireRole })
 const backupScheduler = registerBackupRoutes(app, db, { requireRole, uuid: uuidv4, mediaRoot: UPLOAD_DIR })
 const BEASISWA_ROLES = requireRole('admin', 'super_admin', 'bendahara')
 const BEASISWA_SELECT = `SELECT b.*, s.nama siswa_nama, s.nis siswa_nis
