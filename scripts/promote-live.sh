@@ -76,7 +76,10 @@ for f in "$STG"/server/*.cjs; do
 done
 for f in "$STG"/server/scripts/*; do
   [[ -f "$f" ]] || continue
-  bash -n "$f"
+  case "$f" in
+    *.sh) bash -n "$f" ;;
+    *.cjs|*.js) node -c "$f" ;;
+  esac
 done
 ACTIVATED=1
 rm -rf "$LIVE/dist.next" "$SECONDARY_LIVE/dist.next"
