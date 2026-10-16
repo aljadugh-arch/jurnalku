@@ -5,6 +5,7 @@ import { useAuthStore } from '../stores/authStore'
 import { useThemeStore } from '../stores/themeStore'
 import Avatar from './ui/Avatar'
 import api from '../services/api'
+import { bisaModeGuru } from '../lib/teacherMode'
 
 type NotifItem = { id: string; event_type: string; label: string; metadata: any; created_at: string }
 
@@ -67,7 +68,7 @@ export default function MobileHeader({
     api.get('/auth/me/foto').then(res => setGtkFoto(res.data?.foto || null)).catch(() => setGtkFoto(null))
   }, [profilePhoto, user?.avatar, user?.id])
 
-  const teacherMode = user?.role === 'kepala' && !!user?.can_teach && location.pathname.startsWith('/guru')
+  const teacherMode = bisaModeGuru(user) && location.pathname.startsWith('/guru')
 
   const base = (() => {
     if (basePath) return basePath
@@ -186,7 +187,7 @@ export default function MobileHeader({
 
             <div className="py-1">
               {/* Switch role Kepala ↔ Guru jika punya can_teach */}
-              {user?.role === 'kepala' && !!user?.can_teach && (
+              {bisaModeGuru(user) && (
                 <button
                   onClick={() => { setMenuOpen(false); navigate(teacherMode ? '/admin' : '/guru') }}
                   className="w-full flex items-center gap-2.5 px-4 py-2 text-xs font-semibold text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 text-left"

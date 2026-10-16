@@ -24,7 +24,9 @@ test('akun kepala menyimpan capability mengajar tanpa role atau profil GTK kedua
   assert.match(server, /ALTER TABLE users ADD COLUMN can_teach INTEGER NOT NULL DEFAULT 0/)
   assert.match(server, /SELECT id, nama, email, role, nip, nis, avatar, gtk_id, can_teach FROM users WHERE id = \? AND tenant_id = \?/)
   assert.match(userManagement, /can_teach/)
-  assert.match(userManagement, /Kepala ini juga mengajar/)
+  // Label diperluas: bukan hanya kepala, tapi semua jabatan manajemen yang merangkap.
+  assert.match(userManagement, /Jabatan ini juga mengajar/)
+  assert.match(userManagement, /ROLES_BISA_MENGAJAR/)
 })
 
 test('token dan respons auth memuat capability mengajar akun yang sama', () => {

@@ -14,6 +14,7 @@ import { roleLabel } from '../../lib/roles'
 import { useSubscriptionStore } from '../../stores/subscriptionStore'
 import { pathEnabled } from '../../lib/featureAccess'
 import { menuForRole } from '../../lib/menuItems'
+import { bisaModeGuru } from '../../lib/teacherMode'
 
 interface MenuItem {
   label: string
@@ -92,7 +93,7 @@ export default function Sidebar() {
   const location = useLocation()
   const navigate = useNavigate()
   const [expandedMenus, setExpandedMenus] = useState<string[]>([])
-  const teacherMode = user?.role === 'kepala' && !!user.can_teach && location.pathname.startsWith('/guru')
+  const teacherMode = bisaModeGuru(user) && location.pathname.startsWith('/guru')
 
   const menuItems = (
     user?.role === 'bendahara'
@@ -186,7 +187,7 @@ export default function Sidebar() {
         </div>
 
         {/* Menu */}
-        {user?.role === 'kepala' && user.can_teach && isOpen && (
+        {bisaModeGuru(user) && isOpen && (
           <div className="mx-2 mt-3 grid grid-cols-2 gap-1 rounded-lg bg-white/10 p-1 text-xs">
             <button onClick={() => navigate('/admin')} className={clsx('rounded-md px-2 py-2', !teacherMode ? 'bg-white text-sidebar' : 'text-white/70')}>Mode Manajemen</button>
             <button onClick={() => navigate('/guru')} className={clsx('rounded-md px-2 py-2', teacherMode ? 'bg-white text-sidebar' : 'text-white/70')}>Mode Guru</button>

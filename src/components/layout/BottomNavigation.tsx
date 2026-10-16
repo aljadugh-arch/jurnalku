@@ -6,6 +6,7 @@ import { useSettingsStore } from '../../stores/settingsStore'
 import { useSubscriptionStore } from '../../stores/subscriptionStore'
 import { pathEnabled } from '../../lib/featureAccess'
 import { flattenMenu, menuForRole } from '../../lib/menuItems'
+import { bisaModeGuru } from '../../lib/teacherMode'
 import MobileMenuSheet from '../MobileMenuSheet'
 import {
   BarChart3,
@@ -171,7 +172,7 @@ export default function BottomNavigation() {
   const location = useLocation()
   const [open, setOpen] = useState(false)
   const isDemo = typeof window !== 'undefined' && window.location.hostname.startsWith('demo.')
-  const navigationRole = role === 'kepala' && user?.can_teach && location.pathname.startsWith('/guru') ? 'guru' : role
+  const navigationRole = bisaModeGuru(user) && location.pathname.startsWith('/guru') ? 'guru' : role
   const items = useMemo(() => {
     const base = roleItems(navigationRole, isDemo)
     if (!['operator', 'tata_usaha', 'tu'].includes(navigationRole || '')) return base.filter(item => pathEnabled(item.path, features))
@@ -182,7 +183,7 @@ export default function BottomNavigation() {
   const more = items.slice(4)
   const activeMore = more.some(item => isActive(location.pathname, item.path))
   const managementRole = ['admin', 'super_admin', 'kepala', 'operator', 'tata_usaha', 'tu'].includes(navigationRole || '')
-  const canSwitchTeacher = role === 'kepala' && !!user?.can_teach
+  const canSwitchTeacher = bisaModeGuru(user)
 
   return (
     <>

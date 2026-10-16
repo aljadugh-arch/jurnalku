@@ -157,9 +157,10 @@ test('mobile header renders avatar, name, and bell', () => {
   assert.match(header, /Bell/)
 })
 
-test('mobile header supports switch role for kepala with can_teach', () => {
+test('mobile header supports switch role for jabatan manajemen dengan can_teach', () => {
   const header = read(HEADER)
-  assert.match(header, /user\?\.role === 'kepala' && !!user\?\.can_teach/)
+  // Memakai helper bersama bisaModeGuru (mencakup kepala/admin/operator/TU/bendahara).
+  assert.match(header, /bisaModeGuru/)
   assert.match(header, /Mode Manajemen/)
   assert.match(header, /Mode Guru/)
 })

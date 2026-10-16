@@ -11,7 +11,10 @@ assert.match(rombel, /role="button"/)
 assert.match(rombel, /onKeyDown=/, 'tile rombel harus bisa dibuka lewat keyboard')
 assert.match(rombel, /e\.target !== e\.currentTarget/, 'aksi keyboard tombol anak tidak boleh membuka detail rombel')
 assert.match(rombel, /\/rombel\/.*\/siswa/, 'siswa harus dimuat lazy saat detail dibuka')
-assert.match(server, /app\.get\('\/api\/rombel\/:id\/siswa', ADMIN/, 'detail siswa rombel hanya untuk admin')
+// Detail siswa per rombel kini terbuka untuk seluruh peran manajemen (kepala
+// dulu 403 saat mengklik rombel) — yang wajib dijaga: tetap bukan endpoint publik.
+assert.match(server, /app\.get\('\/api\/rombel\/:id\/siswa', ROLE_LIHAT_SISWA_ROMBEL/, 'detail siswa rombel harus lewat gerbang peran, bukan publik')
+assert.match(server, /ROLE_LIHAT_SISWA_ROMBEL = requireRole\([^)]*'kepala'[^)]*\)/, 'kepala harus termasuk pembaca yang diizinkan')
 assert.match(server, /SELECT s\.id, s\.nama, s\.nis, s\.nisn/, 'endpoint detail rombel hanya mengembalikan kolom siswa yang dibutuhkan')
 assert.match(server, /r\.tenant_id = \? AND s\.tenant_id = \?/, 'endpoint harus validasi tenant rombel dan siswa')
 assert.match(jurnal, /grid-cols-1 sm:grid-cols-2 md:grid-cols-3/, 'tile jurnal harus 1\/2\/3 kolom')

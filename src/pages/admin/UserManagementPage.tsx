@@ -3,6 +3,8 @@ import toast from 'react-hot-toast'
 import { UserPlus, Trash2, Shield, Search, Download, Copy, Edit2 } from 'lucide-react'
 import api from '../../services/api'
 import { roleLabel } from '../../lib/roles'
+import { unduhExcel } from '../../utils/excelExport'
+import { useSettingsStore } from '../../stores/settingsStore'
 import type { User } from '../../types'
 
 const CREATABLE = [
@@ -14,7 +16,13 @@ const CREATABLE = [
   { value: 'wali_kelas', label: 'Wali Kelas' },
 ]
 
+// Jabatan manajemen yang boleh MERANGKAP mengajar dengan satu akun
+// (kepala/admin/operator/TU/bendahara sekaligus guru). Harus sama dengan
+// ROLE_BISA_RANGKAP_MENGAJAR di server/index.cjs.
+const ROLES_BISA_MENGAJAR = ['kepala', 'admin', 'operator', 'tata_usaha', 'tu', 'bendahara']
+
 export default function UserManagementPage() {
+  const settings = useSettingsStore(s => s.settings)
   const [users, setUsers] = useState<User[]>([])
   const [form, setForm] = useState({ nama: '', email: '', password: '', role: 'kepala', can_teach: false })
   const [saving, setSaving] = useState(false)
@@ -33,13 +41,25 @@ export default function UserManagementPage() {
   const filteredGtk = gtk.filter(g => g.nama?.toLowerCase().includes(gtkSearch.toLowerCase()) || (g.nip||'').includes(gtkSearch)).slice(0,8)
   const filteredSiswa = siswa.filter(s => s.nama?.toLowerCase().includes(siswaSearch.toLowerCase()) || (s.nis||'').includes(siswaSearch)).slice(0,8)
 
-  const pickGtk = (g: any) => { setForm(f => ({ ...f, nama: g.nama, email: g.email || f.email, role: f.role === 'kepala' ? 'kepala' : 'guru', can_teach: f.role === 'kepala' || f.can_teach })); setGtkSearch('') }
+  const pickGtk = (g: any) => { setForm(f => ({ ...f, nama: g.nama, email: g.email || f.email, role: f.role === 'kepala' ? 'kepala' : f.role === 'guru' ? 'guru' : f.role, can_teach: ROLES_BISA_MENGAJAR.includes(f.role) || f.can_teach })); setGtkSearch('') }
   const pickSiswa = (s: any) => { setForm(f => ({ ...f, nama: s.nama, email: f.email, role: 'siswa' })); setSiswaSearch('') }
 
   const exportUsers = () => {
-    const lines = users.map(u => `${u.email}\t${u.nama}\t${u.role}`).join('\n')
-    const blob = new Blob(['Email\tNama\tRole\n' + lines], { type: 'text/plain' })
-    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'daftar-pengguna.txt'; a.click()
+    // Ekspor .xlsx rapi (kop + header berwarna + kolom tertata), bukan TXT.
+    unduhExcel(
+      [{
+        name: 'Pengguna',
+        rows: users,
+        columns: [
+          { header: 'Nama', value: 'nama', width: 28 },
+          { header: 'Email', value: 'email', width: 32 },
+          { header: 'Role', value: (u: any) => roleLabel(u.role), width: 20 },
+          { header: 'Merangkap Mengajar', value: (u: any) => (u.can_teach ? 'Ya' : 'Tidak'), width: 20 },
+        ],
+      }],
+      { title: 'Daftar Pengguna', filename: 'Daftar_Pengguna', settings: settings as Record<string, unknown> },
+    )
+    toast.success('Export Excel berhasil')
   }
   const copyWA = () => {
     const lines = users.map(u => `• ${u.nama} (${u.role}): ${u.email}`).join('\n')
@@ -135,10 +155,10 @@ export default function UserManagementPage() {
           <select value={form.role} onChange={e => setForm({ ...form, role: e.target.value })} className="w-full min-w-0 h-11 px-4 py-2 border rounded-lg text-sm">
             {CREATABLE.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
           </select>
-          {form.role === 'kepala' && (
+          {ROLES_BISA_MENGAJAR.includes(form.role) && (
             <label className="sm:col-span-2 flex items-center gap-3 rounded-lg border bg-blue-50 px-4 py-3 text-sm text-blue-900">
               <input type="checkbox" checked={form.can_teach} onChange={e => setForm({ ...form, can_teach: e.target.checked })} className="h-4 w-4" />
-              Kepala ini juga mengajar — gunakan satu akun dan satu profil GTK untuk dashboard Manajemen dan Guru.
+              Jabatan ini juga mengajar — satu akun dan satu profil GTK untuk dashboard Manajemen dan Guru.
             </label>
           )}
         </div>
@@ -154,12 +174,12 @@ export default function UserManagementPage() {
               <div className="min-w-0 flex-1">
                 <p className="font-medium text-gray-800 break-words">{u.nama}</p>
                 <p className="mt-1 text-sm text-gray-600 break-all">{u.email}</p>
-                {u.role === 'kepala' && <p className="mt-1 text-xs text-blue-600">{u.can_teach ? '✓ Mengajar' : '○ Tidak mengajar'}</p>}
+                {ROLES_BISA_MENGAJAR.includes(u.role) && <p className="mt-1 text-xs text-blue-600">{u.can_teach ? '✓ Mengajar' : '○ Tidak mengajar'}</p>}
                 <span className="mt-2 inline-flex max-w-full items-center gap-1 px-2 py-1 rounded-full text-xs bg-primary/10 text-primary">
                   <Shield size={12} className="shrink-0"/><span className="break-words">{roleLabel(u.role)}</span>
                 </span>
               </div>
-              {u.role === 'kepala' && <button aria-label={`Edit ${u.nama}`} onClick={() => editTeachFlag(u)} className="shrink-0 p-2 text-gray-400 hover:text-blue-500"><Edit2 size={16}/></button>}
+              {ROLES_BISA_MENGAJAR.includes(u.role) && <button aria-label={`Edit ${u.nama}`} onClick={() => editTeachFlag(u)} className="shrink-0 p-2 text-gray-400 hover:text-blue-500"><Edit2 size={16}/></button>}
               <button aria-label={`Hapus ${u.nama}`} onClick={() => remove(u)} className="shrink-0 p-2 text-gray-400 hover:text-red-500"><Trash2 size={16}/></button>
             </div>
           ))}
@@ -167,7 +187,7 @@ export default function UserManagementPage() {
         <div className="hidden lg:block overflow-x-auto">
           <table className="w-full min-w-[640px] text-sm">
             <thead className="bg-gray-50 text-gray-500 text-left"><tr><th className="px-4 py-3">Nama</th><th className="px-4 py-3">Email</th><th className="px-4 py-3">Role</th><th className="px-4 py-3 w-16"></th></tr></thead>
-            <tbody className="divide-y">{users.map(u => <tr key={u.id}><td className="px-4 py-3 font-medium text-gray-800 break-words">{u.nama}{u.role === 'kepala' && u.can_teach && ' (✓ Mengajar)'}</td><td className="px-4 py-3 text-gray-600 break-all">{u.email}</td><td className="px-4 py-3"><span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs bg-primary/10 text-primary"><Shield size={12}/>{roleLabel(u.role)}</span></td><td className="px-4 py-3 flex items-center gap-2">{u.role === 'kepala' && <button aria-label={`Edit ${u.nama}`} onClick={() => editTeachFlag(u)} className="text-gray-400 hover:text-blue-500"><Edit2 size={16}/></button>}<button aria-label={`Hapus ${u.nama}`} onClick={() => remove(u)} className="text-gray-400 hover:text-red-500"><Trash2 size={16}/></button></td></tr>)}</tbody>
+            <tbody className="divide-y">{users.map(u => <tr key={u.id}><td className="px-4 py-3 font-medium text-gray-800 break-words">{u.nama}{ROLES_BISA_MENGAJAR.includes(u.role) && u.can_teach && ' (✓ Mengajar)'}</td><td className="px-4 py-3 text-gray-600 break-all">{u.email}</td><td className="px-4 py-3"><span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs bg-primary/10 text-primary"><Shield size={12}/>{roleLabel(u.role)}</span></td><td className="px-4 py-3 flex items-center gap-2">{ROLES_BISA_MENGAJAR.includes(u.role) && <button aria-label={`Edit ${u.nama}`} onClick={() => editTeachFlag(u)} className="text-gray-400 hover:text-blue-500"><Edit2 size={16}/></button>}<button aria-label={`Hapus ${u.nama}`} onClick={() => remove(u)} className="text-gray-400 hover:text-red-500"><Trash2 size={16}/></button></td></tr>)}</tbody>
           </table>
         </div>
       </div>
@@ -178,7 +198,7 @@ export default function UserManagementPage() {
             <h3 className="text-lg font-semibold text-gray-800 mb-4">Edit {editingUser.nama}</h3>
             <label className="flex items-center gap-3 rounded-lg border bg-blue-50 px-4 py-3 text-sm text-blue-900 mb-6">
               <input type="checkbox" checked={editingCanTeach} onChange={e => setEditingCanTeach(e.target.checked)} className="h-4 w-4" />
-              Kepala ini juga mengajar
+              Jabatan ini juga mengajar
             </label>
             <div className="flex gap-3 justify-end">
               <button onClick={() => setEditingUser(null)} className="px-4 py-2 rounded-lg bg-gray-100 text-gray-700 hover:bg-gray-200">Batal</button>

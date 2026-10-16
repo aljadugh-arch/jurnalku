@@ -63,8 +63,11 @@ test('jenjang QR mencakup alias formal serta fallback PT dan nonformal', () => {
 })
 
 test('switch role kepala-guru terlihat di header desktop, mobile, sidebar, dan bottom nav', () => {
+  // Jabatan manajemen yang merangkap mengajar memakai helper bersama
+  // `bisaModeGuru` (mencakup kepala/admin/operator/TU/bendahara), bukan cek
+  // `role === 'kepala'` — supaya admin yang juga guru dapat tombol yang sama.
   for (const source of [header, mobileHeader, sidebar, bottomNav]) {
-    assert.match(source, /can_teach/)
+    assert.match(source, /bisaModeGuru|can_teach/)
     assert.match(source, /Mode Guru/)
     assert.match(source, /Mode Manajemen/)
   }

@@ -6,6 +6,8 @@ import ImportExcel from '../../components/ImportExcel'
 import FoundationTenantPicker from '../../components/FoundationTenantPicker'
 import Modal from '../../components/ui/Modal'
 import { thumbUrl } from '../../lib/thumbUrl'
+import { unduhExcel } from '../../utils/excelExport'
+import { useSettingsStore } from '../../stores/settingsStore'
 
 interface Siswa {
   id: string
@@ -61,6 +63,7 @@ function SiswaPhoto({ foto, nama, size = 'w-12 h-12' }: { foto?: string; nama: s
 }
 
 export default function DataSiswaPage() {
+  const settings = useSettingsStore(s => s.settings)
   const [data, setData] = useState<Siswa[]>([])
   const [search, setSearch] = useState('')
   const [loading, setLoading] = useState(true)
@@ -254,17 +257,35 @@ export default function DataSiswaPage() {
   }
 
   const handleExport = () => {
-    const header = 'NIK,NIS,NISN,Nama,Nama Panggilan,JK,Tempat Lahir,Tgl Lahir,Alamat,No HP,Nama Ortu,Status'
-    const rows = data.map((s) =>
-      [s.nik || '', s.nis, s.nisn, s.nama, s.nama_panggilan || '', s.jenis_kelamin, s.tempat_lahir, s.tanggal_lahir, s.alamat, s.no_hp, s.nama_ortu, s.status].join(',')
+    // Ekspor .xlsx sungguhan lewat helper bersama: kop lembaga, header berwarna,
+    // lebar kolom, autofilter, dan nilai berkoma tetap utuh (dulu CSV mentah
+    // `join(',')` memecah kolom sehingga tabel jadi amburadul).
+    unduhExcel(
+      [{
+        name: 'Data Siswa',
+        rows: data,
+        columns: [
+          { header: 'NIK', value: 'nik', width: 18 },
+          { header: 'NIS', value: 'nis', width: 12 },
+          { header: 'NISN', value: 'nisn', width: 14 },
+          { header: 'Nama', value: 'nama', width: 28 },
+          { header: 'Nama Panggilan', value: 'nama_panggilan', width: 16 },
+          { header: 'JK', value: (s: any) => (s.jenis_kelamin === 'P' ? 'P' : s.jenis_kelamin === 'L' ? 'L' : s.jenis_kelamin || ''), width: 5 },
+          { header: 'Tempat Lahir', value: 'tempat_lahir', width: 18 },
+          { header: 'Tanggal Lahir', value: 'tanggal_lahir', width: 14 },
+          { header: 'Agama', value: 'agama', width: 10 },
+          { header: 'Rombel', value: 'rombel_nama', width: 14 },
+          { header: 'Alamat', value: 'alamat', width: 32 },
+          { header: 'No HP', value: 'no_hp', width: 15 },
+          { header: 'Nama Ayah', value: (s: any) => s.nama_ayah || s.nama_ortu || '', width: 24 },
+          { header: 'Nama Ibu', value: 'nama_ibu', width: 24 },
+          { header: 'Nama Wali', value: 'nama_wali', width: 24 },
+          { header: 'Status', value: 'status', width: 10 },
+        ],
+      }],
+      { title: 'Data Siswa', filename: 'Data_Siswa', settings: settings as Record<string, unknown> },
     )
-    const csv = [header, ...rows].join('\n')
-    const blob = new Blob([csv], { type: 'text/csv' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url; a.download = 'data_siswa.csv'; a.click()
-    URL.revokeObjectURL(url)
-    toast.success('Export berhasil')
+    toast.success('Export Excel berhasil')
   }
 
   const toggleAllKts = () => {

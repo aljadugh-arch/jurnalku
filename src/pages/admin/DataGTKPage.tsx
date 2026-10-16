@@ -6,6 +6,8 @@ import ImportExcel from '../../components/ImportExcel'
 import FoundationTenantPicker from '../../components/FoundationTenantPicker'
 import Modal from '../../components/ui/Modal'
 import { thumbUrl } from '../../lib/thumbUrl'
+import { unduhExcel } from '../../utils/excelExport'
+import { useSettingsStore } from '../../stores/settingsStore'
 
 interface GTK {
   id: string; nik: string; nip: string; nuptk: string; nama: string; jenis_kelamin: string
@@ -36,6 +38,7 @@ function GTKPhoto({ foto, nama, size = 'sm' }: { foto?: string; nama: string; si
 }
 
 export default function DataGTKPage() {
+  const settings = useSettingsStore(s => s.settings)
   const [data, setData] = useState<GTK[]>([])
   const [search, setSearch] = useState('')
   const [loading, setLoading] = useState(true)
@@ -117,14 +120,32 @@ export default function DataGTKPage() {
   }
 
   const handleExport = () => {
-    const header = 'NIK,NIP,NUPTK,Nama,JK,Jabatan,Status Kepegawaian,Bidang Studi,Email,No HP'
-    const rows = data.map(g => [g.nik || '', g.nip, g.nuptk, g.nama, g.jenis_kelamin, g.jabatan, g.status_kepegawaian, g.bidang_studi, g.email, g.no_hp].join(','))
-    const csv = [header, ...rows].join('\n')
-    const blob = new Blob([csv], { type: 'text/csv' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a'); a.href = url; a.download = 'data_gtk.csv'; a.click()
-    URL.revokeObjectURL(url)
-    toast.success('Export berhasil')
+    // Ekspor .xlsx rapi lewat helper bersama (dulu CSV mentah `join(',')` —
+    // koma di alamat/nama memecah kolom dan tabel jadi amburadul).
+    unduhExcel(
+      [{
+        name: 'Data GTK',
+        rows: data,
+        columns: [
+          { header: 'NIK', value: 'nik', width: 18 },
+          { header: 'NIP', value: 'nip', width: 20 },
+          { header: 'NUPTK', value: 'nuptk', width: 20 },
+          { header: 'Nama', value: 'nama', width: 28 },
+          { header: 'JK', value: (g: any) => (g.jenis_kelamin === 'P' ? 'P' : g.jenis_kelamin === 'L' ? 'L' : g.jenis_kelamin || ''), width: 5 },
+          { header: 'Jabatan', value: 'jabatan', width: 14 },
+          { header: 'Status Kepegawaian', value: 'status_kepegawaian', width: 18 },
+          { header: 'Bidang Studi', value: 'bidang_studi', width: 20 },
+          { header: 'Tempat Lahir', value: 'tempat_lahir', width: 18 },
+          { header: 'Tanggal Lahir', value: 'tanggal_lahir', width: 14 },
+          { header: 'Alamat', value: 'alamat', width: 32 },
+          { header: 'Email', value: 'email', width: 26 },
+          { header: 'No HP', value: 'no_hp', width: 15 },
+          { header: 'Status', value: 'status', width: 10 },
+        ],
+      }],
+      { title: 'Data GTK', filename: 'Data_GTK', settings: settings as Record<string, unknown> },
+    )
+    toast.success('Export Excel berhasil')
   }
 
   return (

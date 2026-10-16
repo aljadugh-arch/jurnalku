@@ -4,6 +4,7 @@ import { Search, LogOut, Lock, ChevronDown, User, Moon, Sun, Repeat2 } from 'luc
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { roleLabel } from '../../lib/roles'
+import { bisaModeGuru } from '../../lib/teacherMode'
 
 export default function Header() {
   const { user, logout } = useAuthStore()
@@ -34,7 +35,7 @@ export default function Header() {
           </div>
         </div>
         <div className="flex items-center gap-3">
-          {user?.role === 'kepala' && user.can_teach && (
+          {bisaModeGuru(user) && (
             <button
               onClick={() => navigate(teacherMode ? '/admin' : '/guru')}
               className="inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-xs font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-200 dark:hover:bg-gray-800"

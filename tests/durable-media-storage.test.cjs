@@ -68,7 +68,10 @@ test('student partial updates preserve omitted fields and validate rombel within
   assert.match(route, /SELECT id FROM rombel WHERE id[= ]+\? AND tenant_id[= ]+\?/)
   assert.match(route, /UPDATE siswa SET/)
   assert.match(server, /app\.get\('\/api\/siswa\/:id', authMiddleware/)
-  assert.match(server, /app\.get\('\/api\/rombel\/:id\/siswa', ADMIN/)
+  // Daftar siswa per rombel dibaca halaman Rombel oleh SELURUH peran manajemen
+  // (kepala/bendahara/operator/TU), bukan hanya admin — kepala dulu 403.
+  assert.match(server, /app\.get\('\/api\/rombel\/:id\/siswa', ROLE_LIHAT_SISWA_ROMBEL/)
+  assert.match(server, /ROLE_LIHAT_SISWA_ROMBEL = requireRole\([^)]*'kepala'[^)]*\)/)
   assert.match(server, /app\.put\('\/api\/siswa\/:id', ADMIN/)
 })
 

@@ -46,7 +46,10 @@ test('form Data Siswa punya field nama_panggilan opsional (create, edit, export,
   assert.match(dataSiswaPage, /nama_panggilan: ''/, 'emptyForm harus menyertakan nama_panggilan')
   assert.match(dataSiswaPage, /nama_panggilan: siswa\.nama_panggilan \|\| ''/, 'handleEdit harus mengisi ulang nama_panggilan')
   assert.match(dataSiswaPage, /Nama Panggilan.*opsional, untuk suara TTS absensi/, 'input form harus berlabel opsional')
-  assert.match(dataSiswaPage, /NIK,NIS,NISN,Nama,Nama Panggilan,JK/, 'export CSV harus menyertakan kolom nama panggilan')
+  // Ekspor kini .xlsx rapi lewat helper bersama; kolom "Nama Panggilan" tetap
+  // disertakan (dulu CSV mentah). Assert bentuk barunya, bukan header CSV lama.
+  assert.match(dataSiswaPage, /header: 'Nama Panggilan', value: 'nama_panggilan'/, 'export Excel harus menyertakan kolom nama panggilan')
+  assert.match(dataSiswaPage, /unduhExcel/, 'export Data Siswa harus memakai helper Excel bersama')
   assert.match(dataSiswaPage, /'Nama Panggilan': 'nama_panggilan'/, 'import Excel harus memetakan kolom nama panggilan')
 })
 

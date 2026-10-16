@@ -1869,10 +1869,16 @@ function requireRole(...roles) {
     next()
   }
 }
+// Jabatan ganda: seorang GTK bisa merangkap. `can_teach` menandai pemegang
+// jabatan manajemen (kepala/admin/operator/TU/bendahara) yang JUGA mengajar.
+// Tanpa ini, kepala yang mengajar tidak bisa membuka halaman guru sama sekali,
+// dan admin yang merangkap guru kehilangan seluruh akses mengajarnya.
+const ROLE_BISA_RANGKAP_MENGAJAR = ['kepala', 'admin', 'super_admin', 'operator', 'tata_usaha', 'tu', 'bendahara']
 function userHasCapability(user, capability) {
   if (capability !== 'teacher' || !user) return false
   if (['guru', 'wali_kelas'].includes(user.role)) return true
-  if (user.role !== 'kepala' || !user.tenant_id) return false
+  if (!user.tenant_id) return false
+  if (!ROLE_BISA_RANGKAP_MENGAJAR.includes(user.role)) return false
   const stored = db.prepare('SELECT can_teach FROM users WHERE id=? AND tenant_id=?').get(user.id, user.tenant_id)
   return !!stored?.can_teach && !!resolveGtkForUser(user.id, user.tenant_id)
 }
@@ -2989,9 +2995,13 @@ app.post('/api/users', ADMIN, (req, res) => {
   let links
   try { links = validStudentLinks(req.tenantId, role, student_ids) } catch (e) { return res.status(400).json({ error: e.message }) }
   const id = uuidv4()
+  // can_teach berlaku untuk SEMUA jabatan manajemen yang merangkap mengajar
+  // (kepala/admin/operator/TU/bendahara), bukan hanya kepala.
+  const bolehRangkap = ROLE_BISA_RANGKAP_MENGAJAR.includes(role)
+  const canTeachFlag = bolehRangkap && can_teach ? 1 : 0
   db.transaction(() => {
     db.prepare('INSERT INTO users (id, nama, email, password, role, tenant_id, can_teach) VALUES (?,?,?,?,?,?,?)')
-      .run(id, nama.trim(), email.trim(), bcrypt.hashSync(password, 10), role, req.tenantId, role === 'kepala' && can_teach ? 1 : 0)
+      .run(id, nama.trim(), email.trim(), bcrypt.hashSync(password, 10), role, req.tenantId, canTeachFlag)
     replaceUserLinks(req.tenantId, id, links)
   })()
   // Auto-link GTK untuk semua role staf (guru, kepala, wali_kelas, bendahara, admin)
@@ -3013,7 +3023,7 @@ app.post('/api/users', ADMIN, (req, res) => {
     }
     // else: guru tidak ada di data GTK → biarkan, admin harus tambah dari Data GTK dulu
   }
-  res.json({ id, nama, email, role, can_teach: role === 'kepala' && !!can_teach })
+  res.json({ id, nama, email, role, can_teach: bolehRangkap && !!can_teach })
 })
 
 app.put('/api/users/:id', ADMIN, (req, res) => {
@@ -3023,16 +3033,22 @@ app.put('/api/users/:id', ADMIN, (req, res) => {
   if (target.role === 'super_admin') return res.status(403).json({ error: 'Tidak bisa mengubah superadmin' })
   if (role && !ASSIGNABLE_ROLES.includes(role)) return res.status(400).json({ error: 'Role tidak valid' })
   const finalRole = role || target.role
+  // can_teach boleh untuk jabatan manajemen mana pun yang merangkap mengajar.
+  const bolehRangkapFinal = ROLE_BISA_RANGKAP_MENGAJAR.includes(finalRole)
+  const canTeachFinal = bolehRangkapFinal && (can_teach === undefined ? target.can_teach : can_teach) ? 1 : 0
   let links
   try { links = validStudentLinks(req.tenantId, finalRole, student_ids === undefined ? db.prepare('SELECT student_id FROM user_students WHERE tenant_id=? AND user_id=?').all(req.tenantId, req.params.id).map(x => x.student_id) : student_ids) } catch (e) { return res.status(400).json({ error: e.message }) }
   if (password && !isStr(password, 6, 100)) return res.status(400).json({ error: 'Password minimal 6 karakter' })
   db.transaction(() => {
     db.prepare('UPDATE users SET nama = COALESCE(?, nama), email = COALESCE(?, email), role = COALESCE(?, role), can_teach = ? WHERE id = ? AND tenant_id = ?')
-      .run(nama || null, email || null, role || null, finalRole === 'kepala' && (can_teach === undefined ? target.can_teach : can_teach) ? 1 : 0, req.params.id, req.tenantId)
+      .run(nama || null, email || null, role || null, canTeachFinal, req.params.id, req.tenantId)
     if (password) db.prepare('UPDATE users SET password = ? WHERE id = ? AND tenant_id=?').run(bcrypt.hashSync(password, 10), req.params.id, req.tenantId)
     replaceUserLinks(req.tenantId, req.params.id, links)
   })()
-  // Auto-link GTK saat update user
+  // Auto-link GTK saat update user. Kalau can_teach diaktifkan tapi belum ada
+  // GTK tertaut, buatkan GTK agar capability 'teacher' benar-benar bisa dipakai
+  // (userHasCapability menuntut gtk_id terisi) — tanpa ini, centang "mengajar"
+  // tersimpan tapi halaman guru tetap 403.
   const finalNama = nama || target.nama
   const finalEmail = email || target.email
   const finalRole2 = role || target.role
@@ -3040,12 +3056,18 @@ app.put('/api/users/:id', ADMIN, (req, res) => {
   if (STAFF_ROLES2.includes(finalRole2) && !target.gtk_id) {
     let gtk2 = db.prepare('SELECT id FROM gtk WHERE lower(nama)=lower(?) AND tenant_id=?').get(finalNama, req.tenantId)
     if (!gtk2 && finalEmail) gtk2 = db.prepare("SELECT id FROM gtk WHERE lower(email)=lower(?) AND email!='' AND tenant_id=?").get(finalEmail, req.tenantId)
+    if (!gtk2 && canTeachFinal) {
+      const gtkId = uuidv4()
+      const jabatan = finalRole2 === 'kepala' ? 'Kepala' : finalRole2 === 'admin' ? 'Admin' : finalRole2 === 'operator' ? 'Operator' : 'Guru'
+      db.prepare("INSERT INTO gtk (id, nama, jabatan, email, jenis_kelamin, status_kepegawaian, tenant_id) VALUES (?,?,?,?,'L','Tetap',?)").run(gtkId, finalNama, jabatan, finalEmail || '', req.tenantId)
+      gtk2 = { id: gtkId }
+    }
     if (gtk2) {
       db.prepare('UPDATE users SET gtk_id=? WHERE id=? AND tenant_id=?').run(gtk2.id, req.params.id, req.tenantId)
       db.prepare("UPDATE gtk SET email=? WHERE id=? AND (email IS NULL OR email='')").run(finalEmail, gtk2.id)
     }
   }
-  res.json({ success: true })
+  res.json({ success: true, can_teach: !!canTeachFinal })
 })
 
 app.delete('/api/users/:id', ADMIN, (req, res) => {
@@ -3903,7 +3925,12 @@ app.get('/api/rombel', authMiddleware, (req, res) => {
   res.json(rows)
 })
 
-app.get('/api/rombel/:id/siswa', ADMIN, (req, res) => {
+// Daftar siswa per rombel: dibaca oleh halaman Rombel (klik rombel), jadi harus
+// terbuka untuk SELURUH peran manajemen (kepala/bendahara/operator/TU), bukan
+// hanya admin. Sebelumnya bergerbang ADMIN sehingga kepala lembaga menerima 403
+// saat mengklik rombel — padahal ia berhak melihat seluruh siswa lembaganya.
+const ROLE_LIHAT_SISWA_ROMBEL = requireRole('admin', 'super_admin', 'kepala', 'bendahara', 'operator', 'tata_usaha', 'tu')
+app.get('/api/rombel/:id/siswa', ROLE_LIHAT_SISWA_ROMBEL, (req, res) => {
   const rows = db.prepare(`SELECT s.id, s.nama, s.nis, s.nisn, s.rombel_id, s.status FROM rombel r JOIN siswa s ON s.rombel_id = r.id WHERE r.id = ? AND r.tenant_id = ? AND s.tenant_id = ? ORDER BY s.nama`).all(req.params.id, req.tenantId, req.tenantId)
   res.json(rows)
 })

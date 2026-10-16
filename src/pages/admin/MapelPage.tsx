@@ -1,10 +1,12 @@
 import { useState, useEffect } from 'react'
-import { Plus, Trash2, Upload, X, BookOpen } from 'lucide-react'
+import { Plus, Trash2, Upload, X, BookOpen, Download } from 'lucide-react'
 import toast from 'react-hot-toast'
 import api from '../../services/api'
 import ImportExcel from '../../components/ImportExcel'
 import BulkDeleteButton from '../../components/BulkDeleteButton'
 import Modal from '../../components/ui/Modal'
+import { unduhExcel } from '../../utils/excelExport'
+import { useSettingsStore } from '../../stores/settingsStore'
 
 interface Mapel { id: string; kode: string; nama: string; kelompok: string; tingkat: string; jam_per_minggu: number }
 
@@ -22,6 +24,7 @@ const kelompokBadge = (kelompok: string) => {
 }
 
 export default function MapelPage() {
+  const settings = useSettingsStore(s => s.settings)
   const [data, setData] = useState<Mapel[]>([])
   const [loading, setLoading] = useState(true)
   const [showModal, setShowModal] = useState(false)
@@ -63,6 +66,25 @@ export default function MapelPage() {
     catch { toast.error('Gagal menghapus') }
   }
 
+  // Ekspor .xlsx rapi (kop lembaga + header berwarna + lebar kolom + autofilter).
+  const handleExport = () => {
+    unduhExcel(
+      [{
+        name: 'Mata Pelajaran',
+        rows: data,
+        columns: [
+          { header: 'Kode', value: 'kode', width: 14 },
+          { header: 'Nama Mapel', value: 'nama', width: 30 },
+          { header: 'Kelompok', value: (m: any) => KELOMPOK_LABEL[m.kelompok] || m.kelompok || '', width: 16 },
+          { header: 'Tingkat', value: (m: any) => { try { const t = JSON.parse(m.tingkat || '[]'); return Array.isArray(t) ? t.join(', ') : (m.tingkat || '') } catch { return m.tingkat || '' } }, width: 20 },
+          { header: 'Jam / Minggu', value: 'jam_per_minggu', width: 12, numFmt: '0' },
+        ],
+      }],
+      { title: 'Mata Pelajaran', filename: 'Mata_Pelajaran', settings: settings as Record<string, unknown> },
+    )
+    toast.success('Export Excel berhasil')
+  }
+
   const openDetail = (m: Mapel) => { setSelected(m) }
   const openEdit = (m: Mapel) => {
     setEditing(m)
@@ -84,6 +106,9 @@ export default function MapelPage() {
           <p className="text-gray-500 text-sm mt-1">Kelola data mata pelajaran ({data.length} mapel)</p>
         </div>
         <div className="flex gap-2">
+          <button onClick={handleExport} className="flex items-center gap-2 px-4 py-2 bg-gray-600 text-white rounded-lg text-sm hover:bg-gray-700">
+            <Download size={16} /> Export
+          </button>
           <button onClick={() => setShowImport(true)} className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg text-sm hover:bg-green-700">
             <Upload size={16} /> Import
           </button>

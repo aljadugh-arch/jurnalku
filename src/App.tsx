@@ -13,6 +13,7 @@ import { useSubscriptionStore } from './stores/subscriptionStore'
 import PwaInstallPrompt from './components/PwaInstallPrompt'
 import api from './services/api'
 import type { User } from './types'
+import { bisaModeGuru } from './lib/teacherMode'
 
 // Lazy-loaded pages — setiap halaman jadi chunk terpisah
 const AdminDashboard = lazy(() => import('./pages/admin/AdminDashboard'))
@@ -119,7 +120,8 @@ function PageLoader() {
 function canAccessRole(user: User, allowedRoles?: string[], exactRoles = false) {
   if (!allowedRoles || allowedRoles.includes(user.role)) return true
   if (exactRoles) return false
-  return user.role === 'kepala' && !!user.can_teach && allowedRoles.some(role => role === 'guru' || role === 'wali_kelas')
+  // Jabatan manajemen yang merangkap mengajar boleh membuka rute guru/wali_kelas.
+  return bisaModeGuru(user) && allowedRoles.some(role => role === 'guru' || role === 'wali_kelas')
 }
 
 function AdminIndexRoute() {
