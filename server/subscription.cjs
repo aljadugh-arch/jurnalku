@@ -1,14 +1,35 @@
 const crypto = require('node:crypto')
 
 const FEATURE_KEYS = ['master_data', 'jadwal', 'absensi', 'jurnal', 'penilaian', 'keuangan', 'whatsapp', 'posting', 'modul_ajar', 'backup_drive', 'website', 'rest_api', 'cashless', 'ekantin']
+
+// Fitur per paket. Prinsip: paket lebih tinggi = fitur lebih banyak, dan ada
+// perbedaan NYATA antar tingkat (dulu trial/pro/premium semuanya = SEMUA fitur,
+// sehingga lembaga paket lite bisa punya fitur pro/premium tanpa sengaja).
+//
+// Label fitur (untuk ditampilkan di UI):
+//   master_data   Data siswa, GTK, mapel, rombel, pengguna, tahun ajaran
+//   jadwal        Jadwal pelajaran, ujian, kalender KBM, pengajar, wali kelas
+//   absensi       Absensi siswa/guru (QR, RFID, GPS), ceklok, ekskul, jamaah
+//   jurnal        Jurnal mengajar guru
+//   penilaian     Nilai, rapor, catatan kepribadian, supervisi
+//   keuangan      Tagihan, tabungan, bendahara, beasiswa, cashless
+//   whatsapp      Notifikasi & broadcast WhatsApp
+//   posting       Postingan/feed lembaga
+//   modul_ajar    Generator AI guru & modul ajar
+//   backup_drive  Backup otomatis ke Google Drive
+//   website       Domain sendiri & website publik lembaga
+//   rest_api      REST API Developer (integrasi alat eksternal)
+//   cashless      E-Kantin & cashless penuh
+//   ekantin       Modul kantin (menu, pesanan, pemindai)
 const PLAN_FEATURES = {
+  // Trial: semua fitur boleh dicoba, TAPI masa aktifnya pendek (default 1 bulan).
   trial: FEATURE_KEYS,
-  lite: FEATURE_KEYS.filter(key => !['backup_drive', 'website'].includes(key)),
-  pro: FEATURE_KEYS,
-  // 'premium' adalah nama plan legacy (dipakai sebelum sistem trial/lite/pro
-  // dirapikan) — beberapa tenant lama (termasuk tenant demo) masih menyimpan
-  // nilai ini di kolom plan. Kini premium juga paket kelas satu yang bisa
-  // diatur (harga & masa aktif) seperti lite/pro.
+  // Lite: inti operasional harian. TANPA backup Drive, domain sendiri,
+  // REST API, cashless penuh, dan modul kantin.
+  lite: FEATURE_KEYS.filter(k => !['backup_drive', 'website', 'rest_api', 'cashless', 'ekantin'].includes(k)),
+  // Pro: inti + domain sendiri + backup Drive + REST API. TANPA cashless & kantin.
+  pro: FEATURE_KEYS.filter(k => !['cashless', 'ekantin'].includes(k)),
+  // Premium: SEMUA fitur (cashless & kantin penuh).
   premium: FEATURE_KEYS,
 }
 const FEATURE_PREFIXES = {
@@ -80,8 +101,13 @@ function featureForPath(path) {
   return null
 }
 
-function normalizeFeatureSelection(input, plan) {
-  const allowed = new Set(PLAN_FEATURES[plan] || PLAN_FEATURES.trial)
+function normalizeFeatureSelection(input, plan, planDefs = null) {
+  // Definisi paket diambil dari konfigurasi DB bila ada (admin platform bisa
+  // mengubah fitur paket tanpa deploy); kalau tidak, pakai definisi kode.
+  const def = planDefs ? planDefs[plan] : null
+  const allowed = new Set(
+    def ? (Array.isArray(def) ? def : def.fitur) : (PLAN_FEATURES[plan] || PLAN_FEATURES.trial)
+  )
   return Object.fromEntries(FEATURE_KEYS.map(key => [key, allowed.has(key) && input?.[key] !== false]))
 }
 
@@ -122,6 +148,53 @@ function setupSubscriptionPlans(db) {
   for (const p of DEFAULT_PLANS) {
     ins.run(p.plan, p.label, p.harga, p.masa_nilai, p.masa_satuan, p.aktif, JSON.stringify(PLAN_FEATURES[p.plan] || FEATURE_KEYS), p.urutan)
   }
+
+  // Sinkronisasi fitur paket bawaan. Baris yang fitur AKTIF-nya masih PERSIS
+  // sama dengan definisi lama (belum pernah diubah admin platform) diperbarui
+  // ke definisi baru; baris yang sudah disesuaikan manual TIDAK disentuh.
+  // Tanpa ini, perubahan PLAN_FEATURES di kode tidak pernah sampai ke produksi
+  // karena accessForTenant lebih memilih fitur_json dari DB.
+  //
+  // PENTING: DB bisa menyimpan dua bentuk — array `["jurnal",...]` (bentuk
+  // penulisan kita) atau objek `{"jurnal":true,...}` (bentuk yang ditulis UI
+  // admin). Perbandingan di bawah dinormalkan ke HIMPUNAN fitur aktif sehingga
+  // kedua bentuk dikenali.
+  try {
+    const aktifDari = (mentah) => {
+      if (!mentah) return null
+      let isi
+      try { isi = typeof mentah === 'string' ? JSON.parse(mentah) : mentah } catch { return null }
+      if (Array.isArray(isi)) return new Set(isi.filter(k => FEATURE_KEYS.includes(k)))
+      if (isi && typeof isi === 'object') return new Set(Object.keys(isi).filter(k => FEATURE_KEYS.includes(k) && isi[k] !== false))
+      return null
+    }
+    const sama = (a, b) => a && b && a.size === b.size && [...a].every(k => b.has(k))
+    const DEFINISI_LAMA = {
+      // Bentuk lama yang harus dianggap "belum diubah manual".
+      lite: FEATURE_KEYS.filter(k => !['backup_drive', 'website'].includes(k)),
+      pro: FEATURE_KEYS,
+      premium: FEATURE_KEYS,
+      trial: FEATURE_KEYS,
+    }
+    const upd = db.prepare("UPDATE subscription_plans SET fitur_json=?, updated_at=datetime('now') WHERE plan=?")
+    let disinkron = 0
+    const jalan = db.transaction(() => {
+      for (const p of DEFAULT_PLANS) {
+        const row = db.prepare('SELECT fitur_json FROM subscription_plans WHERE plan=?').get(p.plan)
+        if (!row) continue
+        const baruArr = PLAN_FEATURES[p.plan] || FEATURE_KEYS
+        const baru = new Set(baruArr)
+        const isi = aktifDari(row.fitur_json)
+        const lama = new Set(DEFINISI_LAMA[p.plan] || [])
+        if (sama(isi, lama) && !sama(isi, baru)) {
+          upd.run(JSON.stringify(Object.fromEntries(FEATURE_KEYS.map(k => [k, baru.has(k)]))), p.plan)
+          disinkron++
+        }
+      }
+    })
+    jalan()
+    if (disinkron) console.log(`[migrate] fitur paket disinkronkan: ${disinkron} paket`)
+  } catch (e) { console.error('[migrate] sinkronisasi fitur paket failed', e.message) }
 }
 
 // Daftar fitur yang diizinkan untuk sebuah baris paket. Konfigurasi kosong

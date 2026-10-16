@@ -59,6 +59,8 @@ const ProgramBelajarPage = lazy(() => import('./pages/admin/ProgramBelajarPage')
 const BeasiswaPage = lazy(() => import('./pages/admin/BeasiswaPage'))
 const CashlessPage = lazy(() => import('./pages/admin/CashlessPage'))
 const BackupRestorePage = lazy(() => import('./pages/admin/BackupRestorePage'))
+const ManajemenDataPage = lazy(() => import('./pages/admin/ManajemenDataPage'))
+const SmtpSettingsPage = lazy(() => import('./pages/admin/SmtpSettingsPage'))
 const CekLokAdminPage = lazy(() => import('./pages/admin/CekLokAdminPage'))
 const GuruAbsensiPage = lazy(() => import('./pages/guru/GuruAbsensiPage'))
 const BendaharaDashboard = lazy(() => import('./pages/admin/BendaharaDashboard'))
@@ -283,6 +285,12 @@ export default function App() {
           <Route path="cashless" element={<CashlessPage />} />
           <Route path="backup-restore" element={
             <ProtectedRoute allowedRoles={['admin', 'super_admin']}><BackupRestorePage /></ProtectedRoute>
+          } />
+          <Route path="manajemen-data" element={
+            <ProtectedRoute allowedRoles={['super_admin']}><ManajemenDataPage /></ProtectedRoute>
+          } />
+          <Route path="smtp" element={
+            <ProtectedRoute allowedRoles={['admin', 'super_admin']}><SmtpSettingsPage /></ProtectedRoute>
           } />
           <Route path="ceklok" element={<CekLokAdminPage />} />
           <Route path="absensi-saya" element={<GuruAbsensiPage />} />

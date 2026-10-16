@@ -26,12 +26,14 @@ const { detectJadwalConflicts } = require('./jadwal-conflicts.cjs')
 const { importJadwalRows } = require('./jadwal-import.cjs')
 const { setupPortalCashless, registerPortalRoutes, registerKantinRoutes, selectPenilaianStudentId, normalizeStoredImageDataUrl } = require('./portal-cashless.cjs')
 const { setupPaymentGateway, registerPaymentGatewayRoutes } = require('./payment-gateway-routes.cjs')
+const { buatLayananSmtp } = require('./smtp-tenant.cjs')
 const { setupAdministrasi, registerAdministrasiRoutes } = require('./administrasi-routes.cjs')
 const { setupSupervisi, registerSupervisiRoutes } = require('./supervisi-routes.cjs')
 const { setupProgramBelajar, registerProgramBelajarRoutes } = require('./program-belajar-routes.cjs')
 const { startPaymentPoller } = require('./payment-poller.cjs')
 const waQueue = require('./wa-queue.cjs')
 const { notifikasiRegistrasi } = require('./register-notify.cjs')
+const gtkKategori = require('./gtk-kategori.cjs')
 const notificationMonitor = require('./notification-monitor.cjs')
 const ExcelJS = require('exceljs')
 const { generateRaporForRombel, refreshGeneratedRapor, loadBobot, pickBobot, BOBOT_DEFAULT, computeRaporLive, predikatFromNilai } = require('./rapor-grade-service.cjs')
@@ -60,6 +62,7 @@ const { isDriveFolderUrl } = require('./library-config.cjs')
 const { getLateDashboard } = require('./dashboard-late.cjs')
 const { normalizePiketIds, attachPiketNames, MAKS_GURU_PIKET } = require('./jadwal-piket.cjs')
 const { registerRoutes: registerBackupRestoreRoutes, LIMITS: BACKUP_LIMITS } = require('./backup-restore.cjs')
+const { registerRoutes: registerDataAdminRoutes } = require('./data-admin.cjs')
 const { registerFinanceExcelRoutes } = require('./finance-excel.cjs')
 const { FEATURE_KEYS, PLAN_KEYS, addMonthsIso, computeExpiry, accessForTenant, featureForPath, normalizeFeatureSelection, generateUnlockCode, hashUnlockCode, setupSubscriptionTables, getPlans, planFeatureMap, updatePlan } = require('./subscription.cjs')
 const invoiceService = require('./invoice-service.cjs')
@@ -1265,6 +1268,35 @@ try {
   if (!raporCols.some(col => col.name === 'nilai_harian')) db.exec('ALTER TABLE rapor ADD COLUMN nilai_harian INTEGER DEFAULT 0')
 } catch (e) { console.error('[migrate] rapor kolom tambahan failed', e.message) }
 
+// Migrasi gtk: kolom sertifikasi + normalisasi status/jabatan ke nilai kanonik.
+// Kolom `sertifikasi` menandai guru bersertifikat (pendidik). Normalisasi
+// menyatukan data lama yang campur huruf besar/kecil ('Honorer' vs 'honorer',
+// 'Admin/Operator', 'staff_tu') supaya filter dan laporan konsisten.
+try {
+  const gtkCols = db.prepare('PRAGMA table_info(gtk)').all()
+  if (!gtkCols.some(col => col.name === 'sertifikasi')) db.exec("ALTER TABLE gtk ADD COLUMN sertifikasi TEXT DEFAULT 'belum'")
+  if (!gtkCols.some(col => col.name === 'nrg')) db.exec('ALTER TABLE gtk ADD COLUMN nrg TEXT')
+} catch (e) { console.error('[migrate] gtk kolom sertifikasi failed', e.message) }
+
+try {
+  const gtkKategori = require('./gtk-kategori.cjs')
+  const rows = db.prepare('SELECT id, jabatan, status_kepegawaian, sertifikasi FROM gtk').all()
+  const upd = db.prepare('UPDATE gtk SET jabatan=?, status_kepegawaian=?, sertifikasi=? WHERE id=?')
+  let diubah = 0
+  const jalan = db.transaction(() => {
+    for (const r of rows) {
+      const j = gtkKategori.normalisasiJabatan(r.jabatan)
+      const s = gtkKategori.normalisasiStatus(r.status_kepegawaian)
+      const c = gtkKategori.normalisasiSertifikasi(r.sertifikasi)
+      if (j !== r.jabatan || s !== r.status_kepegawaian || c !== (r.sertifikasi || '')) {
+        upd.run(j, s, c, r.id); diubah++
+      }
+    }
+  })
+  jalan()
+  if (diubah) console.log(`[migrate] gtk kategori dinormalkan: ${diubah} baris`)
+} catch (e) { console.error('[migrate] normalisasi gtk kategori failed', e.message) }
+
 // Migrasi jurnal_mengajar: jejak waktu server (audit) — updated_at & submitted_at.
 try {
   const jurnalCols = db.prepare('PRAGMA table_info(jurnal_mengajar)').all()
@@ -1932,6 +1964,21 @@ app.put('/api/subscription/plans/:plan', SUPER, (req, res) => {
   res.json({ success: true, plan: result.plan, plans: getPlans(db) })
 })
 
+// Periksa / rapikan override fitur per lembaga agar tidak melampaui paketnya.
+// Akar keluhan "lembaga paket lite tapi ada fitur pro/premium": kolom
+// tenants.features_json bisa menyimpan centang fitur dari paket lama.
+// Pembersihan HANYA mematikan fitur di luar paket — tidak pernah menambah hak.
+app.get('/api/subscription/override', SUPER, (req, res) => {
+  const { rencanaRapikanOverride } = require('./fitur-override.cjs')
+  const { perlu, total } = rencanaRapikanOverride(db, planMap())
+  res.json({ diperiksa: total, perlu_dirapikan: perlu.length, rincian: perlu.map(p => ({ tenant: p.slug || p.tenant_id, plan: p.plan, fitur_di_luar_paket: Object.keys(p.lama).filter(k => p.baru[k] === false && p.lama[k] !== false) })) })
+})
+app.post('/api/subscription/override/rapikan', SUPER, (req, res) => {
+  const { rapikanOverride } = require('./fitur-override.cjs')
+  const hasil = rapikanOverride(db, planMap(), { terapkan: true })
+  res.json({ success: true, diperiksa: hasil.diperiksa, dirapikan: hasil.dirapikan, rincian: hasil.perlu.map(p => ({ tenant: p.slug || p.tenant_id, plan: p.plan })) })
+})
+
 // Set paket + masa aktif sebuah lembaga secara langsung (tanpa kunci unlock).
 // body: { plan, mode: 'set'|'extend', sampai?: 'YYYY-MM-DD', masa_nilai?, masa_satuan? }
 app.put('/api/subscription/tenant/:id', SUPER, (req, res) => {
@@ -1962,7 +2009,7 @@ app.put('/api/subscription/tenant/:id', SUPER, (req, res) => {
   }
 
   const apply = db.transaction(() => {
-    const fitur = normalizeFeatureSelection({}, plan)
+    const fitur = normalizeFeatureSelection({}, plan, planMap())
     db.prepare('UPDATE tenants SET plan=?, subscription_ends_at=?, trial_ends_at=?, features_json=?, expired_at=NULL, aktif=1 WHERE id=?')
       .run(plan, endsAt, plan === 'trial' ? endsAt : null, JSON.stringify(fitur), tenant.id)
   })
@@ -1975,7 +2022,7 @@ app.put('/api/subscription/features', ADMIN, (req, res) => {
   if (req.user.role === 'super_admin' && req.body.tenant_id && req.body.tenant_id !== req.tenantId) return res.status(400).json({ error: 'Gunakan domain lembaga untuk mengatur fitur tenant' })
   const tenant = db.prepare('SELECT * FROM tenants WHERE id=?').get(req.tenantId)
   if (!tenant) return res.status(404).json({ error: 'Lembaga tidak ditemukan' })
-  const features = normalizeFeatureSelection(req.body.features, ['lite','pro'].includes(tenant.plan) ? tenant.plan : 'trial')
+  const features = normalizeFeatureSelection(req.body.features, tenant.plan, planMap())
   db.prepare('UPDATE tenants SET features_json=? WHERE id=?').run(JSON.stringify(features), tenant.id)
   res.json({ success: true, ...accessForTenant({ ...tenant, features_json: JSON.stringify(features) }) })
 })
@@ -1990,7 +2037,7 @@ app.post('/api/subscription/unlock', ADMIN, (req, res) => {
   const currentEnd = tenant.subscription_ends_at && new Date(tenant.subscription_ends_at) > new Date() ? tenant.subscription_ends_at : new Date().toISOString()
   const newEnd = addMonthsIso(currentEnd, key.months)
   const apply = db.transaction(() => {
-    const features = normalizeFeatureSelection(JSON.parse(tenant.features_json || '{}'), key.plan)
+    const features = normalizeFeatureSelection(JSON.parse(tenant.features_json || '{}'), key.plan, planMap())
     db.prepare('UPDATE tenants SET plan=?,subscription_ends_at=?,features_json=?,expired_at=NULL,aktif=1 WHERE id=?').run(key.plan, newEnd, JSON.stringify(features), tenant.id)
     db.prepare("UPDATE subscription_unlock_keys SET used_at=datetime('now'),used_by=? WHERE id=? AND used_at IS NULL").run(req.user.id, key.id)
   })
@@ -2093,10 +2140,30 @@ app.get('/api/jadwal-sholat', authMiddleware, (req, res) => {
 // media base64 dapat jauh lebih besar daripada ukuran file media aslinya.
 const backupUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: BACKUP_LIMITS.MAX_BYTES, files: 1 } })
 registerBackupRestoreRoutes(app, db, { ADMIN, upload: backupUpload, dbPath, mediaRoot: UPLOAD_DIR })
+registerDataAdminRoutes(app, db, { SUPER, logger: console })
 registerFinanceExcelRoutes(app, db, { authorize: requireRole('bendahara', 'admin', 'super_admin', 'operator'), upload: multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024, files: 1 } }) })
 registerPortalRoutes(app, db, { auth: authMiddleware, requireRole, uuid: uuidv4, bcrypt })
 registerKantinRoutes(app, db, { requireRole, uuid: uuidv4, bcrypt })
 registerPaymentGatewayRoutes(app, db, { requireRole, hostPermintaan })
+
+// ---- SMTP/IMAP per lembaga ----
+const smtpLayanan = buatLayananSmtp(db, { rahasia: JWT_SECRET, logger: console })
+const smtpGate = requireRole('admin', 'super_admin')
+app.get('/api/smtp/config', smtpGate, (req, res) => {
+  res.json(smtpLayanan.baca(req.tenantId) || { tenant_id: req.tenantId, aktif: 0, smtp_pass_terisi: false, imap_pass_terisi: false })
+})
+app.put('/api/smtp/config', smtpGate, (req, res) => {
+  try { res.json({ success: true, config: smtpLayanan.simpan(req.tenantId, req.body || {}) }) }
+  catch (e) { res.status(400).json({ error: e.message }) }
+})
+app.post('/api/smtp/uji', smtpGate, async (req, res) => {
+  try {
+    const jenis = String(req.body?.jenis || 'smtp')
+    if (jenis === 'imap') return res.json(await smtpLayanan.ujiImapKoneksi(req.tenantId))
+    res.json(await smtpLayanan.ujiSmtp(req.tenantId, { to: req.body?.to }))
+  } catch (e) { res.status(500).json({ error: e.message }) }
+})
+
 registerAdministrasiRoutes(app, db, { requireRole })
 registerSupervisiRoutes(app, db, { requireRole })
 registerProgramBelajarRoutes(app, db, { requireRole })
@@ -2151,6 +2218,13 @@ app.get('/api/bendahara/dashboard', BENDAHARA, (req,res) => {
   const saldo_tabungan=db.prepare("SELECT coalesce(sum(CASE WHEN tipe='setor' THEN nominal ELSE -nominal END),0) saldo FROM tabungan WHERE tenant_id=?").get(tid).saldo
   const siswa_aktif=db.prepare("SELECT count(*) jumlah FROM siswa WHERE tenant_id=? AND coalesce(status,'aktif')='aktif'").get(tid).jumlah
   res.json({tagihan_belum,lunas_bulan_ini,saldo_tabungan,siswa_aktif})
+})
+
+// Panduan pengguna — publik (tanpa login) supaya bisa dibuka dari halaman depan
+// dan dibagikan ke calon pengguna. Isi berasal dari server/panduan-data.cjs.
+app.get('/api/panduan', (_req, res) => {
+  try { res.json({ kelompok: require('./panduan-data.cjs').KELOMPOK }) }
+  catch (e) { res.status(500).json({ error: e.message }) }
 })
 
 app.get('/api/health', (_req, res) => {
@@ -2845,6 +2919,7 @@ app.post('/api/auth/register', accountLimiter, (req, res) => {
     slug,
     domainCustom: domainVal,
     domainStatus,
+    smtp: smtpLayanan,
   }).then(hasil => {
     if (!hasil.wa.ok || !hasil.email.ok) {
       console.warn('[register-notify]', tenantId, JSON.stringify(hasil))
@@ -3779,11 +3854,13 @@ app.get('/api/gtk', authMiddleware, (req, res) => {
 
 app.post('/api/gtk', ADMIN, (req, res) => {
   const id = uuidv4()
-  const { nik, nip, nuptk, nama, jenis_kelamin, tempat_lahir, tanggal_lahir, alamat, no_hp, email, jabatan, status_kepegawaian, bidang_studi, kode_guru } = req.body
+  const { nik, nip, nuptk, nama, jenis_kelamin, tempat_lahir, tanggal_lahir, alamat, no_hp, email, jabatan, status_kepegawaian, bidang_studi, kode_guru, sertifikasi, nrg } = req.body
   if (nik && !/^\d{16}$/.test(String(nik))) return res.status(400).json({ error: 'NIK harus berupa 16 digit angka.' })
   try {
-    db.prepare('INSERT INTO gtk (id, nik, nip, nuptk, nama, jenis_kelamin, tempat_lahir, tanggal_lahir, alamat, no_hp, email, jabatan, status_kepegawaian, bidang_studi, kode_guru, tenant_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
-      .run(id, nik || null, nip || null, nuptk, nama, jenis_kelamin, tempat_lahir, tanggal_lahir, alamat, no_hp, email, jabatan, status_kepegawaian, bidang_studi, kode_guru || '', req.tenantId)
+    db.prepare('INSERT INTO gtk (id, nik, nip, nuptk, nama, jenis_kelamin, tempat_lahir, tanggal_lahir, alamat, no_hp, email, jabatan, status_kepegawaian, bidang_studi, kode_guru, sertifikasi, nrg, tenant_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
+      .run(id, nik || null, nip || null, nuptk, nama, jenis_kelamin, tempat_lahir, tanggal_lahir, alamat, no_hp, email,
+        gtkKategori.normalisasiJabatan(jabatan), gtkKategori.normalisasiStatus(status_kepegawaian), bidang_studi, kode_guru || '',
+        gtkKategori.normalisasiSertifikasi(sertifikasi), nrg || null, req.tenantId)
     res.json({ id })
   } catch (e) {
     if (e.code === 'SQLITE_CONSTRAINT_UNIQUE' || e.code === 'SQLITE_CONSTRAINT') return res.status(400).json({ error: 'NIP ' + nip + ' sudah dipakai GTK lain.' })
@@ -3792,16 +3869,28 @@ app.post('/api/gtk', ADMIN, (req, res) => {
 })
 
 app.put('/api/gtk/:id', ADMIN, (req, res) => {
-  const { nik, nip, nuptk, nama, jenis_kelamin, tempat_lahir, tanggal_lahir, alamat, no_hp, email, jabatan, status_kepegawaian, bidang_studi, status, kode_guru } = req.body
+  const { nik, nip, nuptk, nama, jenis_kelamin, tempat_lahir, tanggal_lahir, alamat, no_hp, email, jabatan, status_kepegawaian, bidang_studi, status, kode_guru, sertifikasi, nrg } = req.body
   if (nik && !/^\d{16}$/.test(String(nik))) return res.status(400).json({ error: 'NIK harus berupa 16 digit angka.' })
   try {
-    db.prepare('UPDATE gtk SET nik=?, nip=?, nuptk=?, nama=?, jenis_kelamin=?, tempat_lahir=?, tanggal_lahir=?, alamat=?, no_hp=?, email=?, jabatan=?, status_kepegawaian=?, bidang_studi=?, status=?, kode_guru=? WHERE id=? AND tenant_id=?')
-      .run(nik || null, nip || null, nuptk, nama, jenis_kelamin, tempat_lahir, tanggal_lahir, alamat, no_hp, email, jabatan, status_kepegawaian, bidang_studi, status, kode_guru || '', req.params.id, req.tenantId)
+    db.prepare('UPDATE gtk SET nik=?, nip=?, nuptk=?, nama=?, jenis_kelamin=?, tempat_lahir=?, tanggal_lahir=?, alamat=?, no_hp=?, email=?, jabatan=?, status_kepegawaian=?, bidang_studi=?, status=?, kode_guru=?, sertifikasi=?, nrg=? WHERE id=? AND tenant_id=?')
+      .run(nik || null, nip || null, nuptk, nama, jenis_kelamin, tempat_lahir, tanggal_lahir, alamat, no_hp, email,
+        gtkKategori.normalisasiJabatan(jabatan), gtkKategori.normalisasiStatus(status_kepegawaian), bidang_studi, status, kode_guru || '',
+        gtkKategori.normalisasiSertifikasi(sertifikasi), nrg || null, req.params.id, req.tenantId)
     res.json({ success: true })
   } catch (e) {
     if (e.code === 'SQLITE_CONSTRAINT_UNIQUE' || e.code === 'SQLITE_CONSTRAINT') return res.status(400).json({ error: 'NIP ' + nip + ' sudah dipakai GTK lain.' })
     throw e
   }
+})
+
+// Daftar kategori GTK (status kepegawaian, jabatan, sertifikasi) — SATU sumber
+// untuk FE supaya label & nilai tidak pernah berbeda dengan backend.
+app.get('/api/gtk/kategori', authMiddleware, (req, res) => {
+  res.json({
+    status_kepegawaian: gtkKategori.STATUS_KEPEGAWAIAN,
+    jabatan: gtkKategori.JABATAN,
+    sertifikasi: gtkKategori.SERTIFIKASI,
+  })
 })
 
 app.delete('/api/gtk/:id', ADMIN, (req, res) => {

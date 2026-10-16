@@ -135,7 +135,7 @@ export default function Sidebar() {
     { name: 'LAYANAN', labels: ['Perpustakaan Digital', 'Generator AI Guru', 'Beasiswa'] },
     { name: 'KEUANGAN & OPERASIONAL', labels: ['Keuangan', 'E-Kantin & Cashless', 'Buku Kas', 'Bendahara', 'E-Kantin'] },
     { name: 'KOMUNIKASI', labels: ['WhatsApp'] },
-    { name: 'PENGATURAN & SISTEM', labels: ['Pengaturan', 'Manajemen Pengguna', 'Backup & Restore', 'Kelola Website', 'REST API Developer', 'Manajemen Lembaga', 'Manajemen Yayasan'] },
+    { name: 'PENGATURAN & SISTEM', labels: ['Pengaturan', 'SMTP & IMAP', 'Manajemen Pengguna', 'Backup & Restore', 'Manajemen Data', 'Kelola Website', 'REST API Developer', 'Manajemen Lembaga', 'Manajemen Yayasan'] },
   ]
 
   // Safety net: item yang tidak match label manapun di atas (mis. menu baru

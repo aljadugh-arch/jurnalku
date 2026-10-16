@@ -331,6 +331,7 @@ export default function LandingPage() {
               </Link>
               <Link to="/login" className="text-slate-300 hover:text-white transition-colors">Masuk</Link>
               <Link to="/login#demo" className="text-slate-300 hover:text-white transition-colors">Demo</Link>
+              <Link to="/panduan" className="text-slate-300 hover:text-white transition-colors">Panduan</Link>
             </div>
           </div>
           <div className="mt-6 border-t border-slate-800 dark:border-gray-900 pt-5 text-center">

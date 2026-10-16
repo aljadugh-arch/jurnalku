@@ -3,7 +3,7 @@ import {
   ClipboardList, UserCheck, QrCode, MapPin,
   Layers, Activity, Globe, Sparkles, DollarSign, Settings, MessageSquare,
   FileText, ClipboardCheck, ScrollText, School, Wallet, Receipt, DatabaseBackup, Code2, ScanText,
-  FileQuestion, Monitor, Star, Building2, CreditCard
+  FileQuestion, Monitor, Star, Building2, CreditCard, Database, Mail
 } from 'lucide-react'
 
 export interface MenuItem {
@@ -85,6 +85,7 @@ export const adminMenuItems: MenuItem[] = [
     ]
   },
   { label: 'Pengaturan', icon: <Settings size={20} />, path: '/admin/settings' },
+  { label: 'SMTP & IMAP', icon: <Mail size={20} />, path: '/admin/smtp' },
   { label: 'REST API Developer', icon: <Code2 size={20} />, path: '/admin/developer-api' },
   { label: 'Manajemen Pengguna', icon: <UserCheck size={20} />, path: '/admin/users' },
   { label: 'Manajemen Lembaga', icon: <Globe size={20} />, path: '/admin/tenants' },
@@ -224,6 +225,7 @@ export const superAdminMenuItems: MenuItem[] = [
   { label: 'Manajemen Yayasan', icon: <Building2 size={20} />, path: '/admin/foundations' },
   { label: 'Manajemen Pengguna', icon: <UserCheck size={20} />, path: '/admin/users' },
   { label: 'Backup & Restore', icon: <DatabaseBackup size={20} />, path: '/admin/backup-restore' },
+  { label: 'Manajemen Data', icon: <Database size={20} />, path: '/admin/manajemen-data' },
   { label: 'REST API Developer', icon: <Code2 size={20} />, path: '/admin/developer-api' },
   { label: 'Pengaturan', icon: <Settings size={20} />, path: '/admin/settings' },
 ]

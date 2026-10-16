@@ -73,7 +73,7 @@ function htmlEmailRegistrasi({ namaLembaga, namaAdmin, email, url, slug, domainC
 async function notifikasiRegistrasi(db, {
   tenantId, namaLembaga, namaAdmin, email, noHp,
   url = '', slug = '', domainCustom = null, domainStatus = null,
-  appName = 'Jurnalku',
+  appName = 'Jurnalku', smtp = null,
 } = {}) {
   const hasil = { wa: { ok: false, reason: '' }, email: { ok: false, error: '' } }
   const data = { namaLembaga, namaAdmin, email, url, slug, domainCustom, domainStatus }
@@ -123,14 +123,21 @@ async function notifikasiRegistrasi(db, {
   }
 
   // --- Email ---
+  // Pakai SMTP lembaga bila diaktifkan (dan `smtp` disuntikkan pemanggil);
+  // kalau tidak / kalau gagal, jatuh ke MTA sistem lewat kirimEmail.
+  const pesanEmail = {
+    to: email,
+    subject: `Pendaftaran ${appName} Berhasil — ${namaLembaga}`,
+    html: htmlEmailRegistrasi(data),
+    headers: { 'X-Jurnalku-Event': 'register' },
+  }
   try {
-    const r = await kirimEmail({
-      to: email,
-      subject: `Pendaftaran ${appName} Berhasil — ${namaLembaga}`,
-      html: htmlEmailRegistrasi(data),
-      headers: { 'X-Jurnalku-Event': 'register' },
-    })
-    hasil.email = r.ok ? { ok: true, error: '' } : { ok: false, error: r.error }
+    let r
+    if (smtp && tenantId) r = await smtp.kirim(tenantId, pesanEmail, (p) => kirimEmail(p))
+    else r = await kirimEmail(pesanEmail)
+    hasil.email = r.ok
+      ? { ok: true, error: '', via: r.via || 'mta-sistem' }
+      : { ok: false, error: r.error, via: r.via || 'mta-sistem' }
   } catch (e) {
     hasil.email = { ok: false, error: e.message }
   }
