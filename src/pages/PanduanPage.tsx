@@ -131,16 +131,35 @@ export default function PanduanPage() {
           <div className="text-center text-gray-400 py-16 text-sm">Panduan sedang tidak tersedia. Coba muat ulang halaman.</div>
         ) : (
           <>
-            {/* Tab jenis pengguna */}
-            <div className="flex flex-wrap gap-2 mb-6 justify-center">
+            {/* Menu kategori: GRID kartu (1 kolom HP, 2 kolom tablet, 3 kolom desktop).
+                Sebelumnya pill `flex-wrap` sehingga menumpuk tak beraturan dan
+                sulit dipindai. `items-stretch` + `h-full` membuat semua kartu dalam
+                satu baris sama tinggi walau panjang ringkasnya berbeda. */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 items-stretch gap-3 mb-8">
               {kelompok.map(k => {
                 const Ikon = IKON[k.icon] || BookOpen
                 const dipilih = k.key === aktif
                 return (
-                  <button key={k.key} onClick={() => setAktif(k.key)}
-                    className={`flex items-center gap-2 rounded-full px-4 py-2 text-sm font-medium border transition ${dipilih ? 'bg-primary text-white border-primary shadow-sm' : 'bg-white text-gray-600 border-gray-200 hover:border-primary/40'}`}>
-                    <Ikon size={16} /> {k.nama}
-                    <span className={`text-xs rounded-full px-1.5 ${dipilih ? 'bg-white/20' : 'bg-gray-100 text-gray-500'}`}>{k.bagian.length}</span>
+                  <button
+                    key={k.key}
+                    onClick={() => setAktif(k.key)}
+                    aria-pressed={dipilih}
+                    className={`group flex h-full min-h-[112px] items-start gap-3 rounded-xl border p-4 text-left transition ${
+                      dipilih
+                        ? 'border-primary bg-primary/5 ring-2 ring-primary/25 shadow-sm'
+                        : 'border-gray-200 bg-white hover:border-primary/40 hover:shadow-sm'
+                    }`}
+                  >
+                    <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${dipilih ? 'bg-primary text-white' : 'bg-gray-100 text-gray-500 group-hover:bg-primary/10 group-hover:text-primary'}`}>
+                      <Ikon size={17} />
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className={`block truncate text-sm font-bold ${dipilih ? 'text-primary' : 'text-gray-800'}`}>{k.nama}</span>
+                      <span className="mt-0.5 block text-[11px] leading-snug text-gray-500 line-clamp-2">{k.ringkas}</span>
+                      <span className={`mt-1.5 inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold ${dipilih ? 'bg-primary/15 text-primary' : 'bg-gray-100 text-gray-500'}`}>
+                        {k.bagian.length} topik
+                      </span>
+                    </span>
                   </button>
                 )
               })}
