@@ -9,6 +9,7 @@
 //   - Hapus program menghapus levelnya juga.
 
 const crypto = require('crypto')
+const { getTenantSettings } = require('./tenant-settings.cjs')
 const {
   setupProgramBelajarTables, seedProgramBawaan, normalizeProgramInput,
   normalizeLevelInput, daftarProgram,
@@ -53,7 +54,11 @@ function registerProgramBelajarRoutes(app, db, { requireRole }) {
   /** Apakah jenjang lembaga ini nonformal (kursus/bimbel/sanggar/diklat)? */
   function jenjangNonformal(tenantId) {
     try {
-      const row = db.prepare("SELECT COALESCE(jenjang,'') jenjang FROM settings WHERE tenant_id=?").get(tenantId)
+      // WAJIB lewat getTenantSettings (id kanonik `main_<tenant>`).
+      // Query `WHERE tenant_id=? LIMIT 1` tanpa id bisa mengambil baris duplikat
+      // lama, sehingga jenjang terbaca berbeda dari yang ditampilkan Pengaturan
+      // (mis. "Madrasah Tsanawiyah" dari baris sisa padahal kanonik "MTs").
+      const row = getTenantSettings(db, tenantId, "jenjang")
       const j = String(row?.jenjang || '').trim().toUpperCase()
       return j === 'NF' || j.includes('NONFORMAL') || j.includes('NON-FORMAL') || j.includes('KURSUS') || j.includes('DIKLAT') || j.includes(' BIMBEL') || j === 'BIMBEL'
     } catch { return false }
