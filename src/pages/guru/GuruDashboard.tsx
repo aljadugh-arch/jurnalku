@@ -59,7 +59,7 @@ export default function GuruDashboard() {
       // Kirim lokasi bila tersedia — server menolak bila di luar area kelas.
       let lok: any = {}
       try { lok = await getCurrentPosition() } catch { lok = {} }
-      await api.post('/guru/sesi-kelas/masuk', { jadwal_id: jadwal.id, latitude: lok.latitude, longitude: lok.longitude })
+      await api.post('/guru/sesi-kelas/masuk', { jadwal_id: jadwal.id, latitude: lok.latitude, longitude: lok.longitude, accuracy: lok.accuracy })
       toast.success(`Masuk kelas ${jadwal.rombel_nama}`)
       await loadDashboard()
     } catch (err: any) {

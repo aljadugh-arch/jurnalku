@@ -75,8 +75,12 @@ export default function SuperadminDashboard() {
 
   return (
     <div className="space-y-3">
-      {/* Mobile/tablet header — hanya tampil di bawah lg (desktop pakai DashboardLayout Header) */}
-      <div className="lg:hidden sticky top-0 z-30 -mx-4 -mt-4 px-4 py-3 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 flex items-center justify-between mb-2">
+      {/* Mobile/tablet header — hanya tampil di bawah lg (desktop pakai DashboardLayout Header).
+          JANGAN pakai `-mt-4`: margin negatif menarik header ini menembus padding `main`
+          sehingga menutupi judul/kartu di atasnya (bug "header menutupi elemen lain").
+          Header ini harus tetap di dalam alur normal; `sticky top-0` saja cukup untuk
+          menempel saat halaman digulir, tanpa menembus padding. */}
+      <div className="lg:hidden sticky top-0 z-30 -mx-4 px-4 py-3 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 flex items-center justify-between">
         <div className="flex items-center gap-2">
           <Crown size={18} className="text-amber-500" />
           <span className="font-bold text-sm text-gray-800 dark:text-gray-100">Superadmin</span>

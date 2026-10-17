@@ -3,6 +3,9 @@ import { useNavigate, Navigate, Link } from 'react-router-dom'
 import { Eye, EyeOff, ArrowRight, Moon, Sun } from 'lucide-react'
 import { useAuthStore } from '../../stores/authStore'
 import { useSettingsStore } from '../../stores/settingsStore'
+import { ClipboardList } from 'lucide-react'
+import api from '../../services/api'
+import toast from 'react-hot-toast'
 import { useThemeStore } from '../../stores/themeStore'
 
 const getRedirectPath = (role: string) => {
@@ -20,6 +23,18 @@ export default function LoginPage() {
   const { settings } = useSettingsStore()
   const { dark, toggle: toggleDark } = useThemeStore()
   const logo = settings.logo || '/logo-jurnalku-256.png'
+
+  // PPDB di halaman login: calon siswa bisa membuka formulir pendaftaran
+  // lembaga ini tanpa akun. Tombol hanya tampil bila pendaftaran memang dibuka,
+  // supaya tidak menyesatkan saat gelombang tutup.
+  const [ppdb, setPpdb] = useState<{ dibuka: boolean; nama: string | null }>({ dibuka: false, nama: null })
+  useEffect(() => {
+    let hidup = true
+    api.get('/ppdb/publik/info')
+      .then(({ data }) => { if (hidup) setPpdb({ dibuka: !!data?.dibuka, nama: data?.gelombang?.nama || null }) })
+      .catch(() => { /* diam: PPDB opsional, jangan ganggu halaman login */ })
+    return () => { hidup = false }
+  }, [])
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
@@ -163,6 +178,40 @@ export default function LoginPage() {
           <p className="mt-3 text-[11px] leading-snug text-slate-400">
             Username dan password awal siswa menggunakan NISN, atau NIS jika NISN belum tersedia.
           </p>
+
+          {/* Tautan PPDB: pendaftaran mandiri calon siswa tanpa akun.
+              URL bisa dibagikan (WA/poster) — tetap milik lembaga ini karena
+              tenant ditentukan dari domain yang dipakai. */}
+          {ppdb.dibuka && (
+            <div className="mt-4 rounded-xl border border-primary/25 bg-primary/5 p-3">
+              <div className="flex items-start gap-2.5">
+                <ClipboardList size={18} className="mt-0.5 shrink-0 text-primary" />
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs font-bold text-slate-700 dark:text-gray-200">Pendaftaran siswa baru dibuka</p>
+                  <p className="mt-0.5 text-[11px] leading-snug text-slate-500 dark:text-gray-400">
+                    {ppdb.nama ? `${ppdb.nama} — ` : ''}Calon siswa/wali bisa mendaftar tanpa akun.
+                  </p>
+                  <div className="mt-2 flex flex-wrap items-center gap-2">
+                    <Link to="/ppdb" className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-[11px] font-bold text-white hover:opacity-95">
+                      Daftar Sekarang
+                    </Link>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const url = `${window.location.origin}/ppdb`
+                        navigator.clipboard?.writeText(url)
+                          .then(() => toast.success('Tautan PPDB disalin'))
+                          .catch(() => toast(`Tautan: ${url}`))
+                      }}
+                      className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-semibold text-slate-600 hover:bg-slate-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300"
+                    >
+                      Salin Tautan
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
 
           {['jurnal.cc.cd', 'jurnalmadrasah.web.id'].includes(window.location.hostname) && (
             <div

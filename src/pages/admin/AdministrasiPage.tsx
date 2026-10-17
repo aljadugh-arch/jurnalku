@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Loader2, Plus, FileText, Image as ImageIcon, Trash2, X, Search, Save, Eye } from 'lucide-react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Loader2, Plus, FileText, Image as ImageIcon, Trash2, X, Search, Save, Eye, Upload } from 'lucide-react'
 import toast from 'react-hot-toast'
 import api from '../../services/api'
 import ResponsiveTable from '../../components/ui/ResponsiveTable'
@@ -26,6 +26,10 @@ export default function AdministrasiPage() {
   // Template editor
   const [editJenis, setEditJenis] = useState<Jenis | null>(null)
   const [tpl, setTpl] = useState({ nama: '', kategori: '', template: '' })
+  // Impor template dari Word/Excel/PDF
+  const [impor, setImpor] = useState<{ jenis: string; peringatan: string[]; placeholder: string[] } | null>(null)
+  const [mengimpor, setMengimpor] = useState(false)
+  const imporRef = useRef<HTMLInputElement>(null)
 
   const muat = useCallback(async () => {
     setLoading(true)
@@ -88,6 +92,25 @@ export default function AdministrasiPage() {
     if (!confirm('Hapus surat ' + s.nomor + '?')) return
     try { await api.delete('/administrasi/surat/' + s.id); toast.success('Dihapus'); muat() }
     catch (e: any) { toast.error(e.response?.data?.error || 'Gagal menghapus') }
+  }
+
+  const imporTemplate = async (file: File | undefined) => {
+    if (!file) return
+    setMengimpor(true)
+    setImpor(null)
+    try {
+      const fd = new FormData()
+      fd.append('berkas', file)
+      const { data } = await api.post('/administrasi/jenis/impor', fd, { headers: { 'Content-Type': 'multipart/form-data' } })
+      setTpl(t => ({ ...t, template: data.html }))
+      setImpor({ jenis: data.jenis, peringatan: data.peringatan || [], placeholder: data.placeholder_terdeteksi || [] })
+      toast.success(`Template diimpor dari ${data.jenis.toUpperCase()}`)
+    } catch (err: any) {
+      toast.error(err?.response?.data?.error || 'Gagal mengimpor template.')
+    } finally {
+      setMengimpor(false)
+      if (imporRef.current) imporRef.current.value = ''
+    }
   }
 
   const simpanTemplate = async () => {
@@ -253,9 +276,28 @@ export default function AdministrasiPage() {
                 </div>
               </div>
               <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1">Template HTML</label>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-xs font-medium text-gray-600">Template HTML</label>
+                  <div className="flex items-center gap-1.5">
+                    <input ref={imporRef} type="file" accept=".docx,.xlsx,.xls,.pdf,.txt"
+                      onChange={e => imporTemplate(e.target.files?.[0])}
+                      className="hidden" />
+                    <button type="button" onClick={() => imporRef.current?.click()} disabled={mengimpor}
+                      className="inline-flex items-center gap-1.5 rounded-lg border border-primary/30 bg-primary/5 px-2.5 py-1 text-[11px] font-semibold text-primary hover:bg-primary/10 disabled:opacity-50">
+                      {mengimpor ? <Loader2 size={12} className="animate-spin" /> : <Upload size={12} />}
+                      Impor dari Word/Excel/PDF
+                    </button>
+                  </div>
+                </div>
                 <textarea rows={12} value={tpl.template} onChange={e => setTpl({ ...tpl, template: e.target.value })} className="w-full px-3 py-2 border rounded-lg text-xs font-mono" />
                 <p className="text-xs text-gray-400 mt-1">{'Placeholder: ' + editJenis.fields.map(f => '{{' + f.key + '}}').join(' ') + ' {{nomor}} {{tanggal_surat}} {{nama_lembaga}}'}</p>
+                {impor && (
+                  <div className="mt-2 rounded-lg border border-blue-200 bg-blue-50 p-2.5 text-[11px] text-blue-800 space-y-1">
+                    <p className="font-semibold">Diimpor dari {impor.jenis.toUpperCase()}</p>
+                    {impor.placeholder.length > 0 && <p>Placeholder terdeteksi: {impor.placeholder.map(p => '{{' + p + '}}').join(', ')}</p>}
+                    {impor.peringatan.map((w, i) => <p key={i}>• {w}</p>)}
+                  </div>
+                )}
               </div>
             </div>
             <div className="flex gap-3 mt-6">

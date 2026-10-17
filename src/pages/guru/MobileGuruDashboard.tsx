@@ -74,7 +74,7 @@ export default function MobileGuruDashboard() {
     try {
       let lok: any = {}
       try { lok = await getCurrentPosition() } catch { lok = {} }
-      await api.post('/guru/sesi-kelas/masuk', { jadwal_id: jadwal.id, latitude: lok.latitude, longitude: lok.longitude })
+      await api.post('/guru/sesi-kelas/masuk', { jadwal_id: jadwal.id, latitude: lok.latitude, longitude: lok.longitude, accuracy: lok.accuracy })
       toast.success(`Masuk kelas ${jadwal.rombel_nama || ''}`.trim())
       await load()
       navigate(`/guru/jurnal?jadwal_id=${encodeURIComponent(jadwal.id)}`)

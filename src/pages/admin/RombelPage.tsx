@@ -24,6 +24,10 @@ export default function RombelPage() {
   const [editing, setEditing] = useState<Rombel | null>(null)
   const [form, setForm] = useState({ nama: '', tingkat: 'VII', tahun_ajaran: '2026/2027', wali_kelas_id: '', kapasitas: 36, geo_latitude: '', geo_longitude: '', geo_radius: 50, geo_lock: 0 })
   const [locating, setLocating] = useState(false)
+  // Akurasi GPS saat mengambil titik kelas (meter) — dipakai untuk memperingatkan
+  // bila radius lebih kecil dari ketelitian alat (penyebab umum "sudah di tempat
+  // yang sama tapi tetap di luar radius").
+  const [akurasi, setAkurasi] = useState<number | null>(null)
 
   // Detail siswa panel
   const [selectedRombel, setSelectedRombel] = useState<Rombel | null>(null)
@@ -98,6 +102,7 @@ export default function RombelPage() {
     navigator.geolocation.getCurrentPosition(
       pos => {
         setForm(f => ({ ...f, geo_latitude: pos.coords.latitude.toFixed(6), geo_longitude: pos.coords.longitude.toFixed(6) }))
+        setAkurasi(pos.coords.accuracy)
         setLocating(false)
         toast.success(`Lokasi terambil (akurasi ±${Math.round(pos.coords.accuracy)}m)`)
       },
@@ -376,10 +381,28 @@ export default function RombelPage() {
                   </button>
                   <div className="flex items-center gap-1">
                     <span className="text-xs text-gray-500">Radius</span>
-                    <input type="number" min={10} value={form.geo_radius} onChange={e => setForm({ ...form, geo_radius: +e.target.value })} className="w-20 px-2 py-1.5 border rounded-lg text-sm" />
+                    <input type="number" min={5} value={form.geo_radius} onChange={e => setForm({ ...form, geo_radius: +e.target.value })} className="w-20 px-2 py-1.5 border rounded-lg text-sm" />
                     <span className="text-xs text-gray-500">m</span>
                   </div>
                 </div>
+                {/* Peringatan radius vs ketelitian GPS: radius 10 m tidak bisa dipenuhi
+                    HP biasa yang akurasinya 10-30 m, walau guru berdiri di titik kelas. */}
+                {!!form.geo_lock && (
+                  <div className="mt-2 space-y-1">
+                    {akurasi != null && Number(form.geo_radius) < akurasi && (
+                      <p className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-1.5">
+                        Radius {form.geo_radius}m lebih kecil dari akurasi GPS alat ini (±{Math.round(akurasi)}m).
+                        Guru bisa tetap ditolak walau sudah di depan kelas. Saran: radius minimal {Math.max(30, Math.round(akurasi))}m.
+                      </p>
+                    )}
+                    {Number(form.geo_radius) < 20 && (
+                      <p className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-1.5">
+                        Radius di bawah 20m terlalu ketat untuk GPS HP. Gunakan 30–75m; server tetap memberi
+                        toleransi sebesar akurasi GPS yang dilaporkan perangkat.
+                      </p>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
             <div className="flex gap-3 mt-6">

@@ -2147,7 +2147,13 @@ registerPortalRoutes(app, db, { auth: authMiddleware, requireRole, uuid: uuidv4,
 registerKantinRoutes(app, db, { requireRole, uuid: uuidv4, bcrypt })
 registerPaymentGatewayRoutes(app, db, { requireRole, hostPermintaan })
 setupPpdbTables(db)
-registerPpdbRoutes(app, db, { requireRole, authMiddleware })
+registerPpdbRoutes(app, db, {
+  requireRole, authMiddleware,
+  // Unggah berkas PPDB (opsional): memori -> disimpan sendiri oleh ppdb-berkas.cjs
+  // ke folder per-tenant, supaya satu lembaga tidak bisa membaca berkas lembaga lain.
+  upload: multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024, files: 5 } }),
+  akarUnggahan: UPLOAD_DIR,
+})
 
 // ---- SMTP/IMAP per lembaga ----
 const smtpLayanan = buatLayananSmtp(db, { rahasia: JWT_SECRET, logger: console })
@@ -2167,7 +2173,11 @@ app.post('/api/smtp/uji', smtpGate, async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }) }
 })
 
-registerAdministrasiRoutes(app, db, { requireRole })
+registerAdministrasiRoutes(app, db, {
+  requireRole,
+  // Impor template surat: dibaca di memori (tidak disimpan), maks 10 MB.
+  upload: multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024, files: 1 } }),
+})
 registerSupervisiRoutes(app, db, { requireRole })
 registerProgramBelajarRoutes(app, db, { requireRole })
 const backupScheduler = registerBackupRoutes(app, db, { requireRole, uuid: uuidv4, mediaRoot: UPLOAD_DIR })
@@ -4695,8 +4705,8 @@ function haversineMeters(lat1, lng1, lat2, lng2) {
 }
 // Validasi lokasi "Masuk Kelas": prioritas lock geolokasi rombel (bila aktif),
 // fallback ke geofence sekolah (settings). Mengembalikan {ok:true} atau {ok:false,status,error}.
-function validateClassGeo(db, tenantId, rombelId, latitude, longitude) {
-  return require('./geo-lock.cjs').validateClassGeo(db, tenantId, rombelId, latitude, longitude)
+function validateClassGeo(db, tenantId, rombelId, latitude, longitude, accuracy) {
+  return require('./geo-lock.cjs').validateClassGeo(db, tenantId, rombelId, latitude, longitude, accuracy)
 }
 
 app.post('/api/guru/sesi-kelas/masuk', TEACHER, (req, res) => {
@@ -4727,7 +4737,7 @@ app.post('/api/guru/sesi-kelas/masuk', TEACHER, (req, res) => {
   if (!jadwal) return res.status(403).json({ error: 'Jadwal bukan jadwal mengajar Anda hari ini' })
   // Lock geolokasi: bila rombel/kelas mengaktifkan geo_lock (atau sekolah punya
   // geofence), guru hanya bisa "Masuk Kelas" dari dalam area. Ditolak bila di luar.
-  const geoCheck = validateClassGeo(db, req.tenantId, jadwal.rombel_id, req.body?.latitude, req.body?.longitude)
+  const geoCheck = validateClassGeo(db, req.tenantId, jadwal.rombel_id, req.body?.latitude, req.body?.longitude, req.body?.accuracy)
   if (!geoCheck.ok) return res.status(geoCheck.status || 400).json({ error: geoCheck.error, geo: { distance: geoCheck.distance, radius: geoCheck.radius } })
   if (jadwal.sesi_status === 'selesai') return res.status(409).json({ error: 'Kelas ini sudah diselesaikan hari ini', status: 'selesai' })
   const active = currentTeacherClassSession(req.tenantId, gtk.id, today)

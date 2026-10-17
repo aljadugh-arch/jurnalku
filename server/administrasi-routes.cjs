@@ -23,7 +23,7 @@ function setupAdministrasi(db) {
   }
 }
 
-function registerAdministrasiRoutes(app, db, { requireRole }) {
+function registerAdministrasiRoutes(app, db, { requireRole, upload, akarUnggahan } = {}) {
   const ADMIN = requireRole('admin', 'super_admin', 'kepala', 'operator', 'tata_usaha', 'tu')
 
   const aman = (res, fn) => { try { fn() } catch (e) { res.status(400).json({ error: e.message }) } }
@@ -36,6 +36,33 @@ function registerAdministrasiRoutes(app, db, { requireRole }) {
 
   function barisSurat(tid, id) {
     return db.prepare('SELECT * FROM surat_keluar WHERE id=? AND tenant_id=?').get(id, tid)
+  }
+
+  // ---- Impor template dari Word / Excel / PDF ---------------------------
+  //
+  // Admin sering sudah punya format surat dalam DOCX/XLSX/PDF. Endpoint ini
+  // mengekstrak teksnya menjadi template HTML + memberi tahu placeholder apa
+  // yang terdeteksi, sehingga tidak perlu mengetik ulang.
+  //
+  // Berkas TIDAK disimpan — hanya dibaca di memori lalu dibuang.
+  if (upload) {
+    app.post('/api/administrasi/jenis/impor', ADMIN, (req, res) => {
+      upload.single('berkas')(req, res, async (err) => {
+        if (err) {
+          const pesan = err.code === 'LIMIT_FILE_SIZE'
+            ? `Ukuran berkas melebihi ${Math.round((require('./surat-impor.cjs').MAKS_BYTE) / 1024 / 1024)} MB.`
+            : err.message || 'Gagal mengunggah berkas.'
+          return res.status(400).json({ error: pesan })
+        }
+        if (!req.file) return res.status(400).json({ error: 'Tidak ada berkas yang dikirim.' })
+        try {
+          const hasil = await require('./surat-impor.cjs').imporTemplate(req.file)
+          res.json({ success: true, ...hasil })
+        } catch (e) {
+          res.status(400).json({ error: e.message })
+        }
+      })
+    })
   }
 
   // ---- Jenis & template surat -------------------------------------------

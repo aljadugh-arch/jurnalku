@@ -17,8 +17,12 @@ function dbPpdb() {
   db.exec('PRAGMA foreign_keys=ON')
   db.exec(`CREATE TABLE IF NOT EXISTS siswa (
     id TEXT PRIMARY KEY, tenant_id TEXT, nis TEXT NOT NULL, nisn TEXT, nik TEXT, nama TEXT NOT NULL,
-    jenis_kelamin TEXT, tempat_lahir TEXT, tanggal_lahir TEXT, alamat TEXT, no_hp TEXT,
-    nama_ortu TEXT, rombel_id TEXT, status TEXT DEFAULT 'aktif')`)
+    nama_panggilan TEXT, jenis_kelamin TEXT, tempat_lahir TEXT, tanggal_lahir TEXT, alamat TEXT, no_hp TEXT,
+    nama_ortu TEXT, rombel_id TEXT, status TEXT DEFAULT 'aktif',
+    -- Kolom biodata: PPDB sekarang menyalin biodata lengkap ke tabel siswa.
+    agama TEXT, status_keluarga TEXT, anak_ke INTEGER, alamat_ortu TEXT,
+    nama_ayah TEXT, kerja_ayah TEXT, nama_ibu TEXT, kerja_ibu TEXT,
+    nama_wali TEXT, kerja_wali TEXT, asal_sekolah TEXT)`)
   ppdb.setupPpdbTables(db)
   return { db, f }
 }
