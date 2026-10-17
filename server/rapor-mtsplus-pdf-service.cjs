@@ -8,6 +8,7 @@
 // seluruh siswa (createRaporMtsplusPdfBulk) — ratusan siswa jadi satu PDF sekaligus.
 
 const PDFDocument = require('pdfkit')
+const { formatTanggalLahir } = require('./format-tanggal.cjs')
 const QRCode = require('qrcode')
 const { getTenantSettings } = require('./tenant-settings.cjs')
 const { terbilang, nilaiKeAbjad, semesterRange } = require('./rapor-k13-service.cjs')
@@ -213,7 +214,7 @@ function renderStudentPages(doc, data, bagian) {
     const rows = [
       ['1.', 'Nama Lengkap', safeText(siswa.nama).toUpperCase()],
       ['2.', 'NIS / NISN', `${nisLokal} / ${nisnNasional}`],
-      ['3.', 'Tempat, Tanggal Lahir', `${safeText(siswa.tempat_lahir)}, ${safeText(siswa.tanggal_lahir)}`],
+      ['3.', 'Tempat, Tanggal Lahir', `${safeText(siswa.tempat_lahir)}, ${formatTanggalLahir(siswa.tanggal_lahir)}`],
       ['4.', 'Jenis Kelamin', safeText(siswa.jenis_kelamin)],
       ['5.', 'Agama', safeText(siswa.agama, 'Islam')],
       ['6.', 'Status dalam Keluarga', safeText(siswa.status_keluarga, 'Anak Kandung')],

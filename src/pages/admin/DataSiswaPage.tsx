@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { formatTanggalLahir } from '../../lib/tanggalLahir'
 import { Search, Plus, Edit, Trash2, Download, Upload, X, Camera, ChevronRight, UsersRound, KeyRound, RefreshCw } from 'lucide-react'
 import toast from 'react-hot-toast'
 import api from '../../services/api'
@@ -272,7 +273,7 @@ export default function DataSiswaPage() {
           { header: 'Nama Panggilan', value: 'nama_panggilan', width: 16 },
           { header: 'JK', value: (s: any) => (s.jenis_kelamin === 'P' ? 'P' : s.jenis_kelamin === 'L' ? 'L' : s.jenis_kelamin || ''), width: 5 },
           { header: 'Tempat Lahir', value: 'tempat_lahir', width: 18 },
-          { header: 'Tanggal Lahir', value: 'tanggal_lahir', width: 14 },
+          { header: 'Tanggal Lahir', value: (s: any) => formatTanggalLahir(s.tanggal_lahir), width: 18 },
           { header: 'Agama', value: 'agama', width: 10 },
           { header: 'Rombel', value: 'rombel_nama', width: 14 },
           { header: 'Alamat', value: 'alamat', width: 32 },
@@ -582,7 +583,7 @@ export default function DataSiswaPage() {
             <DetailRow label="Jenis Kelamin" value={selectedSiswa.jenis_kelamin === 'L' ? 'Laki-laki' : 'Perempuan'} />
             <DetailRow
               label="Tempat / Tgl Lahir"
-              value={[selectedSiswa.tempat_lahir, selectedSiswa.tanggal_lahir].filter(Boolean).join(', ') || '-'}
+              value={[selectedSiswa.tempat_lahir, formatTanggalLahir(selectedSiswa.tanggal_lahir)].filter(Boolean).join(', ')}
             />
             <DetailRow label="Alamat" value={selectedSiswa.alamat || '-'} />
             <DetailRow label="No HP" value={selectedSiswa.no_hp || '-'} />

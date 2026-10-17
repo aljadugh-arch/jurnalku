@@ -1,6 +1,7 @@
 'use strict'
 
 const PDFDocument = require('pdfkit')
+const { formatTanggalLahir } = require('./format-tanggal.cjs')
 const fs = require('fs')
 const path = require('path')
 const { terbilang, nilaiKeAbjad } = require('./rapor-k13-service.cjs')
@@ -95,7 +96,7 @@ async function createRaporK13Pdf({ studentList, settings = {}, uploadDir, bagian
     const biodata = [
       ['1.', 'Nama Lengkap', upper(safe(s.nama))],
       ['2.', 'NIS / NISN', `${safe(s.nis)} / ${safe(s.nisn)}`],
-      ['3.', 'Tempat, Tanggal Lahir', `${safe(s.tempat_lahir)}, ${safe(s.tanggal_lahir)}`],
+      ['3.', 'Tempat, Tanggal Lahir', `${safe(s.tempat_lahir)}, ${formatTanggalLahir(s.tanggal_lahir)}`],
       ['4.', 'Jenis Kelamin', safe(s.jenis_kelamin)],
       ['5.', 'Agama', safe(s.agama || 'Islam')],
       ['6.', 'Status dalam Keluarga', safe(s.status_keluarga || 'Anak Kandung')],

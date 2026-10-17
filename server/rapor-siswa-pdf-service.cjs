@@ -1,4 +1,5 @@
 const PDFDocument = require('pdfkit')
+const { formatTanggalLahir } = require('./format-tanggal.cjs')
 const QRCode = require('qrcode')
 const { getTenantSettings } = require('./tenant-settings.cjs')
 const { computeRaporLive } = require('./rapor-grade-service.cjs')
@@ -451,7 +452,7 @@ async function createRaporSiswaPdf(db, options) {
   const dataDiri = [
     ['1', 'Nama Lengkap', safeText(siswa.nama).toUpperCase()],
     ['2', 'NIS / NISN', `${safeText(siswa.nis)} / ${safeText(siswa.nisn)}`],
-    ['3', 'Tempat, Tanggal Lahir', `${safeText(siswa.tempat_lahir, '-')}, ${safeText(siswa.tanggal_lahir, '-')}`],
+    ['3', 'Tempat, Tanggal Lahir', `${safeText(siswa.tempat_lahir, '-')}, ${formatTanggalLahir(siswa.tanggal_lahir)}`],
     ['4', 'Jenis Kelamin', safeText(siswa.jenis_kelamin, '-')],
     ['5', 'Agama', safeText(siswa.agama, '-')],
     ['6', 'Status dalam Keluarga', safeText(siswa.status_keluarga, '-')],

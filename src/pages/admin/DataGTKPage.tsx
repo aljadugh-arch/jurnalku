@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
+import { formatTanggalLahir } from '../../lib/tanggalLahir'
 import { Search, Plus, Edit, Trash2, Download, Upload, X, Camera, ChevronRight } from 'lucide-react'
 import toast from 'react-hot-toast'
 import api from '../../services/api'
@@ -180,7 +181,7 @@ export default function DataGTKPage() {
           { header: 'NRG', value: 'nrg', width: 18 },
           { header: 'Bidang Studi', value: 'bidang_studi', width: 20 },
           { header: 'Tempat Lahir', value: 'tempat_lahir', width: 18 },
-          { header: 'Tanggal Lahir', value: 'tanggal_lahir', width: 14 },
+          { header: 'Tanggal Lahir', value: (g: any) => formatTanggalLahir(g.tanggal_lahir), width: 18 },
           { header: 'Alamat', value: 'alamat', width: 32 },
           { header: 'Email', value: 'email', width: 26 },
           { header: 'No HP', value: 'no_hp', width: 15 },
@@ -291,7 +292,7 @@ export default function DataGTKPage() {
               ['NUPTK', selected.nuptk || '-'],
               ['Jenis Kelamin', selected.jenis_kelamin === 'L' ? 'Laki-laki' : 'Perempuan'],
               ['Tempat Lahir', selected.tempat_lahir || '-'],
-              ['Tanggal Lahir', selected.tanggal_lahir || '-'],
+              ['Tanggal Lahir', formatTanggalLahir(selected.tanggal_lahir)],
               ['No HP', selected.no_hp || '-'],
               ['Email', selected.email || '-'],
               ['Alamat', selected.alamat || '-'],

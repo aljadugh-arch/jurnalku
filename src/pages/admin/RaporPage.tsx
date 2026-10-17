@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { formatTanggalLahir } from '../../lib/tanggalLahir'
 import api from '../../services/api'
 import { FileText, Printer, Save, Zap, FileSpreadsheet, Link2, Download } from 'lucide-react'
 import FoundationTenantPicker from '../../components/FoundationTenantPicker'
@@ -387,7 +388,7 @@ export default function RaporPage() {
   const identityRows = useMemo(() => [
     ['Nama Lengkap', siswa?.nama],
     ['NIS / NISN', [siswa?.nis, siswa?.nisn].filter(Boolean).join(' / ')],
-    ['Tempat, Tanggal Lahir', [siswa?.tempat_lahir, siswa?.tanggal_lahir].filter(Boolean).join(', ')],
+    ['Tempat, Tanggal Lahir', [siswa?.tempat_lahir, formatTanggalLahir(siswa?.tanggal_lahir)].filter(v => v && v !== '-').join(', ')],
     ['Jenis Kelamin', siswa?.jenis_kelamin === 'L' ? 'Laki-laki' : siswa?.jenis_kelamin === 'P' ? 'Perempuan' : siswa?.jenis_kelamin],
     ['Agama', siswa?.agama],
     ['Status dalam Keluarga', siswa?.status_keluarga],

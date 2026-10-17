@@ -1,6 +1,7 @@
 'use strict'
 
 const PDFDocument = require('pdfkit')
+const { formatTanggalLahir } = require('./format-tanggal.cjs')
 const fs = require('fs')
 const path = require('path')
 const QRCode = require('qrcode')
@@ -93,7 +94,7 @@ function formatJk(value) {
 
 function formatTtl(siswa) {
   const tempat = safe(siswa.tempat_lahir).trim()
-  const tanggal = safe(siswa.tanggal_lahir).trim()
+  const tanggal = formatTanggalLahir(siswa.tanggal_lahir)
   if (tempat && tanggal) return `${tempat}, ${tanggal}`
   return tempat || tanggal || ''
 }
