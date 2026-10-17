@@ -5990,7 +5990,7 @@ for (const [name, definition] of [
 try {
   const { rapikanNotifSettings } = require('./notif-settings.cjs')
   const r = rapikanNotifSettings(db)
-  if (r.digabung || r.dibuat || r.dilewati) console.log(`[notif_settings] digabung=${r.digabung} dibuat=${r.dibuat}${r.dilewati ? ' (dilewati: ' + r.dilewati + ')' : ''}`)
+  if (r.digabung || r.dibuat || r.dilewati || r.dikanonikkan || r.yatim) console.log(`[notif_settings] digabung=${r.digabung} dibuat=${r.dibuat} dikanonikkan=${r.dikanonikkan} yatim=${r.yatim}${r.dilewati ? ' (dilewati: ' + r.dilewati + ')' : ''}`)
 } catch (e) { console.error('[notif_settings] rapikan gagal:', e.message) }
 
 // ── Pemisahan kanal adzan (WA vs suara aplikasi) ──

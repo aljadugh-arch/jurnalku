@@ -125,3 +125,63 @@ test('tabel tanpa kolom tenant_id dilewati tanpa melempar galat', () => {
   const r = rapikanNotifSettings(db)
   assert.equal(r.dilewati, 'kolom tenant_id belum ada')
 })
+
+test('id non-kanonik dinormalkan ke main_<tenantId> tanpa kehilangan nilai', () => {
+  // Kasus nyata produksi: mimifdangimbang punya id main_228f8aa8-… (uuid lama)
+  // padahal tenant-nya 'mimifdangimbang'. Penggabungan duplikat tidak menyentuhnya
+  // karena hanya ada SATU baris — jadi harus ada langkah normalisasi terpisah.
+  const db = fixture(['mimifdangimbang'], [
+    ['main_228f8aa8-5e0d-4244-be3b', 'mimifdangimbang', 1, 1, '', ''],
+  ])
+  const r = rapikanNotifSettings(db)
+  assert.equal(r.dikanonikkan, 1)
+  const baris = barisTenant(db, 'mimifdangimbang')
+  assert.equal(baris.length, 1)
+  assert.equal(baris[0].id, 'main_mimifdangimbang')
+  assert.equal(baris[0].notif_adzan, 1, 'nilai tidak boleh hilang')
+  assert.equal(baris[0].adzan_suara, 1)
+})
+
+test('id non-kanonik + baris kanonik: digabung, hanya kolom KOSONG yang diisi', () => {
+  // Catatan penting: 0 adalah nilai SAH, bukan "kosong". Jadi sakelar yang sudah
+  // 0 di baris kanonik TIDAK boleh ditimpa 1 dari baris lama — kalau ditimpa,
+  // admin yang sengaja mematikan adzan akan melihatnya menyala lagi sendiri.
+  const db = fixture(['t1'], [
+    ['main_uuid-lama', 't1', 1, 1, '', 'template-lama'],   // lama
+    ['main_t1', 't1', 0, 0, '/kustom.mp3', ''],           // kanonik: url terisi, sakelar 0
+  ])
+  rapikanNotifSettings(db)
+  const baris = barisTenant(db, 't1')
+  assert.equal(baris.length, 1, 'harus tersisa satu baris')
+  assert.equal(baris[0].id, 'main_t1')
+  assert.equal(baris[0].adzan_suara_url, '/kustom.mp3', 'nilai kanonik dipertahankan')
+  assert.equal(baris[0].notif_adzan, 0, 'sakelar 0 di kanonik TIDAK ditimpa')
+  assert.equal(baris[0].adzan_suara, 0, 'sakelar 0 di kanonik TIDAK ditimpa')
+  assert.equal(baris[0].template_adzan, 'template-lama', 'kolom yang benar-benar kosong diisi dari baris lama')
+})
+
+test('baris yatim (tenant sudah tidak ada) dihapus', () => {
+  const db = fixture(['t1'], [
+    ['main_t1', 't1', 1, 1, '', ''],
+    ['main_7a0dff9a-yatim', '7a0dff9a-yatim', 1, 1, '', ''],
+    ['main_f3bc6e7a-yatim', 'f3bc6e7a-yatim', 0, 0, '', ''],
+  ])
+  const r = rapikanNotifSettings(db)
+  assert.equal(r.yatim, 2)
+  assert.equal(db.prepare('SELECT COUNT(*) c FROM notif_settings').get().c, 1)
+  assert.equal(barisTenant(db, 't1').length, 1)
+})
+
+test('idempoten: menjalankan dua kali tidak mengubah apa pun pada run kedua', () => {
+  const db = fixture(['t1','t2'], [
+    ['main_uuid-lama', 't1', 1, 1, '', ''],
+    ['main_7a0dff9a-yatim', '7a0dff9a-yatim', 1, 0, '', ''],
+  ])
+  rapikanNotifSettings(db)
+  const setelah1 = db.prepare('SELECT id, tenant_id, notif_adzan FROM notif_settings ORDER BY id').all()
+  const r2 = rapikanNotifSettings(db)
+  const setelah2 = db.prepare('SELECT id, tenant_id, notif_adzan FROM notif_settings ORDER BY id').all()
+  assert.deepEqual(setelah2, setelah1)
+  assert.equal(r2.dikanonikkan, 0, 'run kedua tidak ada yang perlu dikanonikkan')
+  assert.equal(r2.yatim, 0, 'run kedua tidak ada yatim')
+})
