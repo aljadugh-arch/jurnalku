@@ -111,6 +111,34 @@ app.use(cors({
 }))
 
 app.use(express.json({ limit: '2mb', verify: (req, _res, buf) => { req.rawBody = Buffer.from(buf) } }))
+// Label manusiawi untuk kolom wajib yang paling sering kosong. Dipakai error
+// handler NOT NULL supaya pesan menyebut "NIS" alih-alih "siswa.nis".
+const LABEL_KOLOM_WAJIB = {
+  nis: 'NIS', nisn: 'NISN', nik: 'NIK', nama: 'Nama', nama_siswa: 'Nama siswa',
+  kode: 'Kode', kode_mapel: 'Kode mata pelajaran', mapel: 'Mata pelajaran',
+  gtk_id: 'Guru/GTK', siswa_id: 'Siswa', rombel_id: 'Rombongan belajar',
+  tanggal: 'Tanggal', jam: 'Jam', jam_mulai: 'Jam mulai', jam_selesai: 'Jam selesai',
+  kelas: 'Kelas', tingkat: 'Tingkat', tahun_ajaran: 'Tahun ajaran', semester: 'Semester',
+  judul: 'Judul', isi: 'Isi', kategori: 'Kategori', nilai: 'Nilai',
+  tenant_id: 'Lembaga', email: 'Email', password: 'Password', role: 'Peran',
+  no_hp: 'Nomor HP', alamat: 'Alamat', jenis_kelamin: 'Jenis kelamin',
+  nama_lembaga: 'Nama lembaga', slug: 'Slug', nama_kegiatan: 'Nama kegiatan',
+  kegiatan_id: 'Kegiatan', jumlah: 'Jumlah', nominal: 'Nominal', tipe: 'Tipe',
+}
+
+// Validasi rentang jam "HH:MM". Mengembalikan pesan galat atau null.
+// Tanpa ini, jadwal seperti 11:40 -> 00:15 bisa tersimpan: sistem menganggapnya
+// rentang terbalik, sehingga sesi kelas tidak pernah cocok dengan waktu sekarang
+// dan absensi/jurnal untuk jam itu tidak pernah terpicu.
+const POLA_JAM = /^([01]\d|2[0-3]):[0-5]\d$/
+function galatRentangJam (mulai, selesai) {
+  if (mulai == null || selesai == null || mulai === '' || selesai === '') return null // opsional
+  const a = String(mulai).trim(), b = String(selesai).trim()
+  if (!POLA_JAM.test(a) || !POLA_JAM.test(b)) return 'Format jam harus HH:MM (mis. 07:30).'
+  if (a >= b) return `Jam selesai (${b}) harus lebih besar dari jam mulai (${a}).`
+  return null
+}
+
 const UPLOAD_DIR = path.resolve(process.env.MEDIA_ROOT || path.join(__dirname, 'uploads'))
 fs.mkdirSync(UPLOAD_DIR, { recursive: true })
 app.use('/uploads', express.static(UPLOAD_DIR, {
@@ -6346,6 +6374,9 @@ app.post('/api/jadwal/import', ADMIN, (req, res) => {
 app.post('/api/jadwal', ADMIN, (req, res) => {
   const { mapel_id, rombel_id, gtk_id, hari, jam_mulai, jam_selesai, ruangan, template_id, jenis_kegiatan, nama_kegiatan, piket_ids } = req.body
   const jenis = jenis_kegiatan || 'mapel'
+  // Tolak rentang jam terbalik SEBELUM menyentuh DB.
+  const galatJam = galatRentangJam(jam_mulai, jam_selesai)
+  if (galatJam) return res.status(400).json({ error: galatJam })
   const piket = normalizePiketIds(db, { gtk_id, piket_ids, tenant_id: req.tenantId })
   if (piket.error) return res.status(400).json({ error: piket.error })
   const guruPiketJson = JSON.stringify(piket.ids)
@@ -6501,6 +6532,8 @@ app.post('/api/jadwal/generate', ADMIN, (req, res) => {
 app.put('/api/jadwal/:id', ADMIN, (req, res) => {
   const { mapel_id, rombel_id, gtk_id, hari, jam_mulai, jam_selesai, ruangan, template_id, jenis_kegiatan, nama_kegiatan, piket_ids } = req.body
   const jenis = jenis_kegiatan || 'mapel'
+  const galatJam = galatRentangJam(jam_mulai, jam_selesai)
+  if (galatJam) return res.status(400).json({ error: galatJam })
   const piket = normalizePiketIds(db, { gtk_id, piket_ids, tenant_id: req.tenantId })
   if (piket.error) return res.status(400).json({ error: piket.error })
   const guruPiketJson = JSON.stringify(piket.ids)
@@ -10661,6 +10694,20 @@ app.use((err, req, res, next) => {
     return res.status(400).json({ error: 'Data duplikat (kode/NIP/NIS sudah dipakai).' })
   if (err.code === 'SQLITE_CONSTRAINT_FOREIGNKEY')
     return res.status(400).json({ error: 'Data masih dipakai di tabel lain. Hapus data terkait dulu.' })
+  // NOT NULL = kolom wajib belum diisi. Ini kesalahan INPUT (400), bukan kegagalan
+  // server (500). Sebelum ini, pengguna yang lupa mengisi kolom wajib melihat
+  // "Terjadi kesalahan server: NOT NULL constraint failed: siswa.nis" — pesan SQLite
+  // mentah yang tidak memberi tahu apa yang harus diisi.
+  if (err.code === 'SQLITE_CONSTRAINT_NOTNULL' || /NOT NULL constraint failed/i.test(err.message || '')) {
+    const kolom = (String(err.message || '').match(/constraint failed:\s*[\w]+\.([\w]+)/i) || [])[1] || ''
+    const label = LABEL_KOLOM_WAJIB[kolom] || kolom.replace(/_/g, ' ')
+    return res.status(400).json({
+      error: label
+        ? `Kolom wajib belum diisi: ${label}.`
+        : 'Ada kolom wajib yang belum diisi.',
+      field: kolom || undefined,
+    })
+  }
   // Hormati status 4xx eksplisit dari middleware (mis. body parser: 400/413).
   if (status4xx) return res.status(statusBawaan).json({ error: err.message || 'Permintaan tidak valid' })
   res.status(500).json({ error: 'Terjadi kesalahan server: ' + (err.message || 'unknown') })
