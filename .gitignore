@@ -11,6 +11,8 @@ server/*.db.*
 server/uploads/
 .DS_Store
 *.log
+# Arsip log gate kualitas (lokal saja, jangan di-commit)
+logs/
 # Local historical snapshots and deployment backups (not application source)
 backups/
 dist.*/
