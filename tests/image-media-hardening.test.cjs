@@ -37,7 +37,9 @@ test('all cashless image paths await authoritative normalization including batch
 
 test('posting uploads keep image bytes in memory until validation and compression succeed', () => {
   assert.match(server, /postingUpload = multer\(\{[\s\S]*?multer\.memoryStorage\(\)/)
-  assert.match(server, /Promise\.all\(files\.map\(file => savePostingUpload\(file/)
+  // Kontrak diperbarui: batch memakai allSettled (tahan-sebagian), BUKAN all.
+  // Dengan `all`, satu PNG korup menggagalkan SEMUA gambar dalam satu unggahan.
+  assert.match(server, /Promise\.allSettled\(files\.map\(file => savePostingUpload\(file/)
   assert.match(server, /writeCompressedImage[\s\S]*?catch \(error\)[\s\S]*?rm\(destination/)
 })
 

@@ -151,7 +151,8 @@ export default function RichEditor({ content, onChange, placeholder = 'Tulis pos
       Array.from(files).forEach(file => formData.append('files', file))
       const response = await api.post('/posting/upload', formData)
       const uploaded = Array.isArray(response.data.media) ? response.data.media : []
-      if (!uploaded.length) throw new Error('Respons upload tidak valid')
+      const gagal = Array.isArray(response.data.gagal) ? response.data.gagal : []
+      if (!uploaded.length) throw new Error(response.data?.error || 'Respons upload tidak valid')
       uploaded.forEach((data: any) => {
         if (data.media_type === 'image') {
           editor?.chain().focus().setImage({ src: data.media_url, alt: data.filename }).run()
@@ -159,6 +160,18 @@ export default function RichEditor({ content, onChange, placeholder = 'Tulis pos
           editor?.chain().focus().insertContent(`<video src="${data.media_url}" controls class="max-w-full rounded-lg my-2" />`).run()
         }
       })
+      // Berkas yang gagal TIDAK boleh hilang diam-diam: beri tahu nama berkasnya
+      // supaya pengguna bisa mengonversi/mengganti berkas itu dan mencoba lagi.
+      if (gagal.length) {
+        const nama = gagal.map((g: any) => g.filename).slice(0, 3).join(', ')
+        toast.error(
+          `${gagal.length} berkas dilewati (${nama}${gagal.length > 3 ? ', …' : ''}). ` +
+          `Sisanya berhasil disisipkan.`,
+          { duration: 7000 },
+        )
+      } else if (uploaded.length > 1) {
+        toast.success(`${uploaded.length} berkas disisipkan`)
+      }
     } catch (error: any) {
       toast.error(error.response?.data?.error || error.message || 'Gagal mengunggah media')
     } finally {

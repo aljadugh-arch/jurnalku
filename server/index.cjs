@@ -8045,21 +8045,47 @@ app.post('/api/posting/upload', STAFF, postingUpload.fields([{ name: 'files', ma
   const files = Object.values(req.files || {}).flat()
   if (!files.length) return res.status(400).json({ error: 'File wajib diunggah' })
   const saved = []
+  const gagal = []
   try {
     // Proses semua file secara PARALEL (bukan berurutan) supaya upload banyak
     // gambar sekaligus tidak terasa lemot. Setiap file menulis ke path unik,
     // jadi aman dijalankan bersamaan.
-    const results = await Promise.all(files.map(file => savePostingUpload(file, req.tenantId)))
-    for (const file of results) {
+    //
+    // PENTING: pakai allSettled, BUKAN all. Dengan `Promise.all`, satu berkas
+    // bermasalah (mis. PNG korup → "libpng read error", atau format tak dikenal
+    // sharp) menolak seluruh promise sehingga SEMUA gambar gagal tersimpan dan
+    // pengguna hanya melihat "gagal mengunggah" tanpa tahu file mana yang salah.
+    // Dengan allSettled, berkas sehat tetap tersimpan dan yang gagal dilaporkan
+    // per nama berkas.
+    const results = await Promise.allSettled(files.map(file => savePostingUpload(file, req.tenantId)))
+    for (let i = 0; i < results.length; i++) {
+      const r = results[i]
+      const asal = files[i]?.originalname || `berkas-${i + 1}`
+      if (r.status === 'rejected') {
+        gagal.push({ filename: asal, error: r.reason?.message || 'Gagal diproses' })
+        continue
+      }
+      const file = r.value
       const mime = file.mimetype || ''
       const mediaType = mime.startsWith('image/') ? 'image' : mime.startsWith('video/') ? 'video' : mime.startsWith('audio/') ? 'audio' : 'file'
       saved.push({ media_url: '/uploads/' + file.filename, media_type: mediaType, filename: file.originalname })
+    }
+    // Tidak ada satu pun yang berhasil → balas galat agar UI tidak mengira sukses.
+    if (!saved.length) {
+      return res.status(400).json({
+        error: gagal.length === 1
+          ? `Berkas "${gagal[0].filename}" gagal diproses: ${gagal[0].error}`
+          : `Semua berkas gagal diproses (${gagal.length}). Periksa format berkas.`,
+        gagal,
+      })
     }
   } catch (error) {
     for (const item of saved) removeManagedUpload(item.media_url)
     return next(error)
   }
-  res.json({ media: saved })
+  // `gagal` dikirim apa adanya supaya klien bisa memberi tahu berkas mana yang
+  // dilewati, alih-alih diam-diam kehilangan sebagian gambar.
+  res.json({ media: saved, gagal })
 })
 
 app.delete('/api/posting/:id', STAFF, (req, res) => {
