@@ -48,7 +48,7 @@ fi
 # path.join(__dirname,'..','public',...). Kalau public/ tidak ikut dikirim, ikon
 # default tetap versi lama walau build & dist sudah baru. server/uploads TIDAK
 # ikut (data runtime, bukan aset kode).
-mapfile -t BRAND_FILES < <(find public -maxdepth 1 -type f \( -name '*.png' -o -name '*.ico' -o -name '*.svg' -o -name 'manifest.json' -o -name 'robots.txt' -o -name 'sitemap.xml' \) -printf 'public/%f\n' | sort)
+mapfile -t BRAND_FILES < <(find public -maxdepth 1 -type f \( -name '*.png' -o -name '*.ico' -o -name '*.svg' -o -name 'manifest.json' -o -name 'robots.txt' -o -name 'sitemap.xml' -o -name 'google*.html' \) -printf 'public/%f\n' | sort)
 
 echo "[1/5] Syntax check server (${#SERVER_FILES[@]} modul, ${#SERVER_SCRIPTS[@]} skrip)..."
 for f in "${SERVER_FILES[@]}"; do

@@ -10865,6 +10865,16 @@ app.use((req, res, next) => {
   if (req.path.startsWith('/api')) return res.status(404).json({ error: 'Not found' })
   // /posting/:id sudah dilayani rute HTML server-rendered di atas (SEO).
   if (/^\/posting\/[^/]+$/.test(req.path)) return next()
+  // BERKAS BEREXTENSI yang tidak ditemukan harus 404, BUKAN index.html.
+  //
+  // Ini penting untuk verifikasi Google Search Console: Google mengambil
+  // /googleXXXX.html lalu mencocokkan isinya. Sebelum ini, SPA fallback
+  // menjawab 200 dengan index.html untuk SETIAP path, termasuk berkas yang
+  // tidak ada — Google membaca index.html, verifikasi gagal, dan pesannya
+  // hanya "file not found" tanpa menjelaskan bahwa HTTP-nya justru 200.
+  // Rute aplikasi (/, /login, /admin/...) tidak punya ekstensi, jadi tetap
+  // dilayani SPA seperti biasa.
+  if (/\.[a-z0-9]{1,8}$/i.test(req.path)) return res.status(404).type('text/plain').send('Not found')
   // /.well-known/* bukan halaman aplikasi (mis. assetlinks.json untuk Play Store):
   // jangan pernah disajikan sebagai HTML SPA agar verifikasi Google tidak salah baca.
   if (req.path.startsWith('/.well-known/')) return res.status(404).json({ error: 'Not found' })
