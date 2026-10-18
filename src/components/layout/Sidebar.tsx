@@ -128,7 +128,7 @@ export default function Sidebar() {
   // Menggunakan label matching karena menuItems sudah di-filter oleh pathEnabled().
   const adminMenuGroups: Array<{ name: string; labels: string[] }> = [
     { name: 'DASHBOARD', labels: ['Dashboard', 'Monitoring Data', 'Posting'] },
-    { name: 'MASTER DATA', labels: ['Data Siswa', 'PPDB', 'Data GTK', 'Mata Pelajaran', 'Rombongan Belajar', 'Tahun Ajaran', 'Manajemen Lembaga', 'Manajemen Yayasan', 'Integrasi Se-Yayasan', 'Kartu RFID', 'Alumni & Mutasi', 'Sirkulasi Perpustakaan'] },
+    { name: 'MASTER DATA', labels: ['Data Siswa', 'PPDB', 'Data GTK', 'Mata Pelajaran', 'Rombongan Belajar', 'Tahun Ajaran', 'Manajemen Lembaga', 'Manajemen Yayasan', 'Integrasi Se-Yayasan', 'Kartu RFID', 'Alumni & Mutasi', 'Sirkulasi Perpustakaan', 'Substitusi Guru'] },
     { name: 'AKADEMIK', labels: ['Kalender KBM', 'Jadwal Pelajaran', 'Kelola Jadwal', 'Jadwal Ujian', 'Pengajar', 'Wali Kelas', 'Absensi', 'Ceklok & Rekap', 'Absensi Saya', 'Jurnal Mengajar', 'Supervisi', 'Program Belajar', 'Erkam'] },
     { name: 'PENILAIAN & EVALUASI', labels: ['Ujian & Bank Soal', 'Bank Soal', 'Kisi-kisi Soal', 'Paket Ujian', 'Ledger Nilai', 'Rekap Nilai per Mapel', 'Rapor Siswa', 'Catatan Kepribadian', 'Penilaian'] },
     { name: 'ADMINISTRASI', labels: ['Administrasi Surat'] },

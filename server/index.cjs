@@ -73,6 +73,7 @@ const { encryptSecret, decryptSecret, maskKey, PROVIDER_ENDPOINTS, setupAiConfig
 const { daftarkanRuteBk } = require('./bk.cjs')
 const { daftarkanRuteMutasi } = require('./mutasi.cjs')
 const { daftarkanRutePustaka } = require('./pustaka.cjs')
+const { daftarkanRuteSubstitusi } = require('./substitusi.cjs')
 const { assertSafeOutboundUrl } = require('./ssrf-guard.cjs')
 const { setupEkskulMembership } = require('./extracurricular-membership.cjs')
 const { countStudents, deleteStudents } = require('./student-data-delete.cjs')
@@ -10871,6 +10872,9 @@ daftarkanRuteMutasi(app, { db, authMiddleware, requireRole })
 
 // Modul Sirkulasi Perpustakaan
 daftarkanRutePustaka(app, { db, authMiddleware, requireRole })
+
+// Modul Substitusi Guru
+daftarkanRuteSubstitusi(app, { db, authMiddleware, requireRole })
 
 // ==================== SEO: robots, sitemap, meta per-lembaga ====================
 // Blok <head> di dist/index.html ditandai <!--SEO:START-->…<!--SEO:END--> lalu
