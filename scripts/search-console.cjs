@@ -129,9 +129,11 @@ const jalankan = async () => {
         continue
       }
       const t = r.isi.token
-      // Token berbentuk "google" + 16 hex. Nama berkas = token + ".html",
-      // isi berkas = "google-site-verification: " + token + ".html"
-      const namaBerkas = `${t}.html`
+      // PENTING: token dari Google SUDAH berakhiran ".html"
+      // (bentuknya "google" + hex + ".html"). Jangan tambah ".html" lagi —
+      // itu menghasilkan akhiran ganda dan Google membalas "file not found"
+      // karena nama berkas tidak cocok dengan token yang dia simpan.
+      const namaBerkas = /\.html$/i.test(t) ? t : `${t}.html`
       fs.writeFileSync(path.join(AKAR, 'public', namaBerkas), `google-site-verification: ${namaBerkas}\n`)
       console.log(`  ${d.padEnd(30)} token didapat -> public/${namaBerkas}`)
       hasil.push({ d, ok: true, berkas: namaBerkas })
@@ -163,11 +165,22 @@ const jalankan = async () => {
   }
 
   if (PERINTAH === 'sitemap') {
+    // PENTING: verifikasi lewat Site Verification API TIDAK otomatis
+    // mendaftarkan properti di Search Console. Tanpa sites.add, endpoint
+    // sitemap membalas 403 "User does not have sufficient permission".
+    // Jadi daftarkan dulu (PUT /sites/<url>, balas 204 = sudah terdaftar),
+    // baru submit sitemap.
     let ok = 0
     for (const d of DOMAIN) {
-      const r = await api('PUT', `https://www.googleapis.com/webmasters/v3/sites/${encodeURIComponent(`https://${d}/`)}/sitemaps/${encodeURIComponent(`https://${d}/sitemap.xml`)}`, token)
-      if (r.ok) { console.log(`  ${d.padEnd(30)} sitemap terkirim`); ok++ }
-      else console.log(`  ${d.padEnd(30)} GAGAL ${r.status}  ${JSON.stringify(r.isi).slice(0, 130)}`)
+      const site = `https://${d}/`
+      const daftar = await api('PUT', `https://www.googleapis.com/webmasters/v3/sites/${encodeURIComponent(site)}`, token)
+      if (!daftar.ok && daftar.status !== 204) {
+        console.log(`  ${d.padEnd(30)} GAGAL daftar properti ${daftar.status}  ${JSON.stringify(daftar.isi).slice(0, 110)}`)
+        continue
+      }
+      const r = await api('PUT', `https://www.googleapis.com/webmasters/v3/sites/${encodeURIComponent(site)}/sitemaps/${encodeURIComponent(`https://${d}/sitemap.xml`)}`, token)
+      if (r.ok) { console.log(`  ${d.padEnd(30)} properti terdaftar + sitemap terkirim`); ok++ }
+      else console.log(`  ${d.padEnd(30)} sitemap GAGAL ${r.status}  ${JSON.stringify(r.isi).slice(0, 130)}`)
     }
     console.log(`\n${ok}/${DOMAIN.length} sitemap terkirim.`)
     return
