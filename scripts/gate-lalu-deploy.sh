@@ -183,7 +183,7 @@ echo "── rekonsiliasi layanan ──"
 # Skrip ini harus jalan DI VPS (database produksi ada di sana), bukan di mesin
 # lokal. Dijalankan lewat sshpass yang sama dengan deploy, lalu hasilnya
 # disimpan ke log gate.
-REKON_LOG="$ARSIP/rekonsiliasi.log"
+REKON_LOG="$DIR_LOG/rekonsiliasi.log"
 if sshpass -e ssh -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$SSH_KNOWN_HOSTS" \
      "${VPS_USER}@${VPS_IP}" \
      'cd /www/wwwroot/jurnal.cc.cd && bash scripts/rekonsiliasi-pasca-deploy.sh' > "$REKON_LOG" 2>&1; then
