@@ -76,6 +76,7 @@ const { daftarkanRutePustaka } = require('./pustaka.cjs')
 const { daftarkanRuteSubstitusi } = require('./substitusi.cjs')
 const { daftarkanRutePayroll } = require('./payroll.cjs')
 const { daftarkanRuteRkas } = require('./rkas.cjs')
+const { daftarkanRuteLms } = require('./lms.cjs')
 const { assertSafeOutboundUrl } = require('./ssrf-guard.cjs')
 const { setupEkskulMembership } = require('./extracurricular-membership.cjs')
 const { countStudents, deleteStudents } = require('./student-data-delete.cjs')
@@ -10883,6 +10884,9 @@ daftarkanRutePayroll(app, { db, authMiddleware, requireRole })
 
 // Modul RKAS / BOS
 daftarkanRuteRkas(app, { db, authMiddleware, requireRole })
+
+// Modul LMS (materi ajar + progres belajar)
+daftarkanRuteLms(app, { db, authMiddleware, requireRole, upload, UPLOAD_DIR, fs, path })
 
 // ==================== SEO: robots, sitemap, meta per-lembaga ====================
 // Blok <head> di dist/index.html ditandai <!--SEO:START-->…<!--SEO:END--> lalu
