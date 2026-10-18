@@ -19,7 +19,7 @@ test('posting table migration covers author_user_id and konten columns used by I
 test('ceklok pulang allowed after teacher last schedule ends, even before global window', () => {
   const idx = server.indexOf("app.post('/api/guru/ceklok'")
   assert.ok(idx > -1)
-  const block = server.slice(idx, idx + 4000)
+  const block = server.slice(idx, idx + 6500)
   // Must consult the teacher's own schedule to derive an earlier pulang start
   assert.match(block, /jam_selesai/, 'must read schedule end time')
   assert.match(block, /jadwal/, 'must query jadwal for this teacher')

@@ -5325,7 +5325,7 @@ app.post('/api/guru/ceklok', CEKLOK_ACCESS, (req, res) => {
     }
     if (!gtk) return res.status(400).json({ error: 'Akun Anda belum terhubung ke data GTK. Minta admin buatkan akun dari menu Data GTK (Buat Akun Guru).' })
   }
-  const { type, latitude, longitude } = req.body
+  const { type, latitude, longitude, accuracy } = req.body
   if (!['masuk', 'pulang'].includes(type)) return res.status(400).json({ error: 'Jenis ceklok tidak valid' })
   // Selalu baca baris canonical. Tenant lama bisa punya baris settings duplikat tanpa koordinat.
   const geo = getTenantSettings(db, req.tenantId, 'geo_latitude, geo_longitude, geo_radius')
@@ -5337,7 +5337,29 @@ app.post('/api/guru/ceklok', CEKLOK_ACCESS, (req, res) => {
     const dLng = toRad(lng - Number(geo.geo_longitude))
     const a = Math.sin(dLat/2) ** 2 + Math.cos(toRad(Number(geo.geo_latitude))) * Math.cos(toRad(lat)) * Math.sin(dLng/2) ** 2
     const distance = 6371000 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a))
-    if (distance > Number(geo.geo_radius || 200)) return res.status(400).json({ error: `Di luar radius sekolah (${Math.round(distance)}m)` })
+    // Toleransi akurasi GPS — WAJIB, dan sebelumnya tidak dipakai di sini.
+    //
+    // Frontend sudah mengirim `accuracy` (coords.accuracy dari browser), tetapi
+    // endpoint ini dulu mengabaikannya dan membandingkan jarak mentah dengan
+    // radius. Akibatnya guru yang berdiri tepat di sekolah tetap ditolak ketika
+    // HP melaporkan posisi meleset 20-40 m — inilah keluhan "akurasi ceklok
+    // kurang". Aturan yang dipakai SAMA dengan validateClassGeo supaya ceklok
+    // dan masuk-kelas tidak memberi jawaban berbeda di titik yang sama:
+    //   lolos bila jarak <= radius + min(akurasi, AKURASI_MAKS)
+    // Akurasi dibatasi 60 m agar tidak bisa dipakai memalsukan posisi.
+    const { toleransiAkurasi, AKURASI_MAKS } = require('./geo-lock.cjs')
+    const tol = toleransiAkurasi(accuracy)
+    const batas = Number(geo.geo_radius || 200) + tol
+    if (distance > batas) {
+      const ketAkurasi = tol > 0 ? `, akurasi GPS ±${Math.round(tol)}m` : ''
+      const saran = Number(accuracy) > AKURASI_MAKS
+        ? ' Sinyal GPS Anda lemah — coba di ruang terbuka.'
+        : ' Mendekatlah ke lokasi sekolah.'
+      return res.status(400).json({
+        error: `Di luar radius sekolah (${Math.round(distance)}m dari titik sekolah${ketAkurasi}; batas ${Math.round(Number(geo.geo_radius || 200))}m + toleransi = ${Math.round(batas)}m).${saran}`,
+        geo: { distance: Math.round(distance), radius: Number(geo.geo_radius || 200), toleransi: Math.round(tol) },
+      })
+    }
   }
   const today = todayJakarta()
   const now = timeJakarta()

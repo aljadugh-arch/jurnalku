@@ -43,8 +43,23 @@ function pesanLuar(scope, d, radius, akurasi) {
   const ketAkurasi = tol > 0 ? `, akurasi GPS ±${Math.round(tol)}m` : ''
   const ketScope = scope === 'rombel' ? 'titik kelas' : 'titik sekolah'
   const awalan = scope === 'rombel' ? 'Anda di luar area kelas ini' : 'Di luar radius sekolah'
-  return `${awalan} (${Math.round(d)}m dari ${ketScope}${ketAkurasi}; batas ${Math.round(radius)}m + toleransi = ${total}m). Mendekatlah ke lokasi tersebut.`
+  // Saran yang bisa ditindaklanjuti: akurasi buruk BUKAN salah guru, jadi jangan
+  // hanya menyuruh "mendekat" kalau masalahnya sinyal.
+  const saran = Number(akurasi) > AKURASI_MAKS
+    ? ' Sinyal GPS lemah — coba di dekat jendela atau ruang terbuka.'
+    : ' Mendekatlah ke lokasi tersebut.'
+  return `${awalan} (${Math.round(d)}m dari ${ketScope}${ketAkurasi}; batas ${Math.round(radius)}m + toleransi = ${total}m).${saran}`
 }
+
+// Radius kelas di bawah nilai ini tidak bisa dipenuhi GPS ponsel biasa.
+//
+// Browser melaporkan coords.accuracy 10-40 m bahkan saat berdiri diam di ruang
+// terbuka; di dalam gedung bisa 50-100 m. Radius 10 m karena itu membuat guru
+// yang SUDAH berada di kelasnya tetap ditolak — bukan karena salah posisi,
+// tetapi karena alatnya tidak mampu sepresisi itu. Nilai ini adalah lantai
+// (floor), bukan pengganti radius admin: kalau admin mengisi 10 m, sistem
+// memakai 25 m agar penegakan tetap masuk akal.
+const RADIUS_MIN = 25
 
 // Mengembalikan {ok:true, scope, distance?, radius?, accuracy?, toleransi?} atau
 // {ok:false, status, error, distance?, radius?}.
@@ -62,7 +77,7 @@ function validateClassGeo(db, tenantId, rombelId, latitude, longitude, accuracy)
   if (rombel.geo_latitude != null && rombel.geo_longitude != null) {
     if (!adaKoordinat) return { ok: false, status: 400, error: 'Lokasi tidak terbaca — izinkan akses lokasi lalu coba lagi.' }
     const d = haversineMeters(lat, lng, Number(rombel.geo_latitude), Number(rombel.geo_longitude))
-    const radius = Number(rombel.geo_radius || 50)
+    const radius = Math.max(RADIUS_MIN, Number(rombel.geo_radius || 50))
     const tol = toleransiAkurasi(accuracy)
     if (d > radius + tol) {
       return {
@@ -79,7 +94,7 @@ function validateClassGeo(db, tenantId, rombelId, latitude, longitude, accuracy)
   if (geo && geo.geo_latitude != null && geo.geo_longitude != null) {
     if (!adaKoordinat) return { ok: false, status: 400, error: 'Lokasi tidak terbaca — izinkan akses lokasi lalu coba lagi.' }
     const d = haversineMeters(lat, lng, Number(geo.geo_latitude), Number(geo.geo_longitude))
-    const radius = Number(geo.geo_radius || 200)
+    const radius = Math.max(RADIUS_MIN, Number(geo.geo_radius || 200))
     const tol = toleransiAkurasi(accuracy)
     if (d > radius + tol) {
       return {
@@ -95,4 +110,4 @@ function validateClassGeo(db, tenantId, rombelId, latitude, longitude, accuracy)
   return { ok: true, scope: 'none' }
 }
 
-module.exports = { haversineMeters, validateClassGeo, toleransiAkurasi, AKURASI_MAKS }
+module.exports = { haversineMeters, validateClassGeo, toleransiAkurasi, AKURASI_MAKS, RADIUS_MIN }
