@@ -44,18 +44,26 @@ Urutan yang masuk akal: **domain lembaga dulu** (kontennya unik), lalu
 Search Console menolak menampilkan data sebelum Bapak membuktikan domain itu
 milik Bapak. Tiga cara, urut dari paling praktis untuk setup ini.
 
-### Cara A — Berkas HTML (paling praktis, bisa saya bantu)
+### Cara A — Berkas HTML (paling praktis, SUDAH DIUJI bekerja)
+
+Jalur ini sudah dibuka dan dibuktikan end-to-end: berkas ditaruh di `public/`,
+ikut terkirim oleh deploy, dan disajikan apa adanya oleh server di **semua
+domain sekaligus** (satu deploy menyebarkan ke 9 domain).
+
+Langkahnya:
 
 1. Di Search Console, pilih **URL prefix**, isi `https://jurnal.mtsplussd7.cc.cd/`
-2. Pilih metode **HTML file**, unduh berkasnya (nama seperti `google1a2b3c4d.html`)
-3. Simpan berkas itu ke folder `public/` di repo Jurnalku
-4. Saya deploy sekali — berkasnya otomatis tersedia di **semua** domain,
-   karena semua domain dilayani dari `dist/` yang sama
-5. Klik **Verify**
+2. Pilih metode **HTML file**, unduh berkasnya (nama seperti `google1a2b3c4d5e6f7890.html`)
+3. Taruh berkas itu di folder `public/` repo Jurnalku — **jangan di `dist/`**
+4. Minta saya deploy (`bash scripts/gate-lalu-deploy.sh --deploy`)
+5. Klik **Verify** di Search Console
 
-Karena satu deploy menyebarkan berkas ke semua host, Bapak bisa mengunduh
-berkas verifikasi untuk semua domain sekaligus, taruh semuanya di `public/`,
-lalu verifikasi satu per satu tanpa deploy berulang.
+Bapak bisa mengunduh berkas verifikasi untuk semua domain sekaligus, taruh
+semuanya di `public/`, lalu verifikasi satu per satu tanpa deploy berulang.
+
+**Sudah diverifikasi (18 Okt 2026):** berkas uji `google8f2a9c1d4e6b7a03.html`
+dikirim lewat pipeline deploy resmi dan tersaji dengan isi yang cocok persis
+di 9/9 domain, HTTP 200.
 
 ### Cara B — DNS TXT (kalau Bapak lebih suka atur DNS sendiri)
 
