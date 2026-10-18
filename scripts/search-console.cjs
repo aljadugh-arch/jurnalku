@@ -19,6 +19,26 @@ const AKAR = path.join(__dirname, '..')
 process.chdir(AKAR)
 try { require('dotenv').config({ path: path.join(AKAR, 'server', '.env') }) } catch {}
 
+// JWT_SECRET di produksi TIDAK ada di server/.env — di-set lewat environment
+// PM2. Tanpa kunci ini, encryptSecret/decryptSecret tidak bisa jalan dan token
+// Google yang tersimpan tidak terbaca. Ambil dari proses yang sedang hidup
+// (read-only, tidak menulis apa pun ke proses itu).
+if (!process.env.JWT_SECRET) {
+  try {
+    const { execSync } = require('node:child_process')
+    const pid = execSync("pgrep -f 'server/index.cjs' | head -1", { encoding: 'utf8' }).trim()
+    if (pid) {
+      const env = fs.readFileSync(`/proc/${pid}/environ`, 'utf8')
+      const baris = env.split('\0').find(l => l.startsWith('JWT_SECRET='))
+      if (baris) process.env.JWT_SECRET = baris.slice('JWT_SECRET='.length)
+    }
+  } catch { /* biarkan gagal di bawah dengan pesan jelas */ }
+}
+if (!process.env.JWT_SECRET) {
+  console.error('GAGAL: JWT_SECRET tidak ditemukan (dibutuhkan untuk membuka token Google).')
+  process.exit(1)
+}
+
 const Database = require('better-sqlite3')
 const { decryptSecret } = require(path.join(AKAR, 'server', 'ai-config.cjs'))
 
