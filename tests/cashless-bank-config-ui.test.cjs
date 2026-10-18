@@ -5,15 +5,25 @@ const path = require('node:path')
 
 const source = fs.readFileSync(path.join(__dirname, '../src/pages/admin/CashlessBankConfigPage.tsx'), 'utf8')
 
-test('konfigurasi transfer bank tetap tersedia bersama QRIS merchant', () => {
-  assert.match(source, /Konfigurasi Transfer Bank/)
+// KONTRAK BARU: konfigurasi transfer bank tetap ada, tetapi QRIS bukan lagi dua
+// akun merchant ShopeePay/GoPay — sekarang daftar QRIS milik lembaga sendiri
+// (bank atau e-wallet apa pun), berapa pun jumlahnya.
+test('konfigurasi transfer bank tetap tersedia', () => {
+  assert.match(source, /Transfer Bank/)
   assert.match(source, /Aktifkan transfer bank sebagai metode top-up/)
   assert.match(source, /Prefix VA/)
   assert.match(source, /Kode Bank/)
   assert.match(source, /Biaya Admin per Transaksi/)
   assert.match(source, /Verifikasi manual oleh admin\/bendahara/)
-  assert.match(source, /ShopeePay Merchant/)
-  assert.match(source, /GoPay Merchant/)
+})
+
+test('QRIS berupa daftar milik lembaga, bukan dua merchant', () => {
+  assert.match(source, /qris_list/)
+  assert.match(source, /Tambah QRIS/)
+  assert.match(source, /Nama tampil/)
+  // Nama merchant lama tidak boleh muncul lagi sebagai satu-satunya pilihan.
+  assert.doesNotMatch(source, /ShopeePay Merchant/)
+  assert.doesNotMatch(source, /GoPay Merchant/)
 })
 
 test('form transfer bank memakai field konfigurasi backend yang sudah ada', () => {
@@ -24,8 +34,14 @@ test('form transfer bank memakai field konfigurasi backend yang sudah ada', () =
   assert.match(source, /api\.put\('\/cashless\/provider\/bank_transfer', config\)/)
 })
 
-test('input upload QRIS memiliki label aksesibel yang terhubung', () => {
-  assert.match(source, /htmlFor=\{`qris-upload-\$\{key\}`\}/)
-  assert.match(source, /id=\{`qris-upload-\$\{key\}`\}/)
-  assert.match(source, />Upload gambar QRIS \{label\}</)
+test('input upload QRIS punya label yang bisa dibaca', () => {
+  // Label harus berupa teks yang terlihat, bukan sekadar placeholder.
+  assert.match(source, /Gambar QRIS/)
+  assert.match(source, /accept="image\/png,image\/jpeg,image\/webp"/)
+})
+
+test('admin diberi tahu beda QRIS statis dan payment gateway otomatis', () => {
+  // Tanpa penjelasan ini admin mengira halaman ini mengaktifkan QRIS dinamis.
+  assert.match(source, /Payment Gateway/)
+  assert.match(source, /fazapay/)
 })

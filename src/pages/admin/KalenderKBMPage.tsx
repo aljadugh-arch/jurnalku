@@ -4,7 +4,7 @@ import toast from 'react-hot-toast'
 import api from '../../services/api'
 import { todayWib } from '../../lib/dateFormat'
 
-interface KBMEvent { id: string; tanggal: string; judul: string; jenis: string; keterangan: string; warna: string }
+interface KBMEvent { id: string; tanggal: string; judul: string; jenis: string; keterangan: string; warna: string; otomatis?: number }
 interface Schedule { id: string; jam_mulai?: string; jam_selesai?: string; mapel_nama?: string; rombel_nama?: string; guru_nama?: string; nama_kegiatan?: string }
 
 const jenisEvent = [
@@ -26,10 +26,19 @@ export default function KalenderKBMPage() {
   const [modeUjian, setModeUjian] = useState(false)
   const [showModal, setShowModal] = useState(false)
   const [form, setForm] = useState({ judul: '', jenis: 'kbm_aktif', keterangan: '', warna: '#3b82f6' })
+  // Mode normalisasi KBM: server mengirim hari efektif otomatis (semua hari
+  // kecuali libur). Ditandai di kalender supaya admin tahu KBM memang jalan
+  // walau tidak ada entri manual.
+  const [otomatis, setOtomatis] = useState(false)
 
   const loadEvents = async () => {
-    try { const res = await api.get('/kalender-kbm', { params: { year: currentDate.getFullYear(), month: currentDate.getMonth() + 1 } }); setEvents(res.data || []) }
-    catch { setEvents([]) }
+    try {
+      const res = await api.get('/kalender-kbm', { params: { year: currentDate.getFullYear(), month: currentDate.getMonth() + 1 } })
+      const rows: KBMEvent[] = res.data || []
+      setEvents(rows)
+      setOtomatis(rows.some(e => e.otomatis === 1))
+    }
+    catch { setEvents([]); setOtomatis(false) }
   }
   const loadSchedules = async (tanggal: string) => {
     setScheduleLoading(true)
@@ -67,6 +76,16 @@ export default function KalenderKBMPage() {
       <div><h1 className="text-xl font-bold text-slate-900 sm:text-2xl dark:text-white">Kalender Akademik</h1><p className="text-xs text-slate-500 sm:text-sm">Pilih tanggal untuk melihat jadwal mengajar</p></div>
       <button type="button" onClick={openAddEvent} className="flex items-center gap-1 rounded-xl bg-primary px-3 py-2 text-xs font-semibold text-white"><Plus size={16} /> Event</button>
     </div>
+
+    {otomatis && (
+      <div className="flex items-start gap-2 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-800 dark:border-emerald-900 dark:bg-emerald-950/30 dark:text-emerald-300">
+        <Calendar size={14} className="mt-0.5 shrink-0" />
+        <span>
+          <strong>Normalisasi KBM aktif.</strong> Hari efektif dihitung otomatis — semua hari kecuali
+          hari yang diset libur. Tanggal bertanda biru di bawah tidak perlu ditambahkan manual.
+        </span>
+      </div>
+    )}
 
     <section className="rounded-3xl bg-white p-3 shadow-sm dark:bg-gray-900 sm:p-6">
       <div className="mb-4 flex items-center justify-between">

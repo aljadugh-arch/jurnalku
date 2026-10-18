@@ -98,9 +98,14 @@ test('paket: FeatureKey FE memuat fitur baru', () => {
 })
 
 test('paket: label fitur baru tersedia di UI admin', () => {
+  // Label kini berasal dari SATU sumber bersama (lib/fiturPaket) agar landing
+  // dan dashboard superadmin tidak pernah berbeda kata. Yang diuji adalah
+  // hasilnya: setiap fitur baru punya label yang bisa dibaca admin.
   const ui = fs.readFileSync(path.join(AKAR, 'src/pages/admin/TenantManagementPage.tsx'), 'utf8')
+  const lib = fs.readFileSync(path.join(AKAR, 'src/lib/fiturPaket.ts'), 'utf8')
+  assert.ok(/FITUR_INFO/.test(ui), 'UI admin harus memakai FITUR_INFO bersama')
   for (const k of FITUR_BARU) {
-    assert.ok(new RegExp(`${k}:\\s*'`).test(ui), `label ${k} harus ada di FEATURE_LABELS`)
+    assert.ok(new RegExp(`${k}:\\s*\\{`).test(lib), `label ${k} harus ada di FITUR_INFO`)
   }
 })
 

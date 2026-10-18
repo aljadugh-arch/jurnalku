@@ -59,10 +59,15 @@ test('landing page menangani kegagalan API tanpa menampilkan angka palsu', () =>
 })
 
 test('label fitur paket punya terjemahan manusiawi', () => {
-  const s = baca('src/pages/LandingPage.tsx')
-  assert.ok(/LABEL_FITUR/.test(s), 'kode fitur harus diterjemahkan ke label yang bisa dibaca')
-  // Kode fitur inti harus punya label
+  // Label berasal dari satu sumber bersama (lib/fiturPaket) yang dipakai
+  // landing page DAN dashboard superadmin.
+  const landing = baca('src/pages/LandingPage.tsx')
+  const lib = baca('src/lib/fiturPaket.ts')
+  assert.ok(/fiturPaket/.test(landing), 'landing harus memakai sumber label bersama')
   for (const k of ['master_data', 'absensi', 'keuangan', 'whatsapp', 'ujian']) {
-    assert.ok(s.includes(k + ':'), `fitur ${k} harus punya label`)
+    assert.ok(new RegExp(`${k}:\\s*\\{`).test(lib), `fitur ${k} harus punya label di FITUR_INFO`)
   }
+  // Label harus berupa kalimat, bukan kode mentah.
+  assert.ok(/label: 'Data Master'/.test(lib))
+  assert.ok(/label: 'Penilaian & Rapor'/.test(lib))
 })

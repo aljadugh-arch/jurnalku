@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import api from '../../services/api'
+import { FITUR_INFO } from '../../lib/fiturPaket'
 import toast from 'react-hot-toast'
 import { MoreVertical, ExternalLink, Ban, CheckCircle2, Globe2, Link2, ArrowLeftRight, KeyRound, Repeat } from 'lucide-react'
 
@@ -32,32 +33,12 @@ const FALLBACK_PLANS: PlanRow[] = [
   { plan: 'premium', label: 'Premium', harga: 150000, masa_nilai: 1, masa_satuan: 'bulan', aktif: 1, urutan: 3 },
 ]
 
-// Nama fitur (selaras dengan FeatureSettings) untuk editor fitur per paket.
-const FEATURE_LABELS: Record<string, string> = {
-  master_data: 'Data Master',
-  jadwal: 'Jadwal',
-  absensi: 'Absensi',
-  jurnal: 'Jurnal Mengajar',
-  penilaian: 'Penilaian & Rapor',
-  keuangan: 'Keuangan',
-  whatsapp: 'WhatsApp',
-  posting: 'Posting',
-  modul_ajar: 'Modul Ajar',
-  backup_drive: 'Backup Google Drive',
-  website: 'Website Lembaga',
-  cashless: 'Cashless',
-  ekantin: 'E-Kantin',
-  rest_api: 'REST API Developer',
-  // Fitur baru — sebelumnya tidak ada di daftar sehingga tidak bisa diatur paketnya.
-  ppdb: 'PPDB (Siswa Baru)',
-  administrasi: 'Administrasi Surat',
-  perpustakaan: 'Perpustakaan Digital',
-  ujian: 'Ujian & Bank Soal',
-  program_belajar: 'Program Belajar (Nonformal)',
-  smtp: 'SMTP/IMAP Lembaga',
-  monitoring: 'Monitoring & Ledger Nilai',
-  foundation: 'Integrasi Se-Yayasan',
-}
+// Label fitur diambil dari SATU sumber bersama (lib/fiturPaket) supaya editor
+// paket di dashboard superadmin dan daftar fitur di landing page tidak pernah
+// berbeda kata. Sebelumnya dua daftar terpisah dan isinya tidak sama.
+const FEATURE_LABELS: Record<string, string> = Object.fromEntries(
+  Object.entries(FITUR_INFO).map(([k, v]) => [k, v.label]),
+)
 
 type PlanDraft = { label: string; harga: number; masa_nilai: number; masa_satuan: string; aktif: boolean; fitur: Record<string, boolean> }
 

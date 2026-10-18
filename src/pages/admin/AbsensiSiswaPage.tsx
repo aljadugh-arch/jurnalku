@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { Link, useParams } from 'react-router-dom'
-import { QrCode, CheckCircle, XCircle, AlertCircle, Clock, Download, Save } from 'lucide-react'
+import { QrCode, CheckCircle, XCircle, AlertCircle, Clock, Download, Save, Camera } from 'lucide-react'
 import toast from 'react-hot-toast'
 import api from '../../services/api'
 import { todayWib } from '../../lib/dateFormat'
@@ -376,10 +376,28 @@ export default function AbsensiSiswaPage({ qrMode = false }: { qrMode?: boolean 
         </select>
         </div>
         {!readOnly && <>
-          <div className="flex flex-col lg:flex-row gap-3">
-            <div id="qr-file-reader" className="hidden"></div><button onClick={startQrCamera} className="w-full lg:w-auto px-4 py-2 bg-purple-600 text-white rounded-lg text-sm text-center">Scan Kamera</button>
-            <label className="flex w-full lg:w-auto items-center justify-center px-4 py-2 bg-gray-100 rounded-lg text-sm text-center cursor-pointer">Scan Foto<input type="file" accept="image/*" className="hidden" onChange={e => scanQrImage(e.target.files?.[0])} /></label>
-            {['hadir','sakit','izin','alpha'].map(st => <button key={st} onClick={() => setAll(st)} className="px-3 py-2 bg-gray-100 rounded-lg text-sm capitalize">Semua {st}</button>)}
+          {/* Aksi absensi: di ponsel/tablet dibagi GRID 2 kolom (3 kolom di layar
+              agak lebar) supaya tidak menumpuk jadi satu kolom panjang yang
+              memaksa scroll jauh ke bawah sebelum sampai ke daftar siswa.
+              Di desktop tetap satu baris. */}
+          <div id="qr-file-reader" className="hidden"></div>
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:flex lg:flex-row lg:gap-3">
+            <button onClick={startQrCamera}
+              className="flex items-center justify-center gap-1.5 rounded-lg bg-purple-600 px-3 py-2.5 text-xs font-semibold text-white sm:text-sm lg:w-auto lg:px-4">
+              <QrCode size={15} /> Scan Kamera
+            </button>
+            <label className="flex cursor-pointer items-center justify-center gap-1.5 rounded-lg bg-gray-100 px-3 py-2.5 text-center text-xs font-semibold text-gray-700 sm:text-sm lg:w-auto lg:px-4 dark:bg-gray-800 dark:text-gray-200">
+              <Camera size={15} /> Scan Foto
+              <input type="file" accept="image/*" className="hidden" onChange={e => scanQrImage(e.target.files?.[0])} />
+            </label>
+            {(['hadir','sakit','izin','alpha'] as const).map(st => (
+              <button key={st} onClick={() => setAll(st)}
+                className={`flex items-center justify-center gap-1.5 rounded-lg px-3 py-2.5 text-xs font-semibold capitalize sm:text-sm lg:w-auto lg:px-4 ${
+                  { hadir: 'bg-green-100 text-green-700', sakit: 'bg-yellow-100 text-yellow-700', izin: 'bg-blue-100 text-blue-700', alpha: 'bg-red-100 text-red-700' }[st]
+                }`}>
+                Semua {st === 'alpha' ? 'alfa' : st}
+              </button>
+            ))}
           </div>
           <div className="flex flex-col lg:flex-row gap-3">
             <input type="date" value={range.mulai} onChange={e => setRange({...range, mulai: e.target.value})} className="px-3 py-2 border rounded-lg text-sm" />

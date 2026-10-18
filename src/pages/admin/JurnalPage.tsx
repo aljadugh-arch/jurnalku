@@ -3,6 +3,7 @@ import { escapeHtml } from '../../utils/escapeHtml'
 import { Download, FileSpreadsheet, Eye, CheckCircle, XCircle, Clock, Loader2, ChevronLeft, ChevronRight } from 'lucide-react'
 import toast from 'react-hot-toast'
 import api from '../../services/api'
+import SearchInput, { cocokBeberapa } from '../../components/SearchInput'
 import { useAuthStore } from '../../stores/authStore'
 import { useSettingsStore } from '../../stores/settingsStore'
 import { tenantIdentity } from '../../utils/tenantExport'
@@ -28,6 +29,7 @@ export default function JurnalPage() {
   const [detail, setDetail] = useState<any>(null)
   const [bulkSaving, setBulkSaving] = useState(false)
   const [jumlahSubmitted, setJumlahSubmitted] = useState(0)
+  const [cariGuru, setCariGuru] = useState('')
   // Penanda agar request lama tidak menimpa hasil request baru (race saat
   // filter diketik cepat).
   const reqSeq = useRef(0)
@@ -177,10 +179,14 @@ export default function JurnalPage() {
       {/* Filter */}
       <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100 grid grid-cols-1 sm:grid-cols-3 gap-3">
         <input type="date" value={filter.tanggal} onChange={e => setFilter({...filter, tanggal: e.target.value})} className="w-full min-w-0 px-3 py-2 border rounded-lg text-sm" />
-        <select value={filter.guru_id} onChange={e => setFilter({...filter, guru_id: e.target.value})} className="w-full min-w-0 px-3 py-2 border rounded-lg text-sm">
-          <option value="">Semua Guru</option>
-          {gtks.map(g => <option key={g.id} value={g.id}>{g.nama}</option>)}
-        </select>
+        <div className="min-w-0">
+          {/* Daftar guru bisa ratusan — cari dulu, baru pilih. */}
+          <SearchInput value={cariGuru} onChange={setCariGuru} placeholder="Cari guru…" className="mb-2" />
+          <select value={filter.guru_id} onChange={e => setFilter({...filter, guru_id: e.target.value})} className="w-full min-w-0 px-3 py-2 border rounded-lg text-sm">
+            <option value="">Semua Guru</option>
+            {gtks.filter(g => cocokBeberapa(cariGuru, g.nama, g.nip)).map(g => <option key={g.id} value={g.id}>{g.nama}</option>)}
+          </select>
+        </div>
         <select value={filter.status} onChange={e => setFilter({...filter, status: e.target.value})} className="w-full min-w-0 px-3 py-2 border rounded-lg text-sm">
           <option value="">Semua Status</option>
           <option value="draft">Draft</option>

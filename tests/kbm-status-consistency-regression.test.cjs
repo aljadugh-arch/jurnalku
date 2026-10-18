@@ -30,7 +30,10 @@ test('FIXED: assertKbmActive() terima ujian dan kegiatan_lain, hanya tolak libur
 test('FIXED: /api/kalender-kbm/status returns aktif=true saat ujian atau kegiatan_lain', () => {
   const endpoint = routeBody("app.get('/api/kalender-kbm/status'", "app.post('/api/kalender-kbm'")
   assert.match(endpoint, /\/api\/kalender-kbm\/status/)
-  assert.match(endpoint, /aktif:/)
+  // `aktif` bisa ditulis satu baris (`aktif: aktif`) atau multi-baris
+  // (`aktif,` pada objek ringkas). Yang penting nilainya dihitung, bukan
+  // bentuk penulisannya.
+  assert.match(endpoint, /aktif[:,\s]/)
   // FIXED: sekarang gunakan IN untuk terima ujian dan kegiatan_lain
   assert.match(endpoint, /jenis\s+IN\s*\(\s*'kbm_aktif'\s*,\s*'ujian'\s*,\s*'kegiatan_lain'\s*\)/)
 })

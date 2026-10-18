@@ -9,6 +9,7 @@ import {
   Database, Bell, Fingerprint, WalletCards, UserCheck, PieChart, Server,
 } from 'lucide-react'
 import api from '../services/api'
+import { labelFitur, fiturPembeda, URUTAN_FITUR } from '../lib/fiturPaket'
 import { useSettingsStore } from '../stores/settingsStore'
 import { useThemeStore } from '../stores/themeStore'
 
@@ -78,30 +79,6 @@ const langkah = [
 const jenjang = ['RA / TK', 'SD / MI', 'SMP / MTs', 'SMA / MA / SMK', 'Pesantren', 'Kursus & Bimbel', 'Yayasan']
 
 // Label manusiawi untuk kode fitur dari API paket.
-const LABEL_FITUR: Record<string, string> = {
-  master_data: 'Data siswa, GTK, mapel, rombel',
-  jadwal: 'Jadwal pelajaran & kalender KBM',
-  absensi: 'Absensi QR / RFID / GPS',
-  jurnal: 'Jurnal mengajar guru',
-  penilaian: 'Nilai, rapor, catatan kepribadian',
-  keuangan: 'Tagihan, tabungan, beasiswa',
-  whatsapp: 'Notifikasi & broadcast WhatsApp',
-  posting: 'Postingan / feed lembaga',
-  modul_ajar: 'Generator modul ajar (AI)',
-  backup_drive: 'Backup otomatis Google Drive',
-  website: 'Domain sendiri & website publik',
-  rest_api: 'REST API untuk integrasi',
-  cashless: 'Cashless penuh',
-  ekantin: 'Modul kantin & pesanan',
-  ppdb: 'PPDB online',
-  administrasi: 'Administrasi surat menyurat',
-  perpustakaan: 'Perpustakaan digital',
-  ujian: 'Bank soal & ujian online (CBT)',
-  program_belajar: 'Program & level (lembaga kursus)',
-  smtp: 'Email dari domain lembaga',
-  monitoring: 'Monitoring data & ledger nilai',
-  foundation: 'Integrasi se-yayasan',
-}
 
 const faq = [
   { t: 'Apa itu JURNALKU?', j: 'JURNALKU adalah sistem informasi manajemen lembaga pendidikan berbasis web. Satu platform untuk data siswa dan GTK, jadwal, absensi, jurnal mengajar, penilaian, rapor, keuangan, sampai notifikasi WhatsApp ke wali murid.' },
@@ -140,10 +117,12 @@ export default function LandingPage() {
   const paketBayar = useMemo(() => paket.filter(p => p.harga > 0), [paket])
   const paketTrial = useMemo(() => paket.find(p => p.harga === 0), [paket])
 
-  // Fitur yang membedakan tiap paket, untuk ditampilkan sebagai daftar centang.
+  // Fitur PEMBEDA per paket — bukan daftar yang sama diulang di semua paket.
+  // Sumber label tunggal dari lib/fiturPaket, sama dengan dashboard superadmin.
+  const pembeda = useMemo(() => fiturPembeda(paket), [paket])
   const fiturPaket = (p: Paket) => {
-    const label = p.fitur.map(k => LABEL_FITUR[k]).filter(Boolean)
-    return label.slice(0, 8)
+    const kunci = pembeda[p.plan]?.length ? pembeda[p.plan] : p.fitur
+    return kunci.filter(k => URUTAN_FITUR.includes(k) || true).map(k => labelFitur(k)).slice(0, 10)
   }
 
   const nav = [
@@ -244,9 +223,14 @@ export default function LandingPage() {
                 <Link to="/register" className="inline-flex items-center gap-2 px-7 py-3.5 bg-primary text-white rounded-xl font-bold text-base hover:bg-primary-dark shadow-2xl shadow-primary/40 transition-all hover:scale-105">
                   Coba Gratis 30 Hari <ArrowRight size={18} />
                 </Link>
-                <Link to="/login#demo" className="inline-flex items-center gap-2 px-7 py-3.5 border-2 border-slate-300 dark:border-gray-700 text-slate-700 dark:text-gray-200 rounded-xl font-semibold text-base hover:bg-white dark:hover:bg-gray-800 transition-all">
-                  <PlayCircle size={19} /> Lihat Demo
-                </Link>
+                {/* Tombol demo hanya muncul di host demo — di domain lembaga
+                    sungguhan tidak ada akun demo, jadi tombol ini akan
+                    menyesatkan. Server juga menolak /api/auth/demo di host lain. */}
+                {/^(demo\.|demo-)/.test(window.location.hostname) && (
+                  <Link to="/login#demo" className="inline-flex items-center gap-2 px-7 py-3.5 border-2 border-slate-300 dark:border-gray-700 text-slate-700 dark:text-gray-200 rounded-xl font-semibold text-base hover:bg-white dark:hover:bg-gray-800 transition-all">
+                    <PlayCircle size={19} /> Lihat Demo
+                  </Link>
+                )}
               </div>
               <div className="flex flex-wrap items-center justify-center lg:justify-start gap-x-6 gap-y-2 text-sm text-slate-500 dark:text-gray-400">
                 {['Gratis 30 hari', 'Coba gratis sekarang juga', 'Aktif dalam 1 menit'].map(t => (

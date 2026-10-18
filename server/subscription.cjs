@@ -61,15 +61,15 @@ const PLAN_FEATURES = {
   premium: FEATURE_KEYS,
 }
 const FEATURE_PREFIXES = {
-  master_data: ['/api/siswa', '/api/gtk', '/api/mapel', '/api/rombel', '/api/users', '/api/tahun-ajaran'],
+  master_data: ['/api/siswa', '/api/gtk', '/api/mapel', '/api/rombel', '/api/users', '/api/tahun-ajaran', '/api/mutasi', '/api/alumni', '/api/substitusi'],
   jadwal: ['/api/jadwal', '/api/template-jadwal', '/api/pengajar', '/api/wali-kelas', '/api/kalender-kbm', '/api/guru/jadwal', '/api/siswa/jadwal'],
   absensi: ['/api/absensi', '/api/absensi-siswa', '/api/absensi-guru', '/api/ceklok', '/api/guru/ceklok', '/api/guru/absensi-saya', '/api/ekskul', '/api/jamaah'],
   jurnal: ['/api/jurnal'],
-  penilaian: ['/api/penilaian', '/api/penilaian-harian', '/api/rapor', '/api/catatan-kepribadian', '/api/supervisi'],
+  penilaian: ['/api/penilaian', '/api/penilaian-harian', '/api/rapor', '/api/catatan-kepribadian', '/api/supervisi', '/api/bk'],
   keuangan: ['/api/tagihan', '/api/jenis-tagihan', '/api/tabungan', '/api/bendahara', '/api/keuangan', '/api/cashless', '/api/beasiswa'],
   whatsapp: ['/api/broadcast', '/api/wa-', '/api/notif-settings'],
   posting: ['/api/posting'],
-  modul_ajar: ['/api/modul-ajar', '/api/ai-documents'],
+  modul_ajar: ['/api/modul-ajar', '/api/ai-documents', '/api/lms'],
   backup_drive: ['/api/backup', '/api/google-drive'],
   website: ['/api/tenant/domain', '/api/tenant/domain-status', '/api/tenant/verify-domain', '/api/posting/public'],
   cashless: ['/api/cashless'],
@@ -80,13 +80,17 @@ const FEATURE_PREFIXES = {
   // harus tetap bisa diakses publik (halaman pendaftaran), bukan fungsi panitia.
   ppdb: ['/api/ppdb/gelombang', '/api/ppdb/pendaftar', '/api/ppdb/ringkasan', '/api/ppdb/antrian'],
   administrasi: ['/api/administrasi'],
-  perpustakaan: ['/api/library'],
+  perpustakaan: ['/api/library', '/api/pustaka'],
   ujian: ['/api/bank-soal', '/api/kisi-kisi', '/api/paket-ujian', '/api/ujian'],
   program_belajar: ['/api/program-belajar', '/api/program-level'],
   smtp: ['/api/smtp'],
-  // 'monitoring' & 'foundation' hanya punya halaman FE (tidak ada route
-  // /api/monitoring atau /api/foundation) — gerbangnya lewat featureAccess.ts,
-  // jadi tidak ada prefix server di sini.
+  // 'foundation' hanya punya halaman FE (tidak ada route /api/foundation) —
+  // gerbangnya lewat featureAccess.ts.
+  //
+  // 'monitoring' SEKARANG punya route server sendiri: payroll dan rkas. Tanpa
+  // prefix di sini, API keduanya tetap bisa dipanggil paket Lite walau menunya
+  // sudah disembunyikan — gerbang menu saja tidak cukup.
+  monitoring: ['/api/payroll', '/api/rkas'],
 }
 
 function addMonthsIso(from, months = 1) {

@@ -5,6 +5,7 @@ import {
   Users, CalendarDays, Lock, Eye, ChevronDown, X,
 } from 'lucide-react'
 import api from '../../services/api'
+import SearchInput, { cocokBeberapa } from '../../components/SearchInput'
 
 // ============================================================================
 // Bimbingan Konseling (BK)
@@ -83,6 +84,7 @@ export default function BkPage() {
   const [formPelanggaran, setFormPelanggaran] = useState({ siswa_id: '', tanggal: hariIni(), jenis: '', tingkat: 'ringan', poin: '', keterangan: '', tindakan: '' })
   const [formSesi, setFormSesi] = useState({ siswa_id: '', tanggal: hariIni(), jenis_kasus: 'perilaku', judul: '', ringkasan: '', tindak_lanjut: '', status: 'terbuka', rahasia: true })
   const [filterSiswa, setFilterSiswa] = useState('')
+  const [cariSiswa, setCariSiswa] = useState('')
 
   const muat = async () => {
     setMemuat(true)
@@ -270,9 +272,10 @@ export default function BkPage() {
             <p className="mb-3 text-sm font-semibold text-gray-800 dark:text-gray-100">Catat pelanggaran</p>
             <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-4">
               <label className="text-xs text-gray-500">Siswa
+                <SearchInput value={cariSiswa} onChange={setCariSiswa} placeholder="Cari nama atau NIS…" className="mb-2" />
                 <select value={formPelanggaran.siswa_id} onChange={e => setFormPelanggaran(f => ({ ...f, siswa_id: e.target.value }))} className="mt-1 w-full rounded-lg border px-3 py-2 text-sm dark:border-gray-700 dark:bg-gray-800">
                   <option value="">-- Pilih --</option>
-                  {siswaUrut.map(s => <option key={s.id} value={s.id}>{s.nama} {s.nis ? `(${s.nis})` : ''}</option>)}
+                  {siswaUrut.filter(s => cocokBeberapa(cariSiswa, s.nama, s.nis)).map(s => <option key={s.id} value={s.id}>{s.nama} {s.nis ? `(${s.nis})` : ''}</option>)}
                 </select>
               </label>
               <label className="text-xs text-gray-500">Tanggal
@@ -334,9 +337,10 @@ export default function BkPage() {
             </p>
             <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
               <label className="text-xs text-gray-500">Siswa
+                <SearchInput value={cariSiswa} onChange={setCariSiswa} placeholder="Cari nama atau NIS…" className="mb-2" />
                 <select value={formSesi.siswa_id} onChange={e => setFormSesi(f => ({ ...f, siswa_id: e.target.value }))} className="mt-1 w-full rounded-lg border px-3 py-2 text-sm dark:border-gray-700 dark:bg-gray-800">
                   <option value="">-- Pilih --</option>
-                  {siswaUrut.map(s => <option key={s.id} value={s.id}>{s.nama} {s.nis ? `(${s.nis})` : ''}</option>)}
+                  {siswaUrut.filter(s => cocokBeberapa(cariSiswa, s.nama, s.nis)).map(s => <option key={s.id} value={s.id}>{s.nama} {s.nis ? `(${s.nis})` : ''}</option>)}
                 </select>
               </label>
               <label className="text-xs text-gray-500">Tanggal

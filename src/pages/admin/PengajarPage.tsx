@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Plus, Edit, Trash2, X } from 'lucide-react'
+import SearchInput, { cocokBeberapa } from '../../components/SearchInput'
 import toast from 'react-hot-toast'
 import api from '../../services/api'
 
@@ -11,6 +12,8 @@ export default function PengajarPage() {
   const [showModal, setShowModal] = useState(false)
   const [editing, setEditing] = useState<any>(null)
   const [form, setForm] = useState({ gtk_id: '', mapel_id: '', rombel_id: '', jam_per_minggu: 2 })
+  const [cari, setCari] = useState('')
+  const [cariGuru, setCariGuru] = useState('')
 
   useEffect(() => { loadAll() }, [])
 
@@ -77,6 +80,9 @@ export default function PengajarPage() {
 
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
         <div className="overflow-x-auto">
+      <SearchInput value={cari} onChange={setCari} placeholder="Cari guru, mapel, atau rombel…"
+        jumlah={data.filter(p => cocokBeberapa(cari, p.guru_nama, p.mapel_nama, p.rombel_nama)).length} />
+
           <table className="w-full text-sm">
             <thead className="bg-gray-50 border-b">
               <tr>
@@ -92,7 +98,10 @@ export default function PengajarPage() {
               {data.length === 0 && (
                 <tr><td colSpan={6} className="px-4 py-8 text-center text-gray-400">Belum ada data pengajar</td></tr>
               )}
-              {data.map((p, i) => (
+              {data.length > 0 && data.filter(p => cocokBeberapa(cari, p.guru_nama, p.mapel_nama, p.rombel_nama)).length === 0 && (
+                <tr><td colSpan={6} className="px-4 py-8 text-center text-gray-400">Tidak ada yang cocok dengan "{cari}"</td></tr>
+              )}
+              {data.filter(p => cocokBeberapa(cari, p.guru_nama, p.mapel_nama, p.rombel_nama)).map((p, i) => (
                 <tr key={p.id} className="hover:bg-gray-50">
                   <td className="px-4 py-3 text-gray-600">{i + 1}</td>
                   <td className="px-4 py-3 font-medium text-gray-800">{p.guru_nama}</td>
@@ -125,9 +134,10 @@ export default function PengajarPage() {
             <div className="space-y-3">
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1">Guru</label>
+                <SearchInput value={cariGuru} onChange={setCariGuru} placeholder="Cari nama guru…" className="mb-2" />
                 <select value={form.gtk_id} onChange={e => setForm({...form, gtk_id: e.target.value})} className="w-full px-3 py-2 border rounded-lg text-sm">
                   <option value="">-- Pilih Guru --</option>
-                  {gtkList.map(g => <option key={g.id} value={g.id}>{g.nama}</option>)}
+                  {gtkList.filter(g => cocokBeberapa(cariGuru, g.nama, g.nip)).map(g => <option key={g.id} value={g.id}>{g.nama}</option>)}
                 </select>
               </div>
               <div>

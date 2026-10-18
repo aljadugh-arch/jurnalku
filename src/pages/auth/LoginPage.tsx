@@ -213,7 +213,11 @@ export default function LoginPage() {
             </div>
           )}
 
-          {['jurnal.cc.cd', 'jurnalmadrasah.web.id'].includes(window.location.hostname) && (
+          {/* Demo HANYA di host demo. Sebelumnya blok ini muncul di jurnal.cc.cd
+              dan jurnalmadrasah.web.id — pengunjung domain lembaga sungguhan
+              bisa masuk sebagai admin demo lalu mengira itu data lembaganya.
+              Server juga menolak host lain, jadi ini bukan sekadar sembunyian UI. */}
+          {/^(demo\.|demo-)/.test(window.location.hostname) && (
             <div
               id="demo"
               ref={demoRef}

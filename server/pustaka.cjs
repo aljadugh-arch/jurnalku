@@ -159,6 +159,60 @@ function daftarkanRutePustaka(app, { db, authMiddleware, requireRole }) {
     res.json({ success: true })
   })
 
+  // ---- Impor massal dari Excel ----
+  // Sebelumnya buku harus diisi satu per satu. Endpoint ini menerima array
+  // baris hasil parsing Excel di klien, memvalidasi per baris, dan menyimpan
+  // dalam satu transaksi. Baris yang gagal TIDAK membatalkan yang lain —
+  // hasilnya dilaporkan per baris agar operator tahu persis mana yang salah.
+  app.post('/api/pustaka/buku/impor', authMiddleware, KELOLA, (req, res) => {
+    const baris = Array.isArray(req.body?.baris) ? req.body.baris : []
+    if (baris.length === 0) return res.status(400).json({ error: 'Tidak ada baris untuk diimpor.' })
+    if (baris.length > 2000) return res.status(400).json({ error: 'Maksimal 2000 baris sekali impor.' })
+
+    const hasil = { berhasil: 0, gagal: 0, detail: [] }
+    const jalan = db.transaction(() => {
+      for (let i = 0; i < baris.length; i++) {
+        const b = baris[i] || {}
+        const judul = String(b.judul || '').trim()
+        if (!judul) {
+          hasil.gagal++
+          hasil.detail.push({ baris: i + 1, error: 'Judul kosong' })
+          continue
+        }
+        try {
+          db.prepare(`INSERT INTO pustaka_buku (id, judul, pengarang, penerbit, tahun, isbn, kategori, rak, jumlah_salinan, keterangan, tenant_id)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?)`)
+            .run(crypto.randomUUID(), judul, String(b.pengarang || ''), String(b.penerbit || ''),
+              Number(b.tahun) || null, String(b.isbn || ''), String(b.kategori || ''), String(b.rak || ''),
+              Math.max(1, Math.min(999, Number(b.jumlah_salinan) || 1)), String(b.keterangan || ''), req.tenantId)
+          hasil.berhasil++
+        } catch (e) {
+          hasil.gagal++
+          hasil.detail.push({ baris: i + 1, error: e.message })
+        }
+      }
+    })
+    jalan()
+    res.json(hasil)
+  })
+
+  // ---- Cari buku berdasarkan ISBN ----
+  // Dipakai scanner barcode: setelah ISBN terbaca, buku yang sudah ada
+  // langsung ditemukan sehingga tidak dobel input.
+  app.get('/api/pustaka/buku/cari-isbn', authMiddleware, BACA, (req, res) => {
+    const isbn = String(req.query.isbn || '').replace(/[^0-9Xx]/g, '')
+    if (!isbn) return res.status(400).json({ error: 'ISBN kosong.' })
+    const rows = db.prepare(`
+      SELECT b.*,
+        b.jumlah_salinan - (SELECT COUNT(*) FROM pustaka_pinjam p
+          WHERE p.buku_id=b.id AND p.tenant_id=b.tenant_id AND p.tanggal_kembali IS NULL) AS tersedia
+      FROM pustaka_buku b
+      WHERE b.tenant_id=? AND replace(replace(b.isbn,'-',''),' ','') LIKE ?
+      LIMIT 5
+    `).all(req.tenantId, `%${isbn}%`)
+    res.json({ isbn, ditemukan: rows })
+  })
+
   app.delete('/api/pustaka/buku/:id', authMiddleware, KELOLA, (req, res) => {
     const dipinjam = db.prepare("SELECT COUNT(*) n FROM pustaka_pinjam WHERE buku_id=? AND tenant_id=? AND tanggal_kembali IS NULL").get(req.params.id, req.tenantId).n
     if (dipinjam > 0) return res.status(400).json({ error: `Buku masih dipinjam ${dipinjam} eksemplar. Kembalikan dulu.` })

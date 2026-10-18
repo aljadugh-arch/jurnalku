@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Edit, X, Users } from 'lucide-react'
+import SearchInput, { cocokBeberapa } from '../../components/SearchInput'
 import toast from 'react-hot-toast'
 import api from '../../services/api'
 
@@ -9,6 +10,8 @@ export default function WaliKelasPage() {
   const [showModal, setShowModal] = useState(false)
   const [editing, setEditing] = useState<any>(null)
   const [selectedGtk, setSelectedGtk] = useState('')
+  const [cari, setCari] = useState('')
+  const [cariGtk, setCariGtk] = useState('')
 
   useEffect(() => { loadData() }, [])
 
@@ -46,11 +49,17 @@ export default function WaliKelasPage() {
         <p className="text-gray-500 text-sm mt-1">Penugasan wali kelas per rombel</p>
       </div>
 
+      <SearchInput value={cari} onChange={setCari} placeholder="Cari rombel atau nama wali kelas…"
+        jumlah={rombels.filter(r => cocokBeberapa(cari, r.nama, r.wali_kelas_nama)).length} />
+
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {rombels.length === 0 && (
           <p className="col-span-3 text-center text-gray-400 py-8">Belum ada data rombel</p>
         )}
-        {rombels.map((rombel) => (
+        {rombels.length > 0 && rombels.filter(r => cocokBeberapa(cari, r.nama, r.wali_kelas_nama)).length === 0 && (
+          <p className="col-span-3 text-center text-gray-400 py-8">Tidak ada rombel yang cocok dengan "{cari}"</p>
+        )}
+        {rombels.filter(r => cocokBeberapa(cari, r.nama, r.wali_kelas_nama)).map((rombel) => (
           <div key={rombel.id} className="bg-white rounded-xl p-5 shadow-sm border border-gray-100">
             <div className="flex items-center justify-between mb-3">
               <span className="px-3 py-1 bg-primary/10 text-primary text-sm font-bold rounded-lg">{rombel.nama}</span>
@@ -76,9 +85,12 @@ export default function WaliKelasPage() {
             <p className="text-sm text-gray-600 mb-3">Rombel: <strong>{editing?.nama}</strong></p>
             <div>
               <label className="block text-xs font-medium text-gray-600 mb-1">Wali Kelas</label>
+              {/* Daftar GTK bisa ratusan — beri pencarian agar tidak menggulir
+                  dropdown panjang untuk menemukan satu nama. */}
+              <SearchInput value={cariGtk} onChange={setCariGtk} placeholder="Cari nama guru…" className="mb-2" />
               <select value={selectedGtk} onChange={e => setSelectedGtk(e.target.value)} className="w-full px-3 py-2 border rounded-lg text-sm">
                 <option value="">-- Belum Ditentukan --</option>
-                {gtkList.map(g => <option key={g.id} value={g.id}>{g.nama}</option>)}
+                {gtkList.filter(g => cocokBeberapa(cariGtk, g.nama, g.nip)).map(g => <option key={g.id} value={g.id}>{g.nama}</option>)}
               </select>
             </div>
             <div className="flex justify-end gap-2 mt-5">

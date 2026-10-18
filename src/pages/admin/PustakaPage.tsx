@@ -2,9 +2,11 @@ import { useEffect, useMemo, useState } from 'react'
 import toast from 'react-hot-toast'
 import {
   BookOpen, Plus, Search, Trash2, Undo2, Users, AlertTriangle,
-  CalendarClock, Library, Save, X, ArrowLeftRight,
+  CalendarClock, Library, Save, X, ArrowLeftRight, Upload, ScanLine,
 } from 'lucide-react'
 import api from '../../services/api'
+import ImportExcel from '../../components/ImportExcel'
+import SearchInput from '../../components/SearchInput'
 
 // ============================================================================
 // Sirkulasi Perpustakaan
@@ -78,6 +80,9 @@ export default function PustakaPage() {
   const [form, setForm] = useState<any>(KOSONG)
   const [pinjamBuka, setPinjamBuka] = useState(false)
   const [formPinjam, setFormPinjam] = useState({ buku_id: '', siswa_id: '', catatan: '' })
+  const [imporBuka, setImporBuka] = useState(false)
+  const [isbn, setIsbn] = useState('')
+  const [hasilIsbn, setHasilIsbn] = useState<any[] | null>(null)
 
   const muat = async () => {
     setMemuat(true)
@@ -195,6 +200,9 @@ export default function PustakaPage() {
           <button onClick={() => { setForm(KOSONG); setFormBuka(true) }} className="inline-flex items-center gap-2 rounded-lg border border-primary px-3 py-2 text-sm font-semibold text-primary hover:bg-primary/5">
             <Plus size={15} /> Buku
           </button>
+          <button onClick={() => setImporBuka(true)} className="inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-200 dark:hover:bg-gray-800">
+            <Upload size={15} /> Impor Excel
+          </button>
           <button onClick={() => setPinjamBuka(true)} className="inline-flex items-center gap-2 rounded-lg bg-primary px-3 py-2 text-sm text-white">
             <ArrowLeftRight size={15} /> Pinjamkan
           </button>
@@ -237,13 +245,38 @@ export default function PustakaPage() {
         <div className="rounded-xl border bg-white p-10 text-center text-gray-400 dark:border-gray-800 dark:bg-gray-900">Memuat…</div>
       ) : tab === 'katalog' ? (
         <>
-          <div className="flex items-center gap-2 rounded-xl border bg-white px-3 py-2 dark:border-gray-800 dark:bg-gray-900">
-            <Search size={15} className="text-gray-400" />
-            <input value={cari} onChange={e => setCari(e.target.value)}
-              placeholder="Cari judul, pengarang, ISBN, atau kategori…"
-              className="w-full bg-transparent text-sm outline-none dark:text-gray-100" />
-            <span className="shrink-0 text-xs text-gray-400">{bukuTampil.length} judul</span>
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+            <SearchInput value={cari} onChange={setCari}
+              placeholder="Cari judul, pengarang, ISBN, atau kategori…" jumlah={bukuTampil.length} />
+            {/* Cek ISBN: untuk scanner barcode. Tempel/scan ISBN di sini untuk
+                tahu apakah buku sudah terdaftar sebelum menambah baru. */}
+            <div className="flex items-center gap-2 rounded-xl border bg-white px-3 py-2 dark:border-gray-800 dark:bg-gray-900">
+              <ScanLine size={15} className="shrink-0 text-gray-400" />
+              <input value={isbn} onChange={e => setIsbn(e.target.value)}
+                onKeyDown={async e => {
+                  if (e.key !== 'Enter' || !isbn.trim()) return
+                  try {
+                    const r = await api.get(`/pustaka/buku/cari-isbn?isbn=${encodeURIComponent(isbn)}`)
+                    setHasilIsbn(Array.isArray(r.data?.ditemukan) ? r.data.ditemukan : [])
+                  } catch { toast.error('Gagal mencari ISBN') }
+                }}
+                placeholder="Scan / tempel ISBN lalu Enter…"
+                className="w-full min-w-0 bg-transparent text-sm outline-none dark:text-gray-100" />
+              {hasilIsbn && (
+                <button onClick={() => { setHasilIsbn(null); setIsbn('') }} className="shrink-0 text-xs text-gray-400">
+                  {hasilIsbn.length} hasil
+                </button>
+              )}
+            </div>
           </div>
+
+          {hasilIsbn && (
+            <div className="rounded-xl border bg-blue-50 p-3 text-xs text-blue-800 dark:border-blue-900 dark:bg-blue-950/30 dark:text-blue-300">
+              {hasilIsbn.length === 0
+                ? <>ISBN <strong>{isbn}</strong> belum terdaftar — aman ditambahkan sebagai buku baru.</>
+                : <>Sudah terdaftar: {hasilIsbn.map(b => `${b.judul} (${b.tersedia} tersedia)`).join(' · ')}</>}
+            </div>
+          )}
 
           {bukuTampil.length === 0 ? (
             <div className="rounded-xl border bg-white p-10 text-center text-gray-400 dark:border-gray-800 dark:bg-gray-900">
@@ -325,6 +358,36 @@ export default function PustakaPage() {
             </div>
           ))}
         </div>
+      )}
+
+      {/* Impor Excel */}
+      {imporBuka && (
+        <ImportExcel
+          title="Impor Buku dari Excel"
+          templateName="template-buku.xlsx"
+          headerRow={0}
+          columnMap={{
+            'Judul': 'judul', 'Pengarang': 'pengarang', 'Penerbit': 'penerbit',
+            'Tahun': 'tahun', 'ISBN': 'isbn', 'Kategori': 'kategori',
+            'Rak': 'rak', 'Jumlah Salinan': 'jumlah_salinan', 'Keterangan': 'keterangan',
+          }}
+          aliases={{ 'Jumlah': 'jumlah_salinan', 'Stock': 'jumlah_salinan', 'Penulis': 'pengarang' }}
+          sampleRows={[{
+            judul: 'Matematika Kelas VIII', pengarang: 'Kemendikbud', penerbit: 'Pusat Kurikulum',
+            tahun: '2021', isbn: '978-602-1234-56-7', kategori: 'Pelajaran', rak: 'R1',
+            jumlah_salinan: '3', keterangan: '',
+          }]}
+          onImport={async (rows) => {
+            const r = await api.post('/pustaka/buku/impor', { baris: rows })
+            const d = r.data || {}
+            if (d.gagal > 0) {
+              throw new Error(`${d.berhasil} berhasil, ${d.gagal} gagal: ` +
+                (d.detail || []).slice(0, 5).map((x: any) => `baris ${x.baris} (${x.error})`).join('; '))
+            }
+            await muat()
+          }}
+          onClose={() => setImporBuka(false)}
+        />
       )}
 
       {/* Modal tambah buku */}

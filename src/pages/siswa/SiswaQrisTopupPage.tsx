@@ -5,8 +5,11 @@ import api from '../../services/api'
 import { imageFileToDataUrl } from '../../lib/image'
 import QrisPayModal, { JALUR_PORTAL, type QrisTarget } from '../../components/QrisPayModal'
 
-type Qris = { enabled: boolean; shopee_qris: string; gopay_qris: string; providers: string[] }
-const empty: Qris = { enabled: false, shopee_qris: '', gopay_qris: '', providers: [] }
+// QRIS statis MILIK LEMBAGA (bank / e-wallet apa pun), bukan akun merchant
+// Shopee/GoPay seperti sebelumnya.
+type QrisItem = { id: string; label: string; jenis: 'bank' | 'ewallet' | 'lain'; gambar: string }
+type Qris = { enabled: boolean; qris_list: QrisItem[] }
+const empty: Qris = { enabled: false, qris_list: [] }
 
 const imageData = async (file: File, set: (x: string) => void) => {
   if (!['image/png', 'image/jpeg', 'image/webp'].includes(file.type) || file.size > 5 * 1024 * 1024) return toast.error('Upload gambar PNG/JPG/WEBP maksimal 5 MB')
@@ -46,7 +49,7 @@ export default function SiswaQrisTopupPage() {
   useEffect(() => {
     if (gateway) return
     api.get('/cashless/provider/bank_transfer/static-qris')
-      .then(r => { setQris(r.data); setProvider(r.data.providers?.[0] || '') })
+      .then(r => { setQris({ enabled: !!r.data?.enabled, qris_list: Array.isArray(r.data?.qris_list) ? r.data.qris_list : [] }); setProvider(r.data?.qris_list?.[0]?.id || '') })
       .catch(() => {})
   }, [gateway])
 
@@ -73,7 +76,8 @@ export default function SiswaQrisTopupPage() {
     finally { setSaving(false) }
   }
 
-  const img = provider === 'shopee' ? qris.shopee_qris : qris.gopay_qris
+  const qrisDipilih = qris.qris_list.find(q => q.id === provider) || null
+  const img = qrisDipilih?.gambar || ''
 
   return (
     <div className="space-y-5 max-w-3xl">
@@ -114,20 +118,24 @@ export default function SiswaQrisTopupPage() {
       )}
 
       {mode === 'manual' && (
-        !qris.enabled || !qris.providers.length ? (
+        !qris.enabled || !qris.qris_list.length ? (
           <div className="rounded-xl bg-amber-50 p-4 text-amber-800">QRIS belum diaktifkan oleh lembaga.</div>
         ) : (
           <>
-            <div className="flex gap-2">
-              {qris.providers.map(p => (
-                <button key={p} onClick={() => setProvider(p)} className={`px-4 py-2 rounded-lg ${provider === p ? 'bg-primary text-white' : 'bg-gray-100'}`}>
-                  {p === 'shopee' ? 'ShopeePay' : 'GoPay'}
+            {/* Pilihan QRIS lembaga — bisa lebih dari dua, dari bank atau e-wallet. */}
+            <div className="flex flex-wrap gap-2">
+              {qris.qris_list.map(q => (
+                <button key={q.id} onClick={() => setProvider(q.id)}
+                  className={`rounded-lg px-4 py-2 text-sm font-semibold ${provider === q.id ? 'bg-primary text-white' : 'bg-gray-100 text-gray-700'}`}>
+                  {q.label}
                 </button>
               ))}
             </div>
             <div className="bg-white rounded-xl border p-4 text-center">
-              <img src={img} alt="QRIS merchant" className="w-72 h-72 object-contain mx-auto" />
-              <p className="text-sm font-semibold mt-2">{provider === 'shopee' ? 'ShopeePay Merchant' : 'GoPay Merchant'}</p>
+              {img
+                ? <img src={img} alt={`QRIS ${qrisDipilih?.label || ''}`} className="w-72 h-72 object-contain mx-auto" />
+                : <p className="py-10 text-sm text-gray-400">Gambar QRIS belum diunggah.</p>}
+              <p className="text-sm font-semibold mt-2">{qrisDipilih?.label || 'QRIS Lembaga'}</p>
             </div>
             <div className="bg-white rounded-xl border p-5 space-y-3">
               <select value={studentId} onChange={e => setStudentId(e.target.value)} className="w-full border rounded-lg p-2">

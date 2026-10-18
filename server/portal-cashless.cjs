@@ -79,10 +79,49 @@ async function normalizeStoredImageDataUrl(value, label = 'gambar') {
     throw Error(`${label} tidak valid atau gagal diproses`)
   }
 }
+// QRIS statis MILIK LEMBAGA (bank atau e-wallet apa pun), bukan akun merchant
+// Shopee/GoPay. Bentuknya daftar: satu lembaga bisa punya beberapa QRIS
+// (mis. BRI untuk bank, Dana untuk e-wallet). `id` dipakai saat siswa memilih.
+//
+// Kompatibilitas: data lama menyimpan shopee_qris/gopay_qris. Saat dibaca,
+// keduanya diubah menjadi entri daftar supaya top-up lama tidak rusak.
+const qrisListDariConfig = (config) => {
+  if (Array.isArray(config?.qris_list) && config.qris_list.length) {
+    return config.qris_list
+      .filter(q => q && q.gambar)
+      .map((q, i) => ({
+        id: String(q.id || `qris-${i + 1}`),
+        label: String(q.label || '').trim() || `QRIS ${i + 1}`,
+        jenis: ['bank', 'ewallet', 'lain'].includes(String(q.jenis)) ? String(q.jenis) : 'lain',
+        gambar: String(q.gambar),
+      }))
+  }
+  // Migrasi bentuk lama.
+  const hasil = []
+  if (config?.shopee_qris) hasil.push({ id: 'qris-1', label: 'ShopeePay', jenis: 'ewallet', gambar: config.shopee_qris })
+  if (config?.gopay_qris) hasil.push({ id: 'qris-2', label: 'GoPay', jenis: 'ewallet', gambar: config.gopay_qris })
+  return hasil
+}
 const normalizeStaticQrisConfig = async input => {
-  const shopee_qris = await normalizeStoredImageDataUrl(input?.shopee_qris, 'gambar QRIS')
-  const gopay_qris = await normalizeStoredImageDataUrl(input?.gopay_qris, 'gambar QRIS')
-  return { enabled: input?.enabled !== false, shopee_qris, gopay_qris, providers: [shopee_qris && 'shopee', gopay_qris && 'gopay'].filter(Boolean) }
+  // Terima bentuk baru (qris_list) maupun lama (shopee_qris/gopay_qris).
+  const mentah = Array.isArray(input?.qris_list) ? input.qris_list : qrisListDariConfig(input)
+  const qris_list = []
+  for (let i = 0; i < mentah.length && i < 10; i++) {
+    const q = mentah[i] || {}
+    const gambar = q.gambar ? await normalizeStoredImageDataUrl(q.gambar, 'gambar QRIS') : ''
+    if (!gambar) continue
+    const label = String(q.label || '').trim()
+    if (!label) throw Error(`Nama QRIS ke-${i + 1} wajib diisi (mis. BRI, Dana, BSI)`)
+    if (label.length > 40) throw Error(`Nama QRIS ke-${i + 1} maksimal 40 karakter`)
+    qris_list.push({
+      id: String(q.id || `qris-${i + 1}`),
+      label,
+      jenis: ['bank', 'ewallet', 'lain'].includes(String(q.jenis)) ? String(q.jenis) : 'lain',
+      gambar,
+    })
+  }
+  if (qris_list.length === 0) throw Error('Minimal satu QRIS harus diunggah bila fitur ini diaktifkan')
+  return { enabled: input?.enabled !== false, qris_list, providers: qris_list.map(q => q.id) }
 }
 const normalizeBankTransferConfig = async input => {
   const qris = await normalizeStaticQrisConfig(input)
@@ -97,13 +136,17 @@ const normalizeBankTransferConfig = async input => {
     bank_code,
     admin_fee,
     manual_verify: input?.manual_verify !== false,
-    shopee_qris: qris.shopee_qris,
-    gopay_qris: qris.gopay_qris
+    // Daftar QRIS milik lembaga. Field shopee_qris/gopay_qris TIDAK lagi
+    // ditulis; kalau ada data lama, qrisListDariConfig yang memigrasikannya.
+    qris_list: qris.qris_list
   }
 }
 const validateStaticQrisSubmission = async input => {
-  const provider = String(input?.provider || '').toLowerCase()
-  if (!['shopee', 'gopay'].includes(provider)) throw Error('Metode QRIS harus ShopeePay atau GoPay')
+  // `provider` sekarang berisi ID QRIS milik lembaga (mis. 'qris-1'), bukan
+  // nama merchant. Validasi ketersediaannya dilakukan saat verifikasi, karena
+  // di sini belum ada akses ke konfigurasi tenant.
+  const provider = String(input?.provider || '').trim()
+  if (!provider) throw Error('QRIS yang dipilih wajib diisi')
   const amount = Number(input?.amount)
   if (!Number.isSafeInteger(amount) || amount <= 0) throw Error('Nominal transfer harus bilangan bulat positif')
   const unique_code = String(input?.unique_code || '')
@@ -115,14 +158,24 @@ const validateStaticQrisSubmission = async input => {
   if (!atas_nama || !no_rek_dari) throw Error('Nama dan identitas pengirim wajib diisi')
   if (!input?.bukti_transfer) throw Error('Bukti transfer berupa gambar wajib diunggah')
   const bukti_transfer = await normalizeStoredImageDataUrl(input.bukti_transfer, 'bukti transfer')
-  return { provider, amount, unique_code, transfer_amount, atas_nama, no_rek_dari, bank_dari: provider === 'shopee' ? 'ShopeePay' : 'GoPay', bukti_transfer }
+  // `bank_dari` diisi nanti oleh assertStaticQrisSubmissionAvailable, yang
+  // punya akses ke konfigurasi dan bisa memakai label QRIS lembaga
+  // (mis. "BRI", "Dana") alih-alih nama merchant lama.
+  return { provider, amount, unique_code, transfer_amount, atas_nama, no_rek_dari, bank_dari: '', bukti_transfer }
 }
 const assertStaticQrisSubmissionAvailable = (db, tenantId, declaration) => {
   const cfg = db.prepare('SELECT enabled,config_json FROM cashless_provider_config WHERE tenant_id=? AND provider=?').get(tenantId, 'bank_transfer')
   if (!cfg?.enabled) throw Error('QRIS belum diaktifkan oleh lembaga')
   let config = {}
   try { config = JSON.parse(cfg.config_json || '{}') } catch {}
-  if (!config[`${declaration.provider}_qris`]) throw Error(`QRIS ${declaration.bank_dari} belum dikonfigurasi`)
+  // `provider` sekarang berisi ID QRIS milik lembaga (mis. 'qris-1'), bukan
+  // nama merchant. Cocokkan ke daftar; kalau tidak ada, tolak.
+  const daftar = qrisListDariConfig(config)
+  const dipilih = daftar.find(q => String(q.id) === String(declaration.provider))
+  if (!dipilih) throw Error('QRIS yang dipilih tidak tersedia. Muat ulang halaman.')
+  // Simpan label QRIS yang benar-benar dipakai (BRI, Dana, …) untuk bukti
+  // verifikasi bendahara — bukan lagi nama merchant lama.
+  declaration.bank_dari = dipilih.label
   const collision = db.prepare("SELECT id FROM cashless_topup_manual WHERE tenant_id=? AND provider=? AND transfer_amount=? AND status='pending' LIMIT 1").get(tenantId, declaration.provider, declaration.transfer_amount)
   if (collision) throw Error('Kode unik sudah digunakan transaksi pending lain; muat ulang halaman untuk mendapatkan kode baru')
 }
@@ -439,13 +492,14 @@ function registerKantinRoutes(app, db, { requireRole, uuid, bcrypt }) {
     const cfg = db.prepare('SELECT * FROM cashless_provider_config WHERE tenant_id = ? AND provider = ?').get(req.tenantId, 'bank_transfer')
     if (!cfg) return res.json({ enabled: 0, config: { va_prefix: '', bank_code: '', admin_fee: 0, manual_verify: true } })
     const config = JSON.parse(cfg.config_json || '{}')
-    res.json({ enabled: cfg.enabled, config: { ...config, shopee_qris: config.shopee_qris || '', gopay_qris: config.gopay_qris || '', providers: [config.shopee_qris && 'shopee', config.gopay_qris && 'gopay'].filter(Boolean) } })
+    res.json({ enabled: cfg.enabled, config: { ...config, qris_list: qrisListDariConfig(config) } })
   })
 
   app.get('/api/cashless/provider/bank_transfer/static-qris', portal, (req, res) => {
     const cfg = db.prepare('SELECT enabled, config_json FROM cashless_provider_config WHERE tenant_id=? AND provider=?').get(req.tenantId, 'bank_transfer')
     const config = cfg ? JSON.parse(cfg.config_json || '{}') : {}
-    res.json({ enabled: Boolean(cfg?.enabled), shopee_qris: config.shopee_qris || '', gopay_qris: config.gopay_qris || '', providers: [config.shopee_qris && 'shopee', config.gopay_qris && 'gopay'].filter(Boolean), unique_code_required: true })
+    const qris_list = qrisListDariConfig(config)
+    res.json({ enabled: Boolean(cfg?.enabled), qris_list, unique_code_required: true })
   })
 
   app.put('/api/cashless/provider/bank_transfer', kadmin, async (req, res) => {

@@ -2944,7 +2944,16 @@ function resolveGtkForUser(userId, tenantId) {
 }
 
 
-const DEMO_HOSTS = new Set(['jurnal.cc.cd', 'jurnalmadrasah.web.id'])
+// Demo HANYA tersedia di host khusus demo. Sebelumnya jurnal.cc.cd dan
+// jurnalmadrasah.web.id ikut mengizinkan login demo — akibatnya pengunjung
+// domain lembaga sungguhan bisa masuk sebagai admin demo dan melihat data
+// contoh, lalu mengira itu data lembaganya.
+//
+// Bisa ditambah lewat env DEMO_HOSTS (dipisah koma) tanpa mengubah kode.
+const DEMO_HOSTS = new Set(
+  String(process.env.DEMO_HOSTS || 'demo.jurnal.cc.cd')
+    .split(',').map(h => h.trim().toLowerCase()).filter(Boolean)
+)
 // Demo tenant terpisah dari default (superadmin).
 // Cari/buat tenant khusus demo — BUKAN 'default'.
 const DEMO_TENANT_ID = 'demo-tenant'
@@ -6408,7 +6417,34 @@ app.get('/api/kalender-kbm', authMiddleware, (req, res) => {
   const { year, month } = req.query
   if (year && month) {
     const prefix = `${year}-${String(month).padStart(2, '0')}`
-    res.json(db.prepare("SELECT * FROM kalender_kbm WHERE tanggal LIKE ? AND tenant_id=? ORDER BY tanggal").all(prefix + '%', req.tenantId))
+    const baris = db.prepare("SELECT * FROM kalender_kbm WHERE tanggal LIKE ? AND tenant_id=? ORDER BY tanggal").all(prefix + '%', req.tenantId)
+
+    // MODE NORMALISASI KBM: bila `kbm_auto_aktif` menyala, KBM aktif SETIAP HARI
+    // kecuali hari yang diset libur — tanpa perlu entri per tanggal. Tanpa blok
+    // ini, kalender tampak kosong padahal absensi sudah berjalan otomatis, dan
+    // admin mengira setelannya tidak bekerja.
+    if (kbmAutoActiveFor(req.tenantId)) {
+      const adaTanggal = new Set(baris.map(r => r.tanggal))
+      const hariLibur = getTenantSettings(db, req.tenantId, 'hari_libur')?.hari_libur
+      const jmlHari = new Date(Number(year), Number(month), 0).getDate()
+      for (let d = 1; d <= jmlHari; d++) {
+        const tgl = `${prefix}-${String(d).padStart(2, '0')}`
+        if (adaTanggal.has(tgl)) continue
+        if (isHolidayDate(tgl, req.tenantId)) continue
+        baris.push({
+          id: `auto-${tgl}`,
+          tanggal: tgl,
+          judul: 'KBM Aktif (otomatis)',
+          jenis: 'kbm_aktif',
+          keterangan: 'Dihitung otomatis dari setelan normalisasi KBM',
+          warna: '#3b82f6',
+          tenant_id: req.tenantId,
+          otomatis: 1,
+        })
+      }
+      baris.sort((a, b) => String(a.tanggal).localeCompare(String(b.tanggal)))
+    }
+    res.json(baris)
   } else {
     res.json(db.prepare("SELECT * FROM kalender_kbm WHERE tenant_id=? ORDER BY tanggal DESC LIMIT 100").all(req.tenantId))
   }
@@ -6418,8 +6454,12 @@ app.get('/api/kalender-kbm/status', authMiddleware, (req, res) => {
   const tanggal = req.query.tanggal || todayJakarta()
   const libur = isHolidayDate(tanggal, req.tenantId)
   const adaEntri = !!db.prepare("SELECT id FROM kalender_kbm WHERE tenant_id=? AND tanggal=? AND jenis IN ('kbm_aktif','ujian','kegiatan_lain') LIMIT 1").get(req.tenantId, tanggal)
-  const aktif = !libur && (adaEntri || kbmAutoActiveFor(req.tenantId))
-  res.json({ tanggal, aktif: aktif, libur: libur })
+  const otomatis = kbmAutoActiveFor(req.tenantId)
+  const aktif = !libur && (adaEntri || otomatis)
+  res.json({
+    tanggal, aktif, libur, otomatis,
+    sumber: libur ? 'libur' : (adaEntri ? 'kalender' : (otomatis ? 'otomatis' : 'belum')),
+  })
 })
 
 app.post('/api/kalender-kbm', ADMIN, (req, res) => {

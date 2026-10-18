@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { PieChart, Pie, Cell, ResponsiveContainer } from 'recharts'
 import { Link, useNavigate } from 'react-router-dom'
 import {
   Activity, ArrowRight, CalendarCheck, ChevronRight, ClipboardCheck, LayoutGrid, Users,
@@ -19,6 +20,30 @@ function Bar({ nilai, maks, tone = 'bg-emerald-500' }: { nilai: number; maks: nu
   return (
     <div className="h-1.5 w-full overflow-hidden rounded-full bg-slate-100 dark:bg-gray-800">
       <div className={`h-1.5 rounded-full ${tone}`} style={{ width: `${persen}%` }} />
+    </div>
+  )
+}
+
+// Donut ringkas: angka besar di tengah, cincin menunjukkan proporsi.
+// Sebelumnya statistik hanya berupa teks + bar tipis, sehingga sulit dibaca
+// sekilas di layar ponsel.
+function Donut({ nilai, maks, warna, label }: { nilai: number; maks: number; warna: string; label: string }) {
+  const persen = maks > 0 ? Math.min(100, Math.round((nilai / maks) * 100)) : 0
+  const data = [{ v: persen }, { v: 100 - persen }]
+  return (
+    <div className="relative h-16 w-16 shrink-0">
+      <ResponsiveContainer width="100%" height="100%">
+        <PieChart>
+          <Pie data={data} dataKey="v" innerRadius={22} outerRadius={30} startAngle={90} endAngle={-270} stroke="none">
+            <Cell fill={warna} />
+            <Cell fill="rgba(148,163,184,0.25)" />
+          </Pie>
+        </PieChart>
+      </ResponsiveContainer>
+      <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
+        <span className="text-[13px] font-bold tabular-nums leading-none text-slate-800 dark:text-gray-100">{persen}%</span>
+        <span className="mt-0.5 text-[8px] uppercase tracking-wide text-slate-400">{label}</span>
+      </div>
     </div>
   )
 }
@@ -115,7 +140,15 @@ export default function MobileAdminDashboard({ stats }: Props) {
               </div>
               <span className="shrink-0 text-lg font-bold tabular-nums text-emerald-700 dark:text-emerald-300">{siswaHadir}</span>
             </div>
-            <div className="mt-2"><Bar nilai={siswaHadir} maks={totalSiswa} /></div>
+            <div className="mt-2 flex items-center gap-3">
+              <Donut nilai={siswaHadir} maks={totalSiswa} warna="#10b981" label="hadir" />
+              <div className="min-w-0 flex-1">
+                <Bar nilai={siswaHadir} maks={totalSiswa} />
+                <p className="mt-1.5 text-[10px] text-slate-500 dark:text-gray-400">
+                  {totalSiswa > 0 ? `${totalSiswa - siswaHadir} siswa belum tercatat` : 'Belum ada siswa aktif'}
+                </p>
+              </div>
+            </div>
             <div className="mt-2.5">
               {rombelBelumAbsen.length === 0 ? (
                 <p className="text-[11px] font-medium text-emerald-700 dark:text-emerald-300">
@@ -156,7 +189,15 @@ export default function MobileAdminDashboard({ stats }: Props) {
               </div>
               <span className="shrink-0 text-lg font-bold tabular-nums text-cyan-700 dark:text-cyan-300">{ceklok}</span>
             </div>
-            <div className="mt-2"><Bar nilai={ceklok} maks={totalGtk || ceklok} tone="bg-cyan-500" /></div>
+            <div className="mt-2 flex items-center gap-3">
+              <Donut nilai={ceklok} maks={totalGtk || ceklok} warna="#06b6d4" label="ceklok" />
+              <div className="min-w-0 flex-1">
+                <Bar nilai={ceklok} maks={totalGtk || ceklok} tone="bg-cyan-500" />
+                <p className="mt-1.5 text-[10px] text-slate-500 dark:text-gray-400">
+                  {totalGtk > 0 ? `${Math.max(0, totalGtk - ceklok)} GTK belum ceklok` : 'Jumlah GTK belum diatur'}
+                </p>
+              </div>
+            </div>
           </div>
 
           {/* 3. Jadwal guru hari ini */}
