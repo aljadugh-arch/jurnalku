@@ -71,6 +71,7 @@ const { setupBackupTables, registerBackupRoutes, startBackupScheduler } = requir
 const { DOCUMENT_TYPES, buildPrompt, validateGenerateInput, createTemplateContent, createDocumentDocx, callAi, clean } = require('./ai-documents.cjs')
 const { encryptSecret, decryptSecret, maskKey, PROVIDER_ENDPOINTS, setupAiConfigTables, resolveAiConfig } = require('./ai-config.cjs')
 const { daftarkanRuteBk } = require('./bk.cjs')
+const { daftarkanRuteMutasi } = require('./mutasi.cjs')
 const { assertSafeOutboundUrl } = require('./ssrf-guard.cjs')
 const { setupEkskulMembership } = require('./extracurricular-membership.cjs')
 const { countStudents, deleteStudents } = require('./student-data-delete.cjs')
@@ -10848,6 +10849,9 @@ registerTenantRoutes(app, db, authMiddleware, uuidv4, requireRole('super_admin')
 // Dipisah dari catatan_kepribadian: BK bersifat privat (sesi konseling,
 // pelanggaran), sedangkan catatan_kepribadian masuk rapor dan dibaca wali.
 daftarkanRuteBk(app, { db, authMiddleware, STAFF, TEACHER, requireRole })
+
+// Modul Alumni & Mutasi Siswa
+daftarkanRuteMutasi(app, { db, authMiddleware, requireRole })
 
 // ==================== SEO: robots, sitemap, meta per-lembaga ====================
 // Blok <head> di dist/index.html ditandai <!--SEO:START-->…<!--SEO:END--> lalu
