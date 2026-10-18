@@ -150,7 +150,7 @@ function roleItems(role?: string, hideStaffCeklok?: boolean): NavItem[] {
     { label: 'Setting', path: '/admin/settings', icon: <Settings size={iconSize} /> },
     { label: 'REST API', path: '/admin/developer-api', icon: <Settings size={iconSize} /> },
     { label: 'Backup', path: '/admin/backup-restore', icon: <ShieldCheck size={iconSize} /> },
-    { label: 'Website', path: '/admin/website-lembaga', icon: <Home size={iconSize} />, external: 'https://fazacloud.my.id' },
+    { label: 'Website', path: '/', icon: <Home size={iconSize} />, external: '/' },
     { label: 'Menu Kantin', path: '/admin/kantin-menu', icon: <CreditCard size={iconSize} /> },
     { label: 'Order Kantin', path: '/admin/kantin-orders', icon: <CreditCard size={iconSize} /> },
     { label: 'Topup Manual', path: '/admin/cashless-topup', icon: <CreditCard size={iconSize} /> },

@@ -138,9 +138,31 @@ export default function Sidebar() {
     { name: 'PENGATURAN & SISTEM', labels: ['Pengaturan', 'SMTP & IMAP', 'Manajemen Pengguna', 'Backup & Restore', 'Manajemen Data', 'Kelola Website', 'REST API Developer', 'Manajemen Lembaga', 'Manajemen Yayasan'] },
   ]
 
+  // Grup untuk GURU dan SISWA. Tanpa ini sidebar mereka tampil datar
+  // (19 item guru berderet tanpa pemisah), sehingga mata harus memindai
+  // seluruh daftar untuk menemukan satu menu.
+  const guruMenuGroups: Array<{ name: string; labels: string[] }> = [
+    { name: 'UTAMA', labels: ['Dashboard', 'Posting'] },
+    { name: 'MENGAJAR', labels: ['Mengajar'] },
+    { name: 'ABSENSI', labels: ['Absensi'] },
+    { name: 'PENILAIAN', labels: ['Penilaian'] },
+    { name: 'UJIAN', labels: ['Ujian & Bank Soal'] },
+    { name: 'LAINNYA', labels: ['Generator AI Guru', 'Perpustakaan Digital'] },
+  ]
+  const siswaMenuGroups: Array<{ name: string; labels: string[] }> = [
+    { name: 'UTAMA', labels: ['Dashboard', 'Absensi Saya'] },
+    { name: 'AKADEMIK', labels: ['Jadwal', 'Ujian', 'Ekskul'] },
+    { name: 'LAINNYA', labels: ['Perpustakaan Digital'] },
+  ]
+
+  // Pilih grup sesuai peran. Management memakai adminMenuGroups.
+  const grupAktif = user?.role === 'guru' || user?.role === 'wali_kelas'
+    ? guruMenuGroups
+    : (user?.role === 'siswa' ? siswaMenuGroups : adminMenuGroups)
+
   // Safety net: item yang tidak match label manapun di atas (mis. menu baru
   // yang belum dimasukkan ke grouping) tetap tampil, bukan hilang diam-diam.
-  const groupedLabels = new Set(adminMenuGroups.flatMap(g => g.labels))
+  const groupedLabels = new Set(grupAktif.flatMap(g => g.labels))
   const ungroupedItems = menuItems.filter(item => !groupedLabels.has(item.label))
 
   const getGroupedMenus = (groups: typeof adminMenuGroups) => {
@@ -154,7 +176,9 @@ export default function Sidebar() {
   // Semua role "manajemen" (bukan guru/siswa/proktor) mendapat pengelompokan di
   // desktop — sebelumnya hanya admin/operator, sehingga sidebar kepala & bendahara
   // (dan akun demo) tampil datar tanpa grup.
-  const managementRoles = ['admin', 'super_admin', 'operator', 'tata_usaha', 'tu', 'kepala', 'bendahara']
+  // Guru & siswa juga mendapat pengelompokan — sebelumnya hanya peran
+  // manajemen, sehingga sidebar guru/siswa tampil sebagai daftar datar panjang.
+  const managementRoles = ['admin', 'super_admin', 'operator', 'tata_usaha', 'tu', 'kepala', 'bendahara', 'guru', 'wali_kelas', 'siswa']
   const isManagementRole = managementRoles.includes(user?.role || '')
   const showGrouping = isManagementRole && isOpen
   const groupedMenus = showGrouping ? getGroupedMenus(adminMenuGroups) : null
@@ -197,8 +221,8 @@ export default function Sidebar() {
           {showGrouping ? (
             // Admin grouping view (expanded sidebar only)
             <div className="space-y-6">
-              {[...adminMenuGroups, ...(ungroupedItems.length ? [{ name: 'LAINNYA', labels: ungroupedItems.map(i => i.label) }] : [])]
-                .map(group => ({ group, groupItems: groupedMenus?.[group.name] || (group.name === 'LAINNYA' ? ungroupedItems : []) }))
+              {[...grupAktif, ...(ungroupedItems.length ? [{ name: 'BELUM TERKELOMPOK', labels: ungroupedItems.map(i => i.label) }] : [])]
+                .map(group => ({ group, groupItems: groupedMenus?.[group.name] || (group.name === 'BELUM TERKELOMPOK' ? ungroupedItems : []) }))
                 // Sembunyikan grup yang tidak punya item sama sekali untuk role ini
                 // (mis. superadmin tidak punya menu di MASTER DATA/AKADEMIK/dst.) —
                 // hanya berefek saat grup benar-benar kosong, tidak mengubah role lain.

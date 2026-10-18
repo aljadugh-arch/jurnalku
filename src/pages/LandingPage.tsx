@@ -109,9 +109,7 @@ const faq = [
   { t: 'Lembaga jenis apa yang cocok memakainya?', j: 'RA/TK, SD/MI, SMP/MTs, SMA/MA/SMK, pesantren, sampai lembaga kursus dan bimbel. Program belajar juga tersedia khusus untuk lembaga nonformal.' },
   { t: 'Bagaimana dengan data dan keamanan?', j: 'Setiap lembaga memiliki database terpisah. Akses dipisah per peran (admin, guru, siswa, wali) sehingga setiap orang hanya melihat data yang menjadi haknya. Backup dapat dijalankan otomatis.' },
   { t: 'Apakah bisa memakai domain sendiri?', j: 'Bisa. Lembaga dapat memakai subdomain yang disediakan atau menghubungkan domain sendiri, sehingga alamat yang dibagikan ke wali murid adalah alamat resmi lembaga.' },
-  { t: 'Apakah orang tua perlu akun?', j: 'Untuk memantau, ya — satu akun wali terhubung ke anaknya. Tapi notifikasi penting seperti kehadiran dan tagihan tetap dikirim lewat WhatsApp tanpa perlu membuka aplikasi.' },
   { t: 'Bagaimana cara mencoba sebelum berlangganan?', j: 'Daftar dan masa uji coba langsung aktif. Tidak perlu kartu kredit, dan bisa berhenti kapan saja tanpa biaya.' },
-  { t: 'Apakah ada pendampingan saat mulai?', j: 'Ada. Panduan penggunaan tersedia di dalam aplikasi, dan tim dapat membantu proses awal seperti impor data siswa dan penyusunan jadwal.' },
 ]
 
 const rupiah = (n: number) => 'Rp ' + (Number(n) || 0).toLocaleString('id-ID')
@@ -231,23 +229,22 @@ export default function LandingPage() {
         <div className="relative max-w-6xl mx-auto px-4 pt-14 pb-16 sm:pt-20 sm:pb-20">
           <div className="grid lg:grid-cols-2 gap-12 items-center">
             <div className="text-center lg:text-left">
-              <div className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-900 text-emerald-700 dark:text-emerald-400 rounded-full text-sm font-medium mb-5">
-                <BadgeCheck size={16} /> Dipakai lembaga formal, madrasah, pesantren & kursus
+              <div className="inline-flex items-center gap-2 px-3.5 py-1.5 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-900 text-emerald-700 dark:text-emerald-400 rounded-full text-xs font-semibold mb-5">
+                <BadgeCheck size={14} /> Gratis 30 hari · tanpa kartu kredit
               </div>
-              <h1 className="text-4xl sm:text-5xl lg:text-[3.3rem] font-extrabold text-slate-900 dark:text-white font-display leading-[1.1] mb-5">
+              <h1 className="text-[2.1rem] sm:text-5xl lg:text-[3.3rem] font-extrabold text-slate-900 dark:text-white font-display leading-[1.08] mb-4 tracking-tight">
                 Administrasi Rapi,{' '}
                 <span className="bg-gradient-to-r from-primary via-indigo-500 to-purple-500 bg-clip-text text-transparent">Mengajar Tenang</span>
               </h1>
-              <p className="text-sm font-semibold text-primary mb-2">Kelola Lembaga · Dipercaya 100+ Lembaga</p>
-              <p className="text-lg text-slate-600 dark:text-gray-300 max-w-xl mx-auto lg:mx-0 mb-6 leading-relaxed">
-                Data siswa, jadwal, absensi, jurnal, nilai, rapor, dan keuangan dalam satu platform.
-                Wali murid dapat kabar lewat WhatsApp. Guru tidak lagi lembur di Excel.
+              <p className="text-base sm:text-lg text-slate-600 dark:text-gray-300 max-w-lg mx-auto lg:mx-0 mb-6 leading-relaxed">
+                Satu platform untuk seluruh administrasi lembaga. Wali murid dapat kabar lewat
+                WhatsApp, guru berhenti lembur di Excel.
               </p>
               <div className="flex flex-col sm:flex-row items-center lg:items-start justify-center lg:justify-start gap-3 mb-7">
-                <Link to="/register" className="inline-flex items-center gap-2 px-8 py-4 bg-primary text-white rounded-xl font-bold text-lg hover:bg-primary-dark shadow-2xl shadow-primary/40 transition-all hover:scale-105">
-                  Mulai Gratis Sekarang <ArrowRight size={20} />
+                <Link to="/register" className="inline-flex items-center gap-2 px-7 py-3.5 bg-primary text-white rounded-xl font-bold text-base hover:bg-primary-dark shadow-2xl shadow-primary/40 transition-all hover:scale-105">
+                  Coba Gratis 30 Hari <ArrowRight size={18} />
                 </Link>
-                <Link to="/login#demo" className="inline-flex items-center gap-2 px-8 py-4 border-2 border-slate-300 dark:border-gray-700 text-slate-700 dark:text-gray-200 rounded-xl font-semibold hover:bg-white dark:hover:bg-gray-800 transition-all">
+                <Link to="/login#demo" className="inline-flex items-center gap-2 px-7 py-3.5 border-2 border-slate-300 dark:border-gray-700 text-slate-700 dark:text-gray-200 rounded-xl font-semibold text-base hover:bg-white dark:hover:bg-gray-800 transition-all">
                   <PlayCircle size={19} /> Lihat Demo
                 </Link>
               </div>
@@ -338,7 +335,7 @@ export default function LandingPage() {
         <div className="text-center mb-10">
           <span className="text-sm font-bold text-primary uppercase tracking-wider">Fitur</span>
           <h2 className="text-2xl sm:text-3xl font-bold text-slate-900 dark:text-white mb-2 mt-1 font-display">
-            Semua yang Dibutuhkan, Tanpa Aplikasi Terpisah
+            Kelola Lembaga Tanpa Aplikasi Terpisah
           </h2>
           <p className="text-base text-slate-600 dark:text-gray-400 max-w-2xl mx-auto">
             Tidak perlu berlangganan banyak aplikasi berbeda. Setiap modul membaca data yang sama,
@@ -368,7 +365,7 @@ export default function LandingPage() {
             </h2>
             <p className="text-base text-slate-600 dark:text-gray-400 max-w-2xl mx-auto">
               Yayasan melihat rekap, guru melihat kelasnya, siswa melihat jadwalnya,
-              wali melihat kabar anaknya. Tidak ada yang kebanjiran menu.
+              wali melihat kabar anaknya. Dipercaya 100+ Lembaga pendidikan.
             </p>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -397,26 +394,20 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* ================= ALASAN ================= */}
-      <section className="max-w-6xl mx-auto px-4 py-16">
-        <div className="text-center mb-10">
-          <span className="text-sm font-bold text-primary uppercase tracking-wider">Alasan</span>
-          <h2 className="text-2xl sm:text-3xl font-bold text-slate-900 dark:text-white mb-2 mt-1 font-display">
-            Mengapa Lembaga Memilih JURNALKU
-          </h2>
-        </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {alasan.map((a, i) => (
-            <div key={i} className="flex items-start gap-3.5 p-5 bg-white dark:bg-gray-900 rounded-2xl border border-slate-100 dark:border-gray-800">
-              <div className="w-10 h-10 rounded-lg bg-primary/10 dark:bg-primary/20 flex items-center justify-center shrink-0">
-                <a.icon size={19} className="text-primary" />
+      {/* ================= ALASAN (strip ringkas, bukan seksi penuh) ================= */}
+      <section className="border-y border-slate-200 dark:border-gray-800 bg-slate-100/60 dark:bg-gray-900/40">
+        <div className="max-w-6xl mx-auto px-4 py-8">
+          <div className="grid grid-cols-2 lg:grid-cols-3 gap-x-6 gap-y-5">
+            {alasan.map((a, i) => (
+              <div key={i} className="flex items-start gap-2.5">
+                <a.icon size={17} className="mt-0.5 shrink-0 text-primary" />
+                <div>
+                  <p className="text-sm font-bold text-slate-900 dark:text-white leading-tight">{a.judul}</p>
+                  <p className="text-xs text-slate-600 dark:text-gray-400 leading-snug mt-0.5">{a.isi}</p>
+                </div>
               </div>
-              <div>
-                <h3 className="font-bold text-slate-900 dark:text-white mb-1 text-sm">{a.judul}</h3>
-                <p className="text-sm text-slate-600 dark:text-gray-400 leading-relaxed">{a.isi}</p>
-              </div>
-            </div>
-          ))}
+            ))}
+          </div>
         </div>
       </section>
 
@@ -484,7 +475,7 @@ export default function LandingPage() {
                         /{p.masa_satuan === 'bulan' ? 'bulan' : p.masa_satuan}
                       </span>
                       <p className="text-xs text-slate-500 dark:text-gray-400 mt-1">
-                        per lembaga · {p.masa_nilai} {p.masa_satuan}
+                        per lembaga / {p.masa_nilai} {p.masa_satuan} · jumlah guru & siswa tidak menambah biaya
                       </p>
                     </div>
                     <ul className="space-y-2 mb-6 flex-1">

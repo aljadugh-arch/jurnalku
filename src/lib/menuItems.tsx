@@ -81,7 +81,7 @@ export const adminMenuItems: MenuItem[] = [
     label: 'WhatsApp', icon: <MessageSquare size={20} />,
     children: [
       { label: 'Broadcast', path: '/admin/broadcast' },
-      { label: 'Konfigurasi Gateway', path: '/admin/wa-gateway' },
+      { label: 'Sambungkan WA Platform', path: '/admin/wa-gateway' },
       { label: 'Notifikasi Otomatis', path: '/admin/notif-settings' },
     ]
   },
@@ -92,7 +92,7 @@ export const adminMenuItems: MenuItem[] = [
   { label: 'Manajemen Lembaga', icon: <Globe size={20} />, path: '/admin/tenants' },
   { label: 'Integrasi Se-Yayasan', icon: <Users size={20} />, path: '/admin/foundation-sync' },
   { label: 'Backup & Restore', icon: <DatabaseBackup size={20} />, path: '/admin/backup-restore' },
-  { label: 'Kelola Website', icon: <Globe size={20} />, path: '/admin/website-lembaga', external: 'https://fazacloud.my.id' },
+  { label: 'Lihat Website Lembaga', icon: <Globe size={20} />, path: '/', external: '/' },
   {
     label: 'E-Kantin & Cashless', icon: <DollarSign size={20} />,
     children: [
@@ -108,13 +108,35 @@ export const adminMenuItems: MenuItem[] = [
 export const guruMenuItems: MenuItem[] = [
   { label: 'Dashboard', icon: <LayoutDashboard size={20} />, path: '/guru' },
   { label: 'Posting', icon: <FileText size={20} />, path: '/guru/posting' },
-  { label: 'Jurnal Mengajar', icon: <ClipboardList size={20} />, path: '/guru/jurnal' },
-  { label: 'Penilaian Harian', icon: <BookOpen size={20} />, path: '/guru/penilaian-harian' },
-  { label: 'Penilaian Ekskul', icon: <Star size={20} />, path: '/guru/penilaian-ekskul' },
-  { label: 'Nilai STS', icon: <ClipboardCheck size={20} />, path: '/guru/nilai-sts' },
-  { label: 'Nilai SAS', icon: <ClipboardCheck size={20} />, path: '/guru/nilai-sas' },
-  { label: 'Rekap Nilai per Mapel', icon: <ClipboardCheck size={20} />, path: '/guru/rekap-nilai' },
-  { label: 'Koreksi Jawaban (AI+OCR)', icon: <ScanText size={20} />, path: '/guru/koreksi-jawaban' },
+  {
+    label: 'Mengajar', icon: <ClipboardList size={20} />,
+    children: [
+      { label: 'Jurnal Mengajar', path: '/guru/jurnal' },
+      { label: 'Jadwal Saya', path: '/guru/jadwal' },
+      { label: 'Penugasan', path: '/guru#tugas' },
+    ]
+  },
+  {
+    label: 'Absensi', icon: <UserCheck size={20} />,
+    children: [
+      { label: 'Absensi Harian', path: '/guru/absensi-siswa' },
+      { label: 'Absensi Mapel', path: '/guru/absensi-mapel' },
+      { label: 'Absensi Ekskul', path: '/guru/absensi-ekskul' },
+      { label: 'Absensi Saya', path: '/guru/absensi-guru' },
+    ]
+  },
+  {
+    label: 'Penilaian', icon: <ClipboardCheck size={20} />,
+    children: [
+      { label: 'Penilaian Harian', path: '/guru/penilaian-harian' },
+      { label: 'Penilaian Ekskul', path: '/guru/penilaian-ekskul' },
+      { label: 'Nilai STS', path: '/guru/nilai-sts' },
+      { label: 'Nilai SAS', path: '/guru/nilai-sas' },
+      { label: 'Rekap Nilai per Mapel', path: '/guru/rekap-nilai' },
+      { label: 'Koreksi Jawaban (AI+OCR)', path: '/guru/koreksi-jawaban' },
+      { label: 'Catatan Kepribadian', path: '/guru/catatan-kepribadian' },
+    ]
+  },
   {
     label: 'Ujian & Bank Soal', icon: <FileQuestion size={20} />,
     children: [
@@ -123,13 +145,6 @@ export const guruMenuItems: MenuItem[] = [
       { label: 'Paket Ujian', path: '/guru/paket-ujian' },
     ]
   },
-  { label: 'Catatan Kepribadian', icon: <ScrollText size={20} />, path: '/guru/catatan-kepribadian' },
-  { label: 'Jadwal Saya', icon: <Calendar size={20} />, path: '/guru/jadwal' },
-  { label: 'Penugasan', icon: <ClipboardCheck size={20} />, path: '/guru#tugas' },
-  { label: 'Absensi Harian', icon: <QrCode size={20} />, path: '/guru/absensi-siswa' },
-  { label: 'Absensi Mapel', icon: <UserCheck size={20} />, path: '/guru/absensi-mapel' },
-  { label: 'Absensi Ekskul', icon: <Activity size={20} />, path: '/guru/absensi-ekskul' },
-  { label: 'Absensi Saya', icon: <MapPin size={20} />, path: '/guru/absensi-guru' },
   { label: 'Generator AI Guru', icon: <Sparkles size={20} />, path: '/guru/modul-ajar' },
   { label: 'Perpustakaan Digital', icon: <BookOpen size={20} />, path: '/guru/perpustakaan' },
 ]
@@ -279,11 +294,11 @@ export function flattenMenu(items: MenuItem[]): FlatMenu[] {
 const adminPrimaryGrid: FlatMenu[] = [
   { label: 'Kelola Jadwal', path: '/admin/jadwal', icon: <Calendar size={20} /> },
   { label: 'Absensi QR Siswa', path: '/admin/absensi-qr-siswa', icon: <QrCode size={20} /> },
-  { label: 'Absensi GTK', path: '/admin/absensi-guru', icon: <MapPin size={20} /> },
+  { label: 'Absensi Guru (Geolokasi)', path: '/admin/absensi-guru', icon: <MapPin size={20} /> },
   { label: 'Posting', path: '/admin/posting', icon: <FileText size={20} /> },
   { label: 'Rekapitulasi', path: '/admin/rekap-absensi', icon: <ClipboardList size={20} /> },
-  { label: 'Tagihan', path: '/admin/tagihan', icon: <DollarSign size={20} /> },
-  { label: 'Tabungan', path: '/admin/tabungan', icon: <School size={20} /> },
+  { label: 'Tagihan & Pembayaran', path: '/admin/tagihan', icon: <DollarSign size={20} /> },
+  { label: 'Tabungan Siswa', path: '/admin/tabungan', icon: <School size={20} /> },
 ]
 
 export function primaryGridForRole(role?: string): FlatMenu[] {
