@@ -70,6 +70,7 @@ const invoiceService = require('./invoice-service.cjs')
 const { setupBackupTables, registerBackupRoutes, startBackupScheduler } = require('./backup-drive.cjs')
 const { DOCUMENT_TYPES, buildPrompt, validateGenerateInput, createTemplateContent, createDocumentDocx, callAi, clean } = require('./ai-documents.cjs')
 const { encryptSecret, decryptSecret, maskKey, PROVIDER_ENDPOINTS, setupAiConfigTables, resolveAiConfig } = require('./ai-config.cjs')
+const { daftarkanRuteBk } = require('./bk.cjs')
 const { assertSafeOutboundUrl } = require('./ssrf-guard.cjs')
 const { setupEkskulMembership } = require('./extracurricular-membership.cjs')
 const { countStudents, deleteStudents } = require('./student-data-delete.cjs')
@@ -10842,6 +10843,11 @@ registerTenantRoutes(app, db, authMiddleware, uuidv4, requireRole('super_admin')
 // password 'admin123') sudah dihapus demi konsistensi. Lihat
 // tenant.cjs#registerTenantRoutes untuk versi yang lebih aman dengan
 // initial_password acak + flag must_change_password.
+
+// ==================== Modul Bimbingan Konseling (BK) ====================
+// Dipisah dari catatan_kepribadian: BK bersifat privat (sesi konseling,
+// pelanggaran), sedangkan catatan_kepribadian masuk rapor dan dibaca wali.
+daftarkanRuteBk(app, { db, authMiddleware, STAFF, TEACHER, requireRole })
 
 // ==================== SEO: robots, sitemap, meta per-lembaga ====================
 // Blok <head> di dist/index.html ditandai <!--SEO:START-->…<!--SEO:END--> lalu

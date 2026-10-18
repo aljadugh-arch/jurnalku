@@ -132,7 +132,7 @@ export default function Sidebar() {
     { name: 'AKADEMIK', labels: ['Kalender KBM', 'Jadwal Pelajaran', 'Kelola Jadwal', 'Jadwal Ujian', 'Pengajar', 'Wali Kelas', 'Absensi', 'Ceklok & Rekap', 'Absensi Saya', 'Jurnal Mengajar', 'Supervisi', 'Program Belajar', 'Erkam'] },
     { name: 'PENILAIAN & EVALUASI', labels: ['Ujian & Bank Soal', 'Bank Soal', 'Kisi-kisi Soal', 'Paket Ujian', 'Ledger Nilai', 'Rekap Nilai per Mapel', 'Rapor Siswa', 'Catatan Kepribadian', 'Penilaian'] },
     { name: 'ADMINISTRASI', labels: ['Administrasi Surat'] },
-    { name: 'LAYANAN', labels: ['Perpustakaan Digital', 'Generator AI Guru', 'Beasiswa'] },
+    { name: 'LAYANAN', labels: ['Perpustakaan Digital', 'Generator AI Guru', 'Beasiswa', 'Bimbingan Konseling'] },
     { name: 'KEUANGAN & OPERASIONAL', labels: ['Keuangan', 'E-Kantin & Cashless', 'Buku Kas', 'Bendahara', 'E-Kantin'] },
     { name: 'KOMUNIKASI', labels: ['WhatsApp', 'WhatsApp Platform'] },
     { name: 'PENGATURAN & SISTEM', labels: ['Pengaturan', 'SMTP & IMAP', 'Manajemen Pengguna', 'Backup & Restore', 'Manajemen Data', 'Lihat Website Lembaga', 'REST API Developer', 'Manajemen Lembaga', 'Manajemen Yayasan'] },

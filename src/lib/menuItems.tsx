@@ -3,7 +3,7 @@ import {
   ClipboardList, UserCheck, QrCode, MapPin,
   Layers, Activity, Globe, Sparkles, DollarSign, Settings, MessageSquare,
   FileText, ClipboardCheck, ScrollText, School, Wallet, Receipt, DatabaseBackup, Code2, ScanText,
-  FileQuestion, Monitor, Star, Building2, CreditCard, Database, Mail
+  FileQuestion, Monitor, Star, Building2, CreditCard, Database, Mail, HeartHandshake
 } from 'lucide-react'
 
 export interface MenuItem {
@@ -64,6 +64,7 @@ export const adminMenuItems: MenuItem[] = [
     ]
   },
   { label: 'Catatan Kepribadian', icon: <ScrollText size={20} />, path: '/admin/catatan-kepribadian' },
+  { label: 'Bimbingan Konseling', icon: <HeartHandshake size={20} />, path: '/admin/bk' },
   { label: 'Generator AI Guru', icon: <Sparkles size={20} />, path: '/admin/modul-ajar' },
   { label: 'Perpustakaan Digital', icon: <BookOpen size={20} />, path: '/admin/perpustakaan' },
   { label: 'Administrasi Surat', icon: <ScrollText size={20} />, path: '/admin/administrasi' },
@@ -189,6 +190,7 @@ export const kepalaMenuItems: MenuItem[] = [
   { label: 'Data GTK', icon: <Users size={20} />, path: '/admin/gtk' },
   { label: 'Rapor Siswa', icon: <FileText size={20} />, path: '/admin/rapor' },
   { label: 'Catatan Kepribadian', icon: <ScrollText size={20} />, path: '/admin/catatan-kepribadian' },
+  { label: 'Bimbingan Konseling', icon: <HeartHandshake size={20} />, path: '/admin/bk' },
   { label: 'Rombongan Belajar', icon: <Layers size={20} />, path: '/admin/rombel' },
   { label: 'Jurnal Mengajar', icon: <ClipboardList size={20} />, path: '/admin/jurnal' },
   { label: 'Supervisi', icon: <ClipboardCheck size={20} />, path: '/admin/supervisi' },
