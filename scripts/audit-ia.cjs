@@ -30,13 +30,35 @@ function labelInduk(blok) {
   return hasil
 }
 
-// Grup sidebar
+// Grup sidebar — ambil SEMUA definisi grup (admin, guru, siswa), karena
+// tiap peran memakai daftar grupnya sendiri.
 const grupBlok = sideSrc.match(/const adminMenuGroups[\s\S]*?\n  \]/)
 const grupRaw = grupBlok ? grupBlok[0] : ''
 const grup = []
 for (const m of grupRaw.matchAll(/\{\s*name:\s*'([^']+)',\s*labels:\s*\[([\s\S]*?)\]\s*\}/g)) {
   const labels = [...m[2].matchAll(/'([^']+)'/g)].map(x => x[1])
   grup.push({ name: m[1], labels })
+}
+// Grup guru & siswa punya daftar sendiri; audit harus memakainya untuk peran itu,
+// kalau tidak menu yang sebenarnya sudah bergrup akan dilaporkan "tercecer".
+const ambilGrup = (nama) => {
+  const blok = sideSrc.match(new RegExp('const ' + nama + '[\\s\\S]*?\\n  \\]'))
+  if (!blok) return []
+  const hasil = []
+  for (const m of blok[0].matchAll(/\{\s*name:\s*'([^']+)',\s*labels:\s*\[([\s\S]*?)\]\s*\}/g)) {
+    hasil.push({ name: m[1], labels: [...m[2].matchAll(/'([^']+)'/g)].map(x => x[1]) })
+  }
+  return hasil
+}
+const grupGuru = ambilGrup('guruMenuGroups')
+const grupSiswa = ambilGrup('siswaMenuGroups')
+const grupProktor = ambilGrup('proktorMenuGroups')
+const grupSuper = ambilGrup('superAdminMenuGroups')
+const grupPerPeran = {
+  guruMenuItems: grupGuru.length ? grupGuru : grup,
+  siswaMenuItems: grupSiswa.length ? grupSiswa : grup,
+  proktorMenuItems: grupProktor.length ? grupProktor : grup,
+  superAdminMenuItems: grupSuper.length ? grupSuper : grup,
 }
 const semuaLabelGrup = new Set(grup.flatMap(g => g.labels))
 
@@ -54,7 +76,9 @@ else mati.forEach(l => console.log('  - ' + l))
 console.log('\n=== PER PERAN: menu tercecer ke "LAINNYA" ===')
 for (const [nama, blok] of Object.entries(peran)) {
   const induk = labelInduk(blok)
-  const tercecer = induk.filter(l => !semuaLabelGrup.has(l))
+  const grupPakai = grupPerPeran[nama] || grup
+  const labelGrupPakai = new Set(grupPakai.flatMap(g => g.labels))
+  const tercecer = induk.filter(l => !labelGrupPakai.has(l))
   const persen = induk.length ? Math.round((tercecer.length / induk.length) * 100) : 0
   console.log('\n  ' + nama + ': ' + induk.length + ' menu induk, ' + tercecer.length + ' tercecer (' + persen + '%)')
   if (tercecer.length) console.log('    ' + tercecer.join(', '))

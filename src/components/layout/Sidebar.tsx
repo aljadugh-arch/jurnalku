@@ -135,7 +135,7 @@ export default function Sidebar() {
     { name: 'LAYANAN', labels: ['Perpustakaan Digital', 'Generator AI Guru', 'Beasiswa'] },
     { name: 'KEUANGAN & OPERASIONAL', labels: ['Keuangan', 'E-Kantin & Cashless', 'Buku Kas', 'Bendahara', 'E-Kantin'] },
     { name: 'KOMUNIKASI', labels: ['WhatsApp', 'WhatsApp Platform'] },
-    { name: 'PENGATURAN & SISTEM', labels: ['Pengaturan', 'SMTP & IMAP', 'Manajemen Pengguna', 'Backup & Restore', 'Manajemen Data', 'Kelola Website', 'REST API Developer', 'Manajemen Lembaga', 'Manajemen Yayasan'] },
+    { name: 'PENGATURAN & SISTEM', labels: ['Pengaturan', 'SMTP & IMAP', 'Manajemen Pengguna', 'Backup & Restore', 'Manajemen Data', 'Lihat Website Lembaga', 'REST API Developer', 'Manajemen Lembaga', 'Manajemen Yayasan'] },
   ]
 
   // Grup untuk GURU dan SISWA. Tanpa ini sidebar mereka tampil datar
@@ -155,10 +155,26 @@ export default function Sidebar() {
     { name: 'LAINNYA', labels: ['Perpustakaan Digital'] },
   ]
 
-  // Pilih grup sesuai peran. Management memakai adminMenuGroups.
+  const proktorMenuGroups: Array<{ name: string; labels: string[] }> = [
+    { name: 'UJIAN', labels: ['Monitor Ujian'] },
+  ]
+  const superAdminMenuGroups: Array<{ name: string; labels: string[] }> = [
+    { name: 'UTAMA', labels: ['Dashboard'] },
+    { name: 'PLATFORM', labels: ['Manajemen Lembaga', 'Manajemen Yayasan', 'Manajemen Pengguna', 'Invoice Langganan'] },
+    { name: 'KOMUNIKASI', labels: ['WhatsApp Platform'] },
+    { name: 'SISTEM', labels: ['Pengaturan', 'SMTP & IMAP', 'Manajemen Data', 'Backup & Restore', 'REST API Developer', 'Lihat Website Lembaga'] },
+  ]
+
+  // Pilih grup sesuai peran.
   const grupAktif = user?.role === 'guru' || user?.role === 'wali_kelas'
     ? guruMenuGroups
-    : (user?.role === 'siswa' ? siswaMenuGroups : adminMenuGroups)
+    : user?.role === 'siswa'
+      ? siswaMenuGroups
+      : user?.role === 'proktor'
+        ? proktorMenuGroups
+        : user?.role === 'super_admin'
+          ? superAdminMenuGroups
+          : adminMenuGroups
 
   // Safety net: item yang tidak match label manapun di atas (mis. menu baru
   // yang belum dimasukkan ke grouping) tetap tampil, bukan hilang diam-diam.
