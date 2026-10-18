@@ -7332,6 +7332,32 @@ app.get('/api/tts/prewarm/status', ADMIN, (req, res) => {
 })
 
 // ===== Google OAuth (login akun Google berlangganan Gemini Pro, dipakai sbg kredensial AI personal guru) =====
+//
+// Halaman mulai untuk VERIFIKASI SEARCH CONSOLE. Sengaja TANPA authMiddleware:
+// pemilik platform membuka ini sekali dari browser, klik "Allow", dan refresh
+// token tersimpan lewat callback (state='SEARCHCONSOLE'). Tidak perlu login
+// aplikasi, tidak perlu menyalin berkas apa pun.
+app.get('/api/search-console/hubungkan', (req, res) => {
+  const clientId = process.env.GOOGLE_OAUTH_CLIENT_ID
+  if (!clientId) return res.status(503).type('html').send('GOOGLE_OAUTH_CLIENT_ID belum diisi di server.')
+  const redirectUri = process.env.GOOGLE_OAUTH_REDIRECT_URI || `${req.protocol}://${req.get('host')}/api/ai-config/google/callback`
+  const params = new URLSearchParams({
+    client_id: clientId,
+    redirect_uri: redirectUri,
+    response_type: 'code',
+    access_type: 'offline',
+    prompt: 'consent',
+    include_granted_scopes: 'true',
+    scope: [
+      'https://www.googleapis.com/auth/webmasters',
+      'https://www.googleapis.com/auth/siteverification',
+      'openid', 'email', 'profile',
+    ].join(' '),
+    state: 'SEARCHCONSOLE',
+  })
+  res.redirect(`https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`)
+})
+
 app.get('/api/ai-config/google/start', authMiddleware, (req, res) => {
   const clientId = process.env.GOOGLE_OAUTH_CLIENT_ID
   if (!clientId) return res.status(503).json({ error: 'Integrasi Google OAuth belum dikonfigurasi administrator sistem' })
@@ -7353,6 +7379,39 @@ app.get('/api/ai-config/google/callback', async (req, res) => {
   try {
     const { code, state } = req.query
     if (!code || !state) return res.status(400).send('Parameter tidak lengkap')
+
+    // State khusus 'SEARCHCONSOLE' dipakai untuk verifikasi Google Search Console
+    // (bukan login AI). Token-nya BUKAN milik user mana pun, jadi disimpan di
+    // tabel terpisah search_console_token. Jalur ini dipisah SEBELUM jwt.verify
+    // karena state-nya bukan JWT.
+    if (String(state) === 'SEARCHCONSOLE') {
+      const clientIdSc = process.env.GOOGLE_OAUTH_CLIENT_ID
+      const clientSecretSc = process.env.GOOGLE_OAUTH_CLIENT_SECRET
+      const redirectSc = process.env.GOOGLE_OAUTH_REDIRECT_URI || `${req.protocol}://${req.get('host')}/api/ai-config/google/callback`
+      const tukar = await fetch('https://oauth2.googleapis.com/token', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({ code: String(code), client_id: clientIdSc, client_secret: clientSecretSc, redirect_uri: redirectSc, grant_type: 'authorization_code' }),
+      })
+      const isi = await tukar.json()
+      if (!tukar.ok) throw new Error(isi.error_description || isi.error || 'Gagal menukar kode OAuth')
+      if (!isi.refresh_token) throw new Error('Google tidak memberi refresh_token. Cabut akses aplikasi di myaccount.google.com/permissions lalu ulangi.')
+      db.prepare(`CREATE TABLE IF NOT EXISTS search_console_token (
+        id TEXT PRIMARY KEY, refresh_token_encrypted TEXT NOT NULL, scope TEXT, updated_at TEXT
+      )`).run()
+      db.prepare(`INSERT INTO search_console_token (id, refresh_token_encrypted, scope, updated_at)
+        VALUES ('default', ?, ?, datetime('now'))
+        ON CONFLICT(id) DO UPDATE SET refresh_token_encrypted=excluded.refresh_token_encrypted,
+          scope=excluded.scope, updated_at=datetime('now')`)
+        .run(encryptSecret(isi.refresh_token), String(isi.scope || ''))
+      console.log('[SearchConsole] refresh token tersimpan')
+      return res.type('html').send(`<!DOCTYPE html><html lang="id"><head><meta charset="utf-8"><title>Berhasil</title>
+<style>body{font-family:system-ui,sans-serif;max-width:520px;margin:80px auto;padding:0 24px;text-align:center;color:#1e293b}
+.ok{font-size:56px;line-height:1}h1{font-size:1.35rem;margin:12px 0 8px}p{color:#475569;line-height:1.6}</style></head>
+<body><div class="ok">✅</div><h1>Akun Google berhasil dihubungkan</h1>
+<p>Izin untuk Search Console sudah diterima. Tutup tab ini — proses verifikasi domain dan submit sitemap dilanjutkan otomatis.</p></body></html>`)
+    }
+
     const payload = jwt.verify(String(state), JWT_SECRET)
     const clientId = process.env.GOOGLE_OAUTH_CLIENT_ID
     const clientSecret = process.env.GOOGLE_OAUTH_CLIENT_SECRET
