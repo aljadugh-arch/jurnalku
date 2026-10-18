@@ -167,8 +167,8 @@ export default function PostingPageGuru() {
       <div className="mt-3 grid gap-2 grid-cols-2 md:grid-cols-3">
         {media.map((m, i) => (
           <div key={i} className="relative aspect-video rounded-lg overflow-hidden bg-gray-100 dark:bg-gray-800">
-            {m.type === 'image' && <img src={m.url} alt={m.alt || ''} className="w-full h-full object-cover" />}
-            {m.type === 'video' && <video src={m.url} controls className="w-full h-full" />}
+            {(m.media_type || m.type) === 'image' && <img src={m.media_url || m.url} alt={m.alt || m.filename || ''} loading="lazy" className="w-full h-full object-cover" />}
+            {(m.media_type || m.type) === 'video' && <video src={m.media_url || m.url} controls className="w-full h-full" />}
           </div>
         ))}
       </div>

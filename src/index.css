@@ -154,12 +154,24 @@ aside nav::-webkit-scrollbar-thumb {
   .dark .btn-secondary:hover { background-color: #334155; }
 }
 
-/* Gambar/video pada posting ditampilkan oleh renderMedia (grid seragam
-   aspect-video), bukan inline di dalam konten HTML. Ini mencegah gambar
-   dobel dan memastikan ukurannya konsisten (tidak ada yang tampil raksasa
-   sesuai dimensi asli). */
-.posting-content img,
+/* Gambar/video pada posting dirender INLINE dari HTML konten (RichEditor
+   menyisipkan <img src="/uploads/..."> langsung ke konten). Sebelumnya ada
+   aturan `display:none !important` di sini yang menyembunyikan SEMUA gambar
+   posting, sehingga unggahan berhasil tetapi tidak pernah terlihat.
+
+   Ukuran dijaga oleh kelas Tailwind yang dipasang Image.configure()
+   (`rounded-lg max-w-full h-auto`), jadi tidak ada gambar raksasa. */
+.posting-content img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 0.5rem;
+  margin: 0.75rem 0;
+  display: block;
+}
 .posting-content video {
-  display: none !important;
+  max-width: 100%;
+  height: auto;
+  border-radius: 0.5rem;
+  margin: 0.75rem 0;
 }
 

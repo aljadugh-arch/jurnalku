@@ -103,6 +103,27 @@ app.use(helmet({
 // lagi jatuh ke error handler global sebagai 500.
 const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS || 'https://jurnal.cc.cd,https://jurnalmadrasah.web.id')
   .split(',').map(s => s.trim())
+// Resolusi tenant dari HOST untuk permintaan PUBLIK (tanpa login).
+//
+// Rute robots.txt/sitemap.xml dan renderIndexSeo berjalan tanpa authMiddleware,
+// jadi req.tenantId belum terisi. Tanpa ini semua domain dilayani blok SEO
+// yang sama (judul & deskripsi identik) — persis penyebab 6 domain terlihat
+// "belum SEO": Google membaca enam halaman duplikat, bukan enam lembaga.
+//
+// Urutan: domain_custom (diverifikasi) -> base_domain (domain platform).
+const tenantDariHost = (host) => {
+  const h = String(host || '').toLowerCase().trim().replace(/\.$/, '')
+  if (!h) return null
+  try {
+    const custom = db.prepare('SELECT id FROM tenants WHERE lower(trim(domain_custom, \'.\')) = ? AND aktif = 1').get(h)
+    if (custom?.id) return custom.id
+    // base_domain dipakai bersama banyak lembaga (mis. jurnal.cc.cd): hanya
+    // dipakai kalau tepat satu tenant memakainya, supaya tidak salah pilih.
+    const pakaiBase = db.prepare('SELECT id FROM tenants WHERE lower(trim(base_domain, \'.\')) = ? AND aktif = 1').all(h)
+    if (pakaiBase.length === 1) return pakaiBase[0].id
+    return null
+  } catch { return null }
+}
 const cariDomainTenant = (host) =>
   db.prepare("SELECT id FROM tenants WHERE lower(trim(domain_custom, '.')) = ? AND aktif = 1").get(host)
 app.use(cors({
@@ -182,15 +203,95 @@ app.get('/api/thumb/:filename', async (req, res) => {
     res.status(500).end()
   }
 })
+// ==================== Halaman posting PUBLIK (untuk SEO) ====================
+// Posting berita/kegiatan adalah satu-satunya konten unik milik tiap lembaga,
+// jadi inilah yang layak diindeks — bukan cuma beranda yang isinya sama antar
+// domain. Endpoint ini TIDAK butuh login: hanya kolom yang aman untuk publik.
+const esc = (v) => String(v == null ? '' : v).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]))
+const polosHtml = (html) => String(html || '').replace(/<script[\s\S]*?<\/script>/gi, '').replace(/\son\w+\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi, '')
+
+app.get('/api/publik/posting/:id', (req, res) => {
+  const tenantId = req.tenantId || tenantDariHost(hostPermintaan(req))
+  if (!tenantId) return res.status(404).json({ error: 'Lembaga tidak ditemukan.' })
+  try {
+    const row = db.prepare(`SELECT id, judul, isi, konten, kategori, penulis_nama, created_at, media FROM posting WHERE id=? AND tenant_id=?`).get(req.params.id, tenantId)
+    if (!row) return res.status(404).json({ error: 'Posting tidak ditemukan.' })
+    res.json({ ...row, media: (() => { try { return JSON.parse(row.media || '[]') } catch { return [] } })() })
+  } catch (err) {
+    console.error('[posting-publik]', err.message)
+    res.status(500).json({ error: 'Gagal memuat posting.' })
+  }
+})
+
+app.get('/posting/:id', (req, res) => {
+  const tenantId = tenantDariHost(hostPermintaan(req))
+  let row = null
+  try { row = db.prepare(`SELECT id, judul, isi, konten, kategori, penulis_nama, created_at FROM posting WHERE id=? AND tenant_id=?`).get(req.params.id, tenantId || '') } catch {}
+  if (!row) return res.status(404).type('html').send('<!DOCTYPE html><html lang="id"><head><meta charset="utf-8"><title>Posting tidak ditemukan</title><meta name="robots" content="noindex"></head><body><p>Posting tidak ditemukan.</p><p><a href="/">Kembali ke beranda</a></p></body></html>')
+  const base = `${skemaPermintaan(req)}://${hostPermintaan(req)}`
+  let nama = ''
+  try { nama = String((getTenantSettings(db, tenantId, 'nama_lembaga') || {}).nama_lembaga || '').trim() } catch {}
+  const teks = String(row.konten || row.isi || '').replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim()
+  const deskripsi = teks.slice(0, 160)
+  const judulPenuh = `${row.judul}${nama ? ' — ' + nama : ''} | JURNALKU`
+  const isi = polosHtml(row.konten || row.isi || '')
+  const html = `<!DOCTYPE html>
+<html lang="id"><head><meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>${esc(judulPenuh)}</title>
+<meta name="description" content="${esc(deskripsi)}">
+<link rel="canonical" href="${esc(base + '/posting/' + row.id)}">
+<meta name="robots" content="index, follow">
+<meta property="og:type" content="article">
+<meta property="og:title" content="${esc(row.judul)}">
+<meta property="og:description" content="${esc(deskripsi)}">
+<meta property="og:url" content="${esc(base + '/posting/' + row.id)}">
+<meta property="og:image" content="${esc(base + '/og-image.png')}">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">${JSON.stringify({ '@context': 'https://schema.org', '@type': 'NewsArticle', headline: row.judul, datePublished: row.created_at, author: { '@type': 'Person', name: row.penulis_nama || nama || 'JURNALKU' }, publisher: { '@type': 'Organization', name: nama || 'JURNALKU' }, mainEntityOfPage: base + '/posting/' + row.id, description: deskripsi })}</script>
+<style>body{font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;max-width:720px;margin:0 auto;padding:24px 20px 64px;line-height:1.65;color:#1e293b}h1{font-size:1.6rem;line-height:1.3;margin:0 0 8px}.meta{color:#64748b;font-size:.85rem;margin-bottom:20px}.isi img{max-width:100%;height:auto;border-radius:.5rem;margin:.75rem 0;display:block}.isi video{max-width:100%;border-radius:.5rem}.kembali{display:inline-block;margin-top:28px;color:#1e40af;text-decoration:none;font-weight:500}</style>
+</head><body>
+<article>
+<h1>${esc(row.judul)}</h1>
+<p class="meta">${esc(row.penulis_nama || '')}${nama ? ' · ' + esc(nama) : ''} · ${esc(String(row.created_at || '').slice(0, 10))}</p>
+<div class="isi">${isi}</div>
+</article>
+<a class="kembali" href="/">← Kembali ke beranda</a>
+</body></html>`
+  res.type('html').send(html)
+})
+
 app.get('/robots.txt', (req, res) => {
   const base = `${skemaPermintaan(req)}://${hostPermintaan(req)}`
   res.type('text/plain').send(['User-agent: *', 'Allow: /', 'Disallow: /api/', 'Disallow: /admin/', 'Disallow: /guru/', 'Disallow: /siswa/', 'Disallow: /wali/', `Sitemap: ${base}/sitemap.xml`, ''].join('\n'))
 })
 app.get('/sitemap.xml', (req, res) => {
   const base = `${skemaPermintaan(req)}://${hostPermintaan(req)}`
-  const halaman = [['/', '1.0', 'daily'], ['/login', '0.8', 'monthly'], ['/register', '0.7', 'monthly'], ['/panduan', '0.6', 'monthly']]
-  const urls = halaman.map(([loc, pri, freq]) => `  <url><loc>${base}${loc}</loc><changefreq>${freq}</changefreq><priority>${pri}</priority></url>`).join('\n')
-  res.type('application/xml').send(`<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urls}\n</urlset>\n`)
+  const tenantId = tenantDariHost(hostPermintaan(req))
+  // Halaman publik yang benar-benar bisa dirayapi crawler. Halaman yang butuh
+  // login (dashboard) TIDAK dimasukkan: crawler hanya akan kena redirect dan
+  // itu menurunkan kualitas sinyal di Search Console.
+  const halaman = [
+    ['/', '1.0', 'daily'],
+    ['/panduan', '0.8', 'weekly'],
+    ['/ppdb', '0.8', 'weekly'],
+    ['/login', '0.5', 'monthly'],
+    ['/register', '0.6', 'monthly'],
+  ]
+  const baris = halaman.map(([loc, pri, freq]) => `  <url><loc>${base}${loc}</loc><changefreq>${freq}</changefreq><priority>${pri}</priority></url>`)
+  // Posting publik ikut diindeks supaya berita/kegiatan lembaga muncul di
+  // hasil pencarian — inilah konten yang membuat domain punya kata kunci unik
+  // (nama kegiatan, prestasi, agenda), bukan sekadar judul generik.
+  if (tenantId) {
+    try {
+      const rows = db.prepare(`SELECT id, created_at FROM posting WHERE tenant_id=? ORDER BY created_at DESC LIMIT 500`).all(tenantId)
+      for (const r of rows) {
+        const tgl = String(r.created_at || '').slice(0, 10)
+        baris.push(`  <url><loc>${base}/posting/${r.id}</loc><lastmod>${tgl}</lastmod><changefreq>monthly</changefreq><priority>0.7</priority></url>`)
+      }
+    } catch { /* tabel posting belum ada di DB lama: sitemap tetap valid */ }
+  }
+  res.type('application/xml').send(`<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${baris.join('\n')}\n</urlset>\n`)
 })
 
 // SEO: didaftarkan SEBELUM express.static agar versi dinamis per-domain menang
@@ -334,6 +435,35 @@ const postingUpload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 10 * 1024 * 1024, files: 10 }
 })
+// Turunkan daftar media dari HTML konten posting.
+//
+// Kenapa ini perlu: RichEditor menyisipkan <img src="/uploads/..."> LANGSUNG ke
+// konten, tetapi array `media` hanya terisi saat event onUpdate TipTap jalan.
+// Kalau user menyisipkan gambar lewat URL (addImage), atau mengunggah lalu
+// menekan simpan sebelum editor memicu onUpdate, konten berisi <img> tapi
+// `media` tersimpan '[]'. Akibatnya grid renderMedia kosong dan (karena dulu
+// ada CSS display:none) gambar tidak tampil sama sekali.
+//
+// Dengan menurunkannya dari konten di server, `media` tidak mungkin lagi
+// berbeda dari apa yang benar-benar ada di HTML — satu sumber kebenaran.
+const mediaDariKonten = (konten) => {
+  if (typeof konten !== 'string' || !konten) return []
+  const hasil = []
+  const terlihat = new Set()
+  const pola = /<(img|video)\b[^>]*\bsrc\s*=\s*["']([^"']+)["'][^>]*>/gi
+  let m
+  while ((m = pola.exec(konten)) !== null) {
+    const tag = m[1].toLowerCase()
+    const src = m[2]
+    if (!src.startsWith('/uploads/')) continue
+    if (terlihat.has(src)) continue
+    terlihat.add(src)
+    const nama = src.split('/').pop() || ''
+    hasil.push({ media_url: src, media_type: tag === 'img' ? 'image' : 'video', filename: nama })
+  }
+  return hasil
+}
+
 const savePostingUpload = async (file, tenantId) => {
   if (!file?.buffer?.length) throw Error('File wajib diunggah')
   if (String(file.mimetype || '').startsWith('image/')) {
@@ -8067,7 +8197,11 @@ app.post('/api/posting', STAFF, (req, res) => {
   const { judul, isi, konten, kategori, media, activity_type, location_lat, location_lng, location_name, poll_data, tags } = req.body
   if (!judul?.trim() || !isi?.trim()) return res.status(400).json({ error: 'Judul dan isi wajib diisi.' })
   const safeKonten = typeof konten === 'string' && konten.trim() ? konten.trim() : isi.trim()
-  const safeMedia = Array.isArray(media) ? media.filter(item => item && typeof item === 'object' && typeof item.media_url === 'string' && item.media_url.startsWith('/uploads/')) : []
+  // Gabungkan media dari klien dengan yang diturunkan dari HTML konten. Konten
+  // adalah sumber kebenaran: kalau ada <img> di sana, media HARUS memuatnya.
+  const mediaKlien = Array.isArray(media) ? media.filter(item => item && typeof item === 'object' && typeof item.media_url === 'string' && item.media_url.startsWith('/uploads/')) : []
+  const mediaDariHtml = mediaDariKonten(safeKonten)
+  const safeMedia = mediaDariHtml.length ? mediaDariHtml : mediaKlien
   const id = uuidv4()
   db.prepare(`INSERT INTO posting (id, tenant_id, author_user_id, konten, judul, isi, kategori, penulis_id, penulis_nama, media, activity_type, location_lat, location_lng, location_name, poll_data, tags) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
     .run(id, req.tenantId, req.user.id, safeKonten, judul.trim(), isi.trim(), kategori || 'berita', req.user.id, req.user.nama || req.user.username || '', JSON.stringify(safeMedia), activity_type || '', location_lat || null, location_lng || null, location_name || '', JSON.stringify(poll_data || []), JSON.stringify(tags || []))
@@ -8139,7 +8273,11 @@ app.put('/api/posting/:id', STAFF, (req, res) => {
   // PENTING: pertahankan konten HTML (gambar/video/format) saat edit. Sebelumnya
   // konten ditimpa dengan isi (teks polos) sehingga gambar lenyap setelah edit.
   const safeKonten = typeof konten === 'string' && konten.trim() ? konten.trim() : isi.trim()
-  const safeMedia = Array.isArray(media) ? media.filter(item => item && typeof item === 'object' && typeof item.media_url === 'string' && item.media_url.startsWith('/uploads/')) : []
+  // Gabungkan media dari klien dengan yang diturunkan dari HTML konten. Konten
+  // adalah sumber kebenaran: kalau ada <img> di sana, media HARUS memuatnya.
+  const mediaKlien = Array.isArray(media) ? media.filter(item => item && typeof item === 'object' && typeof item.media_url === 'string' && item.media_url.startsWith('/uploads/')) : []
+  const mediaDariHtml = mediaDariKonten(safeKonten)
+  const safeMedia = mediaDariHtml.length ? mediaDariHtml : mediaKlien
   db.prepare(`UPDATE posting SET judul=?, isi=?, konten=?, kategori=?, media=?, activity_type=?, location_lat=?, location_lng=?, location_name=?, poll_data=?, tags=? WHERE id=? AND tenant_id=?`)
     .run(judul.trim(), isi.trim(), safeKonten, kategori || 'berita', JSON.stringify(safeMedia), activity_type || '', location_lat || null, location_lng || null, location_name || '', JSON.stringify(poll_data || []), JSON.stringify(tags || []), req.params.id, req.tenantId)
   try {
@@ -10616,14 +10754,50 @@ function bacaIndexTemplate() {
 function renderIndexSeo(req) {
   const html = bacaIndexTemplate()
   if (!html) return null
+  // Permintaan halaman publik tidak melewati authMiddleware, jadi req.tenantId
+  // kosong. Resolusi dari host dulu supaya tiap domain menyajikan identitas
+  // lembaganya sendiri, bukan judul platform yang sama untuk keenam domain.
+  if (!req.tenantId) req.tenantId = tenantDariHost(hostPermintaan(req))
   let s = {}
   try { if (req.tenantId) s = getTenantSettings(db, req.tenantId, 'nama_lembaga,pwa_name') || {} } catch { s = {} }
   const nama = String(s.nama_lembaga || '').trim()
   const base = `${skemaPermintaan(req)}://${hostPermintaan(req)}`
-  const judul = nama ? `${nama} — JURNALKU` : 'JURNALKU - Sistem Informasi Manajemen Sekolah/Madrasah'
-  const deskripsi = nama
-    ? `Sistem informasi manajemen ${nama}: jurnal mengajar, absensi QR/RFID, penilaian, rapor, keuangan, dan notifikasi WhatsApp untuk guru, siswa, dan wali murid.`
-    : SEO_DESC_DEFAULT
+  // Judul & deskripsi PER HALAMAN. Tanpa ini setiap rute (/panduan, /ppdb,
+  // /login) menyajikan meta yang sama persis, sehingga Google menganggapnya
+  // satu halaman duplikat dan hanya satu URL yang layak diindeks.
+  const path = String(req.path || '/').replace(/\/+$/, '') || '/'
+  const halaman = {
+    '/': {
+      judul: nama ? `${nama} — JURNALKU` : 'JURNALKU - Sistem Informasi Manajemen Sekolah/Madrasah',
+      deskripsi: nama
+        ? `Sistem informasi manajemen ${nama}: jurnal mengajar, absensi QR/RFID, penilaian, rapor, keuangan, dan notifikasi WhatsApp untuk guru, siswa, dan wali murid.`
+        : SEO_DESC_DEFAULT,
+    },
+    '/panduan': {
+      judul: `Panduan Penggunaan${nama ? ' — ' + nama : ''} | JURNALKU`,
+      deskripsi: `Panduan langkah demi langkah penggunaan JURNALKU${nama ? ' di ' + nama : ''}: pendataan siswa dan GTK, jadwal pelajaran, absensi QR/RFID, jurnal mengajar, penilaian, rapor, dan tagihan.`,
+    },
+    '/ppdb': {
+      judul: `Penerimaan Peserta Didik Baru (PPDB)${nama ? ' — ' + nama : ''} | JURNALKU`,
+      deskripsi: `Pendaftaran peserta didik baru${nama ? ' di ' + nama : ''} secara daring: isi biodata, unggah berkas, dan pantau status penerimaan tanpa datang ke sekolah.`,
+    },
+    '/login': {
+      judul: `Masuk${nama ? ' — ' + nama : ''} | JURNALKU`,
+      deskripsi: `Halaman masuk JURNALKU${nama ? ' untuk ' + nama : ''}. Akses dashboard admin, guru, siswa, dan wali murid.`,
+    },
+    '/register': {
+      judul: 'Daftar Lembaga | JURNALKU',
+      deskripsi: 'Daftarkan sekolah, madrasah, atau lembaga kursus Anda ke JURNALKU. Kelola jurnal mengajar, absensi, penilaian, rapor, dan notifikasi WhatsApp dalam satu aplikasi.',
+    },
+  }
+  const meta = halaman[path] || {
+    judul: nama ? `${nama} — JURNALKU` : 'JURNALKU - Sistem Informasi Manajemen Sekolah/Madrasah',
+    deskripsi: nama
+      ? `Sistem informasi manajemen ${nama}: jurnal mengajar, absensi QR/RFID, penilaian, rapor, keuangan, dan notifikasi WhatsApp.`
+      : SEO_DESC_DEFAULT,
+  }
+  const judul = meta.judul
+  const deskripsi = meta.deskripsi
   const gambar = `${base}/og-image.png`
   const namaAplikasi = String(s.pwa_name || nama || 'JURNALKU')
   const ld = {
@@ -10637,7 +10811,7 @@ function renderIndexSeo(req) {
     `<title>${escHtml(judul)}</title>`,
     `<meta name="description" content="${escHtml(deskripsi)}" />`,
     `<meta name="application-name" content="${escHtml(namaAplikasi)}" />`,
-    `<link rel="canonical" href="${escHtml(base + '/')}" />`,
+    `<link rel="canonical" href="${escHtml(base + path)}" />`,
     `<meta name="robots" content="index, follow" />`,
     `<meta name="author" content="JURNALKU" />`,
     `<meta name="keywords" content="aplikasi sekolah, sistem informasi madrasah, jurnal mengajar, absensi QR, absensi RFID, rapor digital, e-rapor, manajemen sekolah, jurnalku" />`,
@@ -10645,7 +10819,7 @@ function renderIndexSeo(req) {
     `<meta property="og:site_name" content="${escHtml(namaAplikasi)}" />`,
     `<meta property="og:title" content="${escHtml(judul)}" />`,
     `<meta property="og:description" content="${escHtml(deskripsi)}" />`,
-    `<meta property="og:url" content="${escHtml(base + '/')}" />`,
+    `<meta property="og:url" content="${escHtml(base + path)}" />`,
     `<meta property="og:image" content="${escHtml(gambar)}" />`,
     `<meta property="og:image:width" content="1200" />`,
     `<meta property="og:image:height" content="630" />`,
@@ -10657,14 +10831,40 @@ function renderIndexSeo(req) {
     `<meta name="twitter:image" content="${escHtml(gambar)}" />`,
     `<script type="application/ld+json">${JSON.stringify(ld)}</script>`,
   ].join('\n    ')
+  // Isi HTML untuk crawler. Aplikasi ini SPA: <div id="root"> kosong sampai JS
+  // jalan, sehingga crawler yang tidak mengeksekusi JS hanya melihat halaman
+  // tanpa teks — tidak ada yang bisa diindeks selain judul. Blok ini dirender
+  // di dalam #root dan DILEBUR React saat mount (createRoot mengganti isinya),
+  // jadi pengunjung normal tidak melihatnya sama sekali.
+  const ringkas = [
+    `<h1>${escHtml(nama || 'JURNALKU — Sistem Informasi Manajemen Sekolah & Madrasah')}</h1>`,
+    `<p>${escHtml(deskripsi)}</p>`,
+    `<h2>Fitur</h2>`,
+    `<ul>`,
+    `<li>Jurnal mengajar harian dan rekap KBM</li>`,
+    `<li>Absensi siswa dan guru dengan QR code maupun RFID</li>`,
+    `<li>Penilaian, e-rapor, dan cetak rapor K13</li>`,
+    `<li>Manajemen siswa, GTK, rombel, jadwal, dan tahun ajaran</li>`,
+    `<li>Tagihan, tabungan siswa, dan perpustakaan</li>`,
+    `<li>Notifikasi WhatsApp untuk guru, siswa, dan wali murid</li>`,
+    `</ul>`,
+    `<p><a href="/panduan">Panduan penggunaan</a> · <a href="/ppdb">PPDB daring</a> · <a href="/login">Masuk</a> · <a href="/register">Daftar lembaga</a></p>`,
+  ].join('\n      ')
+  const isiCrawler = `<div id="root"><div style="max-width:720px;margin:0 auto;padding:24px;font-family:system-ui,sans-serif">\n      ${ringkas}\n    </div></div>`
+
   if (html.includes('<!--SEO:START-->') && html.includes('<!--SEO:END-->')) {
-    return html.replace(/<!--SEO:START-->[\s\S]*?<!--SEO:END-->/, `<!--SEO:START-->\n    ${blok}\n    <!--SEO:END-->`)
+    let hasil = html.replace(/<!--SEO:START-->[\s\S]*?<!--SEO:END-->/, `<!--SEO:START-->\n    ${blok}\n    <!--SEO:END-->`)
+    // Ganti HANYA div#root kosong; kalau sudah berisi, biarkan.
+    hasil = hasil.replace(/<div id="root"><\/div>/, isiCrawler)
+    return hasil
   }
   return html
 }
 // SPA fallback - serve index.html for non-API GET routes
 app.use((req, res, next) => {
   if (req.path.startsWith('/api')) return res.status(404).json({ error: 'Not found' })
+  // /posting/:id sudah dilayani rute HTML server-rendered di atas (SEO).
+  if (/^\/posting\/[^/]+$/.test(req.path)) return next()
   // /.well-known/* bukan halaman aplikasi (mis. assetlinks.json untuk Play Store):
   // jangan pernah disajikan sebagai HTML SPA agar verifikasi Google tidak salah baca.
   if (req.path.startsWith('/.well-known/')) return res.status(404).json({ error: 'Not found' })

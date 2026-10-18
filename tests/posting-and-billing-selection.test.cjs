@@ -13,7 +13,9 @@ test('posting editor sends multiple selected files in one authenticated multipar
   assert.match(editor, /data\.media\b/)
   assert.match(editor, /media_url: data\.media_url|setImage\(\{ src: data\.media_url/)
   assert.match(server, /files:\s*10/)
-  assert.match(server, /safeMedia = Array\.isArray\(media\)/)
+  // Kontrak diperbarui: media diturunkan dari HTML konten (lihat mediaDariKonten),
+  // karena array `media` dari klien bisa kosong walau konten berisi <img>.
+  assert.match(server, /mediaDariKonten\(safeKonten\)/)
   assert.match(server, /const \{ judul, isi, konten, kategori, media/)
   assert.match(server, /postingUpload\.fields\(/)
 })

@@ -52,7 +52,14 @@ test('attendance selfie image data is normalized before database persistence', (
 })
 
 test('posting media are local managed uploads and removed when detached', () => {
-  assert.match(server, /const safeMedia = Array\.isArray\(media\)/)
+  // Kontrak diperbarui: `media` tidak lagi dipercaya mentah dari klien.
+  // Server menurunkannya dari HTML konten (mediaDariKonten) karena RichEditor
+  // menyisipkan <img> langsung ke konten, sementara array `media` bisa
+  // tersimpan kosong kalau onUpdate TipTap tidak sempat jalan. Klien tetap
+  // disaring sebagai cadangan, tetapi konten adalah sumber kebenaran.
+  assert.match(server, /const mediaDariKonten = \(konten\) =>/)
+  assert.match(server, /mediaDariKonten\(safeKonten\)/)
+  assert.match(server, /item\.media_url\.startsWith\('\/uploads\/'\)/)
   assert.match(server, /JSON\.parse\(row\.media \|\| '\[\]'\)[\s\S]*?removeManagedUpload/)
 })
 
