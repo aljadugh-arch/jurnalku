@@ -173,6 +173,27 @@ if [[ $kode_live -ne 0 ]]; then
   exit 1
 fi
 grep -E 'LIVE sehat' "$DEP_LOG" | sed 's/^/   /' || true
+
+# ── Rekonsiliasi layanan pasca-deploy ──
+# WA Gateway, Google Drive, dan Search Console menyimpan kredensial di DB,
+# bukan di kode. Deploy tidak menimpanya, tapi restore DB lama atau baris yang
+# terhapus bisa mematikannya diam-diam. Diperiksa otomatis di sini supaya
+# ketahuan pada deploy yang sama, bukan berminggu-minggu kemudian.
+echo "── rekonsiliasi layanan ──"
+# Skrip ini harus jalan DI VPS (database produksi ada di sana), bukan di mesin
+# lokal. Dijalankan lewat sshpass yang sama dengan deploy, lalu hasilnya
+# disimpan ke log gate.
+REKON_LOG="$ARSIP/rekonsiliasi.log"
+if sshpass -e ssh -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$SSH_KNOWN_HOSTS" \
+     "${VPS_USER}@${VPS_IP}" \
+     'cd /www/wwwroot/jurnal.cc.cd && bash scripts/rekonsiliasi-pasca-deploy.sh' > "$REKON_LOG" 2>&1; then
+  grep -E 'Status rekonsiliasi|KRITIS|PERINGATAN|SEHAT' "$REKON_LOG" | tail -6 | sed 's/^/   /' || true
+else
+  kode_rekon=$?
+  echo "   !! rekonsiliasi layanan menemukan masalah (exit $kode_rekon)"
+  grep -E 'KRITIS|TINDAKAN|  - ' "$REKON_LOG" | tail -8 | sed 's/^/      /' || true
+fi
+
 tulis_ringkasan "sukses (staging $kode_stg, promote $kode_live)"
 
 # Retensi: simpan $SIMPAN_MAKS run terakhir.

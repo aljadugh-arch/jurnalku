@@ -2954,6 +2954,19 @@ const DEMO_HOSTS = new Set(
   String(process.env.DEMO_HOSTS || 'demo.jurnal.cc.cd')
     .split(',').map(h => h.trim().toLowerCase()).filter(Boolean)
 )
+
+// Host "platform" = domain milik Jurnalku sendiri (bukan domain lembaga).
+// Dipakai untuk membatasi login super_admin: hanya boleh dari sini.
+// Domain lembaga (jurnal.mtsplussd7.cc.cd, jurnal.mimifdangimbang.my.id, dst)
+// TIDAK termasuk, sehingga akun lintas lembaga tidak bisa menyusup.
+const HOST_PLATFORM = new Set(
+  String(process.env.HOST_PLATFORM || 'jurnal.cc.cd,www.jurnal.cc.cd,jurnalmadrasah.web.id,www.jurnalmadrasah.web.id,jurnalku.biz.id,www.jurnalku.biz.id,idjurnal.my.id,idjurnal.web.id,idjurnal.biz.id,localhost,127.0.0.1')
+    .split(',').map(h => h.trim().toLowerCase()).filter(Boolean)
+)
+function hostPlatform(req) {
+  const host = String(req.headers['x-forwarded-host'] || req.headers.host || '').split(',')[0].trim().split(':')[0].toLowerCase().replace(/\.$/, '')
+  return HOST_PLATFORM.has(host)
+}
 // Demo tenant terpisah dari default (superadmin).
 // Cari/buat tenant khusus demo — BUKAN 'default'.
 const DEMO_TENANT_ID = 'demo-tenant'
@@ -3029,10 +3042,19 @@ app.post('/api/auth/login', authLimiter, loginAccountLimiter, (req, res) => {
   let tenantId = req.tenantId || 'default'
   const ident = String(email).trim()
   const identLower = ident.toLowerCase()
-  // 1) Email langsung (per tenant, lalu super_admin, lalu global email).
+  // 1) Email langsung. WAJIB dibatasi tenant.
+  //
+  // Sebelumnya ada fallback `WHERE lower(email) = ?` TANPA filter tenant. Itu
+  // membuat akun milik satu lembaga (termasuk akun demo) bisa login dari
+  // domain lembaga LAIN hanya dengan emailnya — terbukti lewat uji: akun di
+  // mtsplussd7 berhasil login dari domain mimifdangimbang.
+  //
+  // Pengecualian yang sah hanya super_admin platform, dan hanya bila host-nya
+  // memang domain platform (bukan domain lembaga).
   let user = db.prepare('SELECT * FROM users WHERE lower(email) = ? AND tenant_id = ?').get(identLower, tenantId)
-  if (!user) user = db.prepare("SELECT * FROM users WHERE lower(email) = ? AND role = 'super_admin'").get(identLower)
-  if (!user) user = db.prepare('SELECT * FROM users WHERE lower(email) = ?').get(identLower)
+  if (!user && hostPlatform(req)) {
+    user = db.prepare("SELECT * FROM users WHERE lower(email) = ? AND role = 'super_admin'").get(identLower)
+  }
   // 2) Kode guru / NIP -> cari GTK di tenant, lalu user yang terhubung.
   if (!user) {
     const g = db.prepare("SELECT * FROM gtk WHERE tenant_id = ? AND ((kode_guru != '' AND lower(kode_guru) = ?) OR nip = ?)").get(tenantId, identLower, ident)
@@ -3045,7 +3067,8 @@ app.post('/api/auth/login', authLimiter, loginAccountLimiter, (req, res) => {
   // 3) NIS / NISN siswa -> auto-provision user siswa jika belum ada.
   if (!user) {
     let siswa = db.prepare("SELECT * FROM siswa WHERE tenant_id = ? AND status = 'aktif' AND (nis = ? OR nisn = ?)").get(tenantId, ident, ident)
-    if (!siswa) siswa = db.prepare("SELECT * FROM siswa WHERE status = 'aktif' AND (nis = ? OR nisn = ?) ORDER BY tenant_id LIMIT 1").get(ident, ident)
+    // JANGAN cari NIS lintas tenant: NIS bisa sama di dua lembaga, dan
+    // memilih yang pertama ditemukan berarti login masuk ke lembaga yang salah.
     if (siswa) { tenantId = siswa.tenant_id || tenantId; user = ensureStudentUser(siswa, tenantId) }
   }
   // 4) Fallback users.kode_guru / users.nip / users.nis langsung.
