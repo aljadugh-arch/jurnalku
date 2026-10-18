@@ -68,6 +68,7 @@ export const adminMenuItems: MenuItem[] = [
   { label: 'Alumni & Mutasi', icon: <ArrowRightLeft size={20} />, path: '/admin/mutasi' },
   { label: 'Sirkulasi Perpustakaan', icon: <Library size={20} />, path: '/admin/pustaka' },
   { label: 'Substitusi Guru', icon: <UserCheck size={20} />, path: '/admin/substitusi' },
+  { label: 'Payroll & JTM', icon: <Wallet size={20} />, path: '/admin/payroll' },
   { label: 'Generator AI Guru', icon: <Sparkles size={20} />, path: '/admin/modul-ajar' },
   { label: 'Perpustakaan Digital', icon: <BookOpen size={20} />, path: '/admin/perpustakaan' },
   { label: 'Administrasi Surat', icon: <ScrollText size={20} />, path: '/admin/administrasi' },

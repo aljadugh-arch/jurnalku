@@ -57,6 +57,7 @@ const BkPage = lazy(() => import('./pages/admin/BkPage'))
 const MutasiPage = lazy(() => import('./pages/admin/MutasiPage'))
 const PustakaPage = lazy(() => import('./pages/admin/PustakaPage'))
 const SubstitusiPage = lazy(() => import('./pages/admin/SubstitusiPage'))
+const PayrollPage = lazy(() => import('./pages/admin/PayrollPage'))
 const SupervisiPage = lazy(() => import('./pages/admin/SupervisiPage'))
 const AdministrasiPage = lazy(() => import('./pages/admin/AdministrasiPage'))
 const ProgramBelajarPage = lazy(() => import('./pages/admin/ProgramBelajarPage'))
@@ -283,6 +284,7 @@ export default function App() {
           <Route path="mutasi" element={<MutasiPage />} />
           <Route path="pustaka" element={<PustakaPage />} />
           <Route path="substitusi" element={<SubstitusiPage />} />
+          <Route path="payroll" element={<PayrollPage />} />
           <Route path="supervisi" element={
             <ProtectedRoute allowedRoles={['admin', 'super_admin', 'kepala']}><SupervisiPage /></ProtectedRoute>
           } />
