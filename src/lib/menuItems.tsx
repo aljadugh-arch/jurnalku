@@ -3,7 +3,7 @@ import {
   ClipboardList, UserCheck, QrCode, MapPin,
   Layers, Activity, Globe, Sparkles, DollarSign, Settings, MessageSquare,
   FileText, ClipboardCheck, ScrollText, School, Wallet, Receipt, DatabaseBackup, Code2, ScanText,
-  FileQuestion, Monitor, Star, Building2, CreditCard, Database, Mail, HeartHandshake, ArrowRightLeft, Library
+  FileQuestion, Monitor, Star, Building2, CreditCard, Database, Mail, HeartHandshake, ArrowRightLeft, Library, Calculator
 } from 'lucide-react'
 
 export interface MenuItem {
@@ -69,6 +69,7 @@ export const adminMenuItems: MenuItem[] = [
   { label: 'Sirkulasi Perpustakaan', icon: <Library size={20} />, path: '/admin/pustaka' },
   { label: 'Substitusi Guru', icon: <UserCheck size={20} />, path: '/admin/substitusi' },
   { label: 'Payroll & JTM', icon: <Wallet size={20} />, path: '/admin/payroll' },
+  { label: 'RKAS & BOS', icon: <Calculator size={20} />, path: '/admin/rkas' },
   { label: 'Generator AI Guru', icon: <Sparkles size={20} />, path: '/admin/modul-ajar' },
   { label: 'Perpustakaan Digital', icon: <BookOpen size={20} />, path: '/admin/perpustakaan' },
   { label: 'Administrasi Surat', icon: <ScrollText size={20} />, path: '/admin/administrasi' },
