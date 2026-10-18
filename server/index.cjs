@@ -2113,6 +2113,41 @@ app.get('/api/subscription/plans', authMiddleware, (req, res) => {
   res.json({ plans: getPlans(db), feature_keys: FEATURE_KEYS })
 })
 
+// Paket untuk LANDING PAGE PUBLIK (tanpa login).
+//
+// Kenapa terpisah dari rute di atas: harga & masa aktif diubah admin lewat UI
+// (tersimpan di tabel subscription_plans), jadi landing page TIDAK BOLEH
+// menuliskan harga di kode — kalau ditulis di kode, harga di landing bisa
+// berbeda dari yang benar-benar ditagih. Rute ini hanya mengembalikan paket
+// yang aktif, dan hanya kolom yang aman untuk publik.
+app.get('/api/publik/paket', (req, res) => {
+  try {
+    const plans = getPlans(db)
+      .filter(p => p && p.aktif !== 0 && p.aktif !== false)
+      .map(p => {
+        let fitur = []
+        try {
+          const raw = typeof p.fitur_json === 'string' ? JSON.parse(p.fitur_json) : (p.fitur_json || p.fitur || [])
+          fitur = Array.isArray(raw) ? raw : Object.entries(raw || {}).filter(([, v]) => v === true).map(([k]) => k)
+        } catch { fitur = [] }
+        return {
+          plan: p.plan,
+          label: p.label,
+          harga: Number(p.harga) || 0,
+          masa_nilai: Number(p.masa_nilai) || 1,
+          masa_satuan: p.masa_satuan || 'bulan',
+          urutan: Number(p.urutan) || 0,
+          fitur,
+        }
+      })
+      .sort((a, b) => a.urutan - b.urutan)
+    res.json({ plans })
+  } catch (err) {
+    console.error('[paket-publik]', err.message)
+    res.status(500).json({ error: 'Gagal memuat paket.' })
+  }
+})
+
 // Ubah konfigurasi paket (harga, masa aktif, nama, aktif, fitur). Khusus super admin.
 app.put('/api/subscription/plans/:plan', SUPER, (req, res) => {
   const plan = String(req.params.plan || '').toLowerCase()
