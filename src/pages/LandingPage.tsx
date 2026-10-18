@@ -109,7 +109,7 @@ const faq = [
   { t: 'Lembaga jenis apa yang cocok memakainya?', j: 'RA/TK, SD/MI, SMP/MTs, SMA/MA/SMK, pesantren, sampai lembaga kursus dan bimbel. Program belajar juga tersedia khusus untuk lembaga nonformal.' },
   { t: 'Bagaimana dengan data dan keamanan?', j: 'Setiap lembaga memiliki database terpisah. Akses dipisah per peran (admin, guru, siswa, wali) sehingga setiap orang hanya melihat data yang menjadi haknya. Backup dapat dijalankan otomatis.' },
   { t: 'Apakah bisa memakai domain sendiri?', j: 'Bisa. Lembaga dapat memakai subdomain yang disediakan atau menghubungkan domain sendiri, sehingga alamat yang dibagikan ke wali murid adalah alamat resmi lembaga.' },
-  { t: 'Bagaimana cara mencoba sebelum berlangganan?', j: 'Daftar dan masa uji coba langsung aktif. Tidak perlu kartu kredit, dan bisa berhenti kapan saja tanpa biaya.' },
+  { t: 'Bagaimana cara mencoba sebelum berlangganan?', j: 'Daftar dan masa uji coba langsung aktif. Coba gratis sekarang juga, dan bisa berhenti kapan saja tanpa biaya.' },
 ]
 
 const rupiah = (n: number) => 'Rp ' + (Number(n) || 0).toLocaleString('id-ID')
@@ -230,7 +230,7 @@ export default function LandingPage() {
           <div className="grid lg:grid-cols-2 gap-12 items-center">
             <div className="text-center lg:text-left">
               <div className="inline-flex items-center gap-2 px-3.5 py-1.5 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-900 text-emerald-700 dark:text-emerald-400 rounded-full text-xs font-semibold mb-5">
-                <BadgeCheck size={14} /> Gratis 30 hari · tanpa kartu kredit
+                <BadgeCheck size={14} /> Gratis 30 hari · coba gratis sekarang juga
               </div>
               <h1 className="text-[2.1rem] sm:text-5xl lg:text-[3.3rem] font-extrabold text-slate-900 dark:text-white font-display leading-[1.08] mb-4 tracking-tight">
                 Administrasi Rapi,{' '}
@@ -249,7 +249,7 @@ export default function LandingPage() {
                 </Link>
               </div>
               <div className="flex flex-wrap items-center justify-center lg:justify-start gap-x-6 gap-y-2 text-sm text-slate-500 dark:text-gray-400">
-                {['Gratis 30 hari', 'Tanpa kartu kredit', 'Aktif dalam 1 menit'].map(t => (
+                {['Gratis 30 hari', 'Coba gratis sekarang juga', 'Aktif dalam 1 menit'].map(t => (
                   <div key={t} className="flex items-center gap-1.5">
                     <CheckCircle size={16} className="text-emerald-500" /> <span>{t}</span>
                   </div>
@@ -495,8 +495,8 @@ export default function LandingPage() {
             </div>
             {paketTrial && (
               <p className="text-center text-sm text-slate-500 dark:text-gray-400 mt-6">
-                Belum yakin? Coba dulu <strong className="text-slate-700 dark:text-gray-200">{paketTrial.masa_nilai} {paketTrial.masa_satuan}</strong> tanpa biaya —
-                tanpa kartu kredit, bisa berhenti kapan saja.
+                Belum yakin? Coba gratis sekarang juga selama <strong className="text-slate-700 dark:text-gray-200">{paketTrial.masa_nilai} {paketTrial.masa_satuan}</strong> —
+                bisa berhenti kapan saja.
               </p>
             )}
           </>

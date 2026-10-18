@@ -296,6 +296,15 @@ app.get('/sitemap.xml', (req, res) => {
   res.type('application/xml').send(`<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${baris.join('\n')}\n</urlset>\n`)
 })
 
+// Ikon per-lembaga: WAJIB didaftarkan SEBELUM express.static.
+// Tanpa ini dist/favicon.ico disajikan lebih dulu dan route dinamis di bawah
+// tidak pernah tercapai — akibatnya semua domain memakai favicon yang sama
+// (terbukti: md5 identik di 9 domain). Caddy sudah mem-proxy path ikon ke Node.
+app.get('/favicon.ico', (req, res) => sendTenantIcon(req, res, 64))
+app.get('/apple-touch-icon.png', (req, res) => sendTenantIcon(req, res, 192))
+app.get('/icon-192.png', (req, res) => sendTenantIcon(req, res, 192))
+app.get('/icon-512.png', (req, res) => sendTenantIcon(req, res, 512))
+
 // SEO: didaftarkan SEBELUM express.static agar versi dinamis per-domain menang
 // ketika permintaan sampai ke Node; public/robots.txt & public/sitemap.xml tetap
 // ada sebagai cadangan bila Caddy melayani berkas dist/ secara langsung.
@@ -5533,7 +5542,15 @@ app.get('/api/pwa/icon/:size', async (req, res) => {
   }
 })
 async function sendTenantIcon(req, res, size = 64) {
-  const s = getTenantSettings(db, req.tenantId, 'pwa_icon,logo') || {}
+  // Rute ikon berjalan TANPA authMiddleware, jadi req.tenantId biasanya kosong.
+  // Tanpa resolusi dari host, setiap domain memakai logo default — persis
+  // keluhan "favicon per tenant tidak berbeda". Resolusi harus terjadi di sini.
+  // Rute ikon berjalan TANPA authMiddleware, jadi req.tenantId biasanya kosong.
+  // Tanpa resolusi dari host, setiap domain memakai logo default — persis
+  // keluhan "favicon per tenant tidak berbeda". Isi req.tenantId di sini.
+  if (!req.tenantId) { try { req.tenantId = tenantDariHost(hostPermintaan(req)) } catch { req.tenantId = null } }
+  let s = {}
+  try { if (req.tenantId) s = getTenantSettings(db, req.tenantId, 'pwa_icon,logo') || {} } catch { s = {} }
   const fallback = path.join(__dirname, '..', 'public', 'logo-jurnalku-256.png')
   try {
     const configured = s.pwa_icon || s.logo || '/logo-jurnalku-256.png'
@@ -5548,8 +5565,6 @@ async function sendTenantIcon(req, res, size = 64) {
     res.sendFile(fallback)
   }
 }
-app.get('/favicon.ico', (req, res) => sendTenantIcon(req, res, 64))
-app.get('/apple-touch-icon.png', (req, res) => sendTenantIcon(req, res, 192))
 // Ikon PWA 192px dipakai juga sebagai og:image bila og-image.png belum ada
 // (preview WhatsApp/Facebook). Dibuat dari logo tenant, jadi otomatis per-lembaga.
 app.get('/og-image.png', async (req, res) => {
