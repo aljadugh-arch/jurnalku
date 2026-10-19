@@ -80,7 +80,13 @@ test('SEO: judul & deskripsi berbeda per halaman', () => {
 test('SEO: sitemap memuat posting publik per tenant', () => {
   const s = baca('server/index.cjs')
   const i = s.indexOf("app.get('/sitemap.xml'")
-  const badan = s.slice(i, i + 1600)
+  assert.ok(i > 0, 'rute sitemap harus ada')
+  // Potong badan route SAMPAI penutupnya, bukan sejumlah karakter tetap.
+  // Jendela tetap (1600 char) rapuh: begitu route menambah logika lain,
+  // tes gagal padahal sitemap masih memuat posting.
+  const akhir = s.indexOf("res.type('application/xml')", i)
+  assert.ok(akhir > i, 'harus ketemu pengiriman XML')
+  const badan = s.slice(i, akhir)
   assert.ok(/FROM posting WHERE tenant_id=\?/.test(badan), 'sitemap harus menyertakan posting tenant')
   assert.ok(/\/posting\//.test(badan), 'sitemap harus memuat URL posting')
 })

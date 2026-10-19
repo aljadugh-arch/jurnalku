@@ -272,6 +272,88 @@ app.get('/robots.txt', (req, res) => {
   const base = `${skemaPermintaan(req)}://${hostPermintaan(req)}`
   res.type('text/plain').send(['User-agent: *', 'Allow: /', 'Disallow: /api/', 'Disallow: /admin/', 'Disallow: /guru/', 'Disallow: /siswa/', 'Disallow: /wali/', `Sitemap: ${base}/sitemap.xml`, ''].join('\n'))
 })
+// ==================== Halaman PROFIL lembaga (publik, untuk SEO) ====================
+// Kenapa ada: sembilan domain menyajikan beranda dengan judul dan isi yang
+// hampir sama, sehingga Google menandainya "Duplicate, Google chose different
+// canonical". Profil lembaga memberi tiap domain SATU halaman berisi data yang
+// benar-benar berbeda: nama, jenjang, NPSN, alamat, kepala sekolah, jumlah
+// rombel/GTK/siswa, dan daftar ekstrakurikuler. Semua dari DB, bukan dikarang.
+function renderProfilLembaga(req, res) {
+  const host = hostPermintaan(req)
+  const tenantId = req.tenantId || tenantDariHost(host)
+  const base = `${skemaPermintaan(req)}://${host}`
+  if (!tenantId) return res.status(404).type('html').send('<!DOCTYPE html><html lang="id"><head><meta charset="utf-8"><title>Lembaga tidak ditemukan</title><meta name="robots" content="noindex"></head><body><p>Lembaga tidak ditemukan.</p><p><a href="/">Beranda</a></p></body></html>')
+  let s = {}, t = null
+  try { s = getTenantSettings(db, tenantId, 'nama_lembaga,jenjang,npsn,nsm,alamat,telepon,email,kepala_sekolah,kota_cetak') || {} } catch { s = {} }
+  try { t = db.prepare('SELECT id FROM tenants WHERE id=?').get(tenantId) } catch { t = null }
+  if (!t) return res.status(404).type('html').send('<!DOCTYPE html><html lang="id"><head><meta charset="utf-8"><title>Lembaga tidak ditemukan</title><meta name="robots" content="noindex"></head><body><p>Lembaga tidak ditemukan.</p><p><a href="/">Beranda</a></p></body></html>')
+  const hitung = (sql) => { try { return db.prepare(sql).get(tenantId)?.n || 0 } catch { return 0 } }
+  const nSiswa = hitung("SELECT COUNT(*) n FROM siswa WHERE tenant_id=? AND status='aktif'")
+  const nGtk = hitung("SELECT COUNT(*) n FROM gtk WHERE tenant_id=? AND status='aktif'")
+  const nRombel = hitung("SELECT COUNT(*) n FROM rombel WHERE tenant_id=?")
+  let ekskul = []
+  try { ekskul = db.prepare('SELECT nama FROM ekskul WHERE tenant_id=? ORDER BY nama LIMIT 24').all(tenantId).map(r => r.nama).filter(Boolean) } catch { ekskul = [] }
+  const nama = String(s.nama_lembaga || '').trim() || 'Lembaga'
+  const jenjang = String(s.jenjang || '').trim()
+  const alamat = String(s.alamat || '').trim()
+  const kepala = String(s.kepala_sekolah || '').trim()
+  const npsn = String(s.npsn || '').trim()
+  const nsm = String(s.nsm || '').trim()
+  const kota = String(s.kota_cetak || '').trim()
+  const judul = `${nama}${jenjang ? ' — ' + jenjang : ''} | Profil Lembaga`
+  const deskripsi = `Profil ${nama}${jenjang ? ' (' + jenjang + ')' : ''}${alamat ? ', ' + alamat : ''}. ${nSiswa} siswa, ${nGtk} guru/tenaga kependidikan, ${nRombel} rombongan belajar. Sistem informasi manajemen sekolah JURNALKU.`
+  const baris = (label, nilai) => nilai ? `<tr><th>${escHtml(label)}</th><td>${escHtml(nilai)}</td></tr>` : ''
+  const html = `<!DOCTYPE html>
+<html lang="id"><head><meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>${escHtml(judul)}</title>
+<meta name="description" content="${escHtml(deskripsi)}">
+<link rel="canonical" href="${escHtml(base + '/profil')}">
+<meta name="robots" content="index, follow">
+<meta property="og:type" content="website">
+<meta property="og:title" content="${escHtml(judul)}">
+<meta property="og:description" content="${escHtml(deskripsi)}">
+<meta property="og:url" content="${escHtml(base + '/profil')}">
+<meta property="og:site_name" content="${escHtml(nama)}">
+<meta name="twitter:card" content="summary">
+<script type="application/ld+json">${JSON.stringify({
+    '@context': 'https://schema.org',
+    '@type': 'EducationalOrganization',
+    name: nama,
+    url: base + '/',
+    ...(alamat ? { address: { '@type': 'PostalAddress', streetAddress: alamat, addressCountry: 'ID' } } : {}),
+    ...(npsn ? { identifier: { '@type': 'PropertyValue', propertyID: 'NPSN', value: npsn } } : {}),
+    ...(kepala ? { employee: { '@type': 'Person', name: kepala, jobTitle: 'Kepala Sekolah' } } : {}),
+    description: deskripsi,
+  })}</script>
+<style>body{font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;max-width:760px;margin:0 auto;padding:24px 20px 64px;line-height:1.65;color:#1e293b}h1{font-size:1.5rem;margin:0 0 4px}.sub{color:#64748b;font-size:.9rem;margin-bottom:24px}table{width:100%;border-collapse:collapse;margin:16px 0}th,td{text-align:left;padding:8px 10px;border-bottom:1px solid #e2e8f0;font-size:.92rem;vertical-align:top}th{width:38%;color:#475569;font-weight:600}.angka{display:flex;gap:10px;flex-wrap:wrap;margin:18px 0}.kartu{flex:1 1 140px;border:1px solid #e2e8f0;border-radius:10px;padding:12px 14px}.kartu b{display:block;font-size:1.4rem;color:#1e40af}.kartu span{font-size:.78rem;color:#64748b}h2{font-size:1.05rem;margin:26px 0 8px}.tag{display:inline-block;background:#eff6ff;color:#1e40af;border-radius:999px;padding:3px 10px;font-size:.8rem;margin:0 6px 6px 0}a{color:#1e40af}</style>
+</head><body>
+<h1>${escHtml(nama)}</h1>
+<div class="sub">${escHtml([jenjang, kota].filter(Boolean).join(' · ') || 'Profil lembaga')}</div>
+<div class="angka">
+  <div class="kartu"><b>${nSiswa}</b><span>Siswa aktif</span></div>
+  <div class="kartu"><b>${nGtk}</b><span>Guru &amp; tenaga kependidikan</span></div>
+  <div class="kartu"><b>${nRombel}</b><span>Rombongan belajar</span></div>
+</div>
+<h2>Identitas Lembaga</h2>
+<table>
+${baris('Nama lembaga', nama)}
+${baris('Jenjang', jenjang)}
+${baris('NPSN', npsn)}
+${baris('NSM', nsm)}
+${baris('Alamat', alamat)}
+${baris('Kepala sekolah', kepala)}
+${baris('Telepon', String(s.telepon || '').trim())}
+${baris('Email', String(s.email || '').trim())}
+</table>
+${ekskul.length ? `<h2>Ekstrakurikuler</h2><div>${ekskul.map(e => `<span class="tag">${escHtml(e)}</span>`).join('')}</div>` : ''}
+<p style="margin-top:32px;font-size:.85rem;color:#64748b">Dikelola dengan JURNALKU — sistem informasi manajemen sekolah dan madrasah.</p>
+<p><a href="/">Kembali ke beranda</a> · <a href="/ppdb">Penerimaan peserta didik baru</a></p>
+</body></html>`
+  res.type('html').send(html)
+}
+app.get('/profil', (req, res) => renderProfilLembaga(req, res))
+
 app.get('/sitemap.xml', (req, res) => {
   const base = `${skemaPermintaan(req)}://${hostPermintaan(req)}`
   const tenantId = tenantDariHost(hostPermintaan(req))
@@ -285,6 +367,18 @@ app.get('/sitemap.xml', (req, res) => {
     ['/login', '0.5', 'monthly'],
     ['/register', '0.6', 'monthly'],
   ]
+  // Profil lembaga hanya dimasukkan bila domain ini benar-benar milik satu
+  // lembaga. Domain platform (jurnal.cc.cd) dipakai sembilan tenant sekaligus,
+  // jadi /profil di sana tidak punya identitas tunggal — memasukkannya justru
+  // menciptakan halaman duplikat baru.
+  const punyaLembaga = (() => {
+    if (!tenantId) return false
+    try {
+      const n = db.prepare('SELECT COUNT(*) n FROM tenants WHERE aktif=1 AND lower(trim(domain_custom, \'.\'))=?').get(hostPermintaan(req))
+      return (n?.n || 0) === 1
+    } catch { return false }
+  })()
+  if (punyaLembaga) halaman.push(['/profil', '0.9', 'weekly'])
   const baris = halaman.map(([loc, pri, freq]) => `  <url><loc>${base}${loc}</loc><changefreq>${freq}</changefreq><priority>${pri}</priority></url>`)
   // Posting publik ikut diindeks supaya berita/kegiatan lembaga muncul di
   // hasil pencarian — inilah konten yang membuat domain punya kata kunci unik

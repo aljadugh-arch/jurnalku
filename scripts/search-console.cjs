@@ -7,6 +7,7 @@
 //   node scripts/search-console.cjs verifikasi     -> verifikasi domain (butuh berkas sudah ter-deploy)
 //   node scripts/search-console.cjs sitemap        -> submit sitemap semua domain
 //   node scripts/search-console.cjs status         -> daftar properti yang sudah terdaftar
+//   node scripts/search-console.cjs indeks [n]     -> status indeks per-URL (n URL per domain)
 //
 // Kenapa begini: Google hanya menerima berkas verifikasi yang tokennya DIA
 // terbitkan. Token itu didapat lewat siteVerification.getToken, bukan dikarang.
@@ -161,6 +162,40 @@ const jalankan = async () => {
       }
     }
     console.log(`\n${ok}/${DOMAIN.length} domain terverifikasi.`)
+    return
+  }
+
+  // Laporan indeks per-URL. "Sitemap terkirim" BUKAN "sudah terindeks" —
+  // URL Inspection API memberi status nyata tiap halaman. Tanpa ini, klaim
+  // "sudah masuk Google" tidak bisa dibuktikan.
+  if (PERINTAH === 'indeks') {
+    const batas = Number(process.argv.find(a => /^\d+$/.test(a)) || 3)
+    for (const d of DOMAIN) {
+      const properti = `https://${d}/`
+      // Ambil URL dari sitemap hidup supaya yang diperiksa benar-benar
+      // halaman yang kita klaim publik.
+      let urls = []
+      try {
+        const r = await fetch(`${properti}sitemap.xml`)
+        const xml = await r.text()
+        urls = [...xml.matchAll(/<loc>([^<]+)<\/loc>/g)].map(m => m[1])
+      } catch { /* sitemap tak terbaca: lewati domain ini */ }
+      if (!urls.length) { console.log(`\n${d}\n  sitemap tidak terbaca`); continue }
+      console.log(`\n${d}  (${urls.length} URL di sitemap)`)
+      let terindeks = 0
+      for (const u of urls.slice(0, batas)) {
+        const r = await api('POST',
+          'https://searchconsole.googleapis.com/v1/urlInspection/index:inspect',
+          token, { inspectionUrl: u, siteUrl: properti })
+        const hasil = r.isi?.inspectionResult?.indexStatusResult
+        if (!r.ok) { console.log(`  ${u.replace(properti, '/')}  GAGAL ${r.status} ${JSON.stringify(r.isi).slice(0, 90)}`); continue }
+        const verdict = hasil?.verdict || '?'
+        const coverage = hasil?.coverageState || '-'
+        if (verdict === 'PASS') terindeks++
+        console.log(`  ${u.replace(properti, '/').padEnd(24)} ${verdict.padEnd(9)} ${coverage}`)
+      }
+      console.log(`  -> ${terindeks}/${Math.min(urls.length, batas)} diperiksa: PASS`)
+    }
     return
   }
 
