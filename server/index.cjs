@@ -2101,6 +2101,9 @@ function requireCapability(capability) {
   })
 }
 const ADMIN = requireRole('admin', 'super_admin')
+// WA platform (nomor CS/notifikasi Jurnalku) hanya boleh dipegang superadmin.
+// Admin lembaga memakai WA gateway lembanya sendiri lewat menu Broadcast/Notif.
+const SUPERADMIN = requireRole('super_admin')
 const SUPER = requireRole('super_admin')
 const PROCTOR = requireRole('admin', 'super_admin', 'proktor')
 const STAFF = requireRole('admin', 'super_admin', 'guru', 'wali_kelas', 'operator', 'tata_usaha', 'tu', 'kepala')
@@ -7777,6 +7780,16 @@ app.post('/api/absensi-siswa/bulk', STAFF, (req, res) => {
   let count = 0
   let already = 0
   for (const d of data) {
+    // PRIORITAS SCAN: catatan QR/RFID tidak boleh ditimpa input massal.
+    // Hanya status non-hadir (sakit/izin/alpha) yang boleh mengoreksi scan —
+    // itu memang kebutuhan nyata (siswa scan lalu diketahui sakit).
+    const sesiField = isPulang ? 'status_pulang' : 'status'
+    const sudahScan = db.prepare(
+      `SELECT 1 FROM absensi_siswa WHERE tenant_id=? AND siswa_id=? AND tanggal=?
+         AND COALESCE(${sesiField},'')<>'' AND metode IN ('qr','rfid','device') LIMIT 1`
+    ).get(req.tenantId, d.siswa_id, tanggal)
+    if (sudahScan && !['sakit', 'izin', 'alpha'].includes(d.status)) { already++; continue }
+
     const result = writeDailyAttendanceSession(db, {
       id: uuidv4(), tenantId: req.tenantId, siswaId: d.siswa_id, rombelId: rombel_id || null,
       tanggal, status: d.status, waktu: d.waktu_absen || null, metode: d.metode || 'manual',
@@ -7805,6 +7818,17 @@ app.post('/api/absensi-siswa/bulk-range', STAFF, (req, res) => {
     try { assertKbmActive(req, tanggal) } catch { continue }
     activeDates++
     for (const x of siswa) {
+      // PRIORITAS SCAN: kalau siswa sudah punya catatan scan (QR/RFID) pada
+      // tanggal itu, input massal TIDAK boleh menimpanya. Sebelumnya "Semua
+      // Hadir" menulis ulang baris siswa yang belum scan, sehingga rekap
+      // menampilkan hadir padahal tidak ada bukti kehadiran.
+      const sesiField = normalizedJenis === 'pulang' ? 'status_pulang' : 'status'
+      const sudahScan = db.prepare(
+        `SELECT 1 FROM absensi_siswa WHERE tenant_id=? AND siswa_id=? AND tanggal=?
+           AND COALESCE(${sesiField},'')<>'' AND metode IN ('qr','rfid','device') LIMIT 1`
+      ).get(req.tenantId, x.id, tanggal)
+      if (sudahScan) { already++; continue }
+
       const result = writeDailyAttendanceSession(db, {
         id: uuidv4(), tenantId: req.tenantId, siswaId: x.id, rombelId: rombel_id,
         tanggal, status: status || 'hadir', metode: 'batch-range', jenis: normalizedJenis, sumber: 'manual',
@@ -10777,12 +10801,15 @@ const WAGateway = require('./wa-gateway.cjs')
 const waGateway = new WAGateway(db)
 
 // Get WA config (per-tenant)
-app.get('/api/wa-gateway/config', authMiddleware, (req, res) => {
+// WA platform = nomor CS/notifikasi Jurnalku, hanya superadmin yang boleh
+// melihat & mengubah. Sebelumnya ADMIN (admin lembaga + super_admin), sehingga
+// admin lembaga bisa mengganti nomor platform.
+app.get('/api/wa-gateway/config', SUPERADMIN, (req, res) => {
   res.json(waGateway.getConfig(req.tenantId))
 })
 
 // Update WA config (per-tenant)
-app.put('/api/wa-gateway/config', ADMIN, async (req, res) => {
+app.put('/api/wa-gateway/config', SUPERADMIN, async (req, res) => {
   const { provider, enabled, sender_name, baileys_webhook, sidobe_api_url, sidobe_api_key, sidobe_device_id } = req.body
   waGateway.getConfig(req.tenantId) // pastikan baris ada
   // Penjaga SSRF: URL ini disimpan dari input admin tenant, tetapi dipanggil oleh
@@ -10799,23 +10826,23 @@ app.put('/api/wa-gateway/config', ADMIN, async (req, res) => {
 })
 
 // Test send WA (per-tenant)
-app.post('/api/wa-gateway/test', ADMIN, async (req, res) => {
+app.post('/api/wa-gateway/test', SUPERADMIN, async (req, res) => {
   const { phone, message } = req.body
   const result = waQueue.enqueue(db, { tenantId: req.tenantId, phone, message: message || 'Test pesan dari JURNALKU', key: `test:${uuidv4()}` })
   // Baileys path is queued first, sent by worker shortly after. UI needs queued=true as success, not failure.
   res.json({ ...result, success: !!result.queued, status: result.queued ? 'queued' : 'failed', message: result.queued ? 'Pesan masuk antrean dan akan dikirim Baileys' : (result.reason || 'Gagal antre') })
 })
 
-app.get('/api/wa-gateway/status', ADMIN, (req, res) => {
+app.get('/api/wa-gateway/status', SUPERADMIN, (req, res) => {
   res.json(db.prepare('SELECT status,phone,last_error,updated_at,qr IS NOT NULL AS has_qr FROM wa_sessions WHERE tenant_id=?').get(req.tenantId) || { status: 'disconnected' })
 })
-app.post('/api/wa-gateway/connect', ADMIN, (req, res) => {
+app.post('/api/wa-gateway/connect', SUPERADMIN, (req, res) => {
   waGateway.getConfig(req.tenantId)
   db.prepare("UPDATE wa_gateway_config SET enabled=1,provider='baileys' WHERE tenant_id=?").run(req.tenantId)
   db.prepare("INSERT INTO wa_sessions(tenant_id,status,requested_action) VALUES(?,'connecting','connect') ON CONFLICT(tenant_id) DO UPDATE SET status='connecting',requested_action='connect',qr=NULL,last_error=NULL").run(req.tenantId)
   res.json({ status: 'starting' })
 })
-app.get('/api/wa-gateway/qr', ADMIN, async (req, res) => {
+app.get('/api/wa-gateway/qr', SUPERADMIN, async (req, res) => {
   const row = db.prepare('SELECT qr FROM wa_sessions WHERE tenant_id=?').get(req.tenantId)
   row?.qr ? res.json({ data_url: await require('qrcode').toDataURL(row.qr) }) : res.status(404).json({ error: 'QR belum tersedia' })
 })
