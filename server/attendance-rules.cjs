@@ -85,6 +85,12 @@ function writeDailyAttendanceSession(db, {
     return { id: saved.id, already: !result.changes, status: saved[sessionField], jenis: isPulang ? 'pulang' : 'masuk' }
   }
 
+  // PENTING: saat hanya sesi PULANG yang tercatat, kolom `status` (masuk) harus
+  // tetap KOSONG — itu memang benar, karena siswa belum pernah scan masuk.
+  // Yang salah adalah UI yang menampilkannya seolah "sudah hadir".
+  //
+  // Jangan mengisi `status` dengan 'hadir' di sini: memalsukan kehadiran masuk
+  // akan membuat rekap, notifikasi wali, dan laporan JTM salah.
   const insert = isPulang
     ? {
         sql: `INSERT INTO absensi_siswa (id,siswa_id,rombel_id,tanggal,status,status_pulang,waktu_pulang,metode,keterangan_pulang,tenant_id)

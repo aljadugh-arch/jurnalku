@@ -7971,7 +7971,18 @@ app.post('/api/absensi-siswa/qr-scan', STAFF, (req, res) => {
   tanggal, status: 'hadir', waktu, metode: 'qr', jenis: normalizedJenis, sumber: 'scan',
   })
   // Both sessions are routed through the same first-writer-wins helper; a pulang-only row keeps masuk empty.
-  const payload = { siswa: qrSiswaPayload(db, siswa, req.tenantId), waktu, sesi: normalizedJenis }
+  // `sesi` pada payload memberi tahu UI sesi mana yang BENAR-BENAR tercatat.
+  // Tanpa ini, scan pulang pada siswa yang belum scan masuk dilaporkan sebagai
+  // "hadir" — persis keluhan "belum absensi tapi sudah tercatat".
+  const payload = {
+    siswa: qrSiswaPayload(db, siswa, req.tenantId),
+    waktu,
+    sesi: normalizedJenis,
+    // Apakah siswa ini sudah punya catatan MASUK hari itu?
+    sudah_masuk: !!db.prepare(
+      "SELECT 1 FROM absensi_siswa WHERE tenant_id=? AND siswa_id=? AND tanggal=? AND COALESCE(status,'')<>'' LIMIT 1"
+    ).get(req.tenantId, siswa.id, tanggal),
+  }
   if (result.already) return res.json({ ...payload, already: true, status: result.status })
   try { notificationMonitor.logActivity(db, { tenantId: req.tenantId, eventType: 'student_qr_attendance', actorId: null, entityId: siswa.id, metadata: { sesi: normalizedJenis, metode: 'qr' } }) } catch {}
   if (normalizedJenis === 'pulang') {

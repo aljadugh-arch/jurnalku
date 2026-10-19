@@ -82,6 +82,9 @@ export default function AbsensiSiswaPage({ qrMode = false }: { qrMode?: boolean 
   const [siswaList, setSiswaList] = useState<any[]>([])
   const [absensi, setAbsensi] = useState<Record<string, string>>({})
   const [existing, setExisting] = useState<any[]>([])
+  // Siswa yang HANYA punya catatan pulang (belum scan masuk). Tanpa penanda ini
+  // mereka tampak "sudah absen" padahal sesi masuknya belum pernah tercatat.
+  const [pulangSaja, setPulangSaja] = useState<Record<string, string>>({})
   const [loading, setLoading] = useState(false)
   const [range, setRange] = useState({ mulai: todayWib(), selesai: todayWib(), status: 'hadir' })
   const [qrToken, setQrToken] = useState('')
@@ -141,11 +144,15 @@ export default function AbsensiSiswaPage({ qrMode = false }: { qrMode?: boolean 
       setSiswaList(siswaRes.data)
       setExisting(absensiRes.data)
       const map: Record<string, string> = {}
+      const hanyaPulang: Record<string, string> = {}
       for (const a of absensiRes.data) {
         const saved = sesi === 'pulang' ? a.status_pulang : a.status
         if (saved) map[a.siswa_id] = saved
+        // Sesi MASUK kosong tapi sesi PULANG ada -> siswa belum pernah scan masuk.
+        if (!a.status && a.waktu_pulang) hanyaPulang[a.siswa_id] = a.waktu_pulang
       }
       setAbsensi(map)
+      setPulangSaja(hanyaPulang)
     } catch { toast.error('Gagal memuat data absensi') }
   }
 
@@ -438,7 +445,15 @@ export default function AbsensiSiswaPage({ qrMode = false }: { qrMode?: boolean 
                 <tr key={s.id} className="hover:bg-gray-50">
                   <td className="px-4 py-3 text-gray-600">{i + 1}</td>
                   <td className="px-4 py-3 font-mono text-gray-700">{s.nis}</td>
-                  <td className="px-4 py-3 font-medium text-gray-800 whitespace-nowrap">{s.nama}</td>
+                  <td className="px-4 py-3 font-medium text-gray-800 whitespace-nowrap">
+                    {s.nama}
+                    {pulangSaja[s.id] && (
+                      <span className="ml-2 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-800 align-middle"
+                        title={`Hanya tercatat pulang pukul ${pulangSaja[s.id]} — belum scan masuk`}>
+                        pulang saja
+                      </span>
+                    )}
+                  </td>
                   {['hadir', 'sakit', 'izin', 'alpha'].map(st => (
                     <td key={st} className="text-center px-4 py-3">
                       <input type="radio" name={`abs-${s.id}`} checked={absensi[s.id] === st} onChange={() => setStatus(s.id, st)} disabled={readOnly} className="w-4 h-4 text-primary disabled:cursor-not-allowed disabled:opacity-60" />
