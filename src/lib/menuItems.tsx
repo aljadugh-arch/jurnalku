@@ -88,9 +88,10 @@ export const adminMenuItems: MenuItem[] = [
     label: 'WhatsApp', icon: <MessageSquare size={20} />,
     children: [
       { label: 'Broadcast', path: '/admin/broadcast' },
-      // 'Sambungkan WA Platform' TIDAK di sini: nomor WA platform adalah nomor
-      // CS/notifikasi Jurnalku yang dipegang superadmin, bukan nomor lembaga.
-      // Kalau lembaga bisa memindai QR di sini, nomor platform bisa tergantikan.
+      // Admin lembaga menyambungkan NOMOR LEMBAGA sendiri di sini. Nomor platform
+      // (tenant `default`) dijaga di server: admin lembaga ditolak 403 bila
+      // mencoba menyentuhnya, jadi QR platform tidak bisa tergantikan.
+      { label: 'Sambungkan WA', path: '/admin/wa-gateway' },
       { label: 'Notifikasi Otomatis', path: '/admin/notif-settings' },
     ]
   },

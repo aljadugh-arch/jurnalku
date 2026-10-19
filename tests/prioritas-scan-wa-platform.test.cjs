@@ -39,8 +39,15 @@ test('tombol semua hadir tidak menimpa scan, tapi sakit/izin/alpha boleh', () =>
     'status non-hadir tetap boleh mengoreksi scan (siswa scan lalu diketahui sakit)')
 })
 
-// ---------------- (2) WA platform superadmin ----------------
-test('endpoint WA gateway hanya untuk superadmin', () => {
+// ---------------- (2) WA gateway: lembaga boleh, platform tidak ----------------
+// KONTRAK DIPERBARUI atas permintaan user: admin lembaga HARUS bisa memindai QR
+// untuk nomor lembaganya sendiri. Sebelumnya endpoint dikunci SUPERADMIN dan
+// menunya dihapus, sehingga admin lembaga kehilangan satu-satunya jalan
+// menyambungkan nomor WA lembaga.
+//
+// Yang tetap dijaga: nomor PLATFORM (tenant `default`) tidak boleh disentuh
+// admin lembaga — kalau tidak, nomor CS/notifikasi platform bisa tergantikan.
+test('endpoint WA gateway memakai WA_KELOLA (admin lembaga + penjaga platform)', () => {
   const s = baca('server/index.cjs')
   for (const ep of [
     "app.get('/api/wa-gateway/config'",
@@ -49,13 +56,28 @@ test('endpoint WA gateway hanya untuk superadmin', () => {
     "app.get('/api/wa-gateway/status'",
     "app.post('/api/wa-gateway/connect'",
     "app.get('/api/wa-gateway/qr'",
+    "app.get('/api/wa-gateway/qr-image'",
+    "app.post('/api/wa-gateway/logout'",
   ]) {
     const i = s.indexOf(ep)
     assert.ok(i > 0, `${ep} harus ada`)
     const baris = s.slice(i, s.indexOf('\n', i))
-    assert.ok(/SUPERADMIN/.test(baris),
-      `${ep} harus memakai SUPERADMIN, bukan ADMIN — dapat: ${baris.slice(0, 110)}`)
+    assert.ok(/\.\.\.WA_KELOLA/.test(baris),
+      `${ep} harus memakai ...WA_KELOLA — dapat: ${baris.slice(0, 120)}`)
   }
+})
+
+test('WA_KELOLA = ADMIN + penjaga tenant platform', () => {
+  const s = baca('server/index.cjs')
+  assert.ok(/const WA_KELOLA = \[ADMIN, tolakTenantPlatform\]/.test(s))
+})
+
+test('admin lembaga ditolak 403 bila menyentuh tenant default (nomor platform)', () => {
+  const s = baca('server/index.cjs')
+  assert.ok(/const WA_TENANT_PLATFORM = 'default'/.test(s))
+  assert.ok(/tenant === WA_TENANT_PLATFORM && peran !== 'super_admin'/.test(s),
+    'penjaga harus membandingkan tenant dengan default DAN peran super_admin')
+  assert.ok(/Nomor WhatsApp platform hanya dapat dikelola superadmin/.test(s))
 })
 
 test('SUPERADMIN didefinisikan sebagai role super_admin saja', () => {
@@ -63,16 +85,16 @@ test('SUPERADMIN didefinisikan sebagai role super_admin saja', () => {
   assert.ok(/const SUPERADMIN = requireRole\('super_admin'\)/.test(s))
 })
 
-test('menu admin lembaga tidak memuat WA Platform', () => {
+test('admin lembaga punya menu Sambungkan WA untuk nomor lembaganya', () => {
   const s = baca('src/lib/menuItems.tsx')
   const awal = s.indexOf('export const adminMenuItems')
   const akhir = s.indexOf('export const superAdminMenuItems')
   assert.ok(awal > 0 && akhir > awal)
-  // Potong hanya daftar menu (bukan helper filterRoleItems yang menyebut path
-  // wa-gateway sebagai path terbatas untuk operator/TU — itu bukan menu).
   const blokMenu = s.slice(awal, s.indexOf('// Pilih daftar menu sesuai role', awal))
+  assert.ok(/label: 'Sambungkan WA', path: '\/admin\/wa-gateway'/.test(blokMenu),
+    'admin lembaga butuh menu scan QR nomor lembaga — ini yang sempat hilang')
   assert.ok(!/label: 'Sambungkan WA Platform'/.test(blokMenu),
-    'admin lembaga tidak boleh punya menu WA Platform — nomor itu milik platform')
+    'label platform tetap khusus superadmin')
 })
 
 test('menu superadmin tetap punya WA Platform', () => {

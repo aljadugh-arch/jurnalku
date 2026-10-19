@@ -10844,12 +10844,28 @@ const waGateway = new WAGateway(db)
 // WA platform = nomor CS/notifikasi Jurnalku, hanya superadmin yang boleh
 // melihat & mengubah. Sebelumnya ADMIN (admin lembaga + super_admin), sehingga
 // admin lembaga bisa mengganti nomor platform.
-app.get('/api/wa-gateway/config', SUPERADMIN, (req, res) => {
+// WA gateway: admin lembaga BOLEH memindai QR untuk nomor lembaganya sendiri.
+// Sebelumnya seluruh endpoint SUPERADMIN, sehingga admin lembaga kehilangan
+// satu-satunya jalan menyambungkan nomor WA lembaga — menu dan endpoint
+// sama-sama hilang. Yang TIDAK boleh: admin lembaga menyentuh tenant `default`,
+// karena itu nomor CS/notifikasi platform milik superadmin.
+const WA_TENANT_PLATFORM = 'default'
+function tolakTenantPlatform(req, res, next) {
+  const peran = req.user?.role
+  const tenant = req.tenantId
+  if (tenant === WA_TENANT_PLATFORM && peran !== 'super_admin') {
+    return res.status(403).json({ error: 'Nomor WhatsApp platform hanya dapat dikelola superadmin' })
+  }
+  next()
+}
+const WA_KELOLA = [ADMIN, tolakTenantPlatform]
+
+app.get('/api/wa-gateway/config', ...WA_KELOLA, (req, res) => {
   res.json(waGateway.getConfig(req.tenantId))
 })
 
 // Update WA config (per-tenant)
-app.put('/api/wa-gateway/config', SUPERADMIN, async (req, res) => {
+app.put('/api/wa-gateway/config', ...WA_KELOLA, async (req, res) => {
   const { provider, enabled, sender_name, baileys_webhook, sidobe_api_url, sidobe_api_key, sidobe_device_id } = req.body
   waGateway.getConfig(req.tenantId) // pastikan baris ada
   // Penjaga SSRF: URL ini disimpan dari input admin tenant, tetapi dipanggil oleh
@@ -10866,35 +10882,35 @@ app.put('/api/wa-gateway/config', SUPERADMIN, async (req, res) => {
 })
 
 // Test send WA (per-tenant)
-app.post('/api/wa-gateway/test', SUPERADMIN, async (req, res) => {
+app.post('/api/wa-gateway/test', ...WA_KELOLA, async (req, res) => {
   const { phone, message } = req.body
   const result = waQueue.enqueue(db, { tenantId: req.tenantId, phone, message: message || 'Test pesan dari JURNALKU', key: `test:${uuidv4()}` })
   // Baileys path is queued first, sent by worker shortly after. UI needs queued=true as success, not failure.
   res.json({ ...result, success: !!result.queued, status: result.queued ? 'queued' : 'failed', message: result.queued ? 'Pesan masuk antrean dan akan dikirim Baileys' : (result.reason || 'Gagal antre') })
 })
 
-app.get('/api/wa-gateway/status', SUPERADMIN, (req, res) => {
+app.get('/api/wa-gateway/status', ...WA_KELOLA, (req, res) => {
   res.json(db.prepare('SELECT status,phone,last_error,updated_at,qr IS NOT NULL AS has_qr FROM wa_sessions WHERE tenant_id=?').get(req.tenantId) || { status: 'disconnected' })
 })
-app.post('/api/wa-gateway/connect', SUPERADMIN, (req, res) => {
+app.post('/api/wa-gateway/connect', ...WA_KELOLA, (req, res) => {
   waGateway.getConfig(req.tenantId)
   db.prepare("UPDATE wa_gateway_config SET enabled=1,provider='baileys' WHERE tenant_id=?").run(req.tenantId)
   db.prepare("INSERT INTO wa_sessions(tenant_id,status,requested_action) VALUES(?,'connecting','connect') ON CONFLICT(tenant_id) DO UPDATE SET status='connecting',requested_action='connect',qr=NULL,last_error=NULL").run(req.tenantId)
   res.json({ status: 'starting' })
 })
-app.get('/api/wa-gateway/qr', SUPERADMIN, async (req, res) => {
+app.get('/api/wa-gateway/qr', ...WA_KELOLA, async (req, res) => {
   const row = db.prepare('SELECT qr FROM wa_sessions WHERE tenant_id=?').get(req.tenantId)
   row?.qr ? res.json({ data_url: await require('qrcode').toDataURL(row.qr) }) : res.status(404).json({ error: 'QR belum tersedia' })
 })
 
-app.get('/api/wa-gateway/qr-image', ADMIN, async (req, res) => {
+app.get('/api/wa-gateway/qr-image', ...WA_KELOLA, async (req, res) => {
   const row = db.prepare('SELECT qr,status FROM wa_sessions WHERE tenant_id=?').get(req.tenantId)
   if (!row?.qr) return res.json({ status: row?.status || 'not_ready', qr: null })
   const QRCode = require('qrcode')
   res.json({ status: row.status, qr: row.qr, image: await QRCode.toDataURL(row.qr, { margin: 1, width: 280 }) })
 })
 
-app.post('/api/wa-gateway/logout', ADMIN, (req, res) => {
+app.post('/api/wa-gateway/logout', ...WA_KELOLA, (req, res) => {
   db.prepare('UPDATE wa_gateway_config SET enabled=0 WHERE tenant_id=?').run(req.tenantId)
   db.prepare("INSERT INTO wa_sessions(tenant_id,status,requested_action) VALUES(?,'disconnecting','logout') ON CONFLICT(tenant_id) DO UPDATE SET status='disconnecting',requested_action='logout'").run(req.tenantId)
   res.json({ status: 'disconnecting' })
