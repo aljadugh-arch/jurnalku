@@ -82,6 +82,30 @@ async function connect(tenantId){
     }
   })
 }
+// ── Denyut worker ────────────────────────────────────────────────────────────
+// Ditulis setiap tick agar kondisi "worker hidup tapi tidak bisa mengirim"
+// terlihat dari API, bukan hanya dari log. Sebelumnya kondisi ini tidak
+// terdeteksi: sesi `qr`/`reconnecting` membuat tick kembali diam-diam.
+db.exec(`CREATE TABLE IF NOT EXISTS wa_worker_heartbeat (
+  tenant_id TEXT PRIMARY KEY,
+  status TEXT,
+  pending INTEGER DEFAULT 0,
+  tertua_detik INTEGER,
+  last_tick TEXT,
+  last_error TEXT
+)`)
+function denyut(tenantId, status, err = '') {
+  try {
+    const q = db.prepare("SELECT COUNT(*) n, MIN(created_at) t FROM wa_queue WHERE tenant_id=? AND status IN ('pending','failed')").get(tenantId)
+    const tertua = q?.t ? Math.max(0, Math.floor((Date.now() - new Date(q.t.replace(' ', 'T') + 'Z').getTime()) / 1000)) : 0
+    db.prepare(`INSERT INTO wa_worker_heartbeat (tenant_id,status,pending,tertua_detik,last_tick,last_error)
+      VALUES (?,?,?,?,datetime('now'),?)
+      ON CONFLICT(tenant_id) DO UPDATE SET status=excluded.status,pending=excluded.pending,
+        tertua_detik=excluded.tertua_detik,last_tick=excluded.last_tick,last_error=excluded.last_error`)
+      .run(tenantId, status, q?.n || 0, tertua, String(err || '').slice(0, 300))
+  } catch (e) { log.error({ tenantId, err: e.message }, 'denyut gagal') }
+}
+
 async function tick(){
   await forEachTenantSettled(db.prepare("SELECT tenant_id,requested_action FROM wa_sessions WHERE requested_action IS NOT NULL").all(),async x=>{
     db.prepare('UPDATE wa_sessions SET requested_action=NULL WHERE tenant_id=?').run(x.tenant_id)
@@ -93,7 +117,18 @@ async function tick(){
   },(e,x)=>{retryAfter.set(x.tenant_id,Date.now()+10000);session(x.tenant_id,'reconnecting',{error:String(e.message||e).slice(0,500)});log.error({tenantId:x.tenant_id,err:e.message},'WA requested action failed')})
   await forEachTenantSettled(db.prepare("SELECT tenant_id FROM wa_gateway_config WHERE enabled=1 AND provider='baileys'").all(),async c=>{
     await connect(c.tenant_id)
-    const sock=sockets.get(c.tenant_id); if(!sock?.user)return
+    const sock=sockets.get(c.tenant_id)
+    if(!sock?.user){
+      // Sesi belum login: antrean TIDAK akan terkirim sampai admin scan QR.
+      // Catat supaya terlihat sebagai masalah, bukan diam.
+      const sesi=db.prepare('SELECT status FROM wa_sessions WHERE tenant_id=?').get(c.tenant_id)
+      denyut(c.tenant_id, sesi?.status || 'belum_login', 'sesi belum login — perlu scan QR')
+      return
+    }
+    // Denyut: catat bahwa worker benar-benar memproses tenant ini. Tanpa ini,
+    // sesi yang mati membuat antrean menumpuk tanpa jejak apa pun — persis
+    // penyebab notifikasi jadwal terlihat "belum work" padahal scheduler jalan.
+    denyut(c.tenant_id, 'online')
     const job=queue.claimNext(db,c.tenant_id); if(!job)return
     try {const r=await sock.sendMessage(`${job.phone}@s.whatsapp.net`,{text:job.message}); db.prepare("UPDATE wa_queue SET status='sent',sent_at=datetime('now'),message_id=?,last_error=NULL WHERE id=? AND tenant_id=?").run(r.key?.id||null,job.id,c.tenant_id); log.info({tenantId:c.tenant_id,queueId:job.id,status:'sent'},'WA queue message sent')}
     catch(e){const msg=String(e.message||e).slice(0,500); db.prepare("UPDATE wa_queue SET status='failed',failed_at=datetime('now'),last_error=?,available_at=datetime('now',printf('+%d minutes',MIN(attempts,5)*2)) WHERE id=? AND tenant_id=?").run(msg,job.id,c.tenant_id); log.error({tenantId:c.tenant_id,queueId:job.id,status:'failed',error:msg},'WA queue message failed')}

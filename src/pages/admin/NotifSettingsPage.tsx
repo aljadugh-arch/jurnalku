@@ -44,6 +44,9 @@ export default function NotifSettingsPage() {
   const audioContohRef = useRef<HTMLAudioElement | null>(null)
   const [memutarContoh, setMemutarContoh] = useState(false)
   const [jadwalSholat, setJadwalSholat] = useState<any>(null)
+  // Status WA yang bisa ditindaklanjuti. Tanpa ini, "notif jadwal belum work"
+  // tidak bisa dibedakan antara sakelar mati, sesi WA mati, atau worker mati.
+  const [waSehat, setWaSehat] = useState<any>(null)
 
   useEffect(() => {
     api.get('/notif-whitelist').then(r => setWhitelist(r.data)).catch(() => {})
@@ -180,6 +183,12 @@ export default function NotifSettingsPage() {
 
   const addWhitelist = async () => { try { await api.post('/notif-whitelist', whiteForm); const r = await api.get('/notif-whitelist'); setWhitelist(r.data); setWhiteForm({ target_type: 'phone', phone: '', target_id: '', reason: '' }); toast.success('Whitelist ditambah') } catch { toast.error('Gagal whitelist') } }
   const delWhitelist = async (id: string) => { try { await api.delete('/notif-whitelist/' + id); setWhitelist(whitelist.filter(w => w.id !== id)) } catch { toast.error('Gagal hapus') } }
+  const muatStatusWA = useCallback(async () => {
+    try { const r = await api.get('/wa-kesehatan'); setWaSehat(r.data) } catch { setWaSehat(null) }
+  }, [])
+
+  useEffect(() => { muatStatusWA() }, [muatStatusWA])
+
   const handleTestJadwalGuru = async () => { setTesting(true); try { const r = await api.post('/notif/jadwal-guru'); toast.success(`Antrean notif jadwal: ${r.data.queued || 0}`) } catch { toast.error('Gagal test jadwal') } finally { setTesting(false) } }
   const handleTestUjianGuru = async () => { setTesting(true); try { const r = await api.post('/notif/ujian-guru'); toast.success(`Antrean notif ujian: ${r.data.queued || 0}`) } catch (e: any) { toast.error(e.response?.data?.error || 'Gagal test ujian — pastikan hari ini ditandai hari ujian di Kalender KBM') } finally { setTesting(false) } }
   const handleTestEkskulGuru = async () => { setTesting(true); try { const r = await api.post('/notif/ekskul-guru'); toast.success(`Antrean notif ekskul: ${r.data.queued || 0}`) } catch (e: any) { toast.error(e.response?.data?.error || 'Gagal test ekskul') } finally { setTesting(false) } }
@@ -304,7 +313,25 @@ export default function NotifSettingsPage() {
       </div>
 
       <div className="bg-white rounded-xl p-4 sm:p-6 shadow-sm border border-gray-100 space-y-4">
-        <h3 className="font-semibold text-gray-800">Notifikasi Jadwal Guru Mapel</h3>
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          <h3 className="font-semibold text-gray-800">Notifikasi Jadwal Guru Mapel</h3>
+          <button onClick={muatStatusWA} className="text-xs px-2 py-1 border rounded-lg text-gray-600">Muat ulang status</button>
+        </div>
+        {waSehat && (
+          <div className={`rounded-lg border px-3 py-2 text-xs ${waSehat.sehat ? 'bg-emerald-50 border-emerald-200 text-emerald-800' : 'bg-amber-50 border-amber-200 text-amber-900'}`}>
+            <div className="font-medium mb-1">{waSehat.sehat ? 'Siap mengirim' : 'Belum bisa mengirim'}</div>
+            {waSehat.masalah && <div className="mb-1">{waSehat.masalah}</div>}
+            <div className="flex flex-wrap gap-x-4 gap-y-1 text-[11px] opacity-90">
+              <span>Sesi: {waSehat.sesi?.status || 'tidak ada'}</span>
+              <span>Antrean: {waSehat.antrean?.pending || 0} menunggu · {waSehat.antrean?.failed || 0} gagal</span>
+              <span>Terkirim hari ini: {waSehat.antrean?.terkirim_hari_ini || 0}</span>
+              {waSehat.worker?.last_tick && <span>Worker terakhir: {waSehat.worker.last_tick}</span>}
+            </div>
+            {!waSehat.sehat && waSehat.sesi?.status === 'qr' && (
+              <Link to="/admin/wa-gateway" className="inline-block mt-1 underline font-medium">Buka WA Gateway untuk scan QR</Link>
+            )}
+          </div>
+        )}
         <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={settings.notif_jadwal_guru} onChange={e => setSettings({...settings, notif_jadwal_guru: e.target.checked})} /> Aktifkan pengingat 5 menit sebelum jam mapel</label>
         {cekTahunAjaran && !tahunAktif && (
           <p className="text-xs text-amber-700">Belum ada tahun ajaran aktif — centang ini belum akan mengirim apa pun.</p>
