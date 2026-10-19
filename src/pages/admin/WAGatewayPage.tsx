@@ -16,6 +16,11 @@ export default function WAGatewayPage() {
   // Detik sejak tombol Connect ditekan. Tanpa ini, pengguna hanya melihat
   // "Connecting…" tanpa tahu apakah proses masih berjalan atau sudah mati.
   const [tungguDetik, setTungguDetik] = useState(0)
+  // Sebelumnya "Refresh Status" hanya membaca ulang baris DB dan menelan
+  // error tanpa jejak — ditekan, tidak ada perubahan, terasa rusak. Sekarang
+  // tombol itu juga melaporkan apakah WORKER masih hidup.
+  const [kesehatan, setKesehatan] = useState<any>(null)
+  const [menyegarkan, setMenyegarkan] = useState(false)
 
   const statusTimer = useRef<number | null>(null)
 
@@ -47,6 +52,7 @@ export default function WAGatewayPage() {
 
   useEffect(() => {
     loadConfig(); loadStatus()
+    api.get('/wa-kesehatan').then(r => setKesehatan(r.data)).catch(() => {})
     return () => { if (statusTimer.current) window.clearInterval(statusTimer.current) }
   }, [loadStatus])
   const connect = async () => {
@@ -74,6 +80,19 @@ export default function WAGatewayPage() {
       }, 1000)
     } catch { setConnecting(false); toast.error('Gagal connect') }
   }
+  const segarkanStatus = async () => {
+    setMenyegarkan(true)
+    try {
+      await Promise.all([loadStatus(), loadQr()])
+      const r = await api.get('/wa-kesehatan')
+      setKesehatan(r.data)
+      if (r.data.sehat) toast.success('Tersambung dan worker aktif')
+      else toast.error(r.data.masalah || 'Belum bisa mengirim')
+    } catch (e: any) {
+      toast.error(e.response?.data?.error || 'Gagal membaca status — periksa koneksi')
+    } finally { setMenyegarkan(false) }
+  }
+
   const disconnect = async () => { try { await api.post('/wa-gateway/logout'); setConnecting(false); setQrImage(null); toast.success('Disconnect diminta'); setTimeout(loadStatus, 1000) } catch { toast.error('Gagal disconnect') } }
   const openQr = async () => {
     try {
@@ -135,6 +154,17 @@ export default function WAGatewayPage() {
             </ol>
           )}
           {waStatus?.last_error && <p className="text-xs text-red-600">{waStatus.last_error}</p>}
+          {kesehatan && (
+            <div className={`rounded-lg border px-3 py-2 text-xs ${kesehatan.sehat ? 'bg-emerald-50 border-emerald-200 text-emerald-800' : 'bg-amber-50 border-amber-200 text-amber-900'}`}>
+              <div className="font-medium">{kesehatan.sehat ? 'Worker aktif' : 'Worker belum bisa mengirim'}</div>
+              {kesehatan.masalah && <div>{kesehatan.masalah}</div>}
+              <div className="flex flex-wrap gap-x-4 gap-y-0.5 opacity-90 mt-0.5">
+                {kesehatan.worker?.last_tick && <span>Denyut terakhir: {kesehatan.worker.last_tick}</span>}
+                <span>Antrean: {kesehatan.antrean?.pending || 0} menunggu · {kesehatan.antrean?.failed || 0} gagal</span>
+                <span>Terkirim hari ini: {kesehatan.antrean?.terkirim_hari_ini || 0}</span>
+              </div>
+            </div>
+          )}
           {(qrImage || waStatus?.has_qr) && (
             <div className="rounded-xl border bg-white p-3 w-fit">
               {qrImage ? <img src={qrImage} alt="QR WhatsApp" className="w-[280px] max-w-full" /> : <p className="text-sm text-gray-500">QR tersedia. Klik Scan QR atau tunggu dimuat.</p>}
@@ -148,11 +178,19 @@ export default function WAGatewayPage() {
             </div>
           )}
           <div className="flex gap-2 flex-wrap">
-            <button onClick={connect} disabled={connecting} className="px-4 py-2 bg-green-600 text-white rounded-lg text-sm disabled:opacity-50">{connecting ? 'Connecting…' : 'Connect Device'}</button>
-            <button onClick={disconnect} className="px-4 py-2 bg-red-600 text-white rounded-lg text-sm">Disconnect Device</button>
-            <button onClick={openQr} className="px-4 py-2 bg-primary text-white rounded-lg text-sm">Scan QR</button>
-            <button onClick={() => { loadStatus(); loadQr() }} className="px-4 py-2 bg-gray-100 rounded-lg text-sm">Refresh Status</button>
+            {/* Tiga tombol ini dulu terasa sama karena ketiganya bisa memunculkan QR.
+                Bedanya: Connect MEMBUAT sesi baru + QR baru; Scan QR hanya
+                membuka QR yang SUDAH ada di layar besar; Refresh hanya MEMBACA
+                keadaan — tidak membuat QR, hanya menampilkan yang sudah ada. */}
+            <button onClick={connect} disabled={connecting} className="px-4 py-2 bg-green-600 text-white rounded-lg text-sm disabled:opacity-50">{connecting ? 'Menyiapkan…' : (waStatus?.has_qr ? 'Buat QR Baru' : 'Connect Device')}</button>
+            <button onClick={disconnect} className="px-4 py-2 bg-red-600 text-white rounded-lg text-sm">Disconnect</button>
+            <button onClick={openQr} disabled={!waStatus?.has_qr} className="px-4 py-2 bg-primary text-white rounded-lg text-sm disabled:opacity-40">Buka QR Besar</button>
+            <button onClick={segarkanStatus} disabled={menyegarkan} className="px-4 py-2 bg-gray-100 rounded-lg text-sm disabled:opacity-50">{menyegarkan ? 'Memeriksa…' : 'Refresh Status'}</button>
           </div>
+          <p className="text-[11px] text-gray-500 leading-relaxed">
+            <b>Connect</b> membuat sesi baru dan QR baru · <b>Buka QR Besar</b> hanya memperbesar QR yang sudah ada ·
+            <b> Refresh Status</b> hanya membaca keadaan (tidak membuat QR).
+          </p>
         </div>
       )}
 

@@ -75,3 +75,26 @@ test('status qr tidak diturunkan ke connecting (mencegah layar berkedip)', () =>
   assert.ok(/QR masih berlaku — pertahankan/.test(s),
     'connecting tidak boleh menimpa qr yang masih segar')
 })
+
+test('tiga tombol dibedakan perannya, tidak lagi terasa sama', () => {
+  const f = baca('src/pages/admin/WAGatewayPage.tsx')
+  // Connect membuat QR baru; labelnya berubah bila QR sudah ada.
+  assert.ok(/waStatus\?\.has_qr \? 'Buat QR Baru' : 'Connect Device'/.test(f),
+    'Connect harus jelas membuat QR baru')
+  // Scan QR hanya memperbesar QR yang sudah ada — dan mati bila belum ada QR.
+  assert.ok(/Buka QR Besar/.test(f))
+  assert.ok(/disabled=\{!waStatus\?\.has_qr\}/.test(f),
+    'Buka QR Besar harus nonaktif bila belum ada QR')
+  // Refresh hanya membaca keadaan.
+  assert.ok(/hanya membaca keadaan \(tidak membuat QR\)/.test(f))
+})
+
+test('Refresh Status melaporkan kesehatan worker, bukan menelan error', () => {
+  const f = baca('src/pages/admin/WAGatewayPage.tsx')
+  assert.ok(/const segarkanStatus = async/.test(f))
+  assert.ok(/api\.get\('\/wa-kesehatan'\)/.test(f),
+    'Refresh harus ikut membaca denyut worker')
+  assert.ok(/Gagal membaca status/.test(f),
+    'error tidak boleh ditelan diam-diam')
+  assert.ok(/Worker aktif/.test(f) && /Worker belum bisa mengirim/.test(f))
+})
