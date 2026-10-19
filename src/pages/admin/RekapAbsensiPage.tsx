@@ -46,6 +46,10 @@ function SiswaRecapTable({ data }: { data: any[] }) {
             <th className="text-left px-4 py-3 font-medium text-gray-600">NIS</th>
             <th className="text-left px-4 py-3 font-medium text-gray-600">Rombel</th>
             <th className="text-center px-4 py-3 font-medium text-blue-600">Hadir</th>
+            {/* Pemisahan asal kehadiran: bukti scan vs dinyatakan guru.
+                Angka "Hadir" tidak berubah; ini hanya keterbukaan asal data. */}
+            <th className="text-center px-4 py-3 font-medium text-cyan-600" title="Hadir dengan bukti scan QR/RFID">Scan</th>
+            <th className="text-center px-4 py-3 font-medium text-slate-500" title="Hadir karena dinyatakan guru (input manual / semua hadir)">Input</th>
             <th className="text-center px-4 py-3 font-medium text-yellow-600">Sakit</th>
             <th className="text-center px-4 py-3 font-medium text-purple-600">Izin</th>
             <th className="text-center px-4 py-3 font-medium text-red-600">Alpha</th>
@@ -65,6 +69,8 @@ function SiswaRecapTable({ data }: { data: any[] }) {
                   <td className="px-4 py-3 text-gray-600 text-xs">{siswa.nis || '-'}</td>
                   <td className="px-4 py-3 text-gray-600">{siswa.rombel_nama || '-'}</td>
                   <td className="px-4 py-3 text-center font-medium text-blue-600">{siswa.hadir}</td>
+                  <td className="px-4 py-3 text-center text-cyan-700 dark:text-cyan-400">{siswa.hadir_scan ?? 0}</td>
+                  <td className="px-4 py-3 text-center text-slate-500 dark:text-gray-400">{siswa.hadir_input ?? 0}</td>
                   <td className="px-4 py-3 text-center font-medium text-yellow-600">{siswa.sakit}</td>
                   <td className="px-4 py-3 text-center font-medium text-purple-600">{siswa.izin}</td>
                   <td className="px-4 py-3 text-center font-medium text-red-600">{siswa.alpha}</td>

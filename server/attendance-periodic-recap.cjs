@@ -188,8 +188,16 @@ function getPeriodicAttendanceRecap(db, tenantId, entityType, range, rombelId = 
         AND COALESCE(g.status_kepegawaian,'')!='Nonaktif' ORDER BY g.nama`).all(tenantId)
   // Rekap MASUK & PULANG: masuk dari kolom `status`, pulang dari `status_pulang`
   // (siswa) dan `waktu_pulang` (GTK). Sebelumnya pulang tidak dibaca sama sekali.
+  // `metode` ikut diambil agar rekap bisa memisahkan kehadiran yang punya BUKTI
+  // scan (qr/rfid/device) dari yang hanya DINYATAKAN guru (manual/batch-range).
+  // Angka `hadir` tidak berubah — ini murni keterbukaan asal data.
+  //
+  // Kolom `metode` dibaca secara defensif: DB lama/fixture bisa belum punya
+  // kolom itu, dan rekap tetap harus jalan (tanpa pemisahan sumber).
+  const adaMetode = tableHasColumn(db, 'absensi_siswa', 'metode')
+  const kolomMetode = adaMetode ? ',a.metode' : ",'' AS metode"
   const records = isStudent
-    ? db.prepare(`SELECT a.siswa_id entity_id,a.tanggal,a.status,a.status_pulang FROM absensi_siswa a
+    ? db.prepare(`SELECT a.siswa_id entity_id,a.tanggal,a.status,a.status_pulang${kolomMetode} FROM absensi_siswa a
         JOIN siswa s ON s.id=a.siswa_id AND s.tenant_id=a.tenant_id
         WHERE a.tenant_id=? AND a.tanggal BETWEEN ? AND ?`).all(tenantId, range.from, range.to)
     : db.prepare(`SELECT a.gtk_id entity_id,a.tanggal,a.status,a.waktu_pulang FROM absensi_guru a
@@ -201,6 +209,19 @@ function getPeriodicAttendanceRecap(db, tenantId, entityType, range, rombelId = 
   for (const record of records) {
     const key = `${record.entity_id}\0${record.tanggal}`
     if (!byEntityDate.has(key)) byEntityDate.set(key, statusKey(record.status))
+  }
+  // Metode pencatatan per entitas/tanggal. Dipakai untuk memisahkan kehadiran
+  // yang punya bukti scan dari yang hanya dinyatakan guru.
+  const METODE_SCAN_REKAP = new Set(['qr', 'rfid', 'device'])
+  const byEntityDateMetode = new Map()
+  for (const record of records) {
+    const key = `${record.entity_id}\0${record.tanggal}`
+    const m = String(record.metode || '').toLowerCase()
+    if (!m) continue
+    // Scan menang: kalau satu tanggal punya baris scan, anggap terbukti scan.
+    if (!byEntityDateMetode.has(key) || METODE_SCAN_REKAP.has(m)) {
+      byEntityDateMetode.set(key, m)
+    }
   }
   // Penanda pulang per entitas/tanggal. Siswa memakai huruf status dari status_pulang
   // (H/S/I/A); GTK memakai 'P' bila waktu_pulang terisi (absensi_guru tanpa status_pulang).
@@ -226,15 +247,27 @@ function getPeriodicAttendanceRecap(db, tenantId, entityType, range, rombelId = 
     const totals = emptySummary()
     let hadirCount = 0
     let pulangCount = 0
+    let hadirScan = 0
+    let hadirInput = 0
     for (const date of dates) {
       const key = byEntityDate.get(`${entity.id}\0${date}`) || ''
       per_tanggal[date] = key ? key.charAt(0).toUpperCase() : ''
       if (key) { totals[key]++; totals.total++ } else totals.kosong++
+      // Pemisahan asal kehadiran: hanya untuk status hadir.
+      if (key === 'hadir') {
+        const metode = byEntityDateMetode.get(`${entity.id}\0${date}`) || ''
+        if (METODE_SCAN_REKAP.has(metode)) hadirScan++
+        else hadirInput++
+      }
       const pulang = byEntityDatePulang.get(`${entity.id}\0${date}`) || ''
       if (pulang) { per_tanggal_pulang[date] = pulang; pulangCount++ }
       if (provision(entity.id, date)) hadirCount++
     }
-    if (isStudent) return { ...entity, ...totals, pulang: pulangCount, per_tanggal, per_tanggal_pulang }
+    if (isStudent) return {
+      ...entity, ...totals, pulang: pulangCount,
+      hadir_scan: hadirScan, hadir_input: hadirInput,
+      per_tanggal, per_tanggal_pulang,
+    }
     const mapel_list = teaching.mapelByGtk[entity.id] || []
     return {
       ...entity,
@@ -242,6 +275,7 @@ function getPeriodicAttendanceRecap(db, tenantId, entityType, range, rombelId = 
       jml_jtm: jtmByGtk.get(entity.id) || 0,
       jumlah_kehadiran: hadirCount,
       pulang: pulangCount,
+      hadir_scan: hadirScan, hadir_input: hadirInput,
       ...totals,
       per_tanggal,
       per_tanggal_pulang,
@@ -254,7 +288,13 @@ function getPeriodicAttendanceRecap(db, tenantId, entityType, range, rombelId = 
     to: range.to,
     label: range.label,
     detail,
-    summary: { ...summarize(detail), pulang: detail.reduce((n, row) => n + (row.pulang || 0), 0) },
+    summary: {
+      ...summarize(detail),
+      pulang: detail.reduce((n, row) => n + (row.pulang || 0), 0),
+      // Total asal kehadiran: berapa yang punya bukti scan vs dinyatakan guru.
+      hadir_scan: detail.reduce((n, row) => n + (row.hadir_scan || 0), 0),
+      hadir_input: detail.reduce((n, row) => n + (row.hadir_input || 0), 0),
+    },
     breakdown: buildBreakdown(range.mode, range.from, range.to, normalizedRecords),
     schedule,
   }
