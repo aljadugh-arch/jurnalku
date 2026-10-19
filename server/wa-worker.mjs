@@ -134,13 +134,20 @@ db.exec(`CREATE TABLE IF NOT EXISTS wa_worker_heartbeat (
 )`)
 function denyut(tenantId, status, err = '') {
   try {
-    const q = db.prepare("SELECT COUNT(*) n, MIN(created_at) t FROM wa_queue WHERE tenant_id=? AND status IN ('pending','failed')").get(tenantId)
+    // `pending` dan `failed` DIPISAH. Sebelumnya keduanya dijumlahkan sehingga
+    // 91 pesan yang sudah menyerah (attempts=5) tampil sebagai "menunggu" —
+    // admin menunggu sesuatu yang tidak akan pernah terkirim.
+    const q = db.prepare(`SELECT
+        SUM(CASE WHEN status='pending' THEN 1 ELSE 0 END) pending,
+        SUM(CASE WHEN status='failed'  THEN 1 ELSE 0 END) failed,
+        MIN(CASE WHEN status IN ('pending','failed') THEN created_at END) t
+      FROM wa_queue WHERE tenant_id=?`).get(tenantId)
     const tertua = q?.t ? Math.max(0, Math.floor((Date.now() - new Date(q.t.replace(' ', 'T') + 'Z').getTime()) / 1000)) : 0
     db.prepare(`INSERT INTO wa_worker_heartbeat (tenant_id,status,pending,tertua_detik,last_tick,last_error)
       VALUES (?,?,?,?,datetime('now'),?)
       ON CONFLICT(tenant_id) DO UPDATE SET status=excluded.status,pending=excluded.pending,
         tertua_detik=excluded.tertua_detik,last_tick=excluded.last_tick,last_error=excluded.last_error`)
-      .run(tenantId, status, q?.n || 0, tertua, String(err || '').slice(0, 300))
+      .run(tenantId, status, q?.pending || 0, tertua, String(err || '').slice(0, 300))
   } catch (e) { log.error({ tenantId, err: e.message }, 'denyut gagal') }
 }
 
