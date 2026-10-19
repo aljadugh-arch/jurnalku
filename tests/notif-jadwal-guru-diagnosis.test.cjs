@@ -38,10 +38,18 @@ test('denyut mencatat jumlah antrean dan umur pesan tertua', () => {
   assert.ok(/status IN \('pending','failed'\)/.test(s))
 })
 
-test('API /api/wa-kesehatan hanya untuk super_admin', () => {
+// KONTRAK DIPERBARUI: halaman WA Gateway dipakai ADMIN LEMBAGA juga, jadi
+// endpoint status tidak boleh SUPERADMIN saja — kalau tidak, tombol Refresh
+// Status di halaman mereka menjawab "Akses ditolak: role tidak berwenang".
+// Penjagaan nomor platform tetap ada di tolakTenantPlatform (tenant `default`).
+test('API /api/wa-kesehatan memakai WA_KELOLA (admin lembaga + penjaga platform)', () => {
   const s = baca('server/index.cjs')
-  assert.ok(/app\.get\('\/api\/wa-kesehatan', authMiddleware, SUPERADMIN/.test(s),
-    'endpoint status WA harus super_admin saja')
+  assert.ok(/app\.get\('\/api\/wa-kesehatan', \.\.\.WA_KELOLA/.test(s),
+    'endpoint status WA harus bisa dibuka admin lembaga')
+  const iKelola = s.indexOf('const WA_KELOLA =')
+  const iEnd = s.indexOf("app.get('/api/wa-kesehatan'")
+  assert.ok(iKelola > 0 && iEnd > iKelola,
+    'endpoint harus setelah WA_KELOLA, kalau tidak ReferenceError saat start')
 })
 
 test('API menyebut penyebab, bukan hanya angka', () => {

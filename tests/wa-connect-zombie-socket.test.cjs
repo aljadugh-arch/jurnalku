@@ -98,3 +98,14 @@ test('Refresh Status melaporkan kesehatan worker, bukan menelan error', () => {
     'error tidak boleh ditelan diam-diam')
   assert.ok(/Worker aktif/.test(f) && /Worker belum bisa mengirim/.test(f))
 })
+
+test('endpoint wa-kesehatan memakai WA_KELOLA, bukan SUPERADMIN', () => {
+  const f = baca('server/index.cjs')
+  assert.ok(/app\.get\('\/api\/wa-kesehatan', \.\.\.WA_KELOLA/.test(f),
+    'admin lembaga juga membuka halaman WA — endpoint ini tidak boleh SUPERADMIN saja')
+  // Harus didefinisikan SETELAH WA_KELOLA, kalau tidak server gagal start.
+  const iKelola = f.indexOf('const WA_KELOLA =')
+  const iEnd = f.indexOf("app.get('/api/wa-kesehatan'")
+  assert.ok(iKelola > 0 && iEnd > iKelola,
+    'endpoint harus berada setelah WA_KELOLA didefinisikan (kalau tidak: ReferenceError)')
+})

@@ -2458,46 +2458,6 @@ app.get('/api/tenant/domains', (_req, res) => {
   res.json({ domains: BASE_DOMAINS.map(d => ({ domain: d })), utama: BASE_DOMAIN })
 })
 
-// Status kesehatan WA yang bisa ditindaklanjuti. Sebelumnya tidak ada cara
-// melihat "antrean menumpuk karena sesi mati" selain membaca log PM2.
-app.get('/api/wa-kesehatan', authMiddleware, SUPERADMIN, (req, res) => {
-  try {
-    const tenantId = String(req.query.tenant_id || req.tenantId || '').trim()
-    const heartbeat = db.prepare('SELECT * FROM wa_worker_heartbeat WHERE tenant_id=?').get(tenantId)
-    const sesi = db.prepare('SELECT status, phone, updated_at FROM wa_sessions WHERE tenant_id=?').get(tenantId)
-    const antrean = db.prepare(`SELECT
-        SUM(CASE WHEN status='pending'  THEN 1 ELSE 0 END) pending,
-        SUM(CASE WHEN status='failed'   THEN 1 ELSE 0 END) failed,
-        SUM(CASE WHEN status='sent' AND sent_at>=date('now') THEN 1 ELSE 0 END) terkirim_hari_ini,
-        MIN(CASE WHEN status IN ('pending','failed') THEN created_at END) tertua
-      FROM wa_queue WHERE tenant_id=?`).get(tenantId)
-    const tertuaDetik = antrean?.tertua
-      ? Math.max(0, Math.floor((Date.now() - new Date(String(antrean.tertua).replace(' ', 'T') + 'Z').getTime()) / 1000))
-      : 0
-    // Diagnosis eksplisit: admin harus tahu APA yang salah, bukan hanya angkanya.
-    let masalah = null
-    if (!sesi || sesi.status !== 'connected') {
-      masalah = sesi?.status === 'qr'
-        ? 'Sesi WA belum terhubung — buka menu WA Gateway dan scan QR.'
-        : `Sesi WA berstatus "${sesi?.status || 'tidak ada'}" — sambungkan ulang.`
-    } else if (tertuaDetik > 900 && (antrean?.pending || antrean?.failed)) {
-      masalah = `Ada ${(antrean.pending || 0) + (antrean.failed || 0)} pesan tertahan lebih dari ${Math.floor(tertuaDetik / 60)} menit.`
-    } else if (!heartbeat) {
-      masalah = 'Worker WA belum pernah melapor — periksa proses jurnalku-wa.'
-    }
-    res.json({
-      tenant_id: tenantId,
-      sesi: sesi || null,
-      worker: heartbeat || null,
-      antrean: { ...antrean, tertua_detik: tertuaDetik },
-      masalah,
-      sehat: !masalah,
-    })
-  } catch (e) {
-    res.status(500).json({ error: e.message })
-  }
-})
-
 app.get('/api/health', (_req, res) => {
   try {
     db.prepare('SELECT 1').get()
@@ -10859,6 +10819,47 @@ function tolakTenantPlatform(req, res, next) {
   next()
 }
 const WA_KELOLA = [ADMIN, tolakTenantPlatform]
+
+// Status kesehatan WA yang bisa ditindaklanjuti. Sebelumnya tidak ada cara
+// melihat "antrean menumpuk karena sesi mati" selain membaca log PM2.
+app.get('/api/wa-kesehatan', ...WA_KELOLA, (req, res) => {
+  try {
+    const tenantId = String(req.query.tenant_id || req.tenantId || '').trim()
+    const heartbeat = db.prepare('SELECT * FROM wa_worker_heartbeat WHERE tenant_id=?').get(tenantId)
+    const sesi = db.prepare('SELECT status, phone, updated_at FROM wa_sessions WHERE tenant_id=?').get(tenantId)
+    const antrean = db.prepare(`SELECT
+        SUM(CASE WHEN status='pending'  THEN 1 ELSE 0 END) pending,
+        SUM(CASE WHEN status='failed'   THEN 1 ELSE 0 END) failed,
+        SUM(CASE WHEN status='sent' AND sent_at>=date('now') THEN 1 ELSE 0 END) terkirim_hari_ini,
+        MIN(CASE WHEN status IN ('pending','failed') THEN created_at END) tertua
+      FROM wa_queue WHERE tenant_id=?`).get(tenantId)
+    const tertuaDetik = antrean?.tertua
+      ? Math.max(0, Math.floor((Date.now() - new Date(String(antrean.tertua).replace(' ', 'T') + 'Z').getTime()) / 1000))
+      : 0
+    // Diagnosis eksplisit: admin harus tahu APA yang salah, bukan hanya angkanya.
+    let masalah = null
+    if (!sesi || sesi.status !== 'connected') {
+      masalah = sesi?.status === 'qr'
+        ? 'Sesi WA belum terhubung — buka menu WA Gateway dan scan QR.'
+        : `Sesi WA berstatus "${sesi?.status || 'tidak ada'}" — sambungkan ulang.`
+    } else if (tertuaDetik > 900 && (antrean?.pending || antrean?.failed)) {
+      masalah = `Ada ${(antrean.pending || 0) + (antrean.failed || 0)} pesan tertahan lebih dari ${Math.floor(tertuaDetik / 60)} menit.`
+    } else if (!heartbeat) {
+      masalah = 'Worker WA belum pernah melapor — periksa proses jurnalku-wa.'
+    }
+    res.json({
+      tenant_id: tenantId,
+      sesi: sesi || null,
+      worker: heartbeat || null,
+      antrean: { ...antrean, tertua_detik: tertuaDetik },
+      masalah,
+      sehat: !masalah,
+    })
+  } catch (e) {
+    res.status(500).json({ error: e.message })
+  }
+})
+
 
 app.get('/api/wa-gateway/config', ...WA_KELOLA, (req, res) => {
   res.json(waGateway.getConfig(req.tenantId))
