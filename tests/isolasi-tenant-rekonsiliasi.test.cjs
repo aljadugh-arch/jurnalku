@@ -132,3 +132,28 @@ test('bandingkan() tidak berisik saat tidak ada perubahan', () => {
   }
   assert.deepStrictEqual(bandingkan(sama, JSON.parse(JSON.stringify(sama))), [])
 })
+
+test('gate mengirim SSHPASS ke sshpass (bukan hanya VPS_PASS)', () => {
+  // sshpass -e membaca variabel bernama SSHPASS. Gate punya VPS_PASS, jadi
+  // harus dipetakan; kalau tidak, rekonsiliasi selalu gagal dengan
+  // "SSHPASS environment variable not set" walau deploy sendiri sukses.
+  const gate = baca('scripts/gate-lalu-deploy.sh')
+  assert.ok(/SSHPASS="\$VPS_PASS"\s+sshpass -e ssh/.test(gate),
+    'gate harus memetakan VPS_PASS -> SSHPASS saat memanggil sshpass')
+})
+
+test('log rekonsiliasi masuk ke arsip run, bukan folder induk', () => {
+  const gate = baca('scripts/gate-lalu-deploy.sh')
+  assert.ok(/REKON_LOG="\$DIR_LOG\/rekonsiliasi\.log"/.test(gate),
+    'memakai $ARSIP membuat log tidak masuk arsip run dan sulit dilacak')
+})
+
+test('dependensi uji frontend disiapkan persisten, bukan di /tmp', () => {
+  // /tmp hilang setiap reboot -> gate merah palsu tanpa perubahan kode.
+  const t = baca('tests/frontend-grade-flows.test.cjs')
+  assert.ok(/\.test-deps/.test(t), 'dependensi harus di .test-deps proyek, bukan /tmp')
+  assert.ok(!/deps = process\.env\.FRONTEND_TEST_DEPS \|\| '\/tmp\//.test(t),
+    'default tidak boleh menunjuk /tmp lagi')
+  const skrip = baca('scripts/siapkan-dependensi-uji.sh')
+  assert.ok(/npm install --prefix/.test(skrip), 'harus ada skrip penyiapan dependensi')
+})

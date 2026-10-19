@@ -27,3 +27,6 @@ backup/
 
 # arsip/backup file sumber tidak perlu masuk repo
 *.bak*
+
+# Dependensi uji frontend (dipasang scripts/siapkan-dependensi-uji.sh)
+.test-deps/

@@ -5,8 +5,29 @@ const path = require('node:path')
 const vm = require('node:vm')
 const ts = require('typescript')
 // Isolated test dependency; no changes to the application's package/lock files.
-// npm install --prefix /tmp/jurnalku-frontend-grade-tests --no-audit --no-fund --package-lock=false react-test-renderer@19.2.7
-const deps = process.env.FRONTEND_TEST_DEPS || '/tmp/jurnalku-frontend-grade-tests/node_modules'
+// Disiapkan oleh scripts/siapkan-dependensi-uji.sh ke .test-deps/ (PERSISTEN).
+//
+// Sebelumnya menunjuk /tmp/jurnalku-frontend-grade-tests yang HILANG setiap
+// reboot, sehingga gate tiba-tiba MERAH dengan "Cannot find module .../react"
+// padahal tidak ada kode yang berubah. Kalau .test-deps belum ada, tes ini
+// memasangnya sendiri sekali, lalu melanjutkan.
+const pathModul = require('node:path')
+const fsModul = require('node:fs')
+const akarProyek = pathModul.join(__dirname, '..')
+const deps = process.env.FRONTEND_TEST_DEPS || pathModul.join(akarProyek, '.test-deps', 'node_modules')
+if (!fsModul.existsSync(pathModul.join(deps, 'react-test-renderer'))) {
+  const { execFileSync } = require('node:child_process')
+  const tujuan = pathModul.dirname(deps)
+  try {
+    execFileSync('npm', ['install', '--prefix', tujuan, '--no-audit', '--no-fund',
+      '--package-lock=false', '--silent', 'react@19.2.7', 'react-test-renderer@19.2.7'],
+      { stdio: 'ignore', timeout: 240000 })
+  } catch (e) {
+    throw new Error(
+      'Dependensi uji frontend belum siap dan pemasangan otomatis gagal. ' +
+      'Jalankan: bash scripts/siapkan-dependensi-uji.sh\n' + e.message)
+  }
+}
 const React = require(path.join(deps, 'react'))
 const { create, act } = require(path.join(deps, 'react-test-renderer'))
 global.IS_REACT_ACT_ENVIRONMENT = true

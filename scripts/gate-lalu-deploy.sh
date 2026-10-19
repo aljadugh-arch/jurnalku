@@ -184,7 +184,11 @@ echo "── rekonsiliasi layanan ──"
 # lokal. Dijalankan lewat sshpass yang sama dengan deploy, lalu hasilnya
 # disimpan ke log gate.
 REKON_LOG="$DIR_LOG/rekonsiliasi.log"
-if sshpass -e ssh -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$SSH_KNOWN_HOSTS" \
+# `VPS_PASS` ada di gate, tetapi sshpass membutuhkan variabel bernama SSHPASS.
+# Sebelumnya hanya deploy-staging.sh yang meng-export SSHPASS — dan itu proses
+# anak, jadi nilainya tidak pernah sampai ke sini. Akibatnya blok ini selalu
+# gagal dengan "SSHPASS environment variable not set".
+if SSHPASS="$VPS_PASS" sshpass -e ssh -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$SSH_KNOWN_HOSTS" \
      "${VPS_USER}@${VPS_IP}" \
      'cd /www/wwwroot/jurnal.cc.cd && bash scripts/rekonsiliasi-pasca-deploy.sh' > "$REKON_LOG" 2>&1; then
   grep -E 'Status rekonsiliasi|KRITIS|PERINGATAN|SEHAT' "$REKON_LOG" | tail -6 | sed 's/^/   /' || true
