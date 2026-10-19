@@ -13,6 +13,9 @@ export default function WAGatewayPage() {
   const [waStatus, setWaStatus] = useState<any>(null)
   const [qrImage, setQrImage] = useState<string | null>(null)
   const [connecting, setConnecting] = useState(false)
+  // Detik sejak tombol Connect ditekan. Tanpa ini, pengguna hanya melihat
+  // "Connecting…" tanpa tahu apakah proses masih berjalan atau sudah mati.
+  const [tungguDetik, setTungguDetik] = useState(0)
 
   const statusTimer = useRef<number | null>(null)
 
@@ -48,17 +51,25 @@ export default function WAGatewayPage() {
   }, [loadStatus])
   const connect = async () => {
     try {
-      setConnecting(true); setQrImage(null)
+      setConnecting(true); setQrImage(null); setTungguDetik(0)
       await api.post('/wa-gateway/connect')
       toast.success('Gateway dimulai, menunggu QR...')
       if (statusTimer.current) window.clearInterval(statusTimer.current)
       let tries = 0
       statusTimer.current = window.setInterval(async () => {
         tries++
+        setTungguDetik(tries)
         await loadStatus(); await loadQr()
-        if (tries >= 90 || waStatus?.status === 'connected') {
+        if (waStatus?.status === 'connected' || waStatus?.status === 'qr') {
           if (statusTimer.current) window.clearInterval(statusTimer.current)
           statusTimer.current = null
+          setConnecting(false)
+        }
+        if (tries >= 90) {
+          if (statusTimer.current) window.clearInterval(statusTimer.current)
+          statusTimer.current = null
+          setConnecting(false)
+          toast.error('Belum ada QR setelah 90 detik. Tekan Connect Device lagi — worker akan membuang sesi lama dan menyambung ulang.')
         }
       }, 1000)
     } catch { setConnecting(false); toast.error('Gagal connect') }
@@ -115,6 +126,14 @@ export default function WAGatewayPage() {
         <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100 space-y-3">
           <h2 className="text-lg font-bold text-gray-800">Device Baileys</h2>
           <p className="text-sm text-gray-500">Status: <b>{waStatus?.status || 'disconnected'}</b> {waStatus?.phone ? `· ${waStatus.phone}` : ''}</p>
+          {waStatus?.status !== 'connected' && (
+            <ol className="text-xs text-gray-600 list-decimal ml-4 space-y-0.5">
+              <li>Tekan <b>Connect Device</b> — tunggu QR muncul (5–15 detik).</li>
+              <li>Di HP: WhatsApp → <b>Perangkat tertaut</b> → <b>Tautkan perangkat</b>.</li>
+              <li>Scan QR. Status berubah jadi <b>connected</b>.</li>
+              <li>QR kedaluwarsa ±60 detik — kalau lewat, tekan Connect Device lagi.</li>
+            </ol>
+          )}
           {waStatus?.last_error && <p className="text-xs text-red-600">{waStatus.last_error}</p>}
           {(qrImage || waStatus?.has_qr) && (
             <div className="rounded-xl border bg-white p-3 w-fit">
@@ -122,7 +141,12 @@ export default function WAGatewayPage() {
               <p className="text-xs text-gray-500 text-center mt-2">WhatsApp → Perangkat tertaut → Tautkan perangkat</p>
             </div>
           )}
-          {connecting && !qrImage && <p className="text-sm text-amber-600">Menyiapkan QR WhatsApp…</p>}
+          {connecting && !qrImage && (
+            <div className="text-sm text-amber-700 space-y-1">
+              <p>Menyiapkan QR WhatsApp… ({tungguDetik} detik)</p>
+              <p className="text-xs text-gray-500">Biasanya 5–15 detik. Kalau lewat 90 detik, tekan Connect Device lagi.</p>
+            </div>
+          )}
           <div className="flex gap-2 flex-wrap">
             <button onClick={connect} disabled={connecting} className="px-4 py-2 bg-green-600 text-white rounded-lg text-sm disabled:opacity-50">{connecting ? 'Connecting…' : 'Connect Device'}</button>
             <button onClick={disconnect} className="px-4 py-2 bg-red-600 text-white rounded-lg text-sm">Disconnect Device</button>

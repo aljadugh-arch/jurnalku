@@ -13,12 +13,50 @@ const dbPath = process.env.DB_PATH ? path.resolve(import.meta.dirname, process.e
 const authRoot = process.env.WA_AUTH_DIR ? path.resolve(import.meta.dirname, process.env.WA_AUTH_DIR) : path.join(import.meta.dirname, 'wa-auth')
 const db=new Database(dbPath); db.pragma('journal_mode=WAL'); queue.setupWA(db)
 const log=pino({level:process.env.LOG_LEVEL||'info'}); const sockets=new Map(); const stopping=new Set(); const retryAfter=new Map()
+// Kapan socket terakhir dibuat. Dipakai untuk mendeteksi socket "zombie":
+// objek socket masih ada di map tetapi tidak pernah mencapai `open`, sehingga
+// `connect()` selalu return lebih awal dan status tertahan di 'connecting'
+// selamanya — inilah gejala "connect device hanya connecting saja".
+const socketSejak=new Map()
+const BATAS_HANDSHAKE_MS=Number(process.env.WA_HANDSHAKE_TIMEOUT_MS||45000)
 const {createVersionResolver,forEachTenantSettled}=workerUtils; const resolveVersion=createVersionResolver(fetchLatestBaileysVersion)
 const nowWib=()=>({date:new Date().toLocaleDateString('en-CA',{timeZone:'Asia/Jakarta'}),time:new Date().toLocaleTimeString('en-GB',{timeZone:'Asia/Jakarta',hour:'2-digit',minute:'2-digit',hour12:false})})
 const safe=id=>String(id).replace(/[^a-zA-Z0-9_-]/g,'_')
-function session(tenantId,status,extra={}){db.prepare(`INSERT INTO wa_sessions(tenant_id,status,qr,last_error,phone,updated_at) VALUES(?,?,?,?,?,datetime('now')) ON CONFLICT(tenant_id) DO UPDATE SET status=excluded.status,qr=CASE WHEN excluded.status='qr' THEN excluded.qr WHEN excluded.status='connected' THEN NULL ELSE wa_sessions.qr END,last_error=excluded.last_error,phone=COALESCE(excluded.phone,wa_sessions.phone),updated_at=datetime('now')`).run(tenantId,status,extra.qr||null,extra.error||null,extra.phone||null)}
+// Status 'qr' adalah keadaan yang BISA DIPAKAI (admin sedang memindai).
+// Jangan turunkan ke 'connecting' hanya karena Baileys memperbarui socket:
+// itulah yang membuat layar berkedip qr → connecting → qr dan tampak
+// "hanya connecting saja". 'connecting' hanya boleh bila belum ada QR segar.
+const QR_SEGAR_MS = 120000
+const qrTerakhir = new Map()
+function session(tenantId,status,extra={}){
+  if(status==='qr' && extra.qr) qrTerakhir.set(tenantId, Date.now())
+  if(status==='connected' || status==='disconnected') qrTerakhir.delete(tenantId)
+  if(status==='connecting'){
+    const umur = Date.now() - (qrTerakhir.get(tenantId) || 0)
+    if(umur < QR_SEGAR_MS){
+      // QR masih berlaku — pertahankan, cukup perbarui waktu.
+      db.prepare("UPDATE wa_sessions SET updated_at=datetime('now') WHERE tenant_id=?").run(tenantId)
+      return
+    }
+  }
+  db.prepare(`INSERT INTO wa_sessions(tenant_id,status,qr,last_error,phone,updated_at) VALUES(?,?,?,?,?,datetime('now')) ON CONFLICT(tenant_id) DO UPDATE SET status=excluded.status,qr=CASE WHEN excluded.status='qr' THEN excluded.qr WHEN excluded.status='connected' THEN NULL ELSE wa_sessions.qr END,last_error=excluded.last_error,phone=COALESCE(excluded.phone,wa_sessions.phone),updated_at=datetime('now')`).run(tenantId,status,extra.qr||null,extra.error||null,extra.phone||null)
+}
 async function connect(tenantId){
-  if(sockets.has(tenantId) || Date.now() < (retryAfter.get(tenantId)||0))return
+  // Socket lama yang sudah login = sehat, jangan diganggu.
+  const lamaSock=sockets.get(tenantId)
+  if(lamaSock?.user) return
+  // Socket ada tetapi belum pernah login: tunggu selama masa handshake.
+  // Lewat batas itu, socket dianggap zombie dan HARUS dibuang — kalau tidak,
+  // tombol "connect" tidak akan pernah berpengaruh apa pun.
+  if(lamaSock){
+    const umur=Date.now()-(socketSejak.get(tenantId)||0)
+    if(umur < BATAS_HANDSHAKE_MS) return
+    log.warn({tenantId,umur},'socket zombie — dibuang lalu disambung ulang')
+    try{ lamaSock.end(undefined) }catch{}
+    sockets.delete(tenantId); socketSejak.delete(tenantId)
+    session(tenantId,'reconnecting',{error:'Handshake tidak selesai — menyambung ulang'})
+  }
+  if(Date.now() < (retryAfter.get(tenantId)||0))return
   const authDir = path.join(authRoot, safe(tenantId))
   fs.mkdirSync(authDir,{recursive:true})
   // eslint-disable-next-line react-hooks/rules-of-hooks -- Baileys auth helper, not a React Hook
@@ -37,7 +75,7 @@ async function connect(tenantId){
     version, auth:state, logger:log.child({tenantId}), printQRInTerminal:false,
     syncFullHistory:false, markOnlineOnConnect:false,
     getMessage:async()=>undefined, cachedGroupMetadata:async()=>undefined,
-  }); sockets.set(tenantId,sock); session(tenantId,'connecting')
+  }); sockets.set(tenantId,sock); socketSejak.set(tenantId,Date.now()); session(tenantId,'connecting')
   sock.ev.on('creds.update',saveCreds)
   sock.ev.on('messages.upsert', async ({messages, type}) => {
     if (type !== 'notify') return
@@ -76,7 +114,7 @@ async function connect(tenantId){
     if(qr)session(tenantId,'qr',{qr}) // QR stored for admin endpoint; never logged
     if(connection==='open'){retryAfter.delete(tenantId);session(tenantId,'connected',{phone:sock.user?.id?.split(':')[0]})}
     if(connection==='close'){
-      sockets.delete(tenantId); const code=lastDisconnect?.error?.output?.statusCode
+      sockets.delete(tenantId); socketSejak.delete(tenantId); const code=lastDisconnect?.error?.output?.statusCode
       if(code===DisconnectReason.loggedOut||stopping.delete(tenantId))session(tenantId,'disconnected')
       else {retryAfter.set(tenantId,Date.now()+10000);session(tenantId,'reconnecting',{error:String(lastDisconnect?.error?.message||'connection closed').slice(0,500)}); setTimeout(()=>connect(tenantId).catch(e=>log.error({tenantId,err:e.message},'reconnect')),10000)}
     }
