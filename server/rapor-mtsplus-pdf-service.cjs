@@ -29,10 +29,41 @@ function resolveUploadPath(uploadDir, url) {
   return fs.existsSync(resolved) ? resolved : null
 }
 
+// PDFKit hanya bisa membaca JPEG dan PNG. Logo Kemenag diunggah admin sebagai
+// WebP (hasil kompresi upload), dan `doc.image()` melempar error untuk format
+// itu — ditelan `try {} catch {}` sehingga logo HILANG tanpa jejak. Konversi ke
+// PNG di memori sekali, lalu cache agar cetak massal 500 siswa tidak
+// mengonversi file yang sama 500 kali.
+const _cacheGambar = new Map()
+async function siapkanGambar(filePath) {
+  if (!filePath) return null
+  if (_cacheGambar.has(filePath)) return _cacheGambar.get(filePath)
+  let hasil = null
+  try {
+    const ext = path.extname(filePath).toLowerCase()
+    if (['.jpg', '.jpeg', '.png'].includes(ext)) {
+      hasil = filePath
+    } else {
+      // WebP/TIFF/GIF/HEIC: konversi ke PNG buffer.
+      const sharp = require('sharp')
+      hasil = await sharp(filePath).png().toBuffer()
+    }
+  } catch {
+    hasil = null // format benar-benar tidak terbaca — jangan gagalkan seluruh rapor
+  }
+  _cacheGambar.set(filePath, hasil)
+  return hasil
+}
+
 function romawi(n) {
+  // Hanya ubah ANGKA MURNI ("8" -> "VIII"). Nama rombel yang sudah berbentuk
+  // "VIII-A" harus dibiarkan apa adanya; sebelumnya fungsi ini mengembalikan
+  // string aslinya sehingga hasilnya benar, tetapi pemanggil memakai `||` yang
+  // membuat nilai kosong jatuh ke '-'. Dijaga eksplisit agar aman.
+  const s = String(n ?? '').trim()
   const table = { 1: 'I', 2: 'II', 3: 'III', 4: 'IV', 5: 'V', 6: 'VI', 7: 'VII', 8: 'VIII', 9: 'IX', 10: 'X', 11: 'XI', 12: 'XII' }
-  const num = parseInt(n, 10)
-  return table[num] || String(n || '')
+  if (/^\d+$/.test(s)) return table[parseInt(s, 10)] || s
+  return s
 }
 
 function jenisLabel(jenis) {
@@ -58,8 +89,10 @@ function hitungRank(db, tenantId, rombelId, tahunAjaran, semester, jenis, siswaI
 function drawKop(doc, settings, logo, y) {
   const W = doc.page.width
   const M = doc.page.margins.left
+  // Nama properti HARUS `lembagaLogoPath` (bukan `lembagaPath`) — sebelumnya
+  // salah nama sehingga logo lembaga tidak pernah tercetak di kop mana pun.
   if (logo.kemenagPath) { try { doc.image(logo.kemenagPath, M, y, { fit: [52, 52] }) } catch {} }
-  if (logo.lembagaPath) { try { doc.image(logo.lembagaPath, W - M - 52, y, { fit: [52, 52] }) } catch {} }
+  if (logo.lembagaLogoPath) { try { doc.image(logo.lembagaLogoPath, W - M - 52, y, { fit: [52, 52] }) } catch {} }
 
   const tx = M + 60
   const tw = W - 2 * (M + 60)
@@ -137,7 +170,14 @@ async function loadStudentData(db, { tenantId, siswaId, tahunAjaran, semester, j
   const kemenagUpload = resolveUploadPath(uploadDir, settings.logo_kemenag)
   const kemenagPath = kemenagUpload || path.join(__dirname, 'assets', 'kemenag-logo.svg')
   const lembagaLogoPath = resolveUploadPath(uploadDir, settings.logo)
-  const logo = { kemenagPath: fs.existsSync(kemenagPath) ? kemenagPath : null, lembagaLogoPath }
+  // Konversi format yang tidak dibaca PDFKit (WebP logo Kemenag adalah kasus
+  // nyata di produksi) SEBELUM render. Tanpa ini, `doc.image()` gagal diam-diam
+  // dan sampul/kop tercetak tanpa logo.
+  const logo = {
+    kemenagPath: await siapkanGambar(fs.existsSync(kemenagPath) ? kemenagPath : null),
+    lembagaLogoPath: await siapkanGambar(lembagaLogoPath),
+  }
+  const fotoSiap = await siapkanGambar(fotoPath)
 
   const tglRapor = safeText(pelengkap.tanggal_pembagian, new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' }))
   const kota = safeText(settings.kota_cetak || settings.kota, '')
@@ -145,7 +185,7 @@ async function loadStudentData(db, { tenantId, siswaId, tahunAjaran, semester, j
 
   return {
     siswa, settings, rapor, kehadiran, kepribadian, pelengkap, ekstrakurikuler,
-    jumlahNilai, rataAkhir, rank, qrBuffer, fotoPath, logo, tglRapor, kota, namaKepsek,
+    jumlahNilai, rataAkhir, rank, qrBuffer, fotoPath: fotoSiap, logo, tglRapor, kota, namaKepsek,
     semester, tahunAjaran, jenis,
   }
 }
@@ -163,40 +203,69 @@ function renderStudentPages(doc, data, bagian) {
   // ---------- HALAMAN 1: COVER ----------
   if (cetakCover) {
     doc.addPage({ size: 'A4', margin: 34 })
+    // Bingkai ganda seperti rapor cetak resmi.
     doc.rect(18, 18, W - 36, H - 36).lineWidth(4).strokeColor('black').stroke()
     doc.rect(26, 26, W - 52, H - 52).lineWidth(1).stroke()
 
-    if (logo.kemenagPath) { try { doc.image(logo.kemenagPath, W / 2 - 40, 70, { fit: [80, 80] }) } catch {} }
-    if (logo.lembagaPath) { try { doc.image(logo.lembagaPath, W / 2 - 30, 160, { fit: [60, 60] }) } catch {} }
+    // Logo Kemenag di atas, logo lembaga di bawahnya — urutan yang sama dengan
+    // rapor resmi. Sebelumnya `logo.lembagaPath` salah nama (objeknya
+    // `lembagaLogoPath`) sehingga tidak satu pun logo lembaga tercetak.
+    if (logo.kemenagPath) { try { doc.image(logo.kemenagPath, W / 2 - 45, 62, { fit: [90, 90] }) } catch {} }
+    if (logo.lembagaLogoPath) { try { doc.image(logo.lembagaLogoPath, W / 2 - 32, 160, { fit: [64, 64] }) } catch {} }
 
-    doc.font('Helvetica-Bold').fontSize(22).fillColor('black')
-    doc.text('RAPOR PESERTA DIDIK', M, 250, { width: W - 2 * M, align: 'center', characterSpacing: 1 })
+    doc.font('Helvetica-Bold').fontSize(24).fillColor('black')
+    doc.text('RAPOR PESERTA DIDIK', M, 248, { width: W - 2 * M, align: 'center', characterSpacing: 1.5 })
+
+    // Jenjang diambil dari settings, bukan hardcode 'MTs'. Lembaga MI/MA akan
+    // tercetak dengan jenjang yang salah kalau ini ditanam.
+    const jenjang = safeText(settings.jenjang, 'MTs')
+    const jenjangPanjang = jenjang === 'MI' ? 'Madrasah Ibtidaiyah (MI)'
+      : jenjang === 'MA' ? 'Madrasah Aliyah (MA)'
+      : jenjang === 'MTs' ? 'Madrasah Tsanawiyah (MTs)'
+      : safeText(settings.jenjang, 'Madrasah Tsanawiyah (MTs)')
     doc.font('Helvetica-Bold').fontSize(14)
-    doc.text('Madrasah Tsanawiyah (MTs)', M, 285, { width: W - 2 * M, align: 'center' })
+    doc.text(jenjangPanjang, M, 284, { width: W - 2 * M, align: 'center' })
 
     const jenisTxt = jenisLabel(jenis)
     doc.font('Helvetica-Bold').fontSize(12)
     const badgeW = doc.widthOfString(jenisTxt) + 24
     const badgeX = W / 2 - badgeW / 2
-    const badgeY = 325
+    const badgeY = 322
     doc.rect(badgeX, badgeY, badgeW, 22).fill('#000000')
     doc.fillColor('white').text(jenisTxt, badgeX, badgeY + 5, { width: badgeW, align: 'center' })
 
-    const boxY = 390
-    doc.rect(W / 2 - 160, boxY, 320, 120).lineWidth(2).strokeColor('black').stroke()
+    const boxY = 386
+    doc.rect(W / 2 - 165, boxY, 330, 126).lineWidth(2).strokeColor('black').stroke()
     doc.font('Helvetica').fontSize(11).fillColor('black')
-    doc.text('Nama Peserta Didik :', W / 2 - 145, boxY + 15, { width: 130 })
+    doc.text('Nama Peserta Didik :', W / 2 - 148, boxY + 14, { width: 200, lineBreak: false })
     doc.font('Helvetica-Bold').fontSize(17)
-    doc.text(safeText(siswa.nama).toUpperCase(), W / 2 - 145, boxY + 38, { width: 290 })
+    doc.text(safeText(siswa.nama).toUpperCase(), W / 2 - 148, boxY + 36, { width: 296, lineBreak: false })
     doc.font('Helvetica').fontSize(11)
-    doc.text('NIS / NISN :', W / 2 - 145, boxY + 75, { width: 130 })
+    doc.text('NIS / NISN :', W / 2 - 148, boxY + 76, { width: 200, lineBreak: false })
     doc.font('Helvetica-Bold').fontSize(14)
-    doc.text(`${safeText(siswa.nis)} / ${safeText(siswa.nisn)}`, W / 2 - 145, boxY + 95, { width: 290 })
+    // NISN bisa berformat gabungan `lokal#nasional` di data lama — cetak bagian
+    // nasionalnya saja, sama seperti halaman identitas.
+    const nisnSampul = String(siswa.nisn || '').split('#')[1] || safeText(siswa.nisn)
+    doc.text(`${safeText(siswa.nis, '')} / ${nisnSampul}`, W / 2 - 148, boxY + 96, { width: 296, lineBreak: false })
 
     doc.font('Helvetica-Bold').fontSize(18)
-    doc.text(safeText(settings.nama_lembaga).toUpperCase(), M, 600, { width: W - 2 * M, align: 'center' })
+    doc.text(safeText(settings.nama_lembaga).toUpperCase(), M, 570, { width: W - 2 * M, align: 'center' })
+    // Yayasan dulu TIDAK PERNAH dicetak padahal datanya ada di settings.
+    if (settings.yayasan_nama) {
+      doc.font('Helvetica').fontSize(11)
+      doc.text(String(settings.yayasan_nama).toUpperCase(), M, 596, { width: W - 2 * M, align: 'center' })
+    }
+    // `nama_instansi` tidak ada di skema `settings` — selalu undefined, sehingga
+    // yang tercetak hanya fallback. Pakai nilai dari DB kalau suatu saat
+    // ditambahkan, jika tidak tetap teks resmi Kementerian Agama.
+    const instansi = safeText(settings.nama_instansi, 'KEMENTERIAN AGAMA REPUBLIK INDONESIA')
     doc.font('Helvetica-Bold').fontSize(12)
-    doc.text(safeText(settings.nama_instansi, 'KEMENTERIAN AGAMA REPUBLIK INDONESIA').toUpperCase(), M, 630, { width: W - 2 * M, align: 'center' })
+    doc.text(instansi.toUpperCase(), M, 622, { width: W - 2 * M, align: 'center' })
+    // Identitas wilayah di kaki sampul: alamat + kontak, data yang sudah ada
+    // di settings tetapi tidak pernah ditampilkan.
+    doc.font('Helvetica').fontSize(9)
+    const kaki = [settings.alamat, [settings.telepon ? `Telp. ${settings.telepon}` : '', settings.email || ''].filter(Boolean).join(' | ')].filter(Boolean).join('\n')
+    if (kaki) doc.text(kaki, M, 660, { width: W - 2 * M, align: 'center' })
   }
 
   // ---------- HALAMAN 2: IDENTITAS ----------
@@ -211,34 +280,34 @@ function renderStudentPages(doc, data, bagian) {
     const nisData = String(siswa.nisn || '-').split('#')
     const nisLokal = safeText(siswa.nis)
     const nisnNasional = nisData[1] || safeText(siswa.nisn)
+    // Nomor urut kini berurutan dan tidak berulang. Sebelumnya bagian orang
+    // tua/wali memakai nomor kosong dan label 'a.'/'b.'/'c.' dua kali (ayah-ibu,
+    // lalu pekerjaan) sehingga hasil cetak terbaca seperti daftar yang rusak.
     const rows = [
       ['1.', 'Nama Lengkap', safeText(siswa.nama).toUpperCase()],
       ['2.', 'NIS / NISN', `${nisLokal} / ${nisnNasional}`],
       ['3.', 'Tempat, Tanggal Lahir', `${safeText(siswa.tempat_lahir)}, ${formatTanggalLahir(siswa.tanggal_lahir)}`],
-      ['4.', 'Jenis Kelamin', safeText(siswa.jenis_kelamin)],
+      ['4.', 'Jenis Kelamin', siswa.jenis_kelamin === 'L' ? 'Laki-laki' : siswa.jenis_kelamin === 'P' ? 'Perempuan' : safeText(siswa.jenis_kelamin)],
       ['5.', 'Agama', safeText(siswa.agama, 'Islam')],
       ['6.', 'Status dalam Keluarga', safeText(siswa.status_keluarga, 'Anak Kandung')],
       ['7.', 'Anak Ke', safeText(siswa.anak_ke)],
       ['8.', 'Alamat Peserta Didik', safeText(siswa.alamat)],
       ['9.', 'Nomor Telepon Rumah', safeText(siswa.no_hp)],
       ['10.', 'Sekolah Asal (SD/MI)', safeText(siswa.asal_sekolah)],
-      ['', 'a. Nama Ayah', safeText(siswa.nama_ayah)],
-      ['', 'b. Nama Ibu', safeText(siswa.nama_ibu)],
-      ['', 'c. Alamat', safeText(siswa.alamat_ortu || siswa.alamat)],
-      ['', 'a. Pekerjaan Ayah', safeText(siswa.kerja_ayah)],
-      ['', 'b. Pekerjaan Ibu', safeText(siswa.kerja_ibu)],
-      ['', 'Nama Wali Peserta Didik', safeText(siswa.nama_wali)],
-      ['', 'Pekerjaan Wali', safeText(siswa.kerja_wali)],
+      ['11.', 'Nama Ayah', safeText(siswa.nama_ayah)],
+      ['12.', 'Pekerjaan Ayah', safeText(siswa.kerja_ayah)],
+      ['13.', 'Nama Ibu', safeText(siswa.nama_ibu)],
+      ['14.', 'Pekerjaan Ibu', safeText(siswa.kerja_ibu)],
+      ['15.', 'Nama Wali Peserta Didik', safeText(siswa.nama_wali)],
+      ['16.', 'Pekerjaan Wali', safeText(siswa.kerja_wali)],
     ]
     doc.fontSize(11)
     for (const [no, label, val] of rows) {
-      if (y > 720) { doc.addPage({ size: 'A4', margin: 34 }); y = 50 }
-      const isSection = no === ''
-      doc.font(isSection ? 'Helvetica-Bold' : 'Helvetica')
-      const labelTxt = isSection ? label : `${no} ${label}`
-      doc.text(labelTxt, M + 10, y, { width: 150, lineBreak: false })
-      doc.text(':', M + 160, y, { width: 10, lineBreak: false })
-      doc.text(val, M + 172, y, { width: W - M - 172 - 10, lineBreak: false })
+      if (y > 700) { doc.addPage({ size: 'A4', margin: 34 }); y = 50 }
+      doc.font('Helvetica')
+      doc.text(`${no} ${label}`, M + 10, y, { width: 160, lineBreak: false })
+      doc.text(':', M + 172, y, { width: 10, lineBreak: false })
+      doc.text(val, M + 184, y, { width: W - M - 184 - 10, lineBreak: false })
       y += 20
     }
 
@@ -273,11 +342,16 @@ function renderStudentPages(doc, data, bagian) {
     doc.text(`: ${romawi(siswa.rombel_nama) || safeText(siswa.rombel_nama)}`, W / 2 + 62, y, { width: 100, lineBreak: false })
     doc.text('NIS/NISN', M, y + 14, { width: 40, lineBreak: false })
     doc.text(`: ${safeText(siswa.nis)} / ${safeText(siswa.nisn)}`, M + 42, y + 14, { width: 200, lineBreak: false })
-    doc.text('Semester', W / 2 + 30, y + 14, { width: 40, lineBreak: false })
-    doc.text(`: ${semester === 'ganjil' ? 'Ganjil' : 'Genap'} (${tahunAjaran})`, W / 2 + 62, y + 14, { width: 150, lineBreak: false })
+    // "Semester" butuh lebar 48pt; sebelumnya 40pt sehingga label terpotong
+    // menjadi "Semeste" + "r" yang membungkus ke baris berikutnya.
+    doc.text('Semester', W / 2 + 30, y + 14, { width: 48, lineBreak: false })
+    doc.text(`: ${semester === 'ganjil' ? 'Ganjil' : 'Genap'} (${tahunAjaran})`, W / 2 + 82, y + 14, { width: 160, lineBreak: false })
     y += 34
 
-    const cols = { no: { x: M, w: 22 }, mapel: { x: M + 22, w: 190 }, kkm: { x: M + 212, w: 32 }, nilai: { x: M + 244, w: 32 }, huruf: { x: M + 276, w: 120 }, capaian: { x: M + 396, w: W - M - 396 } }
+    // Kolom tabel nilai. Lebar total HARUS pas di dalam margin: sebelumnya
+    // `capaian.w = W - M - 396` membuat tepi kanan tabel jatuh di x=595.28 —
+    // melewati batas kertas, sehingga garis tabel terpotong saat dicetak.
+    const cols = { no: { x: M, w: 22 }, mapel: { x: M + 22, w: 186 }, kkm: { x: M + 208, w: 30 }, nilai: { x: M + 238, w: 30 }, huruf: { x: M + 268, w: 116 }, capaian: { x: M + 384, w: W - M - (M + 384) } }
     const drawHeader = () => {
       doc.font('Helvetica-Bold').fontSize(8)
       doc.rect(M, y, W - 2 * M, 18).lineWidth(1).stroke()
@@ -291,7 +365,17 @@ function renderStudentPages(doc, data, bagian) {
     }
     const rowH = 17
     const drawRow = (no, nama, kkm, nilai, huruf, capaian, bold = false) => {
-      if (y + rowH > 760) { doc.addPage({ size: 'A4', margin: 34 }); y = 50; drawHeader() }
+      // Halaman lanjutan WAJIB memakai kop lagi. Sebelumnya `y = 50` tanpa
+      // `drawKop()`, sehingga tabel nilai halaman kedua melayang tanpa identitas
+      // lembaga — dokumen resmi tidak boleh seperti itu.
+      if (y + rowH > 760) {
+        doc.addPage({ size: 'A4', margin: 34 })
+        y = drawKop(doc, settings, logo, 30)
+        doc.font('Helvetica-Bold').fontSize(10)
+        doc.text(`CAPAIAN HASIL BELAJAR ${jenisLabel(jenis)} (lanjutan)`, M, y + 2, { width: W - 2 * M, align: 'center', lineBreak: false })
+        y += 20
+        drawHeader()
+      }
       doc.font(bold ? 'Helvetica-Bold' : 'Helvetica').fontSize(8)
       doc.rect(M, y, W - 2 * M, rowH).lineWidth(0.7).stroke()
       doc.moveTo(cols.mapel.x, y).lineTo(cols.mapel.x, y + rowH).stroke()
@@ -431,8 +515,13 @@ async function createRaporMtsplusPdfPartial(db, { tenantId, siswaId, tahunAjaran
   const kemenagPath = kemenagUpload || path.join(__dirname, 'assets', 'kemenag-logo.svg')
   const data = {
     siswa, settings, rapor: [], kehadiran: { sakit: 0, izin: 0, alpa: 0 }, kepribadian: {}, pelengkap: {}, ekstrakurikuler: [],
-    jumlahNilai: 0, rataAkhir: 0, rank: { rank: 0, totalSiswa: 0 }, qrBuffer, fotoPath: resolveUploadPath(uploadDir, siswa.foto),
-    logo: { kemenagPath: fs.existsSync(kemenagPath) ? kemenagPath : null, lembagaLogoPath: resolveUploadPath(uploadDir, settings.logo) },
+    jumlahNilai: 0, rataAkhir: 0, rank: { rank: 0, totalSiswa: 0 }, qrBuffer, fotoPath: await siapkanGambar(resolveUploadPath(uploadDir, siswa.foto)),
+    // Jalur cetak "cover/identitas saja" memakai konversi yang SAMA supaya logo
+    // WebP juga tampil di sini — dulu jalur ini melewati siapkanGambar.
+    logo: {
+      kemenagPath: await siapkanGambar(fs.existsSync(kemenagPath) ? kemenagPath : null),
+      lembagaLogoPath: await siapkanGambar(resolveUploadPath(uploadDir, settings.logo)),
+    },
     tglRapor: new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' }),
     kota: safeText(settings.kota_cetak || settings.kota, ''), namaKepsek: safeText(settings.kepala_sekolah, '................................................'),
     semester, tahunAjaran, jenis,
