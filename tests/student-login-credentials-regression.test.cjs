@@ -23,6 +23,16 @@ test('admin dapat membuat akun siswa dan mereset password ke NISN atau NIS', () 
   assert.match(server, /reset_default_password === true/)
 })
 
-test('halaman login menjelaskan prioritas kredensial siswa secara jelas', () => {
-  assert.match(login, /Username dan password awal siswa menggunakan NISN, atau NIS jika NISN belum tersedia/)
+test('prioritas kredensial siswa tetap terdokumentasi, tapi TIDAK di halaman login', () => {
+  // Dulu halaman login memuat paragraf "Username dan password awal siswa
+  // menggunakan NISN, atau NIS jika NISN belum tersedia". Atas permintaan
+  // pemilik produk, halaman login dibuat bersih: hanya label "Username" dan
+  // "Password" tanpa keterangan tambahan.
+  //
+  // Informasi itu TIDAK hilang dari produk — tetap ada di halaman Data Siswa
+  // (tombol "Reset Password ke NISN/NIS") yang sudah diperiksa tes di atas.
+  assert.ok(!login.includes('Username dan password awal siswa menggunakan NISN'),
+    'halaman login tidak boleh lagi memuat paragraf kredensial')
+  const page = fs.readFileSync(path.join(__dirname, '..', 'src/pages/admin/DataSiswaPage.tsx'), 'utf8')
+  assert.match(page, /Reset Password ke NISN\/NIS/, 'halaman Data Siswa tetap menjelaskan kredensial')
 })

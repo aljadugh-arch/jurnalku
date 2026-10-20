@@ -210,7 +210,7 @@ export default function LoginPage() {
             <form onSubmit={handleVerifikasiOtp} className="space-y-3.5">
               <div>
                 <label htmlFor="otp-phone" className="mb-1.5 block text-xs font-semibold text-slate-600 dark:text-gray-300">
-                  Nomor WhatsApp Orang Tua / Wali
+                  Nomor WhatsApp
                 </label>
                 <input
                   id="otp-phone"
@@ -219,12 +219,9 @@ export default function LoginPage() {
                   autoComplete="tel"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  placeholder="08xxxxxxxxxx"
+                  placeholder="Nomor WhatsApp"
                   className={inputClass}
                 />
-                <p className="mt-1.5 text-[11px] leading-snug text-slate-400">
-                  Gunakan nomor yang terdaftar di sekolah. Kode dikirim ke WhatsApp nomor ini.
-                </p>
               </div>
 
               {otpTerkirim && (
@@ -280,7 +277,7 @@ export default function LoginPage() {
           <form onSubmit={handleLogin} className="space-y-3.5">
             <div>
               <label htmlFor="login-identifier" className="mb-1.5 block text-xs font-semibold text-slate-600 dark:text-gray-300">
-                Email / No. WhatsApp Wali / Kode Guru / NISN
+                Username
               </label>
               <input
                 id="login-identifier"
@@ -289,7 +286,7 @@ export default function LoginPage() {
                 autoCorrect="off"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                placeholder="email, no. WA wali, kode guru, NISN, atau NIS"
+                placeholder="Username"
                 className={inputClass}
               />
             </div>
@@ -305,7 +302,7 @@ export default function LoginPage() {
                   type={showPassword ? 'text' : 'password'}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  placeholder="Masukkan password"
+                  placeholder="Password"
                   className={`${inputClass} pr-11`}
                 />
                 <button
@@ -328,10 +325,6 @@ export default function LoginPage() {
             </button>
           </form>
           )}
-
-          <p className="mt-3 text-[11px] leading-snug text-slate-400">
-            Username dan password awal siswa menggunakan NISN, atau NIS jika NISN belum tersedia.
-          </p>
 
           {/* Tautan PPDB: pendaftaran mandiri calon siswa tanpa akun.
               URL bisa dibagikan (WA/poster) — tetap milik lembaga ini karena
@@ -398,11 +391,6 @@ export default function LoginPage() {
               </div>
             </div>
           )}
-
-          <p className="mt-3 text-center text-[11px] leading-relaxed text-slate-400 dark:text-gray-500">
-            Wali murid: masuk dengan nomor WhatsApp yang terdaftar di sekolah.
-            Sandi awal = 6 angka terakhir nomor tersebut.
-          </p>
 
           <p className="mt-6 text-center text-xs text-slate-500 dark:text-gray-400">
             Belum punya akun?{' '}

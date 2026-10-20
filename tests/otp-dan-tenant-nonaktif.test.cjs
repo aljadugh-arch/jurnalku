@@ -49,8 +49,14 @@ test('OTP: dibatasi per nomor supaya tidak jadi alat spam', () => {
 
 test('OTP: nomor tak terdaftar tidak membocorkan apa pun', () => {
   // Balasan untuk nomor tak terdaftar harus sama dengan balasan sukses.
-  assert.ok(/if \(!anak\.length\) return res\.json\(balasan\)/.test(otp),
-    'nomor tak terdaftar harus dibalas sama seperti nomor terdaftar')
+  // Sejak perbaikan, cabang ini juga mencatat ke log server (untuk diagnosis)
+  // tetapi TETAP membalas objek `balasan` yang sama.
+  const i = otp.indexOf('if (!anak.length) {')
+  assert.ok(i > 0, 'harus ada cabang nomor tak terdaftar')
+  const blok = otp.slice(i, i + 700)
+  assert.ok(/return res\.json\(balasan\)/.test(blok), 'balasan harus tetap generik')
+  assert.ok(!/res\.status\(4\d\d\)/.test(blok), 'tidak boleh membedakan status HTTP')
+  assert.ok(/console\.warn/.test(blok), 'harus dicatat di log untuk diagnosis admin')
 })
 
 test('OTP: akun wali memakai sandi acak, bukan 6 digit nomor', () => {

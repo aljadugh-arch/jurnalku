@@ -28,6 +28,15 @@ function normalNomor(value) {
   return /^62[1-9]\d{7,13}$/.test(p) ? p : ''
 }
 
+// Nomor Indonesia yang masuk akal: 62 + 8xx + minimal 7 digit = 12 total.
+// (Contoh sah: 6285730086624 = 13 digit.) Nomor 10 digit seperti "0857404929"
+// setelah dikonversi menjadi 11 digit "62857404929" — itu kurang satu digit,
+// biasanya salah ketik. Menolaknya di sini mencegah wali menunggu kode yang
+// tidak akan pernah bisa dikirim.
+function nomorLayakKirim(expr) {
+  return `LENGTH(${expr}) BETWEEN 12 AND 14 AND SUBSTR(${expr},1,3)='628'`
+}
+
 function hashKode(kode, garam) {
   return crypto.createHash('sha256').update(`${garam}:${kode}`).digest('hex')
 }
@@ -61,13 +70,23 @@ function bersihkanKedaluwarsa(db) {
 }
 
 function daftarSiswaDenganNomor(db, tenantId, nomor) {
-  const daftar = new Set([nomor])
-  if (nomor.startsWith('62')) daftar.add('0' + nomor.slice(2))
-  const tanda = [...daftar].map(() => '?').join(',')
+  // Nomor di DB bisa tersimpan sebagai 08.., 628.., atau +628...
+  // `nomor` dari klien sudah dinormalisasi ke 628...; bandingkan keduanya
+  // dengan menyamakan bentuk: buang awalan 62 menjadi 0, atau sebaliknya.
+  const varian = new Set([nomor])
+  if (nomor.startsWith('62')) {
+    varian.add('0' + nomor.slice(2))   // 62857.. -> 0857..
+    varian.add(nomor)                  // 62857..
+  }
+  const kolom = `REPLACE(REPLACE(REPLACE(REPLACE(COALESCE(no_hp,''),' ',''),'-',''),'+',''),'.','')`
+  // Bandingkan dalam bentuk yang SAMA: kolom juga dinormalkan ke 62..
+  const kolom62 = `CASE WHEN ${kolom} LIKE '0%' THEN '62' || SUBSTR(${kolom},2) ELSE ${kolom} END`
+  const tanda = [...varian].map(() => '?').join(',')
   return db.prepare(`SELECT id,nis,nama,no_hp FROM siswa
     WHERE tenant_id=? AND COALESCE(status,'aktif')='aktif'
-      AND REPLACE(REPLACE(REPLACE(REPLACE(COALESCE(no_hp,''),' ',''),'-',''),'+',''),'.','') IN (${tanda})`)
-    .all(tenantId, ...daftar)
+      AND ${kolom62} IN (${tanda})
+      AND ${nomorLayakKirim(kolom62)}`)
+    .all(tenantId, ...varian)
 }
 
 function daftarkanRouteOtp(app, ctx) {
@@ -107,7 +126,14 @@ function daftarkanRouteOtp(app, ctx) {
     }
 
     const anak = daftarSiswaDenganNomor(db, tenantId, nomor)
-    if (!anak.length) return res.json(balasan) // jangan bocorkan bahwa nomor tidak terdaftar
+    if (!anak.length) {
+      // Balasan tetap generik (jangan bocorkan pendaftaran), TETAPI dicatat di
+      // log server. Tanpa jejak ini, admin hanya melihat "kode tidak datang"
+      // tanpa cara mengetahui bahwa nomornya memang tidak terdaftar di
+      // lembaga tempat ia mencoba masuk.
+      console.warn(`[otp] DITOLAK tenant=${tenantId} nomor=${nomor.slice(0, 4)}****${nomor.slice(-2)} alasan=tidak terdaftar`)
+      return res.json(balasan)
+    }
 
     const kode = String(crypto.randomInt(0, 1000000)).padStart(6, '0')
     const garam = crypto.randomBytes(12).toString('hex')

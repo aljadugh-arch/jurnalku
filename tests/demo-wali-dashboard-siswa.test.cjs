@@ -67,11 +67,14 @@ test('satu nomor wali menautkan SEMUA anak (kakak-adik)', () => {
     'harus menautkan setiap anak dengan nomor yang sama')
 })
 
-test('halaman login menjelaskan cara masuk wali', () => {
+test('halaman login menyediakan tab OTP untuk wali', () => {
+  // Keterangan panjang di halaman login sengaja dihapus atas permintaan
+  // pemilik produk. Yang harus tetap ada adalah JALANNYA: tab OTP dan tombol
+  // kirim kode — bukan paragraf penjelasan.
   const s = baca('src/pages/auth/LoginPage.tsx')
-  assert.ok(/nomor WhatsApp yang terdaftar/.test(s))
-  assert.ok(/6 angka terakhir/.test(s))
-  assert.ok(/No\. WhatsApp Wali/.test(s))
+  assert.ok(/Nomor WA \(OTP\)/.test(s), 'tab OTP harus ada')
+  assert.ok(/Kirim Kode ke WhatsApp/.test(s), 'tombol kirim kode harus ada')
+  assert.ok(/Nomor WhatsApp/.test(s), 'kolom nomor harus ada')
 })
 
 // ── 3. DASHBOARD SISWA ────────────────────────────────────────────────────────
