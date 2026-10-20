@@ -260,6 +260,7 @@ function filterRoleItems(items: MenuItem[], role?: string): MenuItem[] {
 export const superAdminMenuItems: MenuItem[] = [
   { label: 'Dashboard', icon: <LayoutDashboard size={20} />, path: '/admin' },
   { label: 'Manajemen Lembaga', icon: <Globe size={20} />, path: '/admin/tenants' },
+  { label: 'Masuk sebagai Lembaga', icon: <Building2 size={20} />, path: '/admin/masuk-lembaga' },
   { label: 'Invoice Langganan', icon: <Receipt size={20} />, path: '/admin/invoice' },
   { label: 'Manajemen Yayasan', icon: <Building2 size={20} />, path: '/admin/foundations' },
   { label: 'Manajemen Pengguna', icon: <UserCheck size={20} />, path: '/admin/users' },

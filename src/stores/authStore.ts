@@ -15,6 +15,8 @@ interface AuthState {
   loginWithCredentials: (email: string, password: string) => Promise<void>
   mintaOtp: (phone: string) => Promise<{ ok: boolean; pesan: string }>
   loginDenganOtp: (phone: string, code: string) => Promise<void>
+  masukLembaga: (tenantId: string) => Promise<void>
+  kembaliKePlatform: () => Promise<void>
   loginDemo: (role: string) => Promise<void>
   logout: () => void
   checkAuth: () => Promise<void>
@@ -59,6 +61,21 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     sessionStorage.removeItem('jurnalku_token')
     set({ user: res.data.user, token: res.data.token, isAuthenticated: true, authReady: true })
     await useSettingsStore.getState().loadSettings()
+  },
+  // Superadmin: pindah konteks ke satu lembaga tanpa logout. Token baru tetap
+  // membawa role super_admin — hanya tenant_id yang berubah.
+  masukLembaga: async (tenantId) => {
+    const res = await api.post('/superadmin/masuk-lembaga', { tenant_id: tenantId })
+    localStorage.setItem('jurnalku_token', res.data.token)
+    set({ token: res.data.token })
+    // Muat ulang pengaturan karena pengaturan kini milik lembaga tersebut.
+    await useSettingsStore.getState().loadSettings().catch(() => {})
+  },
+  kembaliKePlatform: async () => {
+    const res = await api.post('/superadmin/kembali-platform')
+    localStorage.setItem('jurnalku_token', res.data.token)
+    set({ token: res.data.token })
+    await useSettingsStore.getState().loadSettings().catch(() => {})
   },
   loginDemo: async (role) => {
     const res = await api.post('/auth/demo', { role })

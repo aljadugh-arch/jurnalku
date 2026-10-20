@@ -2678,10 +2678,18 @@ app.get('/api/caddy/ask', (req, res) => {
   const matchedBase = BASE_DOMAINS.find(bd => domain.endsWith('.' + bd))
   if (matchedBase) {
     const slug = domain.slice(0, -(matchedBase.length + 1))
-    const tenant = db.prepare('SELECT id FROM tenants WHERE slug = ? AND aktif = 1').get(slug)
+    // Sertifikat tetap disajikan untuk lembaga NONAKTIF.
+    //
+    // Alasannya bukan melonggarkan keamanan: kalau Caddy menolak sertifikat,
+    // pengunjung menerima error TLS ("ssl alert internal error") sebelum
+    // permintaan sampai ke aplikasi — mereka melihat halaman rusak, bukan
+    // penjelasan. Penolakan akses tetap dilakukan aplikasi (tenantMiddleware
+    // -> 403 "Lembaga Tidak Aktif"). Jadi di sini cukup pastikan domain itu
+    // memang milik lembaga terdaftar, apa pun status aktifnya.
+    const tenant = db.prepare('SELECT id FROM tenants WHERE slug = ?').get(slug)
     if (tenant) return res.json({ ok: true })
   }
-  const custom = db.prepare("SELECT id FROM tenants WHERE lower(trim(domain_custom, '.')) = ? AND aktif = 1").get(domain)
+  const custom = db.prepare("SELECT id FROM tenants WHERE lower(trim(domain_custom, '.')) = ?").get(domain)
   if (custom) return res.json({ ok: true })
   return res.status(404).json({ ok: false, error: 'domain tidak terdaftar' })
 })
@@ -11547,6 +11555,11 @@ registerTenantRoutes(app, db, authMiddleware, uuidv4, requireRole('super_admin')
 // Login wali lewat OTP WhatsApp (lihat server/otp-login.cjs).
 require('./otp-login.cjs').daftarkanRouteOtp(app, {
   db, waQueue, jwt, JWT_SECRET, JWT_EXPIRES_IN, authLimiter,
+})
+
+// Superadmin masuk ke dashboard lembaga tanpa logout.
+require('./superadmin-masuk-lembaga.cjs').daftarkanRouteMasukLembaga(app, {
+  db, jwt, JWT_SECRET, JWT_EXPIRES_IN,
 })
 // Catatan: route /api/tenants* didefinisikan di server/tenant.cjs
 // lewat registerTenantRoutes() (di atas). Handler duplikat yang dulunya
