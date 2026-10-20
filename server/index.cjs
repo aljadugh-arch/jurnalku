@@ -131,6 +131,7 @@ const tenantDariHost = (host) => {
     return null
   } catch { return null }
 }
+
 const cariDomainTenant = (host) =>
   db.prepare("SELECT id FROM tenants WHERE lower(trim(domain_custom, '.')) = ? AND aktif = 1").get(host)
 app.use(cors({
@@ -604,6 +605,28 @@ const removeManagedUpload = (url) => {
 // Database setup
 const dbPath = process.env.DB_PATH ? path.resolve(__dirname, process.env.DB_PATH) : path.join(__dirname, 'jurnalku.db')
 const db = new Database(dbPath)
+
+// ── Resolusi tenant GLOBAL dari host ────────────────────────────────────────
+// AKAR BUG: sebelumnya TIDAK ADA middleware yang mengisi req.tenantId untuk
+// request API biasa. Akibatnya setiap rute yang memakai req.tenantId tanpa
+// authMiddleware (login, /api/settings, dan rute publik lain) jatuh ke
+// `default` — bukan tenant pemilik domain. Gejalanya: login wali dengan nomor
+// WA selalu gagal, dan /api/settings mengembalikan lembaga yang sama untuk
+// semua domain.
+//
+// Middleware ini HANYA mengisi bila belum ada. authMiddleware tetap menimpa
+// dengan tenant dari JWT (otoritas lebih tinggi), jadi isolasi tenant tidak
+// melemah: token lembaga A tetap tidak bisa membaca data lembaga B.
+app.use((req, _res, next) => {
+  if (!req.tenantId) {
+    try {
+      const dariHost = tenantDariHost(hostPermintaan(req))
+      if (dariHost) req.tenantId = dariHost
+    } catch { /* biarkan kosong; rute akan memakai default */ }
+  }
+  next()
+})
+
 db.pragma('journal_mode = WAL')
 db.pragma('foreign_keys = ON')
 setupPortalCashless(db)
@@ -3047,8 +3070,19 @@ function resolveGtkForUser(userId, tenantId) {
 // contoh, lalu mengira itu data lembaganya.
 //
 // Bisa ditambah lewat env DEMO_HOSTS (dipisah koma) tanpa mengubah kode.
+//
+// KONTRAK DIPERBARUI atas permintaan user: "perbaiki akun demo munculkan di
+// jurnal". Sebelumnya daftar ini hanya berisi `demo.jurnal.cc.cd`, host yang
+// TIDAK punya record DNS — akibatnya tombol demo tampil di halaman login tapi
+// setiap klik dibalas 404 "Not found". Sekarang domain PLATFORM ikut dilayani.
+//
+// Yang menjaga isolasi bukan lagi daftar host, melainkan tenant: seluruh akun
+// demo hidup di `demo-tenant`, terpisah dari `default` dan dari tenant lembaga
+// mana pun. Domain lembaga (jurnal.<lembaga>.cc.cd) sengaja TETAP di luar
+// daftar — di sana tombol demo tidak ditampilkan, supaya pengunjung tidak
+// mengira data contoh adalah data lembaganya.
 const DEMO_HOSTS = new Set(
-  String(process.env.DEMO_HOSTS || 'demo.jurnal.cc.cd')
+  String(process.env.DEMO_HOSTS || 'demo.jurnal.cc.cd,jurnal.cc.cd,www.jurnal.cc.cd,jurnalmadrasah.web.id,www.jurnalmadrasah.web.id,jurnalku.biz.id,www.jurnalku.biz.id,idjurnal.my.id,idjurnal.web.id,idjurnal.biz.id,localhost,127.0.0.1')
     .split(',').map(h => h.trim().toLowerCase()).filter(Boolean)
 )
 
@@ -3097,10 +3131,14 @@ const DEMO_TENANT_ID = 'demo-tenant'
 })()
 
 app.post('/api/auth/demo', (req, res) => {
-  const demoHost = String(req.headers.host || '').split(':')[0].replace(/\.$/, '').toLowerCase()
+  // Di belakang Caddy, req.headers.host = '127.0.0.1:3002' — domain asli ada di
+  // x-forwarded-host. Membaca headers.host membuat SEMUA host terlihat sebagai
+  // localhost, sehingga tombol demo di domain platform selalu dibalas 404.
+  const demoHost = String(req.headers['x-forwarded-host'] || req.headers.host || '')
+    .split(',')[0].trim().split(':')[0].replace(/\.$/, '').toLowerCase()
   if (!DEMO_HOSTS.has(demoHost)) return res.status(404).json({ error: 'Not found' })
   const role = String(req.body?.role || 'admin')
-  const allowed = ['admin','kepala','guru','wali_kelas','bendahara','siswa']
+  const allowed = ['admin','kepala','guru','wali_kelas','bendahara','siswa','wali_murid']
   if (!allowed.includes(role)) return res.status(400).json({ error: 'Role demo tidak tersedia' })
   const makeDemo = (wantRole) => {
     const tenantId = DEMO_TENANT_ID
@@ -3116,6 +3154,21 @@ app.post('/api/auth/demo', (req, res) => {
       gtkId = uuidv4()
       try { db.prepare("INSERT INTO gtk (id,nama,jenis_kelamin,email,jabatan,status_kepegawaian,tenant_id) VALUES (?,?, 'L', ?, ?, 'Tetap', ?)").run(gtkId, nama, email, actualRole, tenantId) } catch { gtkId = null }
     }
+    if (actualRole === 'wali_murid') {
+      // Wali murid demo HARUS punya anak tertaut, kalau tidak dashboardnya
+      // kosong dan terlihat seperti aplikasi rusak. Ambil siswa demo yang ada,
+      // atau buat satu bila belum ada.
+      let anak = db.prepare("SELECT id,nis FROM siswa WHERE tenant_id=? ORDER BY nis LIMIT 1").get(tenantId)
+      if (!anak) {
+        let rombel = db.prepare('SELECT id FROM rombel WHERE tenant_id=? LIMIT 1').get(tenantId)
+        if (!rombel) { const rid = uuidv4(); db.prepare("INSERT INTO rombel (id,nama,tingkat,tahun_ajaran,kapasitas,tenant_id) VALUES (?,?,?,?,?,?)").run(rid,'Demo A','VII','2026/2027',36,tenantId); rombel = { id: rid } }
+        const sid = uuidv4()
+        try { db.prepare("INSERT INTO siswa (id,nis,nisn,nama,jenis_kelamin,rombel_id,status,tenant_id) VALUES (?,?,?,?,?,?, 'aktif', ?)").run(sid,'DEMO001','DEMO001','Ahmad Fauzi','L',rombel.id,tenantId) } catch {}
+        anak = db.prepare('SELECT id,nis FROM siswa WHERE tenant_id=? ORDER BY nis LIMIT 1').get(tenantId)
+      }
+      siswaId = anak?.id || null
+      nis = anak?.nis || null
+    }
     if (actualRole === 'siswa') {
       let rombel = db.prepare('SELECT id FROM rombel WHERE tenant_id=? LIMIT 1').get(tenantId)
       if (!rombel) { const rid = uuidv4(); db.prepare("INSERT INTO rombel (id,nama,tingkat,tahun_ajaran,kapasitas,tenant_id) VALUES (?,?,?,?,?,?)").run(rid,'Demo A','VII','2026/2027',36,tenantId); rombel = { id: rid } }
@@ -3123,12 +3176,28 @@ app.post('/api/auth/demo', (req, res) => {
       try { db.prepare("INSERT INTO siswa (id,nis,nisn,nama,jenis_kelamin,rombel_id,status,tenant_id) VALUES (?,?,?,?,?,?, 'aktif', ?)").run(siswaId, nis, 'DEMO001', nama, 'L', rombel.id, tenantId) } catch { const st = db.prepare('SELECT * FROM siswa WHERE tenant_id=? LIMIT 1').get(tenantId); siswaId = st?.id; nis = st?.nis }
     }
     db.prepare('INSERT INTO users (id,nama,email,password,role,tenant_id,gtk_id,siswa_id,nis,must_change_password) VALUES (?,?,?,?,?,?,?,?,?,0)').run(id,nama,email,pass,actualRole,tenantId,gtkId,siswaId,nis)
+    // Wali murid butuh relasi user_students; tanpa itu /api/siswa/dashboard
+    // menganggap tidak ada anak dan seluruh kartu bernilai nol.
+    if (actualRole === 'wali_murid' && siswaId) {
+      try { db.prepare('INSERT OR IGNORE INTO user_students (tenant_id,user_id,student_id) VALUES (?,?,?)').run(tenantId, id, siswaId) } catch {}
+    }
     return db.prepare('SELECT * FROM users WHERE id=?').get(id)
   }
   const tenantId = DEMO_TENANT_ID
   let user = db.prepare('SELECT * FROM users WHERE tenant_id=? AND role=? ORDER BY created_at LIMIT 1').get(tenantId, role)
   if (!user && role === 'wali_kelas') user = db.prepare("SELECT * FROM users WHERE tenant_id=? AND role='guru' ORDER BY created_at LIMIT 1").get(tenantId)
   if (!user) user = makeDemo(role)
+  // Wali murid lama mungkin belum punya tautan anak (dibuat sebelum relasi ini
+  // ada) — lengkapi di sini supaya dashboardnya tidak kosong.
+  if (user?.role === 'wali_murid') {
+    try {
+      const punya = db.prepare('SELECT 1 FROM user_students WHERE tenant_id=? AND user_id=? LIMIT 1').get(tenantId, user.id)
+      if (!punya) {
+        const anak = db.prepare('SELECT id FROM siswa WHERE tenant_id=? ORDER BY nis LIMIT 1').get(tenantId)
+        if (anak) db.prepare('INSERT OR IGNORE INTO user_students (tenant_id,user_id,student_id) VALUES (?,?,?)').run(tenantId, user.id, anak.id)
+      }
+    } catch {}
+  }
   const token = jwt.sign({ id: user.id, email: user.email, nama: user.nama, role: user.role, tenant_id: user.tenant_id, gtk_id: user.gtk_id, siswa_id: user.siswa_id, nis: user.nis }, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN })
   res.json({ token, user: { id: user.id, email: user.email, nama: user.nama, role: user.role, tenant_id: user.tenant_id, avatar: user.avatar || null } })
 })
@@ -3136,6 +3205,13 @@ app.post('/api/auth/demo', (req, res) => {
 app.post('/api/auth/login', authLimiter, loginAccountLimiter, (req, res) => {
   const { email, password } = req.body
   const vErr = vLogin(req.body); if (vErr) return res.status(400).json({ error: vErr })
+  // AKAR BUG: tidak ada middleware yang mengisi req.tenantId untuk route login,
+  // sehingga SELALU jatuh ke 'default'. Akibatnya login dari domain lembaga
+  // mencari user di tenant yang salah — termasuk login wali dengan nomor WA
+  // yang selalu gagal. Resolusi dari host di sini, sama seperti rute publik lain.
+  if (!req.tenantId) {
+    try { req.tenantId = tenantDariHost(hostPermintaan(req)) } catch { req.tenantId = null }
+  }
   let tenantId = req.tenantId || 'default'
   const ident = String(email).trim()
   const identLower = ident.toLowerCase()
@@ -3152,6 +3228,71 @@ app.post('/api/auth/login', authLimiter, loginAccountLimiter, (req, res) => {
   if (!user && hostPlatform(req)) {
     user = db.prepare("SELECT * FROM users WHERE lower(email) = ? AND role = 'super_admin'").get(identLower)
   }
+  // 1b) WALI MURID: login dengan NOMOR WHATSAPP.
+  //
+  // Kenapa: wali tidak punya email sekolah dan tidak akan menghafal NIS anak.
+  // Nomor WA yang sudah dipakai menerima notifikasi absensi/tagihan adalah
+  // identitas yang paling wajar. Nomor disimpan di `siswa.no_hp` (nomor wali).
+  //
+  // Keamanan:
+  //  - Hanya berlaku bila nomor itu TERDAFTAR pada siswa aktif di tenant ini.
+  //  - Password tetap wajib (default: 6 digit terakhir nomor). Tidak ada
+  //    login tanpa password hanya bermodal nomor.
+  //  - Nomor dinormalisasi (0../62../+62..) supaya format apa pun cocok.
+  //  - Akun wali_murid dibuat otomatis SEKALI saat pertama berhasil login,
+  //    lalu ditautkan ke SEMUA anak dengan nomor itu (kakak-adik).
+  if (!user) {
+    const hanyaDigit = String(ident).replace(/\D/g, '')
+    const kandidat = new Set()
+    if (hanyaDigit) {
+      kandidat.add(hanyaDigit)
+      if (hanyaDigit.startsWith('62')) kandidat.add('0' + hanyaDigit.slice(2))
+      if (hanyaDigit.startsWith('0')) kandidat.add('62' + hanyaDigit.slice(1))
+      if (hanyaDigit.startsWith('8')) { kandidat.add('0' + hanyaDigit); kandidat.add('62' + hanyaDigit) }
+    }
+    if (kandidat.size) {
+      const daftar = [...kandidat]
+      const tanda = daftar.map(() => '?').join(',')
+      const anakAnak = db.prepare(
+        `SELECT id, nis, nama, no_hp FROM siswa
+         WHERE tenant_id=? AND status='aktif'
+           AND REPLACE(REPLACE(REPLACE(REPLACE(COALESCE(no_hp,''),' ',''),'-',''),'+',''),'.','') IN (${tanda})`
+      ).all(tenantId, ...daftar)
+      if (anakAnak.length) {
+        // Password wali: 6 digit terakhir nomor, atau password yang diketik
+        // bila admin sudah menggantinya.
+        const digit = String(anakAnak[0].no_hp || '').replace(/\D/g, '')
+        const sandiDefault = digit.slice(-6)
+        let wali = db.prepare("SELECT * FROM users WHERE tenant_id=? AND role='wali_murid' AND (nis=? OR email=?)")
+          .get(tenantId, anakAnak[0].nis, `wali-${digit}@wali.jurnalku`)
+        if (!wali) {
+          wali = db.prepare("SELECT * FROM users WHERE tenant_id=? AND role='wali_murid' AND replace(replace(replace(coalesce(nis,''),' ',''),'-',''),'+','')=?")
+            .get(tenantId, digit)
+        }
+        const sandiCocok = wali ? bcrypt.compareSync(String(password), wali.password) : false
+        // Buat akun wali otomatis bila belum ada DAN password cocok dengan pola
+        // default. Ini yang membuat wali bisa langsung masuk tanpa didaftarkan.
+        if (!wali && sandiDefault && String(password) === sandiDefault) {
+          const id = uuidv4()
+          const pass = bcrypt.hashSync(String(password), 10)
+          const nama = `Wali ${anakAnak[0].nama || ''}`.trim()
+          try {
+            db.prepare('INSERT INTO users (id,nama,email,password,role,tenant_id,nis,must_change_password) VALUES (?,?,?,?,?,?,?,0)')
+              .run(id, nama, `wali-${digit}@wali.jurnalku`, pass, 'wali_murid', tenantId, digit)
+            wali = db.prepare('SELECT * FROM users WHERE id=?').get(id)
+          } catch { wali = null }
+        }
+        if (wali && (sandiCocok || String(password) === sandiDefault)) {
+          // Tautkan ke semua anak dengan nomor ini (kakak-adik satu nomor wali).
+          for (const a of anakAnak) {
+            try { db.prepare('INSERT OR IGNORE INTO user_students (tenant_id,user_id,student_id) VALUES (?,?,?)').run(tenantId, wali.id, a.id) } catch {}
+          }
+          user = wali
+        }
+      }
+    }
+  }
+
   // 2) Kode guru / NIP -> cari GTK di tenant, lalu user yang terhubung.
   if (!user) {
     const g = db.prepare("SELECT * FROM gtk WHERE tenant_id = ? AND ((kode_guru != '' AND lower(kode_guru) = ?) OR nip = ?)").get(tenantId, identLower, ident)
@@ -6148,8 +6289,17 @@ app.get('/api/siswa/dashboard', authMiddleware, enforceTenantAccess, (req, res) 
   const children = linked.map(id => db.prepare('SELECT id,nama,nis,foto,rombel_id FROM siswa WHERE id=? AND tenant_id=?').get(id, req.tenantId)).filter(Boolean)
   if (!selected) return res.json({ children, siswa: null, jadwal_hari_ini: [], rekap: { hadir: 0, sakit: 0, izin: 0, alpha: 0 }, absensi_detail: [], tagihan_detail: [], nilai_detail: [], tabungan_detail: [], tagihan: { total: 0, belum_bayar: 0, lunas: 0 }, tabungan: { saldo: 0, setor: 0, tarik: 0 } })
   if (!linked.includes(String(selected))) return res.status(403).json({ error: 'Bukan siswa/anak tertaut' })
-  const siswa = db.prepare('SELECT * FROM siswa WHERE id=? AND tenant_id=?').get(selected, req.tenantId)
+  // Sertakan nama rombel + nama lembaga: header dashboard siswa menampilkan
+  // keduanya ("XII IPA 1 • MAN 1"). Tanpa join, UI harus menebak dan hasilnya
+  // kosong di semua siswa.
+  const siswa = db.prepare(`SELECT s.*, r.nama AS rombel_nama FROM siswa s
+    LEFT JOIN rombel r ON r.id=s.rombel_id AND r.tenant_id=s.tenant_id
+    WHERE s.id=? AND s.tenant_id=?`).get(selected, req.tenantId)
   if (!siswa) return res.status(404).json({ error: 'Siswa tidak ditemukan' })
+  try {
+    const set = getTenantSettings(db, req.tenantId, 'nama_lembaga')
+    siswa.nama_lembaga = String(set?.nama_lembaga || '').trim()
+  } catch { siswa.nama_lembaga = '' }
   
   // Get jadwal hari ini
   let jadwal = []

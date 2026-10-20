@@ -63,6 +63,19 @@ export default function LoginPage() {
     return <Navigate to={getRedirectPath(user.role)} replace />
   }
 
+  // Tombol demo hanya ditampilkan di domain PLATFORM, sama dengan yang dilayani
+  // server (DEMO_HOSTS). Sebelumnya tombol muncul di domain lembaga juga,
+  // padahal server menolak 404 di sana — pengunjung melihat tombol yang pasti
+  // gagal. Satu sumber kebenaran: daftar host di server.
+  const demoHostAktif = (() => {
+    const h = String(window.location.hostname || '').toLowerCase().replace(/\.$/, '')
+    return h === 'localhost' || h === '127.0.0.1'
+      || h === 'jurnal.cc.cd' || h === 'jurnalmadrasah.web.id'
+      || h === 'jurnalku.biz.id' || h === 'idjurnal.my.id'
+      || h === 'idjurnal.web.id' || h === 'idjurnal.biz.id'
+      || h === 'demo.jurnal.cc.cd'
+  })()
+
   const handleDemo = async (role: string) => {
     setError('')
     setLoading(true)
@@ -127,7 +140,7 @@ export default function LoginPage() {
           <form onSubmit={handleLogin} className="space-y-3.5">
             <div>
               <label htmlFor="login-identifier" className="mb-1.5 block text-xs font-semibold text-slate-600 dark:text-gray-300">
-                Email / Kode Guru / NISN / NIS
+                Email / No. WhatsApp Wali / Kode Guru / NISN
               </label>
               <input
                 id="login-identifier"
@@ -136,7 +149,7 @@ export default function LoginPage() {
                 autoCorrect="off"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                placeholder="email, kode guru, NISN, atau NIS"
+                placeholder="email, no. WA wali, kode guru, NISN, atau NIS"
                 className={inputClass}
               />
             </div>
@@ -213,11 +226,15 @@ export default function LoginPage() {
             </div>
           )}
 
-          {/* Demo HANYA di host demo. Sebelumnya blok ini muncul di jurnal.cc.cd
-              dan jurnalmadrasah.web.id — pengunjung domain lembaga sungguhan
-              bisa masuk sebagai admin demo lalu mengira itu data lembaganya.
-              Server juga menolak host lain, jadi ini bukan sekadar sembunyian UI. */}
-          {/^(demo\.|demo-)/.test(window.location.hostname) && (
+          {/* Akun demo ditampilkan di SEMUA domain platform (permintaan user:
+              "perbaiki akun demo munculkan di jurnal"). Pengunjung jurnal.cc.cd
+              dan jurnal lembaga perlu bisa mencoba tanpa mendaftar.
+              PENGAMAN: server tetap hanya melayani /api/auth/demo dari host di
+              DEMO_HOSTS, dan tenant-nya TERPISAH (demo-tenant) — jadi data
+              contoh tidak pernah bercampur dengan data lembaga sungguhan.
+              Kalau host tidak mengizinkan, tombol akan menampilkan pesan jelas
+              alih-alih gagal diam-diam. */}
+          {demoHostAktif && (
             <div
               id="demo"
               ref={demoRef}
@@ -226,19 +243,25 @@ export default function LoginPage() {
             >
               <p className="mb-2 text-[11px] font-semibold text-slate-500 dark:text-gray-400">Akun demo</p>
               <div className="grid grid-cols-3 gap-1.5">
-                {['admin', 'kepala', 'guru', 'bendahara', 'siswa'].map(role => (
+                {['admin', 'kepala', 'guru', 'bendahara', 'siswa', 'wali_murid'].map(role => (
                   <button
                     key={role}
                     type="button"
+                    disabled={loading}
                     onClick={() => handleDemo(role)}
-                    className="rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-[11px] font-semibold capitalize text-slate-600 transition hover:bg-slate-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700"
+                    className="rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-[11px] font-semibold capitalize text-slate-600 transition hover:bg-slate-50 disabled:opacity-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700"
                   >
-                    {role.replace('_', ' ')}
+                    {role === 'wali_murid' ? 'wali murid' : role.replace('_', ' ')}
                   </button>
                 ))}
               </div>
             </div>
           )}
+
+          <p className="mt-3 text-center text-[11px] leading-relaxed text-slate-400 dark:text-gray-500">
+            Wali murid: masuk dengan nomor WhatsApp yang terdaftar di sekolah.
+            Sandi awal = 6 angka terakhir nomor tersebut.
+          </p>
 
           <p className="mt-6 text-center text-xs text-slate-500 dark:text-gray-400">
             Belum punya akun?{' '}

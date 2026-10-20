@@ -54,11 +54,24 @@ test('demo hanya di host demo, bukan domain lembaga', () => {
     'jurnalmadrasah.web.id tidak boleh ada di daftar host demo')
 })
 
-test('blok demo di UI hanya muncul di host demo', () => {
+// KONTRAK DIPERBARUI atas permintaan user: "perbaiki akun demo munculkan di
+// jurnal". Tombol demo kini tampil di semua domain platform. Yang WAJIB tetap
+// dijaga bukan lagi visibilitas tombol, melainkan ISOLASI DATA:
+//   - server hanya melayani /api/auth/demo dari host di DEMO_HOSTS
+//   - tenant demo terpisah (demo-tenant), bukan 'default'
+//   - akun demo tidak bisa dipakai masuk ke data lembaga sungguhan
+test('akun demo tampil di jurnal, tapi datanya terisolasi', () => {
   const login = baca('src/pages/auth/LoginPage.tsx')
-  assert.ok(!/\['jurnal\.cc\.cd', 'jurnalmadrasah\.web\.id'\]\.includes\(window\.location\.hostname\)/.test(login),
-    'LoginPage tidak boleh menampilkan demo di domain lembaga')
-  assert.ok(/\/\^\(demo/.test(login), 'harus memakai pola host demo')
+  assert.ok(/Akun demo/.test(login), 'blok akun demo harus ada di halaman login')
+  assert.ok(!/\/\^\(demo\.\|demo-\)\//.test(login),
+    'tombol demo tidak boleh dikunci ke host demo.* lagi')
+
+  const srv = baca('server/index.cjs')
+  assert.ok(/const DEMO_HOSTS = new Set/.test(srv), 'server tetap membatasi host demo')
+  assert.ok(/if \(!DEMO_HOSTS\.has\(demoHost\)\) return res\.status\(404\)/.test(srv),
+    'host di luar DEMO_HOSTS harus ditolak 404 — ini pengaman sebenarnya')
+  assert.ok(/const DEMO_TENANT_ID = 'demo-tenant'/.test(srv),
+    'tenant demo harus terpisah dari default/superadmin')
 })
 
 // ---------------- (8) QRIS lembaga ----------------

@@ -151,7 +151,16 @@ function tenantMiddleware(db) {
     // API, tenant icons, and the SPA root all need host-aware resolution.
     if (!req.path.startsWith('/api') && !['/', '/favicon.ico', '/apple-touch-icon.png'].includes(req.path)) return next()
 
-    const host = (req.headers.host || '').split(':')[0].toLowerCase()
+    // AKAR BUG TENANT: di belakang Caddy, `req.headers.host` adalah alamat
+    // upstream (127.0.0.1:3002), BUKAN domain yang diketik pengunjung. Caddy
+    // meneruskan domain asli lewat `x-forwarded-host`. Tanpa membacanya, semua
+    // request jatuh ke tenant `default` — inilah sebabnya login dari domain
+    // lembaga mencari user di tenant yang salah (login wali selalu gagal) dan
+    // /api/settings menjawab lembaga yang sama untuk semua domain.
+    const hostMentah = String(
+      req.headers['x-forwarded-host'] || req.headers.host || ''
+    ).split(',')[0].trim().toLowerCase()
+    const host = hostMentah.split(':')[0]
 
     let tenant = null
     req.isRegisteredTenantHost = false
@@ -190,6 +199,23 @@ function tenantMiddleware(db) {
     }
 
     req.isRegisteredTenantHost = Boolean(tenant)
+
+    // 2b. Domain platform yang dipakai TEPAT SATU lembaga sebagai base_domain.
+    // `jurnalmadrasah.web.id` bukan domain_custom siapa pun, tetapi hanya
+    // dimiliki satu tenant (MI Sunan Drajat) — tanpa cabang ini seluruh domain
+    // itu jatuh ke `default`, dan login wali di sana selalu gagal.
+    // Domain yang dipakai BANYAK tenant (jurnal.cc.cd) sengaja tidak diikutkan:
+    // tidak ada satu lembaga yang bisa dianggap pemiliknya.
+    if (!tenant) {
+      // Defensif: fixture tes memakai db tiruan yang hanya punya .get(), bukan
+      // .all(). Tanpa penjagaan ini seluruh middleware melempar TypeError dan
+      // semua domain jatuh ke default.
+      try {
+        const q = db.prepare('SELECT * FROM tenants WHERE lower(trim(base_domain, \'.\'))=? AND aktif=1')
+        const rows = typeof q.all === 'function' ? q.all(host.replace(/\.$/, '')) : []
+        if (rows.length === 1) tenant = rows[0]
+      } catch { /* biarkan jatuh ke default */ }
+    }
 
     // 3. Fallback to default tenant (main domain, localhost, or an unknown host)
     if (!tenant) {
