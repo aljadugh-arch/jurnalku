@@ -39,26 +39,32 @@ test('aksi per siswa DAN per kelas sama-sama tersedia', () => {
   assert.ok(isi.includes('Cetak per Kelas'), 'seksi per kelas harus ada')
 })
 
-test('buku induk tersedia per siswa dan per kelas', () => {
-  const isi = baca('src/pages/admin/CetakRaporPage.tsx')
-  assert.ok(isi.includes("'/buku-induk/pdf'"), 'harus memanggil buku induk per siswa')
-  assert.ok(isi.includes("'/buku-induk/pdf-bulk'"), 'harus memanggil buku induk per kelas')
-  assert.ok(isi.includes('Buku Induk'), 'seksi buku induk harus ada')
-  assert.ok(isi.includes('id="buku-induk"'), 'harus punya anchor untuk menu #buku-induk')
+test('buku induk punya halaman sendiri, terpisah dari cetak rapor', () => {
+  // Dulu buku induk adalah seksi di halaman Cetak Rapor. Itu membuat menu
+  // "Buku Induk" dan "Cetak & Ekspor Rapor" membuka halaman yang sama.
+  // Sekarang keduanya halaman berbeda; kontrak ini menjaga pemisahannya.
+  const bi = baca('src/pages/admin/BukuIndukPage.tsx')
+  assert.ok(bi.includes("'/buku-induk/pdf'"), 'halaman buku induk harus memanggil cetak per siswa')
+  assert.ok(bi.includes("'/buku-induk/pdf-bulk'"), 'halaman buku induk harus memanggil cetak per kelas')
+  assert.ok(bi.includes('Buku Induk'), 'judul halaman harus menyebut Buku Induk')
+  const cetak = baca('src/pages/admin/CetakRaporPage.tsx')
+  assert.ok(!cetak.includes("'/buku-induk/pdf'"), 'halaman cetak rapor tidak boleh lagi memuat aksi buku induk')
 })
 
 test('tidak ada aksi yang disembunyikan di balik dropdown', () => {
   const isi = baca('src/pages/admin/CetakRaporPage.tsx')
-  // Semua tombol dirender langsung lewat .map pada array BAGIAN/BUKU_INDUK.
+  const bi = baca('src/pages/admin/BukuIndukPage.tsx')
+  // Semua tombol dirender langsung lewat .map, bukan menu yang harus dibuka.
   assert.ok(/BAGIAN\.map/.test(isi), 'bagian rapor dirender sebagai tombol langsung')
-  assert.ok(/BUKU_INDUK\.map/.test(isi), 'buku induk dirender sebagai tombol langsung')
+  assert.ok(/BAGIAN\.map/.test(bi), 'bagian buku induk dirender sebagai tombol langsung')
   assert.ok(!isi.includes('setCetakOpen'), 'tidak boleh memakai dropdown tersembunyi')
 })
 
-test('menu sidebar menautkan halaman dan buku induk', () => {
+test('menu sidebar menautkan tiga halaman berbeda', () => {
   const menu = baca('src/lib/menuItems.tsx')
+  assert.ok(menu.includes("path: '/admin/rapor'"), 'menu input nilai harus ada')
   assert.ok(menu.includes("path: '/admin/cetak-rapor'"), 'menu Cetak & Ekspor Rapor harus ada')
-  assert.ok(menu.includes('/admin/cetak-rapor#buku-induk'), 'menu Buku Induk harus menautkan anchor')
+  assert.ok(menu.includes("path: '/admin/buku-induk'"), 'menu Buku Induk harus punya rute sendiri')
   // Dua peran: admin dan kepala.
   const jumlah = (menu.match(/Cetak & Ekspor Rapor/g) || []).length
   assert.ok(jumlah >= 2, `menu harus ada untuk admin DAN kepala, dapat ${jumlah}`)

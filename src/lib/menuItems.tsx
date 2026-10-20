@@ -56,9 +56,9 @@ export const adminMenuItems: MenuItem[] = [
   {
     label: 'Rapor', icon: <FileText size={20} />,
     children: [
-      { label: 'Rapor Siswa', path: '/admin/rapor' },
+      { label: 'Input & Kelola Nilai Rapor', path: '/admin/rapor' },
       { label: 'Cetak & Ekspor Rapor', path: '/admin/cetak-rapor' },
-      { label: 'Buku Induk', path: '/admin/cetak-rapor#buku-induk' },
+      { label: 'Buku Induk Siswa', path: '/admin/buku-induk' },
     ]
   },
   { label: 'Rekap Nilai per Mapel', icon: <ClipboardCheck size={20} />, path: '/admin/rekap-nilai' },
@@ -205,9 +205,9 @@ export const kepalaMenuItems: MenuItem[] = [
   { label: 'PPDB', icon: <ClipboardList size={20} />, path: '/admin/ppdb' },
   { label: 'Data GTK', icon: <Users size={20} />, path: '/admin/gtk' },
   { label: 'Rapor', icon: <FileText size={20} />, children: [
-    { label: 'Rapor Siswa', path: '/admin/rapor' },
+    { label: 'Input & Kelola Nilai Rapor', path: '/admin/rapor' },
     { label: 'Cetak & Ekspor Rapor', path: '/admin/cetak-rapor' },
-    { label: 'Buku Induk', path: '/admin/cetak-rapor#buku-induk' },
+    { label: 'Buku Induk Siswa', path: '/admin/buku-induk' },
   ] },
   { label: 'Catatan Kepribadian', icon: <ScrollText size={20} />, path: '/admin/catatan-kepribadian' },
   { label: 'Bimbingan Konseling', icon: <HeartHandshake size={20} />, path: '/admin/bk' },

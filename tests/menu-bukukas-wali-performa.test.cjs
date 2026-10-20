@@ -15,18 +15,32 @@ const baca = (p) => fs.readFileSync(path.join(AKAR, p), 'utf8')
 
 test('menu Rapor tidak duplikat: tiga entri digabung jadi satu grup', () => {
   const menu = baca('src/lib/menuItems.tsx')
-  // Hitung kemunculan label tingkat-atas (bukan anak menu).
-  const jumlahRaporSiswa = (menu.match(/label: 'Rapor Siswa'/g) || []).length
-  const jumlahCetak = (menu.match(/label: 'Cetak & Ekspor Rapor'/g) || []).length
-  const jumlahBukuInduk = (menu.match(/label: 'Buku Induk'/g) || []).length
-  // Satu untuk admin, satu untuk kepala = 2 masing-masing (sebagai anak grup).
-  assert.strictEqual(jumlahRaporSiswa, 2, `Rapor Siswa harus tepat 2 (admin+kepala), dapat ${jumlahRaporSiswa}`)
-  assert.strictEqual(jumlahCetak, 2, `Cetak & Ekspor harus tepat 2, dapat ${jumlahCetak}`)
-  assert.strictEqual(jumlahBukuInduk, 2, `Buku Induk harus tepat 2, dapat ${jumlahBukuInduk}`)
-  // Tidak boleh ada lagi entri tingkat-atas dengan path rapor yang berdiri sendiri.
+  // Tiga tugas berbeda harus punya tiga tujuan berbeda:
+  //   input nilai -> /admin/rapor
+  //   cetak rapor satu periode -> /admin/cetak-rapor
+  //   arsip -> /admin/buku-induk
+  // Sebelumnya Buku Induk menautkan /admin/cetak-rapor#buku-induk, yaitu
+  // halaman yang SAMA dengan Cetak & Ekspor — menu terlihat kembar.
+  const jumlahCetak = (menu.match(/path: '\/admin\/cetak-rapor'/g) || []).length
+  const jumlahBukuInduk = (menu.match(/path: '\/admin\/buku-induk'/g) || []).length
+  assert.strictEqual(jumlahCetak, 2, `Cetak & Ekspor harus tepat 2 (admin+kepala), dapat ${jumlahCetak}`)
+  assert.strictEqual(jumlahBukuInduk, 2, `Buku Induk harus tepat 2 dan punya rute sendiri, dapat ${jumlahBukuInduk}`)
+  assert.ok(!menu.includes('cetak-rapor#buku-induk'),
+    'Buku Induk tidak boleh lagi menautkan anchor di halaman cetak')
+  // Tidak boleh ada lagi entri tingkat-atas yang berdiri sendiri.
   const baris = menu.split('\n').filter(l => !l.trim().startsWith('//'))
   const liar = baris.filter(l => /^\s*\{ label: 'Rapor Siswa', icon:/.test(l))
   assert.strictEqual(liar.length, 0, 'Rapor Siswa tidak boleh jadi item tingkat-atas lagi')
+})
+
+test('halaman Buku Induk terpisah dari halaman Cetak Rapor', () => {
+  const p = path.join(AKAR, 'src/pages/admin/BukuIndukPage.tsx')
+  assert.ok(fs.existsSync(p), 'BukuIndukPage harus ada')
+  const app = baca('src/App.tsx')
+  assert.ok(app.includes('path="buku-induk"'), 'rute /admin/buku-induk harus terdaftar')
+  const cetak = baca('src/pages/admin/CetakRaporPage.tsx')
+  assert.ok(!cetak.includes("'/buku-induk/pdf'"), 'halaman cetak rapor tidak boleh lagi memuat aksi buku induk')
+  assert.ok(!cetak.includes('id="buku-induk"'), 'anchor buku induk harus hilang dari halaman cetak')
 })
 
 test('Buku Kas menerima parameter bulan', () => {

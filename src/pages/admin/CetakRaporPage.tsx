@@ -19,12 +19,6 @@ const BAGIAN: Array<{ id: Bagian; label: string; ket: string; icon: any }> = [
   { id: 'lengkap', label: 'Lengkap', ket: 'Cover + identitas + nilai', icon: Files },
 ]
 
-const BUKU_INDUK: Array<{ id: 'lengkap' | 'identitas' | 'nilai'; label: string; ket: string }> = [
-  { id: 'lengkap', label: 'Buku Induk Lengkap', ket: 'Biodata + seluruh riwayat nilai + catatan' },
-  { id: 'identitas', label: 'Buku Induk — Identitas', ket: 'Biodata siswa + orang tua/wali' },
-  { id: 'nilai', label: 'Buku Induk — Nilai', ket: 'Seluruh riwayat nilai per semester' },
-]
-
 function unduh(blob: Blob, nama: string) {
   const url = window.URL.createObjectURL(blob)
   const a = document.createElement('a')
@@ -104,23 +98,6 @@ export default function CetakRaporPage() {
       unduh(new Blob([r.data], { type: 'application/pdf' }), namaBerkas('rapor-kelas', bagian))
       setPesan({ tipe: 'ok', teks: `PDF ${bagian} satu kelas siap diunduh.` })
     } catch (e: any) { setPesan({ tipe: 'err', teks: await bacaError(e, 'Gagal membuat PDF kelas') }) }
-    finally { setSibuk('') }
-  }
-
-  // Buku induk: per siswa (jika dipilih) atau per kelas.
-  const cetakBukuInduk = async (bagian: 'lengkap' | 'identitas' | 'nilai', perKelas: boolean) => {
-    if (perKelas && !rombelId) return setPesan({ tipe: 'err', teks: 'Pilih kelas dulu.' })
-    if (!perKelas && !siswaId) return setPesan({ tipe: 'err', teks: 'Pilih siswa dulu.' })
-    setSibuk(`bi-${bagian}-${perKelas ? 'kelas' : 'siswa'}`); setPesan(null)
-    try {
-      const params: any = { bagian }
-      if (perKelas) params.rombel_id = rombelId
-      else params.siswa_id = siswaId
-      const r = await api.get(perKelas ? '/buku-induk/pdf-bulk' : '/buku-induk/pdf', { params, responseType: 'blob', timeout: 300000 })
-      unduh(new Blob([r.data], { type: 'application/pdf' }), namaBerkas(perKelas ? 'buku-induk-kelas' : 'buku-induk', bagian))
-      const n = r.headers?.['x-buku-induk-dicetak']
-      setPesan({ tipe: 'ok', teks: n ? `Buku induk siap (${n} siswa).` : 'Buku induk siap diunduh.' })
-    } catch (e: any) { setPesan({ tipe: 'err', teks: await bacaError(e, 'Gagal membuat buku induk') }) }
     finally { setSibuk('') }
   }
 
@@ -222,35 +199,11 @@ export default function CetakRaporPage() {
         </div>
       </section>
 
-      {/* Buku induk */}
-      <section id="buku-induk" className="scroll-mt-4">
-        <h2 className="mb-2 flex items-center gap-2 text-sm font-bold text-gray-700">
-          <BookMarked size={16} /> Buku Induk (arsip)
-        </h2>
-        <p className="mb-2 text-xs text-gray-500">Dokumen arsip: seluruh riwayat, bukan satu periode.</p>
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {BUKU_INDUK.map(b => (
-            <Tombol
-              key={`s-${b.id}`}
-              onClick={() => void cetakBukuInduk(b.id, false)}
-              aktif={sibuk === `bi-${b.id}-siswa`}
-              icon={BookMarked}
-              judul={`${b.label} (siswa)`}
-              ket={b.ket}
-            />
-          ))}
-          {BUKU_INDUK.map(b => (
-            <Tombol
-              key={`k-${b.id}`}
-              onClick={() => void cetakBukuInduk(b.id, true)}
-              aktif={sibuk === `bi-${b.id}-kelas`}
-              icon={Users}
-              judul={`${b.label} (kelas)`}
-              ket={`Seluruh siswa, satu PDF`}
-            />
-          ))}
-        </div>
-      </section>
+      {/* Buku induk punya halamannya sendiri (/admin/buku-induk).
+          Dulu seksi ini ada di sini juga, sehingga menu "Buku Induk" hanya
+          menggulir ke bawah halaman yang sama dengan "Cetak & Ekspor Rapor" —
+          terlihat identik. Sekarang dipisah: halaman ini hanya rapor satu
+          periode. */}
     </div>
   )
 }

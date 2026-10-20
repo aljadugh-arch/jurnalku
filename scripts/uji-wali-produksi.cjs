@@ -10,11 +10,14 @@ const BASE = process.env.UJI_BASE || 'http://127.0.0.1:3002'
 const HOST = process.env.UJI_HOST || 'jurnal.mtsplussd7.cc.cd'
 const db = new Database(path.join(__dirname, '..', 'server/jurnalku.db'), { readonly: true })
 
-// Ambil siswa yang punya nomor HP wali, di tenant mtsplussd7.
+// Ambil siswa yang punya nomor HP wali yang VALID (minimal 10 digit) di
+// tenant mtsplussd7. Sebelumnya query hanya mengecek no_hp tidak kosong,
+// sehingga bisa terpilih baris berisi tanda '-' dan login gagal.
 const siswa = db.prepare(`SELECT s.id,s.nama,s.nis,s.no_hp,s.rombel_id FROM siswa s
   WHERE s.tenant_id='mtsplussd7' AND s.status='aktif'
-    AND COALESCE(s.no_hp,'')<>'' AND s.rombel_id IS NOT NULL
-  LIMIT 1`).get()
+    AND LENGTH(REPLACE(REPLACE(REPLACE(REPLACE(COALESCE(s.no_hp,''),' ',''),'-',''),'+',''),'.','')) >= 10
+    AND s.rombel_id IS NOT NULL
+  ORDER BY s.nama LIMIT 1`).get()
 if (!siswa) { console.log('TIDAK ADA siswa dengan no_hp'); process.exit(0) }
 
 const digit = String(siswa.no_hp).replace(/\D/g, '')
