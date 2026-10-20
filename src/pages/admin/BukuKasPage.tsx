@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Pencil, Plus, Save, Trash2, X } from 'lucide-react'
 import toast from 'react-hot-toast'
 import api from '../../services/api'
+import MonthFilter, { bulanSekarang } from '../../components/MonthFilter'
 
 type Row = { id:string; tanggal:string; hari:string; uraian:string; debet:number; kredit:number; saldo:number }
 const empty = { tanggal: new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Jakarta' }), uraian: '', debet: '', kredit: '' }
@@ -12,7 +13,10 @@ export default function BukuKasPage() {
   const [form, setForm] = useState(empty)
   const [editing, setEditing] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
-  const load = useCallback(() => api.get('/buku-kas').then(r => setRows(r.data || [])).catch(() => toast.error('Gagal memuat Buku Kas')), [])
+  // '' = seluruh periode. Bulan berjalan dipilih lebih dulu karena itu yang
+  // paling sering dibuka bendahara; saldo tetap posisi akhir bulan itu.
+  const [bulan, setBulan] = useState(bulanSekarang())
+  const load = useCallback(() => api.get('/buku-kas', { params: bulan ? { bulan } : {} }).then(r => setRows(r.data || [])).catch(() => toast.error('Gagal memuat Buku Kas')), [bulan])
   useEffect(() => { void load() }, [load])
   const total = useMemo(() => ({ debet: rows.reduce((n,r)=>n+Number(r.debet||0),0), kredit: rows.reduce((n,r)=>n+Number(r.kredit||0),0), saldo: rows.at(-1)?.saldo || 0 }), [rows])
   const reset = () => { setEditing(null); setForm(empty) }
@@ -30,6 +34,10 @@ export default function BukuKasPage() {
 
   return <div className="space-y-5 pb-24 lg:pb-6">
     <div><h1 className="text-2xl font-bold text-gray-800">Buku Kas</h1><p className="text-sm text-gray-500">Input penerimaan dan pengeluaran kas lembaga.</p></div>
+    <div className="flex flex-wrap items-center justify-between gap-2">
+      <MonthFilter nilai={bulan} onUbah={setBulan} izinkanSemua label="Periode Buku Kas" />
+      <p className="text-xs text-gray-500">Saldo adalah posisi akhir periode, bukan mutasi bulan ini.</p>
+    </div>
     <form onSubmit={submit} className="grid gap-3 rounded-2xl border bg-white p-4 shadow-sm sm:grid-cols-2 lg:grid-cols-5">
       <div><label className="text-xs text-gray-500">TGL</label><input required type="date" value={form.tanggal} onChange={e=>setForm({...form,tanggal:e.target.value})} className="mt-1 w-full rounded-lg border px-3 py-2 text-sm"/></div>
       <div className="sm:col-span-2"><label className="text-xs text-gray-500">URAIAN</label><input required value={form.uraian} onChange={e=>setForm({...form,uraian:e.target.value})} className="mt-1 w-full rounded-lg border px-3 py-2 text-sm" placeholder="Keterangan transaksi"/></div>

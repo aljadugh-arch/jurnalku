@@ -1,4 +1,28 @@
-import * as XLSX from 'xlsx'
+// Utilitas tanggal — SENGAJA tanpa dependensi.
+//
+// JANGAN tambahkan `import ... from 'xlsx'` di sini. Berkas ini dipakai ~20
+// halaman, jadi apa pun yang diimpor di sini ikut ke chunk awal dan menahan
+// render pertama. Dulu ada `XLSX.SSF.parse_date_code` hanya untuk mengubah
+// nomor seri Excel menjadi tanggal — itu menarik seluruh library xlsx
+// (1,25 MB mentah) ke jalur kritis. Penggantinya ada di bawah, 6 baris.
+
+// Serial date Excel: hari ke-1 = 1900-01-01, dengan bug 1900 bukan kabisat.
+// 25569 = jumlah hari antara 1899-12-30 dan 1970-01-01.
+const EXCEL_EPOCH_HARI = 25569
+
+export function serialExcelKeIso(serial: number): string | null {
+  if (!Number.isFinite(serial) || serial <= 0 || serial > 2958465) return null
+  const hari = Math.floor(serial)
+  // Excel menganggap 1900-02-29 ada (hari ke-60). Tanggal itu tidak nyata,
+  // tetapi dikembalikan apa adanya supaya hasilnya identik dengan xlsx.
+  if (hari === 60) return '1900-02-29'
+  // Untuk serial < 61 tanggal sebenarnya mundur satu hari dari hitungan linear.
+  const koreksi = hari < 61 ? 1 : 0
+  const ms = Math.round((hari - EXCEL_EPOCH_HARI + koreksi) * 86400000)
+  const d = new Date(ms)
+  if (isNaN(d.getTime())) return null
+  return d.toISOString().slice(0, 10)
+}
 
 export const todayWib = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Jakarta' }).format(new Date())
 export const nowWib = () => new Intl.DateTimeFormat('id-ID', { timeZone: 'Asia/Jakarta', hour: '2-digit', minute: '2-digit', hour12: false }).format(new Date())
@@ -18,13 +42,13 @@ export function normalizeDate(value: any) {
     return `${p.year}-${p.month}-${p.day}`
   }
   if (typeof value === 'number' && value > 1 && value < 60000) {
-    const d = XLSX.SSF.parse_date_code(value)
-    if (d) return `${d.y}-${String(d.m).padStart(2, '0')}-${String(d.d).padStart(2, '0')}`
+    const iso = serialExcelKeIso(value)
+    if (iso) return iso
   }
   const s = String(value).trim()
   if (/^\d{5}(\.\d+)?$/.test(s)) {
-    const d = XLSX.SSF.parse_date_code(Number(s))
-    if (d) return `${d.y}-${String(d.m).padStart(2, '0')}-${String(d.d).padStart(2, '0')}`
+    const iso = serialExcelKeIso(Number(s))
+    if (iso) return iso
   }
   const iso = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/)
   if (iso) return `${iso[1]}-${iso[2].padStart(2, '0')}-${iso[3].padStart(2, '0')}`

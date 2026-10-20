@@ -95,6 +95,7 @@ const GuruCatatanKepribadianPage = lazy(() => import('./pages/guru/GuruCatatanKe
 const GuruAbsensiEkskulPage = lazy(() => import('./pages/guru/GuruAbsensiEkskulPage'))
 const GuruAbsensiSiswaQRPage = lazy(() => import('./pages/guru/GuruAbsensiSiswaQRPage'))
 const SiswaDashboard = lazy(() => import('./pages/siswa/SiswaDashboard'))
+const WaliDashboardPage = lazy(() => import('./pages/siswa/WaliDashboardPage'))
 const SiswaAbsensiPage = lazy(() => import('./pages/siswa/SiswaAbsensiPage'))
 const SiswaJadwalPage = lazy(() => import('./pages/siswa/SiswaJadwalPage'))
 const SiswaEkskulPage = lazy(() => import('./pages/siswa/SiswaEkskulPage'))
@@ -141,6 +142,14 @@ function AdminIndexRoute() {
   if (user?.role === 'super_admin') return <SuperadminDashboard />
   if (user?.role === 'bendahara') return <BendaharaDashboard />
   return <AdminDashboard />
+}
+
+// Wali murid mendapat dashboard sendiri: pemilih anak, ringkasan kehadiran,
+// tagihan, tabungan, dan nilai. Dashboard siswa tetap dipakai untuk siswa.
+function DashboardSiswaAtauWali() {
+  const { user } = useAuthStore()
+  if (user?.role === 'wali_murid') return <WaliDashboardPage />
+  return <SiswaDashboard />
 }
 
 function ProtectedRoute({ children, allowedRoles, exactRoles = false }: { children: ReactNode, allowedRoles?: string[], exactRoles?: boolean }) {
@@ -399,7 +408,7 @@ export default function App() {
             </SubscriptionGate>
           </ProtectedRoute>
         }>
-          <Route index element={<SiswaDashboard />} />
+          <Route index element={<DashboardSiswaAtauWali />} />
           <Route path="absensi" element={<SiswaAbsensiPage />} />
           <Route path="jadwal" element={<SiswaJadwalPage />} />
           <Route path="ekskul" element={<SiswaEkskulPage />} />

@@ -6297,17 +6297,25 @@ function validBukuKasPayload(body) {
 app.get('/api/buku-kas', BENDAHARA, (req, res) => {
   const akun = db.prepare("SELECT id,saldo_awal FROM keuangan_akun WHERE tenant_id=? AND nama='Buku Kas' ORDER BY id LIMIT 1").get(req.tenantId)
   if (!akun) return res.json([])
+  // Filter bulan opsional (?bulan=YYYY-MM). Saldo HARUS tetap dihitung dari
+  // seluruh transaksi sampai akhir bulan yang dipilih — kalau saldo dihitung
+  // hanya dari baris yang lolos filter, angka "saldo" berubah jadi "mutasi
+  // bulan ini" dan laporan kas jadi salah. Karena itu: hitung saldo berjalan
+  // atas SEMUA baris, baru saring baris yang ditampilkan.
+  const bulan = normalisasiBulan(req.query.bulan)
   const transactions = db.prepare(`SELECT t.id,t.tanggal,t.keterangan AS uraian,t.tipe,t.nominal,t.created_at
     FROM keuangan_transaksi t WHERE t.tenant_id=? AND t.akun_id=?
     ORDER BY t.tanggal ASC,t.created_at ASC,t.id ASC`).all(req.tenantId, akun.id)
   let saldo = Number(akun.saldo_awal || 0)
   const formatter = new Intl.DateTimeFormat('id-ID', { weekday: 'long', timeZone: 'Asia/Jakarta' })
-  const rows = transactions.map(row => {
+  const rows = []
+  for (const row of transactions) {
     const debet = row.tipe === 'masuk' ? Number(row.nominal) : 0
     const kredit = row.tipe === 'keluar' ? Number(row.nominal) : 0
     saldo += debet - kredit
-    return { ...row, hari: formatter.format(new Date(`${row.tanggal}T12:00:00+07:00`)), debet, kredit, saldo }
-  })
+    if (bulan && !String(row.tanggal || '').startsWith(bulan)) continue
+    rows.push({ ...row, hari: formatter.format(new Date(`${row.tanggal}T12:00:00+07:00`)), debet, kredit, saldo })
+  }
   res.json(rows)
 })
 

@@ -19,10 +19,15 @@ test('B2+B3: meta description/OpenGraph + skeleton #root ada di index.html', () 
   assert.match(html, /Memuat JURNALKU/, 'teks loading')
 })
 
-test('B4: vite.config punya manualChunks untuk vendor berat', () => {
+test('B4: vite.config memisahkan vendor berat dari jalur awal', () => {
   assert.match(vite, /manualChunks/, 'manualChunks ada')
-  assert.match(vite, /vendor-xlsx/, 'chunk xlsx')
-  assert.match(vite, /vendor-react/, 'chunk react')
+  // Kontrak lama menuntut nama chunk `vendor-xlsx`. Itu keliru: memaksa xlsx
+  // ke chunk bernama membuat Rollup menaruh helper bersama di dalamnya lalu
+  // mengimpornya balik dari chunk jalur awal. Yang penting bukan NAMA chunk,
+  // tetapi bahwa library berat tidak ikut di jalur awal.
+  assert.match(vite, /node_modules\/react\//, 'chunk react dicocokkan dengan benar')
+  assert.doesNotMatch(vite.replace(/\/\/.*$/gm, ''), /id\.includes\('\/react\/'\)/,
+    'jangan pakai pola yang menangkap @tiptap/react')
 })
 
 test('B6+D1: jurnal punya guard submitting + autosave draf localStorage', () => {
