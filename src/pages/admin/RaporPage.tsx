@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { formatTanggalLahir } from '../../lib/tanggalLahir'
 import api from '../../services/api'
-import { FileText, Printer, Save, Zap, FileSpreadsheet, Link2, Download } from 'lucide-react'
+import { FileText, Printer, Save, Zap, FileSpreadsheet, Link2, Download, BookMarked } from 'lucide-react'
 import FoundationTenantPicker from '../../components/FoundationTenantPicker'
 import { QRCodeSVG } from 'qrcode.react'
 import { thumbUrl } from '../../lib/thumbUrl'
@@ -49,6 +49,9 @@ export default function RaporPage() {
   const [msg, setMsg] = useState('')
   const [foundationTenantId, setFoundationTenantId] = useState<string | null>(null)
   const [cetakOpen, setCetakOpen] = useState(false)
+  // Menu cetak massal per bagian (cover/identitas/nilai/lengkap) dan menu buku induk.
+  const [cetakBulkOpen, setCetakBulkOpen] = useState(false)
+  const [bukuIndukOpen, setBukuIndukOpen] = useState(false)
   const [cetakBagian, setCetakBagian] = useState<BagianCetak>('lengkap')
   const [k13CetakOpen, setK13CetakOpen] = useState(false)
   // Layout cetak rapor (Kurikulum Merdeka): 'rdm' (bawaan) atau 'mtsplus' (alternatif).
@@ -299,6 +302,7 @@ export default function RaporPage() {
   }
 
   // Cetak MASSAL seluruh siswa satu kelas (format mtsplus) jadi SATU PDF.
+  // `bagian` bisa dipilih: cover/identitas/nilai saja, atau lengkap.
   const exportPdfBulk = async (bagian: BagianCetak = 'lengkap') => {
     if (!selectedRombel) { setMsg('✗ Pilih kelas terlebih dahulu'); return }
     if (foundationTenantId) return setMsg('✗ Cetak massal hanya untuk data lembaga sendiri')
@@ -318,6 +322,30 @@ export default function RaporPage() {
       if (data instanceof Blob) {
         try { pesan = JSON.parse(await data.text()).error || pesan } catch { /* biarkan */ }
       } else if (data?.error) pesan = data.error
+      setMsg(`✗ ${pesan}`)
+    }
+  }
+
+  // Buku induk: dokumen arsip (biodata + riwayat semua periode + catatan).
+  const exportBukuInduk = async (bagian: 'lengkap' | 'identitas' | 'nilai' = 'lengkap', rombel?: string) => {
+    if (foundationTenantId) return setMsg('✗ Buku induk hanya untuk data lembaga sendiri')
+    setMsg('⏳ Membuat buku induk…')
+    try {
+      const params: any = { bagian }
+      if (rombel) params.rombel_id = rombel
+      else if (selectedSiswa) params.siswa_id = selectedSiswa
+      else return setMsg('✗ Pilih siswa atau kelas terlebih dahulu')
+      const url = rombel || !selectedSiswa ? '/buku-induk/pdf-bulk' : '/buku-induk/pdf'
+      const resp = await api.get(url, { params, responseType: 'blob', timeout: 300000 })
+      const nama = rombel ? `buku-induk-${rombel?.length ? 'kelas' : 'semua'}-${bagian}.pdf` : `buku-induk-${bagian}.pdf`
+      downloadBlob(new Blob([resp.data], { type: 'application/pdf' }), nama)
+      const dicetak = resp.headers?.['x-buku-induk-dicetak']
+      setMsg(dicetak ? `✓ Buku induk siap (${dicetak} siswa)` : '✓ Buku induk siap cetak')
+    } catch (e: any) {
+      let pesan = 'Gagal membuat buku induk'
+      const data = e.response?.data
+      if (data instanceof Blob) { try { pesan = JSON.parse(await data.text()).error || pesan } catch { /* bawaan */ } }
+      else if (data?.error) pesan = data.error
       setMsg(`✗ ${pesan}`)
     }
   }
@@ -461,7 +489,50 @@ export default function RaporPage() {
             </>
           )}
           {selectedRombel && !foundationTenantId && kurikulum === 'merdeka' && raporFormat === 'mtsplus' && (
-            <button onClick={() => void exportPdfBulk('lengkap')} disabled={!selectedRombel} title="Cetak seluruh siswa di kelas ini jadi satu PDF" className="btn-secondary flex items-center gap-2 whitespace-nowrap"><Printer className="w-4 h-4" />Cetak Massal (Kelas)</button>
+            <div className="relative">
+              <button onClick={() => setCetakBulkOpen(!cetakBulkOpen)} aria-haspopup="menu" aria-expanded={cetakBulkOpen} title="Cetak seluruh siswa di kelas ini jadi satu PDF" className="btn-secondary flex items-center gap-2 whitespace-nowrap"><Printer className="w-4 h-4" />Cetak Massal (Kelas)</button>
+              {cetakBulkOpen && (
+                <div role="menu" className="absolute right-0 z-20 mt-2 w-72 overflow-hidden rounded-lg border border-gray-200 bg-white shadow-lg">
+                  {CETAK_MENU.map(item => (
+                    <button
+                      key={item.bagian}
+                      role="menuitem"
+                      onClick={() => { setCetakBulkOpen(false); void exportPdfBulk(item.bagian) }}
+                      className="block w-full px-4 py-2 text-left text-sm hover:bg-gray-50"
+                    >
+                      <span className="font-medium text-gray-800">Massal — {item.label}</span>
+                      <span className="block text-xs text-gray-500">{item.deskripsi}, satu file untuk seluruh kelas</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+          {!foundationTenantId && kurikulum === 'merdeka' && (
+            <div className="relative">
+              <button onClick={() => setBukuIndukOpen(!bukuIndukOpen)} aria-haspopup="menu" aria-expanded={bukuIndukOpen} title="Buku induk: biodata lengkap + seluruh riwayat nilai" className="btn-secondary flex items-center gap-2 whitespace-nowrap"><BookMarked className="w-4 h-4" />Buku Induk</button>
+              {bukuIndukOpen && (
+                <div role="menu" className="absolute right-0 z-20 mt-2 w-72 overflow-hidden rounded-lg border border-gray-200 bg-white shadow-lg">
+                  <button role="menuitem" onClick={() => { setBukuIndukOpen(false); void exportBukuInduk('lengkap') }} className="block w-full px-4 py-2 text-left text-sm hover:bg-gray-50">
+                    <span className="font-medium text-gray-800">Buku Induk — Lengkap</span>
+                    <span className="block text-xs text-gray-500">Biodata + riwayat nilai + catatan</span>
+                  </button>
+                  <button role="menuitem" onClick={() => { setBukuIndukOpen(false); void exportBukuInduk('identitas') }} className="block w-full px-4 py-2 text-left text-sm hover:bg-gray-50">
+                    <span className="font-medium text-gray-800">Buku Induk — Identitas</span>
+                    <span className="block text-xs text-gray-500">Biodata siswa + orang tua/wali</span>
+                  </button>
+                  <button role="menuitem" onClick={() => { setBukuIndukOpen(false); void exportBukuInduk('nilai') }} className="block w-full px-4 py-2 text-left text-sm hover:bg-gray-50">
+                    <span className="font-medium text-gray-800">Buku Induk — Nilai</span>
+                    <span className="block text-xs text-gray-500">Seluruh riwayat nilai per semester</span>
+                  </button>
+                  <div className="border-t border-gray-100" />
+                  <button role="menuitem" disabled={!selectedRombel} onClick={() => { setBukuIndukOpen(false); if (selectedRombel) void exportBukuInduk('lengkap', selectedRombel) }} className="block w-full px-4 py-2 text-left text-sm hover:bg-gray-50 disabled:opacity-40">
+                    <span className="font-medium text-gray-800">Buku Induk — Satu Kelas</span>
+                    <span className="block text-xs text-gray-500">Seluruh siswa kelas terpilih, satu PDF</span>
+                  </button>
+                </div>
+              )}
+            </div>
           )}
           {!foundationTenantId && kurikulum === 'merdeka' && raporFormat === 'mtsplus' && (
             <button onClick={() => void exportPdfBulkAll('lengkap')} title="Cetak seluruh siswa semua kelas jadi satu PDF" className="btn-secondary flex items-center gap-2 whitespace-nowrap"><Printer className="w-4 h-4" />Cetak Semua Kelas</button>

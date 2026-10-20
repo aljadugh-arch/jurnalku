@@ -50,6 +50,7 @@ const { buatPemeriksaOrigin } = require('./cors-origin.cjs')
 const { migrateRaporUniqueIndex } = require('./rapor-unique-index.cjs')
 const { createRaporSiswaPdf, normalizeBagian: normalizeBagianRapor, BAGIAN_VALID: BAGIAN_RAPOR_VALID } = require('./rapor-siswa-pdf-service.cjs')
 const { createRaporMtsplusPdf, createRaporMtsplusPdfBulk } = require('./rapor-mtsplus-pdf-service.cjs')
+const { createBukuIndukPdf, createBukuIndukPdfBulk } = require('./buku-induk-pdf-service.cjs')
 const { createKtsPdf, CARD_W: KTS_W, CARD_H: KTS_H } = require('./kts-pdf-service.cjs')
 const { createRaporK13Pdf, createK13LedgerPdf } = require('./rapor-k13-pdf-service.cjs')
 const { getK13RaporData, getPeringkatK13, getK13Ledger, normalizeK13Nilai } = require('./rapor-k13-service.cjs')
@@ -9452,6 +9453,70 @@ app.get('/api/rapor/export/pdf-bulk', authMiddleware, async (req, res) => {
   } catch (e) {
     console.error('[rapor/export/pdf-bulk]', e)
     res.status(500).json({ error: 'Gagal membuat PDF rapor massal' })
+  }
+})
+
+// ==================== BUKU INDUK SISWA ====================
+// Dokumen arsip: biodata lengkap + riwayat nilai semua periode + kehadiran +
+// catatan pendukung (ekskul, prestasi, pelanggaran, mutasi).
+// Berbeda dari rapor yang hanya satu periode.
+const BAGIAN_BUKU_INDUK = ['lengkap', 'identitas', 'nilai']
+function normalizeBagianBukuInduk(b) {
+  const v = String(b ?? '').trim().toLowerCase()
+  return BAGIAN_BUKU_INDUK.includes(v) ? v : 'lengkap'
+}
+
+app.get('/api/buku-induk/pdf', authMiddleware, async (req, res) => {
+  const { siswa_id, bagian } = req.query
+  if (!siswa_id) return res.status(400).json({ error: 'siswa_id wajib' })
+  if (bagian !== undefined && bagian !== '' && !BAGIAN_BUKU_INDUK.includes(String(bagian).trim().toLowerCase())) {
+    return res.status(400).json({ error: `bagian harus salah satu dari: ${BAGIAN_BUKU_INDUK.join(', ')}` })
+  }
+  if (isTeacherContext(req) && !teacherCanAccessStudent(req, siswa_id)) return res.status(404).json({ error: 'Siswa tidak ditemukan' })
+  try {
+    const doc = await createBukuIndukPdf(db, {
+      tenantId: req.tenantId, siswaId: siswa_id, uploadDir: UPLOAD_DIR, bagian: normalizeBagianBukuInduk(bagian),
+    })
+    if (!doc) return res.status(404).json({ error: 'Siswa tidak ditemukan' })
+    const siswa = db.prepare('SELECT nama, nis FROM siswa WHERE id=? AND tenant_id=?').get(siswa_id, req.tenantId)
+    const namaFile = `buku-induk-${String(siswa?.nama || siswa_id).replace(/[^\w\s-]/g, '').replace(/\s+/g, '-')}.pdf`
+    res.setHeader('Content-Type', 'application/pdf')
+    res.setHeader('Content-Disposition', `attachment; filename="${namaFile}"`)
+    doc.pipe(res)
+    doc.end()
+  } catch (e) {
+    console.error('[buku-induk/pdf]', e)
+    res.status(500).json({ error: 'Gagal membuat buku induk' })
+  }
+})
+
+// Massal per rombel (atau seluruh siswa bila rombel_id kosong) → satu PDF.
+app.get('/api/buku-induk/pdf-bulk', authMiddleware, async (req, res) => {
+  const { rombel_id, bagian } = req.query
+  if (bagian !== undefined && bagian !== '' && !BAGIAN_BUKU_INDUK.includes(String(bagian).trim().toLowerCase())) {
+    return res.status(400).json({ error: `bagian harus salah satu dari: ${BAGIAN_BUKU_INDUK.join(', ')}` })
+  }
+  if (rombel_id && isTeacherContext(req) && !canManageRaporRombel(req, rombel_id)) {
+    return res.status(404).json({ error: 'Rombel tidak ditemukan' })
+  }
+  if (!rombel_id && isTeacherContext(req)) return res.status(403).json({ error: 'Guru harus memilih rombel tertentu' })
+  try {
+    const doc = await createBukuIndukPdfBulk(db, {
+      tenantId: req.tenantId, rombelId: rombel_id ? String(rombel_id) : null,
+      uploadDir: UPLOAD_DIR, bagian: normalizeBagianBukuInduk(bagian),
+    })
+    const { dicetak, dilewati } = doc.meta || { dicetak: 0, dilewati: 0 }
+    if (!dicetak) return res.status(409).json({ error: `Tidak ada siswa yang bisa dicetak (${dilewati} dilewati).` })
+    const fname = `buku-induk-${rombel_id ? 'rombel' : 'semua'}-${normalizeBagianBukuInduk(bagian)}.pdf`
+    res.setHeader('Content-Type', 'application/pdf')
+    res.setHeader('Content-Disposition', `attachment; filename="${fname}"`)
+    res.setHeader('X-Buku-Induk-Dicetak', String(dicetak))
+    res.setHeader('X-Buku-Induk-Dilewati', String(dilewati))
+    doc.pipe(res)
+    doc.end()
+  } catch (e) {
+    console.error('[buku-induk/pdf-bulk]', e)
+    res.status(500).json({ error: 'Gagal membuat buku induk massal' })
   }
 })
 

@@ -35,23 +35,30 @@ function resolveUploadPath(uploadDir, url) {
 // PNG di memori sekali, lalu cache agar cetak massal 500 siswa tidak
 // mengonversi file yang sama 500 kali.
 const _cacheGambar = new Map()
-async function siapkanGambar(filePath) {
+async function siapkanGambar(filePath, maxW = 420) {
   if (!filePath) return null
-  if (_cacheGambar.has(filePath)) return _cacheGambar.get(filePath)
+  const kunci = `${filePath}|${maxW}`
+  if (_cacheGambar.has(kunci)) return _cacheGambar.get(kunci)
   let hasil = null
   try {
+    const sharp = require('sharp')
     const ext = path.extname(filePath).toLowerCase()
-    if (['.jpg', '.jpeg', '.png'].includes(ext)) {
+    const meta = await sharp(filePath).metadata()
+    // File kecil yang sudah JPEG/PNG dipakai apa adanya (hindari re-encode).
+    if (['.jpg', '.jpeg', '.png'].includes(ext) && (meta.width || 0) <= maxW) {
       hasil = filePath
     } else {
-      // WebP/TIFF/GIF/HEIC: konversi ke PNG buffer.
-      const sharp = require('sharp')
-      hasil = await sharp(filePath).png().toBuffer()
+      // Resize ke lebar cetak + kompres. Tanpa ini, cetak massal satu kelas
+      // menghasilkan PDF puluhan MB karena foto 900x1200 diulang tiap siswa.
+      hasil = await sharp(filePath)
+        .resize({ width: maxW, withoutEnlargement: true })
+        .png({ compressionLevel: 9, palette: true })
+        .toBuffer()
     }
   } catch {
     hasil = null // format benar-benar tidak terbaca — jangan gagalkan seluruh rapor
   }
-  _cacheGambar.set(filePath, hasil)
+  _cacheGambar.set(kunci, hasil)
   return hasil
 }
 

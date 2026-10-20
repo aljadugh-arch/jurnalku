@@ -38,7 +38,9 @@ test('logo lembaga memakai nama properti yang benar (lembagaLogoPath)', () => {
 
 test('gambar non-JPEG/PNG dikonversi sebelum dicetak (WebP logo Kemenag)', () => {
   assert.ok(svc.includes('async function siapkanGambar'), 'harus ada siapkanGambar')
-  assert.ok(/sharp\(filePath\)\.png\(\)\.toBuffer\(\)/.test(svc), 'harus mengonversi lewat sharp ke PNG')
+  // Konversi + resize + kompres lewat sharp (bukan hanya .png().toBuffer()).
+  assert.ok(/sharp\(filePath\)\s*\n?\s*\.resize/.test(svc), 'harus resize lewat sharp')
+  assert.ok(/\.png\(\{\s*compressionLevel/.test(svc), 'harus kompres PNG agar PDF massal tidak puluhan MB')
   // Konversi WAJIB dipakai di ketiga jalur: data utama, partial, dan foto siswa.
   assert.ok(/kemenagPath:\s*await siapkanGambar/.test(svc), 'logo kemenag harus dikonversi di loadStudentData')
   assert.ok(/fotoPath:\s*await siapkanGambar/.test(svc), 'foto siswa harus dikonversi')
