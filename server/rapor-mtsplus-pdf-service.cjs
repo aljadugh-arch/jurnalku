@@ -32,9 +32,15 @@ function resolveUploadPath(uploadDir, url) {
 // PDFKit hanya bisa membaca JPEG dan PNG. Logo Kemenag diunggah admin sebagai
 // WebP (hasil kompresi upload), dan `doc.image()` melempar error untuk format
 // itu — ditelan `try {} catch {}` sehingga logo HILANG tanpa jejak. Konversi ke
-// PNG di memori sekali, lalu cache agar cetak massal 500 siswa tidak
-// mengonversi file yang sama 500 kali.
+// PNG sekali, lalu cache agar cetak massal 500 siswa tidak mengonversi file
+// yang sama 500 kali.
+//
+// PENTING: hasil konversi ditulis ke BERKAS, bukan Buffer. PDFKit hanya
+// mendeduplikasi objek gambar bila diberi path; Buffer yang sama ditanam ulang
+// di setiap halaman. Pada rapor massal satu kelas itu berarti logo dicetak
+// ulang 3x per siswa — puluhan MB byte yang isinya identik.
 const _cacheGambar = new Map()
+const _dirCache = path.join(require('os').tmpdir(), 'jurnalku-pdf-img')
 async function siapkanGambar(filePath, maxW = 420) {
   if (!filePath) return null
   const kunci = `${filePath}|${maxW}`
@@ -50,10 +56,15 @@ async function siapkanGambar(filePath, maxW = 420) {
     } else {
       // Resize ke lebar cetak + kompres. Tanpa ini, cetak massal satu kelas
       // menghasilkan PDF puluhan MB karena foto 900x1200 diulang tiap siswa.
-      hasil = await sharp(filePath)
-        .resize({ width: maxW, withoutEnlargement: true })
-        .png({ compressionLevel: 9, palette: true })
-        .toBuffer()
+      await fs.promises.mkdir(_dirCache, { recursive: true })
+      const tujuan = path.join(_dirCache, `${require('crypto').createHash('sha1').update(kunci).digest('hex')}.png`)
+      if (!fs.existsSync(tujuan)) {
+        await sharp(filePath)
+          .resize({ width: maxW, withoutEnlargement: true })
+          .png({ compressionLevel: 9, palette: true })
+          .toFile(tujuan)
+      }
+      hasil = tujuan
     }
   } catch {
     hasil = null // format benar-benar tidak terbaca — jangan gagalkan seluruh rapor

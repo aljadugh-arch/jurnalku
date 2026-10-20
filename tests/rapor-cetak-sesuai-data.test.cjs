@@ -50,6 +50,25 @@ test('gambar non-JPEG/PNG dikonversi sebelum dicetak (WebP logo Kemenag)', () =>
   assert.ok(svc.includes('_cacheGambar'), 'konversi harus di-cache')
 })
 
+// Regresi: hasil konversi harus BERKAS, bukan Buffer.
+//
+// PDFKit hanya mendeduplikasi objek gambar bila diberi path. Buffer yang sama
+// ditanam ulang di setiap halaman — terukur 544 objek gambar pada arsip 136
+// halaman dan PDF 13,6 MB, padahal isinya cuma 2 logo + 34 foto. Setelah
+// diubah ke .toFile(), arsip yang sama jadi 310 KB (44x lebih kecil).
+test('hasil konversi gambar ditulis ke berkas agar PDFKit bisa deduplikasi', () => {
+  const kode = svc.split('\n').filter(l => !l.trim().startsWith('//')).join('\n')
+  assert.ok(kode.includes('.toFile(tujuan)'), 'sharp harus menulis ke berkas, bukan Buffer')
+  assert.ok(!/\.png\(\{[^}]*\}\)\s*\n?\s*\.toBuffer\(\)/.test(kode), 'tidak boleh mengembalikan Buffer dari siapkanGambar')
+  // Nama berkas cache harus deterministik supaya berkas yang sama dipakai ulang.
+  assert.ok(kode.includes("createHash('sha1')"), 'nama berkas cache harus hash dari kunci')
+  // Berlaku juga untuk buku induk.
+  const bi = fs.readFileSync(path.join(__dirname, '..', 'server/buku-induk-pdf-service.cjs'), 'utf8')
+  const biKode = bi.split('\n').filter(l => !l.trim().startsWith('//')).join('\n')
+  assert.ok(biKode.includes('.toFile(tujuan)'), 'buku induk juga harus menulis ke berkas')
+  assert.ok(!/\.png\(\{[^}]*\}\)\s*\n?\s*\.toBuffer\(\)/.test(biKode), 'buku induk tidak boleh pakai Buffer')
+})
+
 test('sampul mencetak yayasan, alamat, dan kontak dari settings', () => {
   const cover = svc.slice(svc.indexOf('// ---------- HALAMAN 1: COVER ----------'), svc.indexOf('// ---------- HALAMAN 2: IDENTITAS ----------'))
   assert.ok(cover.includes('yayasan_nama'), 'yayasan_nama harus tercetak')

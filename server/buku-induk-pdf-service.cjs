@@ -44,7 +44,13 @@ function resolveUploadPath(uploadDir, url) {
 // setiap halaman/siswa, sehingga arsip satu kelas membengkak jadi puluhan MB
 // (terukur 81 MB untuk 34 siswa). Di-resize ke ukuran cetak (~300 dpi) dan
 // dikompres — kualitas cetak tetap, ukuran file turun drastis.
+//
+// PENTING: hasil resize ditulis ke BERKAS, bukan Buffer. PDFKit hanya
+// melakukan deduplikasi objek gambar bila diberi path; Buffer yang sama
+// ditanam ulang di setiap halaman. Terukur: 136 halaman dengan Buffer =
+// 544 objek gambar / 13,6 MB; dengan path = 2 objek / ratusan KB.
 const _cacheGambar = new Map()
+const _dirCache = path.join(require('os').tmpdir(), 'jurnalku-pdf-img')
 async function siapkanGambar(filePath, maxW = 420) {
   if (!filePath) return null
   const kunci = `${filePath}|${maxW}`
@@ -57,10 +63,15 @@ async function siapkanGambar(filePath, maxW = 420) {
     if (['.jpg', '.jpeg', '.png'].includes(ext) && (meta.width || 0) <= maxW) {
       hasil = filePath
     } else {
-      hasil = await sharp(filePath)
-        .resize({ width: maxW, withoutEnlargement: true })
-        .png({ compressionLevel: 9, palette: true })
-        .toBuffer()
+      await fs.promises.mkdir(_dirCache, { recursive: true })
+      const tujuan = path.join(_dirCache, `${require('crypto').createHash('sha1').update(kunci).digest('hex')}.png`)
+      if (!fs.existsSync(tujuan)) {
+        await sharp(filePath)
+          .resize({ width: maxW, withoutEnlargement: true })
+          .png({ compressionLevel: 9, palette: true })
+          .toFile(tujuan)
+      }
+      hasil = tujuan
     }
   } catch {
     hasil = null
@@ -130,7 +141,7 @@ function kehadiranSemester(db, { tenantId, siswaId, tahunAjaran, semester }) {
   return { ...out, total: out.sakit + out.izin + out.alpa }
 }
 
-async function loadBukuInduk(db, { tenantId, siswaId, uploadDir }) {
+async function loadBukuInduk(db, { tenantId, siswaId, uploadDir, fotoMaxW = 420 }) {
   const siswa = db.prepare(`
     SELECT s.*, r.nama AS rombel_nama, r.tingkat, r.tahun_ajaran AS rombel_tahun, r.wali_kelas_id,
            g.nama AS wali_kelas_nama
@@ -195,7 +206,7 @@ async function loadBukuInduk(db, { tenantId, siswaId, uploadDir }) {
     } catch { return [] }
   })()
 
-  const fotoPath = await siapkanGambar(resolveUploadPath(uploadDir, siswa.foto))
+  const fotoPath = await siapkanGambar(resolveUploadPath(uploadDir, siswa.foto), fotoMaxW)
   const kemenagUpload = resolveUploadPath(uploadDir, settings.logo_kemenag)
   const kemenagPath = kemenagUpload || path.join(__dirname, 'assets', 'kemenag-logo.svg')
   const logo = {
@@ -490,8 +501,13 @@ async function createBukuIndukPdf(db, options) {
 }
 
 // Massal: satu PDF untuk satu rombel (atau seluruh siswa tenant).
+//
+// Foto diperkecil ke 260px (bukan 420px) karena di arsip massal foto muncul
+// puluhan kali. Pada ukuran cetak 90x120 pt, 260px sudah ~2x kerapatan yang
+// dibutuhkan mata — 420px hanya menambah byte tanpa beda yang terlihat.
+const FOTO_MASSAL_MAXW = 260
 async function createBukuIndukPdfBulk(db, options) {
-  const { tenantId, rombelId, uploadDir, bagian = 'lengkap' } = options
+  const { tenantId, rombelId, uploadDir, bagian = 'lengkap', fotoMaxW = FOTO_MASSAL_MAXW } = options
   const siswaList = rombelId
     ? db.prepare("SELECT id, nama FROM siswa WHERE tenant_id=? AND rombel_id=? AND COALESCE(status,'aktif')='aktif' ORDER BY nama").all(tenantId, rombelId)
     : db.prepare("SELECT id, nama FROM siswa WHERE tenant_id=? AND COALESCE(status,'aktif')='aktif' ORDER BY nama").all(tenantId)
@@ -501,7 +517,7 @@ async function createBukuIndukPdfBulk(db, options) {
   const dilewati = []
   for (const s of siswaList) {
     try {
-      const data = await loadBukuInduk(db, { tenantId, siswaId: s.id, uploadDir })
+      const data = await loadBukuInduk(db, { tenantId, siswaId: s.id, uploadDir, fotoMaxW })
       if (!data) { dilewati.push(s.nama); continue }
       renderBukuInduk(doc, data, bagian)
       dicetak++
