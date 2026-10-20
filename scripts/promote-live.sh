@@ -117,12 +117,29 @@ if [[ -d "$STG/public" ]]; then
   echo "aset brand dipromosikan ke LIVE: $(ls -1 "$STG/public" | wc -l) berkas"
 fi
 pm2 restart "$PM2_APP" --update-env
-for attempt in {1..10}; do
-  curl --fail --silent --show-error --max-time 15 "$HEALTH_URL" >/dev/null && break
-  [[ "$attempt" -lt 10 ]] || exit 1
-  sleep 1
-done
-curl --fail --silent --show-error --max-time 15 https://jurnalmadrasah.web.id/api/health >/dev/null
+# Dua domain diperiksa dengan pola yang SAMA. Sebelumnya domain utama punya 10
+# percobaan sedangkan jurnalmadrasah.web.id hanya sekali — pada cold start
+# setelah `pm2 restart`, Caddy sempat membalas 502 dan pemeriksaan kedua gagal
+# padahal aplikasi hanya butuh ~1 detik lagi untuk siap. Pemeriksaan yang tidak
+# sabar bukan pemeriksaan, hanya kebetulan.
+#
+# Percobaan yang gagal di tengah TIDAK mencetak error: `--show-error` membuat
+# setiap percobaan pertama yang masih 502 menulis "curl: (22) ... 502" ke log,
+# sehingga log promot sukses terlihat seperti gagal. Error hanya dicetak pada
+# percobaan terakhir, saat memang benar-benar gagal.
+tunggu_sehat() {
+  local url="$1" attempt
+  for attempt in {1..10}; do
+    curl --fail --silent --max-time 15 "$url" >/dev/null && return 0
+    if [[ "$attempt" -eq 10 ]]; then
+      curl --fail --silent --show-error --max-time 15 "$url" >/dev/null
+      return 1
+    fi
+    sleep 1
+  done
+}
+tunggu_sehat "$HEALTH_URL" || exit 1
+tunggu_sehat https://jurnalmadrasah.web.id/api/health || exit 1
 ACTIVATED=0
 ln -sfn "$BACKUP" "$LIVE/.rollback-current"
 ln -sfn "$SECONDARY_BACKUP" "$SECONDARY_LIVE/.rollback-current"
