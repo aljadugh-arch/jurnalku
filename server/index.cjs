@@ -2567,12 +2567,20 @@ app.delete('/api/beasiswa/:id', BEASISWA_ROLES, (req, res) => {
   res.json({ success: true })
 })
 
+// Bulan berjalan menurut WIB, bukan UTC. Server berjalan di zona UTC, sehingga
+// `toISOString()` pada 1 Oktober pukul 00:00–06:59 WIB masih terbaca 30
+// September — dashboard akan menampilkan bulan yang salah selama 7 jam pertama
+// setiap awal bulan.
+function bulanBerjalanWib() {
+  return new Date(Date.now() + 7 * 60 * 60 * 1000).toISOString().slice(0, 7)
+}
+
 app.get('/api/bendahara/dashboard', BENDAHARA, (req,res) => {
   const tid=req.tenantId
   // `bulan=YYYY-MM` membuat seluruh kartu mengikuti satu periode. Tanpa
   // parameter ini, perilaku lama dipertahankan (bulan berjalan) supaya
   // pemanggil lama tidak berubah hasilnya.
-  const bulan = normalisasiBulan(req.query.bulan) || new Date().toISOString().slice(0, 7)
+  const bulan = normalisasiBulan(req.query.bulan) || bulanBerjalanWib()
   const rentang = rentangBulan(bulan)
   const teks = bulanTeks(bulan)
 
@@ -7453,7 +7461,7 @@ app.get('/api/tabungan', BENDAHARA, (req, res) => {
 // Saldo total sengaja TIDAK difilter — saldo adalah posisi terkini, bukan
 // angka per bulan; yang berubah per bulan adalah mutasinya.
 app.get('/api/tabungan/ringkasan-bulanan', BENDAHARA, (req, res) => {
-  const bulan = normalisasiBulan(req.query.bulan) || new Date().toISOString().slice(0, 7)
+  const bulan = normalisasiBulan(req.query.bulan) || bulanBerjalanWib()
   const rentang = rentangBulan(bulan)
   const setor = db.prepare("SELECT COALESCE(SUM(nominal),0) total, COUNT(*) jumlah FROM tabungan WHERE tenant_id=? AND tipe='setor' AND tanggal >= ? AND tanggal <= ?").get(req.tenantId, rentang.awal, rentang.akhir)
   const tarik = db.prepare("SELECT COALESCE(SUM(nominal),0) total, COUNT(*) jumlah FROM tabungan WHERE tenant_id=? AND tipe='tarik' AND tanggal >= ? AND tanggal <= ?").get(req.tenantId, rentang.awal, rentang.akhir)

@@ -147,3 +147,17 @@ test('pemilih bulan menandai bulan tanpa data', () => {
   const isi = baca('src/components/MonthFilter.tsx')
   assert.ok(isi.includes('kosong'), 'bulan tanpa data harus ditandai agar tidak menebak')
 })
+
+test('bulan berjalan dihitung dalam WIB, bukan UTC', () => {
+  // Server berjalan di zona UTC. `toISOString()` pada 1 Oktober 00:00–06:59 WIB
+  // masih 30 September, sehingga dashboard menampilkan bulan yang salah selama
+  // 7 jam pertama setiap awal bulan.
+  assert.ok(server.includes('function bulanBerjalanWib'), 'server harus punya bulanBerjalanWib')
+  assert.ok(!/normalisasiBulan\(req\.query\.bulan\) \|\| new Date\(\)\.toISOString/.test(server),
+    'default bulan tidak boleh memakai toISOString langsung (UTC)')
+
+  const isi = server.slice(server.indexOf('function bulanBerjalanWib'), server.indexOf("app.get('/api/bendahara/dashboard'"))
+  const fn = new Function(`${isi}; return bulanBerjalanWib`)()
+  assert.equal(fn(), new Date(Date.now() + 7 * 3600 * 1000).toISOString().slice(0, 7))
+  assert.match(fn(), /^\d{4}-(0[1-9]|1[0-2])$/)
+})
