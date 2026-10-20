@@ -1866,6 +1866,20 @@ function studentActiveIdentifier(siswa) {
   return nisn || String(siswa?.nis || '').trim()
 }
 
+// NIS/NISN yang diimpor dari Excel sering datang dengan apostrof di depan.
+// Excel menambahkan `'` supaya deretan angka panjang diperlakukan sebagai teks,
+// dan apostrof itu ikut terbaca sebagai bagian nilainya. Akibatnya NIS tersimpan
+// sebagai `'111235230232220024` — pencarian, ekspor, dan pencocokan Dapodik
+// gagal karena string tidak sama dengan NIS yang diketik pengguna.
+// Dibersihkan di titik masuk (impor, tambah, ubah, PPDB) supaya satu bentuk
+// saja yang pernah tersimpan.
+function bersihkanNis(v) {
+  return String(v ?? '')
+    .replace(/^['\u2018\u2019\u02BC\u0060]+/, '')
+    .replace(/[\u200B-\u200D\uFEFF]/g, '')
+    .trim()
+}
+
 // Simpan setiap identifier lama agar QR yang sudah tercetak tetap valid
 // setelah NIS/NISN siswa diperbaiki. Payload QR baru tidak memakai field ini.
 function rememberStudentQrIdentifiers(siswa, tenantId) {
@@ -2555,11 +2569,40 @@ app.delete('/api/beasiswa/:id', BEASISWA_ROLES, (req, res) => {
 
 app.get('/api/bendahara/dashboard', BENDAHARA, (req,res) => {
   const tid=req.tenantId
+  // `bulan=YYYY-MM` membuat seluruh kartu mengikuti satu periode. Tanpa
+  // parameter ini, perilaku lama dipertahankan (bulan berjalan) supaya
+  // pemanggil lama tidak berubah hasilnya.
+  const bulan = normalisasiBulan(req.query.bulan) || new Date().toISOString().slice(0, 7)
+  const rentang = rentangBulan(bulan)
+  const teks = bulanTeks(bulan)
+
   const tagihan_belum=db.prepare("SELECT count(*) jumlah,coalesce(sum(nominal),0) nominal FROM tagihan WHERE tenant_id=? AND status='belum_bayar'").get(tid)
-  const lunas_bulan_ini=db.prepare("SELECT count(*) jumlah,coalesce(sum(nominal),0) nominal FROM tagihan WHERE tenant_id=? AND status='lunas' AND strftime('%Y-%m',tanggal_bayar)=strftime('%Y-%m','now')").get(tid)
+  // "Lunas bulan ini" dihitung dari TANGGAL BAYAR, bukan bulan tagihan —
+  // uang masuk ke kas saat dibayar, bukan saat tagihan diterbitkan.
+  const lunas_bulan_ini=db.prepare("SELECT count(*) jumlah,coalesce(sum(nominal),0) nominal FROM tagihan WHERE tenant_id=? AND status='lunas' AND tanggal_bayar >= ? AND tanggal_bayar <= ?").get(tid, rentang.awal, rentang.akhir)
   const saldo_tabungan=db.prepare("SELECT coalesce(sum(CASE WHEN tipe='setor' THEN nominal ELSE -nominal END),0) saldo FROM tabungan WHERE tenant_id=?").get(tid).saldo
   const siswa_aktif=db.prepare("SELECT count(*) jumlah FROM siswa WHERE tenant_id=? AND coalesce(status,'aktif')='aktif'").get(tid).jumlah
-  res.json({tagihan_belum,lunas_bulan_ini,saldo_tabungan,siswa_aktif})
+
+  // Angka pendukung per bulan: dipakai kartu tambahan di dashboard.
+  const tabungan_setor=db.prepare("SELECT coalesce(sum(nominal),0) total,count(*) jumlah FROM tabungan WHERE tenant_id=? AND tipe='setor' AND tanggal>=? AND tanggal<=?").get(tid, rentang.awal, rentang.akhir)
+  const tabungan_tarik=db.prepare("SELECT coalesce(sum(nominal),0) total,count(*) jumlah FROM tabungan WHERE tenant_id=? AND tipe='tarik' AND tanggal>=? AND tanggal<=?").get(tid, rentang.awal, rentang.akhir)
+  const kas_masuk=db.prepare("SELECT coalesce(sum(nominal),0) total FROM keuangan_transaksi WHERE tenant_id=? AND tipe='masuk' AND tanggal>=? AND tanggal<=?").get(tid, rentang.awal, rentang.akhir).total
+  const kas_keluar=db.prepare("SELECT coalesce(sum(nominal),0) total FROM keuangan_transaksi WHERE tenant_id=? AND tipe='keluar' AND tanggal>=? AND tanggal<=?").get(tid, rentang.awal, rentang.akhir).total
+  // Tagihan yang JATUH pada bulan ini (dasar bulan tagihan) — untuk melihat
+  // berapa yang seharusnya tertagih pada periode tersebut.
+  const tagihan_bulan_ini = teks
+    ? db.prepare("SELECT count(*) jumlah,coalesce(sum(nominal),0) nominal,coalesce(sum(CASE WHEN status='lunas' THEN nominal ELSE 0 END),0) terbayar FROM tagihan WHERE tenant_id=? AND lower(trim(bulan))=lower(?) AND trim(tahun)=?").get(tid, teks.bulan, teks.tahun)
+    : { jumlah: 0, nominal: 0, terbayar: 0 }
+
+  const bulan_tersedia = db.prepare(`
+    SELECT bulan FROM (
+      SELECT DISTINCT strftime('%Y-%m', tanggal_bayar) bulan FROM tagihan WHERE tenant_id=? AND tanggal_bayar IS NOT NULL
+      UNION SELECT DISTINCT strftime('%Y-%m', tanggal) FROM tabungan WHERE tenant_id=? AND tanggal IS NOT NULL
+      UNION SELECT DISTINCT strftime('%Y-%m', tanggal) FROM keuangan_transaksi WHERE tenant_id=? AND tanggal IS NOT NULL
+    ) WHERE bulan IS NOT NULL ORDER BY bulan DESC
+  `).all(tid, tid, tid).map(r => r.bulan).filter(Boolean)
+
+  res.json({ bulan, periode: { mulai: rentang.awal, selesai: rentang.akhir }, tagihan_belum, lunas_bulan_ini, saldo_tabungan, siswa_aktif, tabungan_setor, tabungan_tarik, kas_masuk, kas_keluar, tagihan_bulan_ini, bulan_tersedia })
 })
 
 // Panduan pengguna — publik (tanpa login) supaya bisa dibuka dari halaman depan
@@ -3082,9 +3125,15 @@ function resolveGtkForUser(userId, tenantId) {
 // daftar — di sana tombol demo tidak ditampilkan, supaya pengunjung tidak
 // mengira data contoh adalah data lembaganya.
 const DEMO_HOSTS = new Set(
-  String(process.env.DEMO_HOSTS || 'demo.jurnal.cc.cd,jurnal.cc.cd,www.jurnal.cc.cd,jurnalmadrasah.web.id,www.jurnalmadrasah.web.id,jurnalku.biz.id,www.jurnalku.biz.id,idjurnal.my.id,idjurnal.web.id,idjurnal.biz.id,localhost,127.0.0.1')
+  String(process.env.DEMO_HOSTS || 'demo.jurnal.cc.cd,jurnal.cc.cd,www.jurnal.cc.cd,jurnalku.biz.id,www.jurnalku.biz.id,idjurnal.my.id,idjurnal.web.id,idjurnal.biz.id,localhost,127.0.0.1')
     .split(',').map(h => h.trim().toLowerCase()).filter(Boolean)
 )
+// `jurnalmadrasah.web.id` SENGAJA tidak ada di daftar ini meski namanya
+// berbau platform: domain itu adalah `base_domain` milik tenant e3138852
+// (MI Sunan Drajat Bektiharjo, 141 siswa + 14 guru). Menampilkan panel demo
+// di sana membuat pengunjung mengira data contoh adalah data lembaganya.
+// Aturan: kalau sebuah host dipakai satu tenant sebagai alamat resminya,
+// host itu BUKAN host demo.
 
 // Host "platform" = domain milik Jurnalku sendiri (bukan domain lembaga).
 // Dipakai untuk membatasi login super_admin: hanya boleh dari sini.
@@ -3097,6 +3146,26 @@ const HOST_PLATFORM = new Set(
 function hostPlatform(req) {
   const host = String(req.headers['x-forwarded-host'] || req.headers.host || '').split(',')[0].trim().split(':')[0].toLowerCase().replace(/\.$/, '')
   return HOST_PLATFORM.has(host)
+}
+// Apakah sebuah host adalah ALAMAT RESMI satu lembaga?
+// Dipakai sebagai penjaga demo: kalau domain itu dipakai sebuah tenant sebagai
+// alamat resminya (domain_custom, atau base_domain yang hanya dimiliki SATU
+// tenant), maka di domain itu TIDAK boleh ada panel akun demo — pengunjung akan
+// mengira data contoh adalah data lembaganya.
+// `jurnal.cc.cd` sengaja lolos: domain itu base_domain BANYAK tenant, jadi tidak
+// ada satu lembaga yang bisa dianggap pemiliknya.
+function hostMilikSatuLembaga(host) {
+  try {
+    const h = String(host || '').toLowerCase().replace(/\.$/, '')
+    if (!h || h === 'localhost' || /^\d+\.\d+\.\d+\.\d+$/.test(h)) return false
+    const custom = db.prepare("SELECT id FROM tenants WHERE lower(trim(domain_custom,'.')) = ? AND aktif = 1").get(h)
+    if (custom) return true
+    const q = db.prepare("SELECT id FROM tenants WHERE lower(trim(base_domain,'.')) = ? AND aktif = 1")
+    const rows = typeof q.all === 'function' ? q.all(h) : []
+    return rows.length === 1 && rows[0].id !== DEMO_TENANT_ID
+  } catch {
+    return false
+  }
 }
 // Demo tenant terpisah dari default (superadmin).
 // Cari/buat tenant khusus demo — BUKAN 'default'.
@@ -3137,6 +3206,11 @@ app.post('/api/auth/demo', (req, res) => {
   const demoHost = String(req.headers['x-forwarded-host'] || req.headers.host || '')
     .split(',')[0].trim().split(':')[0].replace(/\.$/, '').toLowerCase()
   if (!DEMO_HOSTS.has(demoHost)) return res.status(404).json({ error: 'Not found' })
+  // Penjaga kedua: host yang dipakai sebuah lembaga sebagai alamat resminya
+  // TIDAK boleh melayani demo, walau namanya mirip domain platform. Ini yang
+  // sebelumnya bocor di `jurnalmadrasah.web.id` (base_domain milik MI Sunan
+  // Drajat) — pengunjung lembaga melihat panel akun demo di alamat sendiri.
+  if (hostMilikSatuLembaga(demoHost)) return res.status(404).json({ error: 'Not found' })
   const role = String(req.body?.role || 'admin')
   const allowed = ['admin','kepala','guru','wali_kelas','bendahara','siswa','wali_murid']
   if (!allowed.includes(role)) return res.status(400).json({ error: 'Role demo tidak tersedia' })
@@ -3200,6 +3274,18 @@ app.post('/api/auth/demo', (req, res) => {
   }
   const token = jwt.sign({ id: user.id, email: user.email, nama: user.nama, role: user.role, tenant_id: user.tenant_id, gtk_id: user.gtk_id, siswa_id: user.siswa_id, nis: user.nis }, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN })
   res.json({ token, user: { id: user.id, email: user.email, nama: user.nama, role: user.role, tenant_id: user.tenant_id, avatar: user.avatar || null } })
+})
+
+// Status panel akun demo untuk host yang sedang dibuka.
+// Frontend TIDAK lagi menebak dari daftar hardcode — ia bertanya ke server,
+// sehingga aturan demo hanya hidup di satu tempat dan tidak bisa melenceng
+// dari penjagaan route `/api/auth/demo`.
+app.get('/api/demo-status', (req, res) => {
+  const host = String(req.headers['x-forwarded-host'] || req.headers.host || '')
+    .split(',')[0].trim().split(':')[0].replace(/\.$/, '').toLowerCase()
+  const aktif = DEMO_HOSTS.has(host) && !hostMilikSatuLembaga(host)
+  res.set('Cache-Control', 'no-store')
+  res.json({ aktif, host })
 })
 
 app.post('/api/auth/login', authLimiter, loginAccountLimiter, (req, res) => {
@@ -4070,8 +4156,8 @@ app.post('/api/siswa/bulk-import', ADMIN, (req, res) => {
       try {
         const id = uuidv4()
         const nik = String(row.nik || '').trim() || null
-        const nis = String(row.nis || '').trim()
-        const nisn = String(row.nisn || '').trim()
+        const nis = bersihkanNis(row.nis)
+        const nisn = bersihkanNis(row.nisn)
         const nama = String(row.nama || '').trim()
         
         if (!nama) {
@@ -4186,7 +4272,7 @@ app.post('/api/siswa', ADMIN, (req, res) => {
       agama, status_keluarga, anak_ke, asal_sekolah, nama_ayah, nama_ibu, alamat_ortu, kerja_ayah, kerja_ibu, nama_wali, kerja_wali
     ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
       .run(
-        id, nik || null, nis, nisn, nama, jenis_kelamin, tempat_lahir, tanggal_lahir, alamat, no_hp, nama_ortu, (nama_panggilan || '').trim() || null, rombel_id || null, req.tenantId,
+        id, nik || null, bersihkanNis(nis), bersihkanNis(nisn), nama, jenis_kelamin, tempat_lahir, tanggal_lahir, alamat, no_hp, nama_ortu, (nama_panggilan || '').trim() || null, rombel_id || null, req.tenantId,
         agama || 'Islam', status_keluarga || 'Anak Kandung', anak_ke || null, asal_sekolah || null, nama_ayah || null, nama_ibu || null, alamat_ortu || null, kerja_ayah || null, kerja_ibu || null, nama_wali || null, kerja_wali || null,
       )
     const siswa = db.prepare('SELECT * FROM siswa WHERE id = ? AND tenant_id = ?').get(id, req.tenantId)
@@ -4211,6 +4297,10 @@ app.put('/api/siswa/:id', ADMIN, (req, res) => {
   if (updates.length === 0) return res.status(400).json({ error: 'Tidak ada data yang diubah' })
   const values = { ...current }
   for (const field of updates) values[field] = body[field]
+  // Apostrof dari Excel (`'111235…`) dibuang di titik ubah juga, supaya data
+  // yang terlanjur kotor bisa diperbaiki lewat form tanpa menyisakan dua bentuk.
+  if (updates.includes('nis')) values.nis = bersihkanNis(values.nis)
+  if (updates.includes('nisn')) values.nisn = bersihkanNis(values.nisn)
   if (updates.includes('nama_panggilan')) values.nama_panggilan = (values.nama_panggilan || '').trim() || null
   if (updates.includes('rfid_uid')) values.rfid_uid = (values.rfid_uid || '').trim().toUpperCase() || null
   if (values.nik && !/^\d{16}$/.test(String(values.nik))) return res.status(400).json({ error: 'NIK harus berupa 16 digit angka.' })
@@ -6111,18 +6201,60 @@ app.delete('/api/keuangan/transaksi/:id', BENDAHARA, (req, res) => {
 })
 
 // Laporan keuangan
+// Utilitas periode untuk semua laporan keuangan.
+// Satu bentuk parameter untuk semua endpoint: `bulan=YYYY-MM`.
+// Mengapa tidak memakai `mulai`/`selesai` saja: bendahara bekerja per bulan
+// tagihan (SPP, infaq, gaji), bukan per rentang bebas. Filter rentang tetap
+// didukung supaya laporan kustom tidak hilang.
+const NAMA_BULAN_ID = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember']
+
+function normalisasiBulan(v) {
+  const s = String(v || '').trim()
+  return /^\d{4}-(0[1-9]|1[0-2])$/.test(s) ? s : ''
+}
+
+// Rentang tanggal [awal, akhir] dari `bulan=YYYY-MM`, atau null bila kosong.
+function rentangBulan(bulan) {
+  const b = normalisasiBulan(bulan)
+  if (!b) return null
+  const [y, m] = b.split('-').map(Number)
+  const akhir = new Date(Date.UTC(y, m, 0)).getUTCDate()
+  return { awal: `${b}-01`, akhir: `${b}-${String(akhir).padStart(2, '0')}` }
+}
+
+// Nama bulan Indonesia + tahun, untuk tabel `tagihan` yang menyimpan bulan
+// sebagai teks ('Oktober') bukan angka.
+function bulanTeks(bulan) {
+  const b = normalisasiBulan(bulan)
+  if (!b) return null
+  const [y, m] = b.split('-').map(Number)
+  return { bulan: NAMA_BULAN_ID[m - 1], tahun: String(y) }
+}
+
 app.get('/api/keuangan/laporan', BENDAHARA, (req, res) => {
   const { mulai, selesai } = req.query
+  const bulan = normalisasiBulan(req.query.bulan)
+  const rentang = rentangBulan(bulan)
   let where = 'WHERE t.tenant_id=?'
   const params = [req.tenantId]
-  if (mulai) { where += ' AND t.tanggal >= ?'; params.push(mulai) }
-  if (selesai) { where += ' AND t.tanggal <= ?'; params.push(selesai) }
+  // `bulan` menang atas rentang bebas: kalau keduanya dikirim, pengguna sedang
+  // memakai pemilih bulan dan mengharapkan tepat satu bulan.
+  if (rentang) { where += ' AND t.tanggal >= ? AND t.tanggal <= ?'; params.push(rentang.awal, rentang.akhir) }
+  else {
+    if (mulai) { where += ' AND t.tanggal >= ?'; params.push(mulai) }
+    if (selesai) { where += ' AND t.tanggal <= ?'; params.push(selesai) }
+  }
   const debet = db.prepare(`SELECT COALESCE(SUM(nominal),0) total FROM keuangan_transaksi t ${where} AND tipe='masuk'`).get(...params).total
   const kredit = db.prepare(`SELECT COALESCE(SUM(nominal),0) total FROM keuangan_transaksi t ${where} AND tipe='keluar'`).get(...params).total
   const saldo_awal = db.prepare('SELECT COALESCE(SUM(saldo_awal),0) total FROM keuangan_akun WHERE tenant_id=?').get(req.tenantId).total
   const per_kategori = db.prepare(`SELECT k.nama, t.tipe, SUM(t.nominal) total FROM keuangan_transaksi t LEFT JOIN keuangan_kategori k ON k.id=t.kategori_id AND k.tenant_id=t.tenant_id ${where} GROUP BY t.kategori_id, t.tipe ORDER BY t.tipe, k.nama`).all(...params)
   const per_akun = db.prepare(`SELECT a.nama, SUM(CASE WHEN t.tipe='masuk' THEN t.nominal ELSE 0 END) debet, SUM(CASE WHEN t.tipe='keluar' THEN t.nominal ELSE 0 END) kredit FROM keuangan_transaksi t LEFT JOIN keuangan_akun a ON a.id=t.akun_id AND a.tenant_id=t.tenant_id ${where} GROUP BY t.akun_id ORDER BY a.nama`).all(...params)
-  res.json({ saldo_awal, debet, kredit, saldo: saldo_awal + debet - kredit, per_kategori, per_akun })
+
+  // Daftar bulan yang benar-benar punya transaksi — dipakai pemilih bulan agar
+  // bendahara tidak menebak bulan mana yang berisi data.
+  const bulan_tersedia = db.prepare(`SELECT DISTINCT strftime('%Y-%m', tanggal) bulan FROM keuangan_transaksi WHERE tenant_id=? AND tanggal IS NOT NULL ORDER BY bulan DESC`).all(req.tenantId).map(r => r.bulan).filter(Boolean)
+
+  res.json({ saldo_awal, debet, kredit, saldo: saldo_awal + debet - kredit, per_kategori, per_akun, periode: { bulan: bulan || '', mulai: rentang?.awal || mulai || '', selesai: rentang?.akhir || selesai || '' }, bulan_tersedia })
 })
 
 
@@ -7231,6 +7363,17 @@ app.get('/api/tagihan', BENDAHARA, (req, res) => {
   if (status) { sql += ' AND t.status = ?'; params.push(status) }
   if (jenis_tagihan_id) { sql += ' AND t.jenis_tagihan_id = ?'; params.push(jenis_tagihan_id) }
   if (rombel_id) { sql += ' AND s.rombel_id = ?'; params.push(rombel_id) }
+
+  // Filter bulan. Dua dasar yang berbeda dan keduanya dibutuhkan bendahara:
+  //  - `bulan`       → periode TAGIHAN (kolom bulan/tahun, mis. SPP Oktober)
+  //  - `bulan_bayar` → periode PEMBAYARAN (tanggal_bayar, kapan uang masuk)
+  // Membedakannya penting: tagihan Oktober yang dibayar November masuk kas
+  // November, dan laporan "uang masuk bulan ini" harus memakai dasar kedua.
+  const bulanTagihan = bulanTeks(req.query.bulan)
+  if (bulanTagihan) { sql += ' AND lower(trim(t.bulan)) = lower(?) AND trim(t.tahun) = ?'; params.push(bulanTagihan.bulan, bulanTagihan.tahun) }
+  const rentangBayar = rentangBulan(req.query.bulan_bayar)
+  if (rentangBayar) { sql += ' AND t.tanggal_bayar >= ? AND t.tanggal_bayar <= ?'; params.push(rentangBayar.awal, rentangBayar.akhir) }
+
   sql += ' ORDER BY r.nama, s.nama, t.created_at DESC'
   res.json(db.prepare(sql).all(...params))
 })
@@ -7297,8 +7440,27 @@ app.put('/api/tagihan/:id/bayar', BENDAHARA, (req, res) => {
 app.get('/api/tabungan', BENDAHARA, (req, res) => {
   const { siswa_id } = req.query
   if (!siswa_id) return res.status(400).json({ error: 'siswa_id required' })
-  const rows = db.prepare('SELECT * FROM tabungan WHERE siswa_id = ? AND tenant_id = ? ORDER BY created_at DESC').all(siswa_id, req.tenantId)
-  res.json(rows)
+  let sql = 'SELECT * FROM tabungan WHERE siswa_id = ? AND tenant_id = ?'
+  const params = [siswa_id, req.tenantId]
+  const rentang = rentangBulan(req.query.bulan)
+  if (rentang) { sql += ' AND tanggal >= ? AND tanggal <= ?'; params.push(rentang.awal, rentang.akhir) }
+  sql += ' ORDER BY created_at DESC'
+  res.json(db.prepare(sql).all(...params))
+})
+
+// Ringkasan tabungan per bulan untuk dashboard bendahara: berapa setoran dan
+// penarikan yang terjadi pada bulan itu, plus berapa siswa yang menabung.
+// Saldo total sengaja TIDAK difilter — saldo adalah posisi terkini, bukan
+// angka per bulan; yang berubah per bulan adalah mutasinya.
+app.get('/api/tabungan/ringkasan-bulanan', BENDAHARA, (req, res) => {
+  const bulan = normalisasiBulan(req.query.bulan) || new Date().toISOString().slice(0, 7)
+  const rentang = rentangBulan(bulan)
+  const setor = db.prepare("SELECT COALESCE(SUM(nominal),0) total, COUNT(*) jumlah FROM tabungan WHERE tenant_id=? AND tipe='setor' AND tanggal >= ? AND tanggal <= ?").get(req.tenantId, rentang.awal, rentang.akhir)
+  const tarik = db.prepare("SELECT COALESCE(SUM(nominal),0) total, COUNT(*) jumlah FROM tabungan WHERE tenant_id=? AND tipe='tarik' AND tanggal >= ? AND tanggal <= ?").get(req.tenantId, rentang.awal, rentang.akhir)
+  const penabung = db.prepare("SELECT COUNT(DISTINCT siswa_id) jumlah FROM tabungan WHERE tenant_id=? AND tipe='setor' AND tanggal >= ? AND tanggal <= ?").get(req.tenantId, rentang.awal, rentang.akhir).jumlah
+  const saldo_total = db.prepare("SELECT COALESCE(SUM(CASE WHEN tipe='setor' THEN nominal ELSE -nominal END),0) saldo FROM tabungan WHERE tenant_id=?").get(req.tenantId).saldo
+  const bulan_tersedia = db.prepare("SELECT DISTINCT strftime('%Y-%m', tanggal) bulan FROM tabungan WHERE tenant_id=? AND tanggal IS NOT NULL ORDER BY bulan DESC").all(req.tenantId).map(r => r.bulan).filter(Boolean)
+  res.json({ bulan, setor, tarik, penabung, saldo_total, bulan_tersedia })
 })
 
 app.get('/api/tabungan/saldo', BENDAHARA, (req, res) => {

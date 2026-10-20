@@ -166,10 +166,22 @@ export default function LandingPage() {
             >
               {dark ? <Sun size={18} className="text-amber-500" /> : <Moon size={18} />}
             </button>
-            <Link to="/login" className="hidden sm:inline-flex px-4 py-2.5 text-sm font-semibold text-slate-700 dark:text-gray-200 hover:text-primary dark:hover:text-primary transition-colors">
+            {/* Tombol Masuk WAJIB terlihat di semua ukuran layar. Sebelumnya
+                `hidden sm:inline-flex` menyembunyikannya di bawah 640px —
+                satu-satunya jalan masuk di ponsel adalah membuka menu
+                hamburger, dan pengunjung mengira tidak ada cara login.
+                Di layar sempit padding dipadatkan supaya tetap muat
+                berdampingan dengan logo dan tombol menu. */}
+            <Link
+              to="/login"
+              className="inline-flex items-center px-3 sm:px-4 py-2.5 text-sm font-semibold text-slate-700 dark:text-gray-200 hover:text-primary dark:hover:text-primary transition-colors whitespace-nowrap"
+            >
               Masuk
             </Link>
-            <Link to="/register" className="inline-flex items-center gap-1.5 px-5 py-2.5 bg-primary text-white rounded-xl text-sm font-semibold hover:bg-primary-dark shadow-lg shadow-primary/30 transition-all">
+            {/* Coba Gratis tetap tombol utama, tapi di ponsel ia pindah ke
+                menu supaya baris header tidak meluber (logo + Masuk + CTA +
+                hamburger melebihi 360px). */}
+            <Link to="/register" className="hidden sm:inline-flex items-center gap-1.5 px-5 py-2.5 bg-primary text-white rounded-xl text-sm font-semibold hover:bg-primary-dark shadow-lg shadow-primary/30 transition-all whitespace-nowrap">
               Coba Gratis <ArrowRight size={15} />
             </Link>
             <button
@@ -192,6 +204,12 @@ export default function LandingPage() {
                 </a>
               ))}
               <Link to="/login" onClick={() => setMenuBuka(false)} className="py-2.5 text-sm font-semibold text-primary">Masuk ke akun</Link>
+              {/* Di ponsel tombol "Coba Gratis" disembunyikan dari header, jadi
+                  jalur daftar harus ada di menu — kalau tidak, pengunjung
+                  kehilangan CTA utama tepat di layar terkecil. */}
+              <Link to="/register" onClick={() => setMenuBuka(false)} className="mt-2 inline-flex items-center justify-center gap-2 px-5 py-3 bg-primary text-white rounded-xl text-sm font-semibold">
+                Coba Gratis <ArrowRight size={15} />
+              </Link>
             </div>
           </div>
         )}

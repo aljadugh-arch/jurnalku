@@ -44,6 +44,26 @@ export default function LoginPage() {
   const navigate = useNavigate()
   const { loginWithCredentials, loginDemo, isAuthenticated, user, authReady } = useAuthStore()
 
+  // Panel demo HANYA ditampilkan kalau SERVER membenarkan host ini.
+  // Sebelumnya daftar host diduplikasi di sini, dan keduanya melenceng:
+  // `jurnalmadrasah.web.id` ikut terdaftar padahal itu alamat resmi MI Sunan
+  // Drajat, jadi wali murid di sana melihat panel akun demo di halaman login
+  // lembaganya sendiri. Sekarang server yang menjawab (/api/demo-status) —
+  // satu aturan, tidak bisa berbeda antara tampilan dan route.
+  // Default `false`: kalau permintaan gagal, panel tidak muncul. Lebih baik
+  // tombol hilang daripada muncul lalu 404.
+  // Catatan: hook ini WAJIB di atas early-return sesi di bawah — kalau
+  // diletakkan setelahnya, jumlah hook berubah antar-render dan React melempar
+  // "Rendered fewer hooks than expected" begitu user login.
+  const [demoHostAktif, setDemoHostAktif] = useState(false)
+  useEffect(() => {
+    let batal = false
+    api.get('/demo-status')
+      .then(r => { if (!batal) setDemoHostAktif(Boolean(r?.data?.aktif)) })
+      .catch(() => { if (!batal) setDemoHostAktif(false) })
+    return () => { batal = true }
+  }, [])
+
   // PWA start_url untuk host tenant terdaftar adalah '/login', jadi setiap kali
   // aplikasi yang sudah terinstall dibuka ulang, browser membuka rute ini
   // langsung -- bukan '/'. Token 30 hari di localStorage tetap valid dan
@@ -62,19 +82,6 @@ export default function LoginPage() {
   if (authReady && isAuthenticated && user) {
     return <Navigate to={getRedirectPath(user.role)} replace />
   }
-
-  // Tombol demo hanya ditampilkan di domain PLATFORM, sama dengan yang dilayani
-  // server (DEMO_HOSTS). Sebelumnya tombol muncul di domain lembaga juga,
-  // padahal server menolak 404 di sana — pengunjung melihat tombol yang pasti
-  // gagal. Satu sumber kebenaran: daftar host di server.
-  const demoHostAktif = (() => {
-    const h = String(window.location.hostname || '').toLowerCase().replace(/\.$/, '')
-    return h === 'localhost' || h === '127.0.0.1'
-      || h === 'jurnal.cc.cd' || h === 'jurnalmadrasah.web.id'
-      || h === 'jurnalku.biz.id' || h === 'idjurnal.my.id'
-      || h === 'idjurnal.web.id' || h === 'idjurnal.biz.id'
-      || h === 'demo.jurnal.cc.cd'
-  })()
 
   const handleDemo = async (role: string) => {
     setError('')

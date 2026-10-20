@@ -6,6 +6,7 @@ import api from '../../services/api'
 import ResponsiveTable from '../../components/ui/ResponsiveTable'
 import FinanceExcelPanel from '../../components/FinanceExcelPanel'
 import QrisPayModal, { type QrisTarget } from '../../components/QrisPayModal'
+import MonthFilter from '../../components/MonthFilter'
 
 interface Tagihan {
   id: string; siswa_id: string; siswa_nama: string; nis: string
@@ -117,11 +118,20 @@ export default function TagihanPage() {
   const [editTagihan, setEditTagihan] = useState<Tagihan | null>(null)
   const [editTagihanForm, setEditTagihanForm] = useState({ nominal: 0, keterangan: '' })
   const [qris, setQris] = useState<QrisTarget | null>(null)
+  // Filter periode tagihan. Dua dasar karena bendahara menanyakan dua hal
+  // berbeda: "tagihan bulan apa" (periode tagihan) dan "uang masuk bulan apa"
+  // (tanggal bayar). Tanpa pemisahan ini, laporan kas selalu salah satu.
+  const [bulan, setBulan] = useState('')
+  const [dasarBulan, setDasarBulan] = useState<'tagihan' | 'bayar'>('tagihan')
 
   const fetchData = async () => {
     try {
       const params: any = {}
       if (filter) params.status = filter
+      if (bulan) {
+        if (dasarBulan === 'tagihan') params.bulan = bulan
+        else params.bulan_bayar = bulan
+      }
       const [res, rombelRes, jenisRes] = await Promise.all([
         api.get('/tagihan', { params }),
         api.get('/rombel'),
@@ -132,7 +142,7 @@ export default function TagihanPage() {
     finally { setLoading(false) }
   }
 
-  useEffect(() => { fetchData() }, [filter])
+  useEffect(() => { fetchData() }, [filter, bulan, dasarBulan]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const filtered = data.filter(t =>
     t.siswa_nama?.toLowerCase().includes(search.toLowerCase()) ||
@@ -258,15 +268,36 @@ export default function TagihanPage() {
         </div>
       </div>
 
-      <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100 flex flex-col sm:flex-row gap-3">
-        <div className="relative flex-1">
-          <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-          <input type="text" placeholder="Cari siswa..." value={search} onChange={e => setSearch(e.target.value)} className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg text-sm" />
+      <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100 flex flex-col gap-3">
+        <div className="flex flex-col sm:flex-row gap-3">
+          <div className="relative flex-1">
+            <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+            <input type="text" placeholder="Cari siswa..." value={search} onChange={e => setSearch(e.target.value)} className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg text-sm" />
+          </div>
+          <div className="flex gap-2">
+            <button onClick={() => setFilter('')} className={'px-3 py-2 rounded-lg text-sm ' + (!filter ? 'bg-primary text-white' : 'bg-gray-100 text-gray-600')}>Semua</button>
+            <button onClick={() => setFilter('belum_bayar')} className={'px-3 py-2 rounded-lg text-sm ' + (filter === 'belum_bayar' ? 'bg-red-600 text-white' : 'bg-gray-100 text-gray-600')}>Belum Bayar</button>
+            <button onClick={() => setFilter('lunas')} className={'px-3 py-2 rounded-lg text-sm ' + (filter === 'lunas' ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-600')}>Lunas</button>
+          </div>
         </div>
-        <div className="flex gap-2">
-          <button onClick={() => setFilter('')} className={'px-3 py-2 rounded-lg text-sm ' + (!filter ? 'bg-primary text-white' : 'bg-gray-100 text-gray-600')}>Semua</button>
-          <button onClick={() => setFilter('belum_bayar')} className={'px-3 py-2 rounded-lg text-sm ' + (filter === 'belum_bayar' ? 'bg-red-600 text-white' : 'bg-gray-100 text-gray-600')}>Belum Bayar</button>
-          <button onClick={() => setFilter('lunas')} className={'px-3 py-2 rounded-lg text-sm ' + (filter === 'lunas' ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-600')}>Lunas</button>
+        {/* Baris periode: bulan + dasar perhitungan. */}
+        <div className="flex flex-wrap items-center gap-2 border-t border-gray-100 pt-3">
+          <MonthFilter nilai={bulan} onUbah={setBulan} label="Bulan tagihan" />
+          <div className="inline-flex overflow-hidden rounded-xl border border-gray-200 text-xs">
+            <button
+              onClick={() => setDasarBulan('tagihan')}
+              className={'px-3 py-2 font-semibold ' + (dasarBulan === 'tagihan' ? 'bg-primary text-white' : 'bg-white text-gray-600')}
+              title="Tagihan yang diterbitkan untuk bulan tersebut"
+            >Bulan tagihan</button>
+            <button
+              onClick={() => setDasarBulan('bayar')}
+              className={'px-3 py-2 font-semibold ' + (dasarBulan === 'bayar' ? 'bg-primary text-white' : 'bg-white text-gray-600')}
+              title="Tagihan yang dibayar pada bulan tersebut, termasuk tunggakan bulan lalu"
+            >Bulan bayar</button>
+          </div>
+          <span className="text-xs text-gray-400">
+            {!bulan ? 'Seluruh periode' : dasarBulan === 'tagihan' ? 'Tagihan terbit pada bulan itu' : 'Uang masuk pada bulan itu'}
+          </span>
         </div>
       </div>
 

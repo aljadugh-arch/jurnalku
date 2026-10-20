@@ -349,7 +349,7 @@ function buatLayananPpdb(db, { logger = console } = {}) {
           alamat_ortu,nama_ayah,kerja_ayah,nama_ibu,kerja_ibu,nama_wali,kerja_wali,
           asal_sekolah,rombel_id,status)
         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,'aktif')`).run(
-        siswaId, tenantId, nis, p.nisn || null, p.nik || null, p.nama, p.nama_panggilan || null, p.jenis_kelamin,
+        siswaId, tenantId, String(nis ?? '').replace(/^['\u2018\u2019\u02BC\u0060]+/, '').trim(), p.nisn || null, p.nik || null, p.nama, p.nama_panggilan || null, p.jenis_kelamin,
         p.tempat_lahir || null, p.tanggal_lahir || null, p.alamat || null,
         p.no_hp_ortu || p.no_hp || null, p.nama_ortu || null,
         p.agama || null, p.status_keluarga || null, p.anak_ke || null,

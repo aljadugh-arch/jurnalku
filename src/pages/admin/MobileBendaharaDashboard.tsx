@@ -5,12 +5,19 @@ import {
 } from 'lucide-react'
 import MobileDashboardHeader from '../../components/MobileDashboardHeader'
 import JadwalSholatCard from '../../components/JadwalSholatCard'
+import MonthFilter, { labelBulan } from '../../components/MonthFilter'
 
 type BendaharaData = {
   tagihan_belum?: { jumlah?: number; nominal?: number }
   lunas_bulan_ini?: { jumlah?: number; nominal?: number }
   saldo_tabungan?: number
   siswa_aktif?: number
+  tabungan_setor?: { jumlah?: number; total?: number }
+  tabungan_tarik?: { jumlah?: number; total?: number }
+  kas_masuk?: number
+  kas_keluar?: number
+  tagihan_bulan_ini?: { jumlah?: number; nominal?: number; terbayar?: number }
+  bulan_tersedia?: string[]
 }
 
 const rupiah = (value: number) => new Intl.NumberFormat('id-ID', {
@@ -26,12 +33,13 @@ const quickMenus = [
   { label: 'Data Siswa', path: '/admin/siswa', icon: Landmark, tile: 'bg-rose-500', bg: 'bg-rose-50' },
 ]
 
-export default function MobileBendaharaDashboard({ data }: { data: BendaharaData | null }) {
+export default function MobileBendaharaDashboard({ data, bulan, onUbahBulan }: { data: BendaharaData | null; bulan?: string; onUbahBulan?: (b: string) => void }) {
   const navigate = useNavigate()
   const paid = Number(data?.lunas_bulan_ini?.jumlah || 0)
   const unpaid = Number(data?.tagihan_belum?.jumlah || 0)
   const totalBills = paid + unpaid
   const paidPercent = totalBills ? Math.round((paid / totalBills) * 100) : 0
+  const judulPeriode = bulan ? labelBulan(bulan) : 'Semua periode'
 
   return (
     <div className="min-h-[100dvh] -mx-4 -mt-3 bg-slate-50 pb-6 dark:bg-gray-950 sm:-mx-6">
@@ -43,23 +51,48 @@ export default function MobileBendaharaDashboard({ data }: { data: BendaharaData
       <div data-mobile-compact-dashboard="true" className="space-y-3 px-4 pt-3">
         {/* ── RINGKASAN KEUANGAN (dulu hero bergradasi; kini kartu senada) ── */}
         <section className="rounded-3xl bg-white p-4 shadow-sm dark:bg-gray-900">
-          <div className="mb-3">
-            <h2 className="flex items-center gap-2 text-sm font-bold text-slate-900 dark:text-white">
-              <Target size={16} className="shrink-0 text-emerald-600" />
-              Ringkasan Keuangan Hari Ini
-            </h2>
-            <p className="mt-0.5 break-words text-[11px] text-slate-400">Pantau tagihan, tabungan, dan kas sekolah dari sini.</p>
+          <div className="mb-3 flex flex-wrap items-start justify-between gap-2">
+            <div className="min-w-0">
+              <h2 className="flex items-center gap-2 text-sm font-bold text-slate-900 dark:text-white">
+                <Target size={16} className="shrink-0 text-emerald-600" />
+                Ringkasan Keuangan
+              </h2>
+              <p className="mt-0.5 break-words text-[11px] text-slate-400">{judulPeriode} · pantau tagihan, tabungan, dan kas sekolah.</p>
+            </div>
+            {onUbahBulan && (
+              <MonthFilter
+                nilai={bulan || ''}
+                onUbah={onUbahBulan}
+                tersedia={data?.bulan_tersedia}
+                label="Bulan dashboard"
+                className="[&_label]:px-2.5 [&_label]:py-1.5 [&_select]:text-xs"
+              />
+            )}
           </div>
           <div className="grid grid-cols-2 gap-3">
             <button onClick={() => navigate('/admin/tagihan')} className="rounded-2xl bg-emerald-50 p-3 text-left active:scale-[.98] transition dark:bg-emerald-500/10">
               <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15"><WalletCards size={18} /></span>
               <p className="mt-2 text-[10px] font-medium uppercase tracking-wide text-slate-400">Pendapatan</p>
               <p className="mt-0.5 break-words text-sm font-bold text-slate-900 dark:text-white">{rupiah(Number(data?.lunas_bulan_ini?.nominal || 0))}</p>
+              <p className="mt-0.5 break-words text-[10px] text-slate-400">{data?.lunas_bulan_ini?.jumlah || 0} pembayaran</p>
             </button>
             <button onClick={() => navigate('/admin/tabungan')} className="rounded-2xl bg-blue-50 p-3 text-left active:scale-[.98] transition dark:bg-blue-500/10">
               <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-blue-100 text-blue-700 dark:bg-blue-500/15"><PiggyBank size={18} /></span>
               <p className="mt-2 text-[10px] font-medium uppercase tracking-wide text-slate-400">Saldo Tabungan</p>
               <p className="mt-0.5 break-words text-sm font-bold text-slate-900 dark:text-white">{rupiah(Number(data?.saldo_tabungan || 0))}</p>
+              <p className="mt-0.5 break-words text-[10px] text-slate-400">posisi terkini</p>
+            </button>
+            <button onClick={() => navigate('/admin/tabungan')} className="rounded-2xl bg-teal-50 p-3 text-left active:scale-[.98] transition dark:bg-teal-500/10">
+              <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-teal-100 text-teal-700 dark:bg-teal-500/15"><ArrowDownLeft size={18} /></span>
+              <p className="mt-2 text-[10px] font-medium uppercase tracking-wide text-slate-400">Tabungan Masuk</p>
+              <p className="mt-0.5 break-words text-sm font-bold text-slate-900 dark:text-white">{rupiah(Number(data?.tabungan_setor?.total || 0))}</p>
+              <p className="mt-0.5 break-words text-[10px] text-slate-400">{data?.tabungan_setor?.jumlah || 0} setoran</p>
+            </button>
+            <button onClick={() => navigate('/admin/tabungan')} className="rounded-2xl bg-rose-50 p-3 text-left active:scale-[.98] transition dark:bg-rose-500/10">
+              <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-rose-100 text-rose-700 dark:bg-rose-500/15"><ArrowUpRight size={18} /></span>
+              <p className="mt-2 text-[10px] font-medium uppercase tracking-wide text-slate-400">Tabungan Keluar</p>
+              <p className="mt-0.5 break-words text-sm font-bold text-slate-900 dark:text-white">{rupiah(Number(data?.tabungan_tarik?.total || 0))}</p>
+              <p className="mt-0.5 break-words text-[10px] text-slate-400">{data?.tabungan_tarik?.jumlah || 0} penarikan</p>
             </button>
           </div>
         </section>

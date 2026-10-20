@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { Search, Plus, X, Pencil, Trash2 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import api from '../../services/api'
+import MonthFilter from '../../components/MonthFilter'
 
 interface SaldoSiswa { id: string; nis: string; nisn?: string; nama: string; saldo: number; rombel_nama?: string }
 interface Mutasi { id: string; tanggal: string; tipe: string; nominal: number; saldo_akhir: number; keterangan: string }
@@ -16,6 +17,12 @@ export default function TabunganPage() {
   const [trxForm, setTrxForm] = useState({ siswa_id: '', tipe: 'setor', nominal: 0, keterangan: '' })
   const [editMutasi, setEditMutasi] = useState<Mutasi | null>(null)
   const [editForm, setEditForm] = useState({ nominal: 0, tipe: 'setor', keterangan: '' })
+  // Riwayat mutasi per siswa difilter per bulan. Saldo siswa TIDAK ikut
+  // difilter — saldo adalah posisi terkini; yang dilihat per bulan adalah
+  // mutasinya. Ini yang membingungkan sebelumnya: daftar saldo tetap penuh
+  // walau riwayat kosong.
+  const [bulan, setBulan] = useState('')
+  const [ringkasan, setRingkasan] = useState<any>(null)
 
   const fetchSaldo = async () => {
     try { const res = await api.get('/tabungan/saldo'); setSaldoList(res.data) }
@@ -23,7 +30,12 @@ export default function TabunganPage() {
     finally { setLoading(false) }
   }
 
-  useEffect(() => { fetchSaldo() }, [])
+  const fetchRingkasan = async (b: string) => {
+    try { const res = await api.get('/tabungan/ringkasan-bulanan', { params: { bulan: b || undefined } }); setRingkasan(res.data) }
+    catch { setRingkasan(null) }
+  }
+
+  useEffect(() => { fetchSaldo(); fetchRingkasan(bulan) }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const filtered = saldoList.filter(s =>
     s.nama.toLowerCase().includes(search.toLowerCase()) || (s.nis || '').includes(search) || (s.nisn || '').includes(search)
@@ -31,15 +43,22 @@ export default function TabunganPage() {
 
   const totalSaldo = saldoList.reduce((t, s) => t + s.saldo, 0)
 
-  const handleSelectSiswa = async (siswa: SaldoSiswa) => {
+  const handleSelectSiswa = async (siswa: SaldoSiswa, bulanPilihan = bulan) => {
     setSelectedSiswa(siswa)
     setTrxForm(prev => ({ ...prev, siswa_id: siswa.id }))
-    try { const res = await api.get('/tabungan', { params: { siswa_id: siswa.id } }); setMutasi(res.data) }
+    try { const res = await api.get('/tabungan', { params: { siswa_id: siswa.id, bulan: bulanPilihan || undefined } }); setMutasi(res.data) }
     catch { setMutasi([]) }
+  }
+
+  const gantiBulan = (b: string) => {
+    setBulan(b)
+    fetchRingkasan(b)
+    if (selectedSiswa) handleSelectSiswa(selectedSiswa, b)
   }
 
   const reload = () => {
     fetchSaldo()
+    fetchRingkasan(bulan)
     if (selectedSiswa) handleSelectSiswa(selectedSiswa)
   }
 
@@ -90,6 +109,19 @@ export default function TabunganPage() {
         <button onClick={() => setShowTrx(true)} className="flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-lg text-sm hover:bg-primary-dark">
           <Plus size={16} /> Transaksi Baru
         </button>
+      </div>
+
+      {/* Ringkasan bulan terpilih. Saldo total tetap ditampilkan karena itu
+          posisi terkini; setoran/penarikan mengikuti bulan yang dipilih. */}
+      <div className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <MonthFilter nilai={bulan} onUbah={gantiBulan} tersedia={ringkasan?.bulan_tersedia} izinkanSemua label="Bulan mutasi" />
+          <div className="flex flex-wrap items-center gap-4 text-sm">
+            <span className="text-gray-500">Setoran: <b className="text-emerald-600">{fmt(ringkasan?.setor?.total || 0)}</b> <span className="text-xs text-gray-400">({ringkasan?.setor?.jumlah || 0})</span></span>
+            <span className="text-gray-500">Penarikan: <b className="text-rose-600">{fmt(ringkasan?.tarik?.total || 0)}</b> <span className="text-xs text-gray-400">({ringkasan?.tarik?.jumlah || 0})</span></span>
+            <span className="text-gray-500">Penabung: <b className="text-gray-700">{ringkasan?.penabung || 0} siswa</b></span>
+          </div>
+        </div>
       </div>
 
       <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
