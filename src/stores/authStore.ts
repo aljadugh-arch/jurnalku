@@ -13,6 +13,8 @@ interface AuthState {
   authError: string | null
   login: (user: User, token: string) => void
   loginWithCredentials: (email: string, password: string) => Promise<void>
+  mintaOtp: (phone: string) => Promise<{ ok: boolean; pesan: string }>
+  loginDenganOtp: (phone: string, code: string) => Promise<void>
   loginDemo: (role: string) => Promise<void>
   logout: () => void
   checkAuth: () => Promise<void>
@@ -39,6 +41,20 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   },
   loginWithCredentials: async (email, password) => {
     const res = await api.post('/auth/login', { email, password })
+    localStorage.setItem('jurnalku_token', res.data.token)
+    sessionStorage.removeItem('jurnalku_token')
+    set({ user: res.data.user, token: res.data.token, isAuthenticated: true, authReady: true })
+    await useSettingsStore.getState().loadSettings()
+  },
+  // Wali murid: kode 6 digit dikirim ke WhatsApp nomor yang terdaftar.
+  // Sandi tidak dipakai di jalur ini, sehingga tidak ada angka yang bisa
+  // ditebak dari nomor telepon.
+  mintaOtp: async (phone) => {
+    const res = await api.post('/auth/otp/request', { phone })
+    return { ok: Boolean(res.data?.ok), pesan: String(res.data?.pesan || 'Kode dikirim.') }
+  },
+  loginDenganOtp: async (phone, code) => {
+    const res = await api.post('/auth/otp/verify', { phone, code })
     localStorage.setItem('jurnalku_token', res.data.token)
     sessionStorage.removeItem('jurnalku_token')
     set({ user: res.data.user, token: res.data.token, isAuthenticated: true, authReady: true })

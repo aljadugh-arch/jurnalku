@@ -31,6 +31,16 @@ api.interceptors.response.use(
       sessionStorage.removeItem('jurnalku_token')
       window.location.href = '/login'
     }
+    // Lembaga dinonaktifkan saat pengguna masih punya sesi: akhiri sesi dan
+    // tampilkan alasan. Tanpa ini pengguna hanya melihat halaman kosong tanpa
+    // penjelasan, dan tokennya terus mencoba memanggil API yang menolak.
+    if (err.response?.status === 403 && err.response?.data?.code === 'TENANT_INACTIVE') {
+      localStorage.removeItem('jurnalku_token')
+      sessionStorage.removeItem('jurnalku_token')
+      if (!window.location.pathname.startsWith('/login')) {
+        window.location.href = '/login?alasan=lembaga-nonaktif'
+      }
+    }
     return Promise.reject(err)
   }
 )

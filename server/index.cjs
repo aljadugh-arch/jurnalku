@@ -2168,6 +2168,23 @@ function authMiddleware(req, res, next) {
     // Override tenantId from JWT if present (user's actual tenant)
     if (req.user.tenant_id) req.tenantId = req.user.tenant_id
 
+    // Lembaga yang dinonaktifkan harus langsung kehilangan akses API, termasuk
+    // lewat token yang sudah diterbitkan sebelumnya. Tanpa pemeriksaan ini,
+    // menonaktifkan lembaga hanya menyembunyikan halaman depannya — API-nya
+    // tetap melayani data penuh sampai token kedaluwarsa.
+    // super_admin dikecualikan: ia harus tetap bisa mengelola lembaga itu.
+    if (req.user.role !== 'super_admin') {
+      try {
+        const t = db.prepare('SELECT aktif FROM tenants WHERE id=?').get(req.tenantId)
+        if (t && Number(t.aktif) !== 1) {
+          return res.status(403).json({
+            error: 'Lembaga ini sedang tidak aktif. Hubungi penyedia layanan.',
+            code: 'TENANT_INACTIVE',
+          })
+        }
+      } catch { /* biarkan lewat bila tabel tidak tersedia (mis. fixture tes) */ }
+    }
+
     // Enforce wajib ganti password jika user masih punya flag must_change_password=1.
     // Boleh akses endpoint khusus tanpa harus ganti dulu:
     // - /api/auth/me              (cek sesi)
@@ -2205,6 +2222,19 @@ function requireRole(...roles) {
     }
     if (!roles.includes(req.user.role)) {
       return res.status(403).json({ error: 'Akses ditolak: role tidak berwenang' })
+    }
+    // Sama seperti authMiddleware: lembaga nonaktif tidak boleh mengakses API
+    // lewat token lama. super_admin tetap boleh (untuk mengelola).
+    if (req.user.role !== 'super_admin') {
+      try {
+        const t = db.prepare('SELECT aktif FROM tenants WHERE id=?').get(req.tenantId)
+        if (t && Number(t.aktif) !== 1) {
+          return res.status(403).json({
+            error: 'Lembaga ini sedang tidak aktif. Hubungi penyedia layanan.',
+            code: 'TENANT_INACTIVE',
+          })
+        }
+      } catch { /* abaikan */ }
     }
     next()
   }
@@ -3308,6 +3338,16 @@ app.post('/api/auth/login', authLimiter, loginAccountLimiter, (req, res) => {
     try { req.tenantId = tenantDariHost(hostPermintaan(req)) } catch { req.tenantId = null }
   }
   let tenantId = req.tenantId || 'default'
+  // Lembaga nonaktif tidak boleh meloloskan login, meski akun dan sandinya benar.
+  try {
+    const t = db.prepare('SELECT aktif FROM tenants WHERE id=?').get(tenantId)
+    if (t && Number(t.aktif) !== 1) {
+      return res.status(403).json({
+        error: 'Lembaga ini sedang tidak aktif. Hubungi penyedia layanan.',
+        code: 'TENANT_INACTIVE',
+      })
+    }
+  } catch { /* abaikan */ }
   const ident = String(email).trim()
   const identLower = ident.toLowerCase()
   // 1) Email langsung. WAJIB dibatasi tenant.
@@ -11503,6 +11543,11 @@ app.post('/api/broadcast/quick', ADMIN, async (req, res) => {
 
 // Multi-tenant management routes
 registerTenantRoutes(app, db, authMiddleware, uuidv4, requireRole('super_admin'))
+
+// Login wali lewat OTP WhatsApp (lihat server/otp-login.cjs).
+require('./otp-login.cjs').daftarkanRouteOtp(app, {
+  db, waQueue, jwt, JWT_SECRET, JWT_EXPIRES_IN, authLimiter,
+})
 // Catatan: route /api/tenants* didefinisikan di server/tenant.cjs
 // lewat registerTenantRoutes() (di atas). Handler duplikat yang dulunya
 // ada di sini (versi inline yang tidak memvalidasi slug dan hardcode

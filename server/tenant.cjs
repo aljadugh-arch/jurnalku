@@ -217,6 +217,51 @@ function tenantMiddleware(db) {
       } catch { /* biarkan jatuh ke default */ }
     }
 
+    // 2c. Host milik lembaga yang DINONAKTIFKAN harus ditolak tegas.
+    //
+    // Tanpa cabang ini, query di atas (yang selalu menyaring `aktif=1`) tidak
+    // menemukan apa pun, lalu kode jatuh ke tenant `default`. Akibatnya lembaga
+    // nonaktif tidak diblokir — ia diam-diam berubah menjadi "platform", dan
+    // subdomainnya tetap menjawab 200. Nonaktif harus berarti TERTUTUP.
+    if (!tenant) {
+      const hostBersih = host.replace(/\.$/, '')
+      let mati = db.prepare("SELECT * FROM tenants WHERE COALESCE(aktif,1)<>1 AND lower(trim(domain_custom,'.'))=?").get(hostBersih)
+      if (!mati) {
+        const mb = BASE_DOMAINS.find(bd => hostBersih.endsWith('.' + bd))
+        if (mb) {
+          const slugMati = hostBersih.slice(0, -(mb.length + 1))
+          if (slugMati && slugMati !== 'www') {
+            mati = db.prepare('SELECT * FROM tenants WHERE COALESCE(aktif,1)<>1 AND slug=?').get(slugMati)
+          }
+        }
+      }
+      if (!mati && !canonicalHost) {
+        try {
+          const q = db.prepare("SELECT * FROM tenants WHERE COALESCE(aktif,1)<>1 AND lower(trim(base_domain,'.'))=?")
+          const rows = typeof q.all === 'function' ? q.all(hostBersih) : []
+          if (rows.length === 1) mati = rows[0]
+        } catch { /* abaikan */ }
+      }
+      if (mati) {
+        req.tenantNonaktif = mati
+        if (req.path.startsWith('/api')) {
+          return res.status(403).json({
+            error: 'Lembaga ini sedang tidak aktif. Hubungi penyedia layanan.',
+            code: 'TENANT_INACTIVE',
+          })
+        }
+        res.status(403).type('html').send(`<!DOCTYPE html><html lang="id"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>Lembaga Tidak Aktif</title>
+<style>body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;background:#f8fafc;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;color:#334155}
+.box{max-width:420px;padding:32px;text-align:center}.ic{font-size:44px;line-height:1}h1{font-size:19px;margin:14px 0 8px}
+p{font-size:14px;color:#64748b;line-height:1.6;margin:0}</style></head><body><div class="box">
+<div class="ic">🔒</div><h1>Lembaga Tidak Aktif</h1>
+<p>Akses untuk lembaga ini sedang dinonaktifkan. Silakan hubungi penyedia layanan JURNALKU apabila Anda merasa ini sebuah kekeliruan.</p>
+</div></body></html>`)
+        return
+      }
+    }
+
     // 3. Fallback to default tenant (main domain, localhost, or an unknown host)
     if (!tenant) {
       tenant = db.prepare('SELECT * FROM tenants WHERE id = ?').get('default')

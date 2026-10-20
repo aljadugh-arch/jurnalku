@@ -39,10 +39,23 @@ export default function LoginPage() {
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState('')
+  // Kalau sesi berakhir karena lembaga dinonaktifkan, jelaskan alasannya di
+  // halaman login — jangan biarkan pengguna mengira aplikasinya rusak.
+  useEffect(() => {
+    const alasan = new URLSearchParams(window.location.search).get('alasan')
+    if (alasan === 'lembaga-nonaktif') {
+      setError('Lembaga ini sedang tidak aktif. Hubungi penyedia layanan apabila Anda merasa ini sebuah kekeliruan.')
+    }
+  }, [])
   const [loading, setLoading] = useState(false)
+  // Login wali tanpa sandi: kode 6 digit dikirim ke WhatsApp nomor terdaftar.
+  const [mode, setMode] = useState<'sandi' | 'otp'>('sandi')
+  const [otpTerkirim, setOtpTerkirim] = useState(false)
+  const [kode, setKode] = useState('')
+  const [info, setInfo] = useState('')
   const demoRef = useRef<HTMLDivElement>(null)
   const navigate = useNavigate()
-  const { loginWithCredentials, loginDemo, isAuthenticated, user, authReady } = useAuthStore()
+  const { loginWithCredentials, loginDemo, mintaOtp, loginDenganOtp, isAuthenticated, user, authReady } = useAuthStore()
 
   // Panel demo HANYA ditampilkan kalau SERVER membenarkan host ini.
   // Sebelumnya daftar host diduplikasi di sini, dan keduanya melenceng:
@@ -95,6 +108,29 @@ export default function LoginPage() {
     } finally { setLoading(false) }
   }
 
+  const handleMintaOtp = async () => {
+    setError(''); setInfo(''); setLoading(true)
+    try {
+      const r = await mintaOtp(email)
+      setOtpTerkirim(true)
+      setInfo(r.pesan)
+    } catch (err: any) {
+      setError(err.response?.data?.error || 'Gagal mengirim kode. Coba lagi.')
+    } finally { setLoading(false) }
+  }
+
+  const handleVerifikasiOtp = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setError(''); setLoading(true)
+    try {
+      await loginDenganOtp(email, kode)
+      const u = useAuthStore.getState().user
+      navigate(getRedirectPath(u?.role || 'wali_murid'))
+    } catch (err: any) {
+      setError(err.response?.data?.error || 'Kode salah atau sudah kedaluwarsa.')
+    } finally { setLoading(false) }
+  }
+
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
     setError('')
@@ -144,6 +180,103 @@ export default function LoginPage() {
             </div>
           )}
 
+          {/* Pilihan cara masuk. Wali murid memakai OTP karena sandi bawaan
+              mereka adalah 6 digit terakhir nomor WA — angka yang mudah
+              ditebak siapa pun yang tahu nomornya. */}
+          <div className="mb-4 grid grid-cols-2 gap-1 rounded-xl bg-slate-100 p-1 dark:bg-gray-800">
+            {([['sandi', 'Email / NIS'], ['otp', 'Nomor WA (OTP)']] as const).map(([id, label]) => (
+              <button
+                key={id}
+                type="button"
+                onClick={() => { setMode(id); setError(''); setInfo(''); setOtpTerkirim(false); setKode('') }}
+                className={`rounded-lg py-2 text-xs font-semibold transition ${
+                  mode === id
+                    ? 'bg-white text-primary shadow-sm dark:bg-gray-900'
+                    : 'text-slate-500 hover:text-slate-700 dark:text-gray-400'
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+
+          {info && (
+            <div className="mb-4 rounded-xl border border-sky-100 bg-sky-50 px-4 py-3 text-xs font-medium text-sky-700 dark:border-sky-900 dark:bg-sky-950/40 dark:text-sky-400">
+              {info}
+            </div>
+          )}
+
+          {mode === 'otp' ? (
+            <form onSubmit={handleVerifikasiOtp} className="space-y-3.5">
+              <div>
+                <label htmlFor="otp-phone" className="mb-1.5 block text-xs font-semibold text-slate-600 dark:text-gray-300">
+                  Nomor WhatsApp Orang Tua / Wali
+                </label>
+                <input
+                  id="otp-phone"
+                  type="tel"
+                  inputMode="tel"
+                  autoComplete="tel"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="08xxxxxxxxxx"
+                  className={inputClass}
+                />
+                <p className="mt-1.5 text-[11px] leading-snug text-slate-400">
+                  Gunakan nomor yang terdaftar di sekolah. Kode dikirim ke WhatsApp nomor ini.
+                </p>
+              </div>
+
+              {otpTerkirim && (
+                <div>
+                  <label htmlFor="otp-code" className="mb-1.5 block text-xs font-semibold text-slate-600 dark:text-gray-300">
+                    Kode 6 Digit
+                  </label>
+                  <input
+                    id="otp-code"
+                    type="text"
+                    inputMode="numeric"
+                    autoComplete="one-time-code"
+                    maxLength={6}
+                    value={kode}
+                    onChange={(e) => setKode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                    placeholder="000000"
+                    className={`${inputClass} text-center text-lg font-bold tracking-[0.5em]`}
+                  />
+                </div>
+              )}
+
+              {otpTerkirim ? (
+                <button
+                  type="submit"
+                  disabled={loading || kode.length !== 6}
+                  className="flex w-full items-center justify-center gap-2 rounded-xl bg-primary py-3 text-sm font-bold text-white shadow-sm transition-all hover:opacity-95 active:scale-[.99] disabled:opacity-50"
+                >
+                  {loading ? 'Memeriksa...' : (<>Masuk <ArrowRight size={16} /></>)}
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => void handleMintaOtp()}
+                  disabled={loading || email.trim().length < 9}
+                  className="flex w-full items-center justify-center gap-2 rounded-xl bg-primary py-3 text-sm font-bold text-white shadow-sm transition-all hover:opacity-95 active:scale-[.99] disabled:opacity-50"
+                >
+                  {loading ? 'Mengirim...' : 'Kirim Kode ke WhatsApp'}
+                </button>
+              )}
+
+              {otpTerkirim && (
+                <button
+                  type="button"
+                  onClick={() => void handleMintaOtp()}
+                  disabled={loading}
+                  className="w-full text-center text-[11px] font-semibold text-primary hover:underline disabled:opacity-50"
+                >
+                  Kirim ulang kode
+                </button>
+              )}
+            </form>
+          ) : (
           <form onSubmit={handleLogin} className="space-y-3.5">
             <div>
               <label htmlFor="login-identifier" className="mb-1.5 block text-xs font-semibold text-slate-600 dark:text-gray-300">
@@ -194,6 +327,7 @@ export default function LoginPage() {
               {loading ? 'Memproses...' : (<>Masuk <ArrowRight size={16} /></>)}
             </button>
           </form>
+          )}
 
           <p className="mt-3 text-[11px] leading-snug text-slate-400">
             Username dan password awal siswa menggunakan NISN, atau NIS jika NISN belum tersedia.
