@@ -50,6 +50,7 @@ const RekapAbsensiPage = lazy(() => import('./pages/admin/RekapAbsensiPage'))
 const NotifSettingsPage = lazy(() => import('./pages/admin/NotifSettingsPage'))
 const TenantManagementPage = lazy(() => import('./pages/admin/TenantManagementPage'))
 const RaporPage = lazy(() => import('./pages/admin/RaporPage'))
+const CetakRaporPage = lazy(() => import('./pages/admin/CetakRaporPage'))
 const UserManagementPage = lazy(() => import('./pages/admin/UserManagementPage'))
 const PostingPage = lazy(() => import('./pages/admin/PostingPage'))
 const CatatanKepribadianPage = lazy(() => import('./pages/admin/CatatanKepribadianPage'))
@@ -265,6 +266,7 @@ export default function App() {
             <ProtectedRoute allowedRoles={['admin', 'super_admin', 'operator']}><PanduanAbsensiAlatPage /></ProtectedRoute>
           } />
           <Route path="rapor" element={<RaporPage />} />
+          <Route path="cetak-rapor" element={<CetakRaporPage />} />
           <Route path="nilai-ledger" element={
             <ProtectedRoute allowedRoles={['admin', 'super_admin']}><GuruNilaiLedgerPage /></ProtectedRoute>
           } />

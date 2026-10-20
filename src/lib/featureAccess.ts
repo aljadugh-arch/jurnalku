@@ -11,7 +11,7 @@ const rules: [FeatureKey, string[]][] = [
   ['jadwal', ['/admin/jadwal', '/admin/pengajar', '/admin/wali-kelas', '/admin/kalender-kbm', '/guru/jadwal']],
   ['absensi', ['/admin/absensi', '/admin/absensi-siswa', '/admin/absensi-qr-siswa', '/admin/absensi-guru', '/admin/absensi-ekskul', '/admin/absensi-jamaah', '/admin/absensi-kokurikuler', '/admin/absensi-kegiatan', '/admin/rekap-absensi', '/admin/ceklok', '/admin/ekskul', '/admin/rfid', '/admin/panduan-absensi-alat', '/guru/absensi', '/guru/absensi-siswa', '/guru/absensi-mapel', '/guru/absensi-ekskul', '/siswa/absensi', '/siswa/ekskul']],
   ['jurnal', ['/admin/jurnal', '/guru/jurnal']],
-  ['penilaian', ['/admin/rapor', '/admin/catatan-kepribadian', '/admin/supervisi', '/admin/bk', '/guru/penilaian', '/guru/penilaian-harian', '/guru/penilaian-ekskul', '/guru/catatan', '/guru/catatan-kepribadian', '/guru/rekap-nilai', '/guru/nilai-sts', '/guru/nilai-sas', '/guru/koreksi-jawaban', '/siswa/nilai']],
+  ['penilaian', ['/admin/rapor', '/admin/cetak-rapor', '/admin/catatan-kepribadian', '/admin/supervisi', '/admin/bk', '/guru/penilaian', '/guru/penilaian-harian', '/guru/penilaian-ekskul', '/guru/catatan', '/guru/catatan-kepribadian', '/guru/rekap-nilai', '/guru/nilai-sts', '/guru/nilai-sas', '/guru/koreksi-jawaban', '/siswa/nilai']],
   ['keuangan', ['/admin/tagihan', '/admin/tabungan', '/admin/bendahara', '/admin/beasiswa', '/admin/cashless', '/admin/payment-gateway', '/admin/buku-kas', '/admin/laporan-keuangan']],
   ['whatsapp', ['/admin/broadcast', '/admin/wa-gateway', '/admin/notif-settings']],
   ['posting', ['/admin/posting', '/guru/posting', '/siswa/posting']],

@@ -3,7 +3,8 @@ import {
   ClipboardList, UserCheck, QrCode, MapPin,
   Layers, Activity, Globe, Sparkles, DollarSign, Settings, MessageSquare,
   FileText, ClipboardCheck, ScrollText, School, Wallet, Receipt, DatabaseBackup, Code2, ScanText,
-  FileQuestion, Monitor, Star, Building2, CreditCard, Database, Mail, HeartHandshake, ArrowRightLeft, Library, Calculator, BookOpenCheck
+  FileQuestion, Monitor, Star, Building2, CreditCard, Database, Mail, HeartHandshake, ArrowRightLeft, Library, Calculator, BookOpenCheck,
+  Printer, BookMarked
 } from 'lucide-react'
 
 export interface MenuItem {
@@ -53,6 +54,8 @@ export const adminMenuItems: MenuItem[] = [
   { label: 'Absensi Saya', icon: <UserCheck size={20} />, path: '/admin/absensi-saya' },
   { label: 'Jurnal Mengajar', icon: <ClipboardList size={20} />, path: '/admin/jurnal' },
   { label: 'Rapor Siswa', icon: <FileText size={20} />, path: '/admin/rapor' },
+  { label: 'Cetak & Ekspor Rapor', icon: <Printer size={20} />, path: '/admin/cetak-rapor' },
+  { label: 'Buku Induk', icon: <BookMarked size={20} />, path: '/admin/cetak-rapor#buku-induk' },
   { label: 'Ledger Nilai', icon: <ClipboardCheck size={20} />, path: '/admin/nilai-ledger' },
   { label: 'Rekap Nilai per Mapel', icon: <ClipboardCheck size={20} />, path: '/admin/rekap-nilai' },
   {
@@ -198,6 +201,8 @@ export const kepalaMenuItems: MenuItem[] = [
   { label: 'PPDB', icon: <ClipboardList size={20} />, path: '/admin/ppdb' },
   { label: 'Data GTK', icon: <Users size={20} />, path: '/admin/gtk' },
   { label: 'Rapor Siswa', icon: <FileText size={20} />, path: '/admin/rapor' },
+  { label: 'Cetak & Ekspor Rapor', icon: <Printer size={20} />, path: '/admin/cetak-rapor' },
+  { label: 'Buku Induk', icon: <BookMarked size={20} />, path: '/admin/cetak-rapor#buku-induk' },
   { label: 'Catatan Kepribadian', icon: <ScrollText size={20} />, path: '/admin/catatan-kepribadian' },
   { label: 'Bimbingan Konseling', icon: <HeartHandshake size={20} />, path: '/admin/bk' },
   { label: 'Rombongan Belajar', icon: <Layers size={20} />, path: '/admin/rombel' },
