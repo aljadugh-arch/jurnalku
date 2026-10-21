@@ -13,6 +13,7 @@
 
 const BASE_DOMAIN = process.env.BASE_DOMAIN || 'jurnal.cc.cd'
 const customDomain = require('./custom-domain.cjs')
+const bcrypt = require('bcryptjs')
 // Platform menerima registrasi/subdomain di lebih dari satu domain kanonik yang
 // berbagi satu database tenant. Daftar ini menentukan domain mana yang SAH
 // sebagai basis subdomain-per-tenant (mis. slug.<domain>).
@@ -351,7 +352,6 @@ function registerTenantRoutes(app, db, authMiddleware, uuidv4, SUPER) {
     // Create default admin user for tenant.
     // Catatan: must_change_password=1 agar user dipaksa ganti password
     // pada login pertama. Middleware akan mencekal API lain sampai diganti.
-    const bcrypt = require('bcryptjs')
     const adminId = uuidv4()
     const adminEmail = email || `admin@${slug}.${baseDomain}`
     // Generate password acak (16 char base64) supaya admin pertama tidak
@@ -534,7 +534,53 @@ function registerTenantRoutes(app, db, authMiddleware, uuidv4, SUPER) {
     }
   })
 
-  // Get only public fields from the tenant already resolved by tenantMiddleware.
+// Reset sandi pengguna lembaga oleh super_admin.
+//
+// Kenapa perlu: /api/auth/forgot-password hanya SIMULASI (tidak mengirim email),
+// sehingga pengguna yang lupa sandi — termasuk kepala madrasah — tidak punya
+// jalan pulih sama sekali. Superadmin harus bisa menetapkan sandi sementara,
+// lalu pengguna dipaksa menggantinya saat login pertama.
+app.post('/api/superadmin/reset-sandi', authMiddleware, (req, res) => {
+  if (req.user.role !== 'super_admin') return res.status(403).json({ error: 'Khusus super admin' })
+  const tenantId = String(req.body?.tenant_id || '').trim()
+  const userId = String(req.body?.user_id || '').trim()
+  const sandiBaru = String(req.body?.sandi || '').trim()
+  if (!tenantId || !userId) return res.status(400).json({ error: 'tenant_id dan user_id wajib diisi' })
+  if (sandiBaru.length < 6) return res.status(400).json({ error: 'Sandi minimal 6 karakter' })
+
+  const t = db.prepare('SELECT id,slug,nama FROM tenants WHERE id=?').get(tenantId)
+  if (!t) return res.status(404).json({ error: 'Lembaga tidak ditemukan' })
+  const u = db.prepare('SELECT id,nama,email,role FROM users WHERE id=? AND tenant_id=?').get(userId, tenantId)
+  if (!u) return res.status(404).json({ error: 'Pengguna tidak ditemukan di lembaga ini' })
+  if (u.role === 'super_admin') return res.status(403).json({ error: 'Tidak bisa mengubah super admin' })
+
+  const hash = bcrypt.hashSync(sandiBaru, 10)
+  // must_change_password=1 memaksa pengguna mengganti sandi setelah masuk,
+  // supaya sandi sementara ini tidak dipakai selamanya.
+  db.prepare('UPDATE users SET password=?, must_change_password=1 WHERE id=? AND tenant_id=?').run(hash, userId, tenantId)
+  console.log(`[reset-sandi] ${req.user.email || req.user.id} mereset sandi ${u.email || u.nama} (${t.slug})`)
+  res.json({
+    success: true,
+    pengguna: { id: u.id, nama: u.nama, email: u.email, role: u.role },
+    lembaga: { slug: t.slug, nama: t.nama },
+    pesan: 'Sandi sementara aktif. Pengguna wajib menggantinya saat login.',
+  })
+})
+
+// Daftar pengguna satu lembaga untuk dipilih superadmin.
+app.get('/api/superadmin/pengguna', authMiddleware, (req, res) => {
+  if (req.user.role !== 'super_admin') return res.status(403).json({ error: 'Khusus super admin' })
+  const tenantId = String(req.query.tenant_id || '').trim()
+  if (!tenantId) return res.status(400).json({ error: 'tenant_id wajib diisi' })
+  const rows = db.prepare(`SELECT id,nama,email,role,nis,gtk_id,must_change_password
+    FROM users WHERE tenant_id=? ORDER BY
+    CASE role WHEN 'kepala' THEN 0 WHEN 'admin' THEN 1 WHEN 'operator' THEN 2
+              WHEN 'tata_usaha' THEN 3 WHEN 'bendahara' THEN 4 WHEN 'guru' THEN 5 ELSE 9 END, nama`)
+    .all(tenantId)
+  res.json(rows)
+})
+
+// Get only public fields from the tenant already resolved by tenantMiddleware.
   app.get('/api/tenant/info', (req, res) => {
     const resolved = req.tenant || db.prepare('SELECT slug, nama, logo, plan FROM tenants WHERE id = ?').get('default')
     const tenant = resolved

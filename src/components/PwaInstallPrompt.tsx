@@ -58,7 +58,20 @@ export default function PwaInstallPrompt() {
     }
   }, [installing])
 
-  if (!enabled || installed || dismissed || (!deferredPrompt && !isIos)) return null
+  // Prompt install TIDAK lagi bergantung pada `pwa_enabled`.
+  //
+  // `pwa_enabled` hanya mengatur manifest/ikon milik lembaga. Menjadikannya
+  // syarat prompt membuat aplikasi tidak bisa dipasang sama sekali ketika admin
+  // belum menyalakannya — padahal manifest statis (/manifest.json) sudah valid
+  // dan browser sudah mengirim `beforeinstallprompt`. Akibatnya di Android dan
+  // desktop tidak pernah muncul ajakan install.
+  //
+  // Yang tetap dihormati: kalau PWA lembaga memang dinonaktifkan secara sadar
+  // (pwa_enabled === false DAN pwa_name kosong), tombol hanya muncul saat
+  // browser benar-benar menawarkan pemasangan (deferredPrompt tersedia).
+  const bolehTampil = installed || dismissed ? false : Boolean(deferredPrompt) || isIos
+  if (!bolehTampil) return null
+  void enabled
 
   const install = async () => {
     if (!deferredPrompt || installing) return

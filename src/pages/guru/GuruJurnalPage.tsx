@@ -259,9 +259,12 @@ export default function GuruJurnalPage() {
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-1">Jam Ke</label>
-                  <select value={form.jam_ke} onChange={e => setForm({...form, jam_ke: Number(e.target.value)})} className="w-full px-3 py-2 border rounded-lg text-sm">
-                    {[1,2,3,4,5,6,7,8].map(j => <option key={j} value={j}>Jam ke-{j}</option>)}
-                  </select>
+                  {/* Jam ke- TIDAK dipilih manual lagi. Server mengisinya dari
+                      jam_mulai jadwal, dan satu sesi (walau 2 JTM) cukup satu
+                      jurnal — lihat POST /api/jurnal. */}
+                  <div className="w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-500">
+                    Otomatis dari jadwal
+                  </div>
                 </div>
               </div>
               <div>

@@ -8791,6 +8791,55 @@ app.post('/api/jurnal', STAFF, signatureUpload.single('signature'), async (req, 
   }
   if (!guru_id) return res.status(400).json({ error: 'guru_id required' })
   if (!tanggal || !mapel_id || !rombel_id) return res.status(400).json({ error: 'mapel_id, rombel_id, dan tanggal wajib' })
+
+  // ---- Satu jurnal untuk satu SESI, bukan satu jam pelajaran ----
+  //
+  // Guru dengan 2 JTM (dua jam pelajaran berurutan pada mapel & rombel yang
+  // sama) tidak perlu mengisi dua jurnal. Sebelumnya `jam_ke` dipilih manual
+  // 1..8 sehingga guru mengisi jurnal berulang untuk sesi yang sama.
+  //
+  // Aturan: cari jadwal yang cocok pada tanggal itu (mapel+rombel+guru). Bila
+  // ditemukan, `jam_ke` diisi dari jam mulai jadwal dan jurnal yang sudah ada
+  // pada sesi itu TIDAK digandakan.
+  let jamDariJadwal = null
+  let sesiSudahAda = null
+  try {
+    const hari = ['minggu','senin','selasa','rabu','kamis','jumat','sabtu'][new Date(tanggal + 'T12:00:00+07:00').getDay()]
+    const jad = db.prepare(`SELECT id, jam_mulai, jam_selesai FROM jadwal
+      WHERE tenant_id=? AND gtk_id=? AND mapel_id=? AND rombel_id=?
+        AND lower(hari)=? AND jenis_kegiatan='mapel'
+      ORDER BY jam_mulai LIMIT 1`).get(req.tenantId, guru_id, mapel_id, rombel_id, hari)
+    if (jad) {
+      // jam_ke dihitung dari URUTAN slot nyata sekolah, bukan rumus tetap
+      // (menit-420)/40. Rumus tetap meleset begitu ada jam istirahat: jadwal
+      // 08:50-09:30, 09:30-10:10, lalu 10:25-11:05 tidak berjarak 40 menit rata.
+      // Dengan mengambil seluruh jam_mulai pada hari itu lalu mengurutkannya,
+      // "jam ke-" yang tersimpan sama dengan yang dipakai sekolah.
+      const slot = db.prepare(`SELECT DISTINCT jam_mulai FROM jadwal
+        WHERE tenant_id=? AND lower(hari)=? AND jenis_kegiatan='mapel' AND jam_mulai<>''
+        ORDER BY jam_mulai`).all(req.tenantId, hari).map(r => String(r.jam_mulai))
+      const posisi = slot.indexOf(String(jad.jam_mulai))
+      jamDariJadwal = posisi >= 0 ? posisi + 1 : 1
+      // Sudah ada jurnal untuk sesi ini?
+      sesiSudahAda = db.prepare(`SELECT id FROM jurnal_mengajar
+        WHERE tenant_id=? AND guru_id=? AND mapel_id=? AND rombel_id=? AND tanggal=?
+        LIMIT 1`).get(req.tenantId, guru_id, mapel_id, rombel_id, tanggal)
+    }
+  } catch { /* jadwal opsional — jangan gagalkan penyimpanan */ }
+
+  if (sesiSudahAda) {
+    return res.status(409).json({
+      error: 'Jurnal untuk sesi ini sudah ada pada tanggal tersebut. Satu sesi cukup satu jurnal.',
+      code: 'JURNAL_SUDAH_ADA',
+      jurnal_id: sesiSudahAda.id,
+    })
+  }
+  // jadwal adalah sumber kebenaran untuk jam mulai sesi. Frontend selalu
+  // mengirim jam_ke (default 1), jadi nilai dari jadwal harus MENIMPA, bukan
+  // hanya mengisi bila kosong — kalau tidak, pengisian otomatis tidak pernah
+  // terpakai dan guru tetap melihat "Jam ke-1" untuk kelas jam ke-3.
+  if (jamDariJadwal) jam_ke = jamDariJadwal
+
   status = status || 'submitted'
   if (!['draft', 'submitted'].includes(status)) return res.status(400).json({ error: 'Status jurnal tidak valid' })
   if (signature_type && !['drawn', 'upload'].includes(signature_type)) return res.status(400).json({ error: 'Metode tanda tangan tidak valid' })

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Building2, CheckCircle2, AlertCircle, Loader2, Search, ArrowLeft, Users, UserCheck } from 'lucide-react'
+import { Building2, CheckCircle2, AlertCircle, Loader2, Search, ArrowLeft, Users, UserCheck, KeyRound } from 'lucide-react'
 import api from '../../services/api'
 import { useAuthStore } from '../../stores/authStore'
 
@@ -27,6 +27,43 @@ export default function SuperadminLembagaPage() {
   const [cari, setCari] = useState('')
   const [sibuk, setSibuk] = useState('')
   const [galat, setGalat] = useState('')
+
+  // Reset sandi: /api/auth/forgot-password hanya simulasi (tidak mengirim email),
+  // jadi superadmin perlu menetapkan sandi sementara secara langsung.
+  type Pengguna = { id: string; nama: string; email: string | null; role: string }
+  const [reset, setReset] = useState<{ id: string; nama: string; userId: string; sandi: string; pesan: string; gagal: boolean } | null>(null)
+  const [resetPengguna, setResetPengguna] = useState<Pengguna[]>([])
+  const [resetSibuk, setResetSibuk] = useState(false)
+
+  const bukaReset = async (l: Lembaga) => {
+    setReset({ id: l.id, nama: l.nama, userId: '', sandi: '', pesan: '', gagal: false })
+    setResetPengguna([])
+    try {
+      const r = await api.get(`/superadmin/pengguna?tenant_id=${encodeURIComponent(l.id)}`)
+      const rows: Pengguna[] = Array.isArray(r.data) ? r.data : []
+      // Staf lebih dulu; akun siswa/wali tidak perlu direset dari sini.
+      const urut = ['kepala', 'admin', 'operator', 'tata_usaha', 'bendahara', 'guru']
+      setResetPengguna(rows.filter(u => urut.includes(u.role)).sort((a, b) => urut.indexOf(a.role) - urut.indexOf(b.role)))
+    } catch (e: any) {
+      setReset(r => r ? { ...r, pesan: e?.response?.data?.error || 'Gagal memuat pengguna', gagal: true } : r)
+    }
+  }
+
+  const tutupReset = () => { setReset(null); setResetPengguna([]); setResetSibuk(false) }
+
+  const simpanReset = async () => {
+    if (!reset?.userId || reset.sandi.trim().length < 6) return
+    setResetSibuk(true)
+    try {
+      const r = await api.post('/superadmin/reset-sandi', {
+        tenant_id: reset.id, user_id: reset.userId, sandi: reset.sandi.trim(),
+      })
+      const nama = r.data?.pengguna?.nama || 'Pengguna'
+      setReset(r2 => r2 ? { ...r2, pesan: `Sandi ${nama} berhasil direset. Minta pengguna login dengan sandi ini, lalu ganti.`, gagal: false, sandi: '' } : r2)
+    } catch (e: any) {
+      setReset(r2 => r2 ? { ...r2, pesan: e?.response?.data?.error || 'Gagal mereset sandi', gagal: true } : r2)
+    } finally { setResetSibuk(false) }
+  }
 
   useEffect(() => {
     api.get('/superadmin/lembaga')
@@ -132,6 +169,15 @@ export default function SuperadminLembagaPage() {
               >
                 {sibuk === l.id ? <><Loader2 size={14} className="animate-spin" /> Membuka...</> : <><CheckCircle2 size={14} /> Masuk ke lembaga</>}
               </button>
+              {/* Jalur pemulihan sandi. /api/auth/forgot-password hanya simulasi
+                  (tidak mengirim email), jadi tanpa ini pengguna yang lupa sandi
+                  — termasuk kepala madrasah — tidak punya jalan masuk sama sekali. */}
+              <button
+                onClick={() => void bukaReset(l)}
+                className="mt-2 inline-flex w-full items-center justify-center gap-2 rounded-xl border border-gray-200 py-2 text-xs font-semibold text-gray-600 transition hover:border-primary hover:text-primary dark:border-gray-700 dark:text-gray-300"
+              >
+                <KeyRound size={13} /> Reset sandi pengguna
+              </button>
             </div>
           )
         })}
@@ -139,6 +185,75 @@ export default function SuperadminLembagaPage() {
 
       {data && daftar.length === 0 && (
         <p className="py-8 text-center text-sm text-gray-400">Tidak ada lembaga yang cocok dengan pencarian.</p>
+      )}
+
+      {reset && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={() => { if (!resetSibuk) tutupReset() }}>
+          <div className="w-full max-w-lg rounded-2xl bg-white p-5 shadow-xl dark:bg-gray-900" onClick={e => e.stopPropagation()}>
+            <div className="mb-3 flex items-start gap-3">
+              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-50 text-amber-600">
+                <KeyRound size={18} />
+              </span>
+              <div className="min-w-0 flex-1">
+                <h3 className="text-sm font-bold text-gray-800 dark:text-gray-100">Reset sandi — {reset.nama}</h3>
+                <p className="mt-0.5 text-[11px] text-gray-500">Pengguna wajib mengganti sandi ini saat login berikutnya.</p>
+              </div>
+            </div>
+
+            {resetPengguna.length === 0 ? (
+              <p className="py-6 text-center text-sm text-gray-400">Memuat pengguna...</p>
+            ) : (
+              <>
+                <label className="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-300">Pilih pengguna</label>
+                <select
+                  value={reset.userId}
+                  onChange={e => setReset({ ...reset, userId: e.target.value })}
+                  className="mb-3 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
+                >
+                  <option value="">-- Pilih pengguna --</option>
+                  {resetPengguna.map(u => (
+                    <option key={u.id} value={u.id}>{u.nama} — {u.role}{u.email ? ` (${u.email})` : ''}</option>
+                  ))}
+                </select>
+
+                <label className="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-300">Sandi sementara</label>
+                <input
+                  type="text"
+                  value={reset.sandi}
+                  onChange={e => setReset({ ...reset, sandi: e.target.value })}
+                  placeholder="Minimal 6 karakter"
+                  className="w-full rounded-xl border border-gray-200 px-3 py-2 font-mono text-sm dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
+                />
+                {reset.sandi.length > 0 && reset.sandi.length < 6 && (
+                  <p className="mt-1 text-[11px] text-red-600">Minimal 6 karakter.</p>
+                )}
+
+                {reset.pesan && (
+                  <p className={`mt-3 rounded-xl px-3 py-2 text-xs ${reset.gagal ? 'bg-red-50 text-red-700' : 'bg-emerald-50 text-emerald-700'}`}>
+                    {reset.pesan}
+                  </p>
+                )}
+
+                <div className="mt-4 flex gap-2">
+                  <button
+                    onClick={tutupReset}
+                    disabled={resetSibuk}
+                    className="flex-1 rounded-xl border border-gray-200 py-2 text-xs font-semibold text-gray-600 disabled:opacity-50 dark:border-gray-700 dark:text-gray-300"
+                  >
+                    Tutup
+                  </button>
+                  <button
+                    onClick={() => void simpanReset()}
+                    disabled={resetSibuk || !reset.userId || reset.sandi.trim().length < 6}
+                    className="inline-flex flex-1 items-center justify-center gap-2 rounded-xl bg-primary py-2 text-xs font-bold text-white disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    {resetSibuk ? <><Loader2 size={13} className="animate-spin" /> Menyimpan...</> : 'Simpan sandi baru'}
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
       )}
     </div>
   )
