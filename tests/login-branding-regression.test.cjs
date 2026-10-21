@@ -17,7 +17,11 @@ test('branding tenant dimuat sebelum login dari endpoint settings publik', () =>
 })
 
 test('settings login tidak menggunakan cache browser lama', () => {
-  assert.match(settings, /api\.get\('\/settings', \{ headers: \{ 'Cache-Control': 'no-cache' \} \}\)/)
+  // Header no-cache tetap wajib; yang berubah hanya tambahan timeout agar
+  // koneksi lemah tidak menahan halaman. Kontrak menguji tujuannya, bukan
+  // bentuk pemanggilan yang persis.
+  assert.match(settings, /'Cache-Control': 'no-cache'/)
+  assert.match(settings, /api\.get\('\/settings'/)
 })
 
 test('tenant favicon dan Apple icon memakai konfigurasi tenant sebelum fallback', () => {

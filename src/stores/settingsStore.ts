@@ -25,7 +25,10 @@ export const useSettingsStore = create<SettingsState>()(
   settings: {},
   loadSettings: async () => {
     try {
-      const res = await api.get('/settings', { headers: { 'Cache-Control': 'no-cache' } })
+      // Batas waktu pendek: pengaturan hanya memengaruhi tampilan (nama, logo,
+      // warna). Di koneksi lemah lebih baik memakai nilai tersimpan di cache
+      // daripada menahan halaman.
+      const res = await api.get('/settings', { headers: { 'Cache-Control': 'no-cache' }, timeout: 12000 })
       set({ settings: res.data || {} })
       applyTheme(res.data || {})
     } catch {

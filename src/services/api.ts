@@ -5,7 +5,35 @@ const API_URL = import.meta.env.VITE_API_URL || '/api'
 const api = axios.create({
   baseURL: API_URL,
   headers: { 'Content-Type': 'application/json' },
+  // Tanpa timeout, axios menunggu SELAMANYA (default 0). Di koneksi lemah
+  // (sinyal 1-2 bar, WiFi sekolah padat) permintaan menggantung tanpa batas:
+  // spinner berputar terus, tidak pernah gagal, tidak pernah bisa dicoba lagi.
+  // 90 detik cukup longgar untuk endpoint berat (generate PDF rapor massal),
+  // sementara login memakai batas jauh lebih pendek di bawah.
+  timeout: 90000,
 })
+
+/** Pesan error jaringan yang bisa dibaca pengguna, bukan "Network Error". */
+export function pesanGagalJaringan(err: any): string {
+  if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+    return 'Tidak ada koneksi internet. Periksa sinyal atau WiFi, lalu coba lagi.'
+  }
+  if (err?.code === 'ECONNABORTED' || /timeout/i.test(String(err?.message || ''))) {
+    return 'Koneksi terlalu lambat — permintaan tidak selesai. Coba lagi di tempat dengan sinyal lebih baik.'
+  }
+  if (!err?.response) {
+    return 'Koneksi terputus. Periksa jaringan, lalu coba lagi.'
+  }
+  return err?.response?.data?.error || 'Terjadi kesalahan. Coba lagi.'
+}
+
+/** Apakah kegagalan ini layak dicoba ulang (jaringan/timeout), bukan ditolak server? */
+export function bisaDiulang(err: any): boolean {
+  // 4xx = server sudah menjawab (sandi salah, akun tidak ada) — mengulang
+  // hanya memperburuk hitungan percobaan dan tidak akan berubah hasilnya.
+  if (err?.response?.status && err.response.status < 500) return false
+  return true
+}
 
 // Interceptor to add auth token
 api.interceptors.request.use((config) => {

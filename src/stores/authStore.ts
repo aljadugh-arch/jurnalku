@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import type { User } from '../types'
-import api from '../services/api'
+import api, { bisaDiulang } from '../services/api'
 import { useSettingsStore } from './settingsStore'
 import { clearLocalTheme } from './themeStore'
 
@@ -42,25 +42,48 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     set({ user, token, isAuthenticated: true, authReady: true })
   },
   loginWithCredentials: async (email, password) => {
-    const res = await api.post('/auth/login', { email, password })
+    // Login memakai batas waktu jauh lebih pendek dari 90 detik. Di koneksi
+    // lemah, menunggu 90 detik terasa seperti aplikasi rusak. 20 detik cukup:
+    // bila server tidak menjawab dalam waktu itu, pengguna diberi tahu dan
+    // bisa mencoba lagi.
+    //
+    // Satu kali coba ulang otomatis HANYA untuk kegagalan jaringan/timeout.
+    // Percobaan ulang tidak boleh terjadi saat server menolak (401 sandi
+    // salah) — itu menambah hitungan rate-limit tanpa mengubah hasil.
+    let res
+    try {
+      res = await api.post('/auth/login', { email, password }, { timeout: 20000 })
+    } catch (err: any) {
+      // Jangan mengulang saat perangkat jelas-jelas offline: percobaan kedua
+      // hanya menambah 20 detik menunggu tanpa kemungkinan berhasil.
+      const offline = typeof navigator !== 'undefined' && navigator.onLine === false
+      if (offline || !bisaDiulang(err)) throw err
+      await new Promise(r => setTimeout(r, 1200))
+      res = await api.post('/auth/login', { email, password }, { timeout: 20000 })
+    }
     localStorage.setItem('jurnalku_token', res.data.token)
     sessionStorage.removeItem('jurnalku_token')
     set({ user: res.data.user, token: res.data.token, isAuthenticated: true, authReady: true })
-    await useSettingsStore.getState().loadSettings()
+    // loadSettings TIDAK ditunggu. Sebelumnya `await` di sini menahan navigasi
+    // setelah login: token sudah sah, tetapi pengguna masih melihat spinner
+    // karena menunggu /api/settings selesai di koneksi lemah. Diambil di
+    // belakang layar dengan batas waktu pendek; bila gagal, tampilan memakai
+    // nilai bawaan dan tidak menghalangi masuk.
+    void useSettingsStore.getState().loadSettings().catch(() => {})
   },
   // Wali murid: kode 6 digit dikirim ke WhatsApp nomor yang terdaftar.
   // Sandi tidak dipakai di jalur ini, sehingga tidak ada angka yang bisa
   // ditebak dari nomor telepon.
   mintaOtp: async (phone) => {
-    const res = await api.post('/auth/otp/request', { phone })
+    const res = await api.post('/auth/otp/request', { phone }, { timeout: 20000 })
     return { ok: Boolean(res.data?.ok), pesan: String(res.data?.pesan || 'Kode dikirim.') }
   },
   loginDenganOtp: async (phone, code) => {
-    const res = await api.post('/auth/otp/verify', { phone, code })
+    const res = await api.post('/auth/otp/verify', { phone, code }, { timeout: 20000 })
     localStorage.setItem('jurnalku_token', res.data.token)
     sessionStorage.removeItem('jurnalku_token')
     set({ user: res.data.user, token: res.data.token, isAuthenticated: true, authReady: true })
-    await useSettingsStore.getState().loadSettings()
+    void useSettingsStore.getState().loadSettings().catch(() => {})
   },
   // Superadmin: pindah konteks ke satu lembaga tanpa logout. Token baru tetap
   // membawa role super_admin — hanya tenant_id yang berubah.
@@ -78,11 +101,13 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     await useSettingsStore.getState().loadSettings().catch(() => {})
   },
   loginDemo: async (role) => {
-    const res = await api.post('/auth/demo', { role })
+    const res = await api.post('/auth/demo', { role }, { timeout: 20000 })
     localStorage.setItem('jurnalku_token', res.data.token)
     sessionStorage.removeItem('jurnalku_token')
     set({ user: res.data.user, token: res.data.token, isAuthenticated: true, authReady: true })
-    await useSettingsStore.getState().loadSettings()
+    // Sama seperti login biasa: pengaturan dimuat di belakang layar supaya
+    // panel demo tidak tertahan di koneksi lambat.
+    void useSettingsStore.getState().loadSettings().catch(() => {})
   },
   logout: () => {
     localStorage.removeItem('jurnalku_token')
@@ -101,7 +126,11 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       return
     }
     try {
-      const res = await api.get('/auth/me')
+      // Batas waktu pendek: pemeriksaan sesi menentukan apakah halaman bisa
+      // dirender. Dengan timeout bawaan (90 detik) di koneksi lemah pengguna
+      // melihat "Memuat sesi..." sangat lama, padahal ia cukup diarahkan ke
+      // halaman login yang bisa langsung dipakai.
+      const res = await api.get('/auth/me', { timeout: 12000 })
       set({ user: res.data, token, isAuthenticated: true, authReady: true, authError: null })
     } catch (error: any) {
       const status = error?.response?.status

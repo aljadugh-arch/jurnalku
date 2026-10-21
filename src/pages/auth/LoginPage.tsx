@@ -4,7 +4,7 @@ import { Eye, EyeOff, ArrowRight, Moon, Sun } from 'lucide-react'
 import { useAuthStore } from '../../stores/authStore'
 import { useSettingsStore } from '../../stores/settingsStore'
 import { ClipboardList } from 'lucide-react'
-import api from '../../services/api'
+import api, { pesanGagalJaringan } from '../../services/api'
 import toast from 'react-hot-toast'
 import { useThemeStore } from '../../stores/themeStore'
 
@@ -30,7 +30,10 @@ export default function LoginPage() {
   const [ppdb, setPpdb] = useState<{ dibuka: boolean; nama: string | null }>({ dibuka: false, nama: null })
   useEffect(() => {
     let hidup = true
-    api.get('/ppdb/publik/info')
+    // Batas waktu pendek: di koneksi lemah permintaan opsional ini bersaing
+    // memperebutkan bandwidth dengan permintaan login. Kalau lambat, lebih baik
+    // dilepas cepat daripada menahan antrean.
+    api.get('/ppdb/publik/info', { timeout: 8000 })
       .then(({ data }) => { if (hidup) setPpdb({ dibuka: !!data?.dibuka, nama: data?.gelombang?.nama || null }) })
       .catch(() => { /* diam: PPDB opsional, jangan ganggu halaman login */ })
     return () => { hidup = false }
@@ -48,6 +51,20 @@ export default function LoginPage() {
     }
   }, [])
   const [loading, setLoading] = useState(false)
+  // Penanda koneksi lambat: setelah 6 detik menunggu, beri tahu pengguna bahwa
+  // masih diproses — bukan macet. Di koneksi lemah, spinner diam tanpa
+  // keterangan membuat orang menutup aplikasi lalu mengulang login berkali-kali
+  // (yang justru menambah beban dan memicu batas percobaan).
+  const [lambat, setLambat] = useState(false)
+  useEffect(() => {
+    if (!loading) { setLambat(false); return }
+    const t = window.setTimeout(() => setLambat(true), 6000)
+    // Dengarkan perubahan status jaringan: begitu perangkat kembali online,
+    // hilangkan peringatan tanpa menunggu permintaan selesai.
+    const onOnline = () => setLambat(false)
+    window.addEventListener('online', onOnline)
+    return () => { window.clearTimeout(t); window.removeEventListener('online', onOnline) }
+  }, [loading])
   // Login wali tanpa sandi: kode 6 digit dikirim ke WhatsApp nomor terdaftar.
   const [mode, setMode] = useState<'sandi' | 'otp'>('sandi')
   const [otpTerkirim, setOtpTerkirim] = useState(false)
@@ -71,7 +88,7 @@ export default function LoginPage() {
   const [demoHostAktif, setDemoHostAktif] = useState(false)
   useEffect(() => {
     let batal = false
-    api.get('/demo-status')
+    api.get('/demo-status', { timeout: 8000 })
       .then(r => { if (!batal) setDemoHostAktif(Boolean(r?.data?.aktif)) })
       .catch(() => { if (!batal) setDemoHostAktif(false) })
     return () => { batal = true }
@@ -115,7 +132,10 @@ export default function LoginPage() {
       setOtpTerkirim(true)
       setInfo(r.pesan)
     } catch (err: any) {
-      setError(err.response?.data?.error || 'Gagal mengirim kode. Coba lagi.')
+      // Membedakan gagal jaringan dari penolakan server. Sebelumnya jaringan
+      // putus selalu tampil "Gagal mengirim kode" sehingga wali mengulang
+      // terus padahal yang bermasalah sinyalnya.
+      setError(err?.response?.data?.error || pesanGagalJaringan(err))
     } finally { setLoading(false) }
   }
 
@@ -127,7 +147,9 @@ export default function LoginPage() {
       const u = useAuthStore.getState().user
       navigate(getRedirectPath(u?.role || 'wali_murid'))
     } catch (err: any) {
-      setError(err.response?.data?.error || 'Kode salah atau sudah kedaluwarsa.')
+      // Kalau server menjawab, pakai pesannya ("Kode salah atau kedaluwarsa").
+      // Kalau tidak ada jawaban sama sekali, jangan salahkan kodenya.
+      setError(err?.response?.data?.error || pesanGagalJaringan(err))
     } finally { setLoading(false) }
   }
 
@@ -140,7 +162,11 @@ export default function LoginPage() {
       const user = useAuthStore.getState().user
       navigate(getRedirectPath(user?.role || 'siswa'))
     } catch (err: any) {
-      setError(err.response?.data?.error || 'Login gagal. Periksa email dan password.')
+      // Sebelumnya: err.response?.data?.error || 'Login gagal. Periksa email...'
+      // Saat jaringan putus, err.response kosong sehingga pengguna diberi tahu
+      // "periksa email dan password" — padahal sandinya benar dan yang salah
+      // adalah sinyal. Pesan sekarang membedakan ditolak server vs jaringan.
+      setError(pesanGagalJaringan(err))
     } finally {
       setLoading(false)
     }
@@ -177,6 +203,12 @@ export default function LoginPage() {
           {error && (
             <div className="mb-4 rounded-xl border border-rose-100 bg-rose-50 px-4 py-3 text-xs font-medium text-rose-600 dark:border-rose-900 dark:bg-rose-950/40 dark:text-rose-400">
               {error}
+            </div>
+          )}
+
+          {lambat && !error && (
+            <div className="mb-4 rounded-xl border border-amber-100 bg-amber-50 px-4 py-3 text-xs font-medium text-amber-700 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-400">
+              Koneksi lambat — masih diproses. Jangan tutup halaman ini.
             </div>
           )}
 
