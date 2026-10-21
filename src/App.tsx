@@ -53,6 +53,7 @@ const RaporPage = lazy(() => import('./pages/admin/RaporPage'))
 const CetakRaporPage = lazy(() => import('./pages/admin/CetakRaporPage'))
 const BukuIndukPage = lazy(() => import('./pages/admin/BukuIndukPage'))
 const SuperadminLembagaPage = lazy(() => import('./pages/admin/SuperadminLembagaPage'))
+const PortalOperatorPage = lazy(() => import('./pages/admin/PortalOperatorPage'))
 const UserManagementPage = lazy(() => import('./pages/admin/UserManagementPage'))
 const PostingPage = lazy(() => import('./pages/admin/PostingPage'))
 const CatatanKepribadianPage = lazy(() => import('./pages/admin/CatatanKepribadianPage'))
@@ -280,6 +281,7 @@ export default function App() {
           <Route path="cetak-rapor" element={<CetakRaporPage />} />
           <Route path="buku-induk" element={<BukuIndukPage />} />
           <Route path="masuk-lembaga" element={<SuperadminLembagaPage />} />
+          <Route path="portal-operator" element={<PortalOperatorPage />} />
           <Route path="nilai-ledger" element={
             <ProtectedRoute allowedRoles={['admin', 'super_admin']}><GuruNilaiLedgerPage /></ProtectedRoute>
           } />

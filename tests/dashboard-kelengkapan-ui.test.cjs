@@ -39,8 +39,11 @@ test('menu "Monitoring Data" ada di bawah Dashboard untuk admin dan kepala', () 
     const iDashboard = baris.findIndex(l => l.includes("label: 'Dashboard', icon: <LayoutDashboard size={20} />, path: '/admin' }"))
     assert.ok(iDashboard > -1, `menu Dashboard tidak ditemukan di ${nama}`)
 
-    // Baris pertama yang berisi isi menu setelah Dashboard harus Monitoring Data.
-    const sesudah = baris.slice(iDashboard + 1).find(l => l.includes("label:") && l.includes("path: '/admin"))
+    // Menu pertama setelah Dashboard harus Monitoring Data, kecuali Portal
+    // Operator yang sengaja diletakkan lebih dulu sebagai pintu masuk harian
+    // operator. Keduanya tetap di grup DASHBOARD.
+    const sesudah = baris.slice(iDashboard + 1)
+      .find(l => l.includes("label:") && l.includes("path: '/admin") && !l.includes("Portal Operator"))
     assert.ok(sesudah, `tidak ada menu setelah Dashboard di ${nama}`)
     assert.ok(
       sesudah.includes("label: 'Monitoring Data'") && sesudah.includes("path: '/admin/monitoring'"),
@@ -50,8 +53,8 @@ test('menu "Monitoring Data" ada di bawah Dashboard untuk admin dan kepala', () 
 
   // Grup sidebar admin: masuk grup DASHBOARD supaya tidak jatuh ke "LAINNYA".
   assert.ok(
-    sisi.includes("labels: ['Dashboard', 'Monitoring Data', 'Posting']"),
-    'Monitoring Data belum masuk grup DASHBOARD'
+    sisi.includes("labels: ['Dashboard', 'Portal Operator', 'Monitoring Data', 'Posting']"),
+    'Portal Operator / Monitoring Data belum masuk grup DASHBOARD'
   )
 })
 

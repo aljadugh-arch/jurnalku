@@ -4,7 +4,7 @@ import {
   Layers, Activity, Globe, Sparkles, DollarSign, Settings, MessageSquare,
   FileText, ClipboardCheck, ScrollText, School, Wallet, Receipt, DatabaseBackup, Code2, ScanText,
   FileQuestion, Monitor, Star, Building2, CreditCard, Database, Mail, HeartHandshake, ArrowRightLeft, Library, Calculator, BookOpenCheck,
-  Printer, BookMarked
+  Printer, BookMarked, LayoutGrid
 } from 'lucide-react'
 
 export interface MenuItem {
@@ -18,6 +18,7 @@ export interface MenuItem {
 // Admin/operator/TU: urut sesuai alur input data — master data dulu, operasional, lalu pengaturan.
 export const adminMenuItems: MenuItem[] = [
   { label: 'Dashboard', icon: <LayoutDashboard size={20} />, path: '/admin' },
+  { label: 'Portal Operator', icon: <LayoutGrid size={20} />, path: '/admin/portal-operator' },
   { label: 'Monitoring Data', icon: <Activity size={20} />, path: '/admin/monitoring' },
   { label: 'Posting', icon: <FileText size={20} />, path: '/admin/posting' },
   { label: 'Data Siswa', icon: <GraduationCap size={20} />, path: '/admin/siswa' },
