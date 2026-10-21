@@ -359,15 +359,18 @@ function renderBukuInduk(doc, data, bagian = 'lengkap') {
   // menembus garis bawah kotak.
   // Kotak juga digeser turun: logo lembaga berakhir di 580.7pt, kotak lama
   // mulai 579.2pt sehingga garis kotak menempel pada logo (−1.5pt).
-  const boxY = H * 0.706
+  const boxY = H * 0.702
   const boxW = 340
-  const boxH = 110
+  const boxH = 120
   doc.rect(W / 2 - boxW / 2, boxY, boxW, boxH).lineWidth(1.5).strokeColor('black').stroke()
 
+  // Jarak dalam kotak diseimbangkan. Sebelumnya baris NIS/NISN dan KELAS
+  // berdesakan (label KELAS hanya 1pt di bawah nilai NIS) karena boxH=110
+  // dipakai untuk tiga pasang label+nilai.
   doc.font('Helvetica').fontSize(11).fillColor('black')
-  doc.text('NAMA PESERTA DIDIK', W / 2 - boxW / 2 + 18, boxY + 12, { width: boxW - 36, align: 'center', lineBreak: false })
+  doc.text('NAMA PESERTA DIDIK', W / 2 - boxW / 2 + 18, boxY + 10, { width: boxW - 36, align: 'center', lineBreak: false })
   doc.font('Helvetica-Bold').fontSize(15)
-  doc.text(safeText(siswa.nama, '').toUpperCase(), W / 2 - boxW / 2 + 12, boxY + 28, { width: boxW - 24, align: 'center' })
+  doc.text(safeText(siswa.nama, '').toUpperCase(), W / 2 - boxW / 2 + 12, boxY + 24, { width: boxW - 24, align: 'center' })
 
   doc.font('Helvetica').fontSize(11)
   doc.text('NIS / NISN', W / 2 - boxW / 2 + 18, boxY + 50, { width: boxW - 36, align: 'center', lineBreak: false })
@@ -376,9 +379,9 @@ function renderBukuInduk(doc, data, bagian = 'lengkap') {
   doc.text(`${safeText(siswa.nis, '')} / ${nisnSampul}`, W / 2 - boxW / 2 + 12, boxY + 66, { width: boxW - 24, align: 'center', lineBreak: false })
 
   doc.font('Helvetica').fontSize(11)
-  doc.text('KELAS', W / 2 - boxW / 2 + 18, boxY + 80, { width: boxW - 36, align: 'center', lineBreak: false })
+  doc.text('KELAS', W / 2 - boxW / 2 + 18, boxY + 88, { width: boxW - 36, align: 'center', lineBreak: false })
   doc.font('Helvetica-Bold').fontSize(13)
-  doc.text(safeText(siswa.rombel_nama, '-'), W / 2 - boxW / 2 + 12, boxY + 94, { width: boxW - 24, align: 'center', lineBreak: false })
+  doc.text(safeText(siswa.rombel_nama, '-'), W / 2 - boxW / 2 + 12, boxY + 102, { width: boxW - 24, align: 'center', lineBreak: false })
 
   // Kaki halaman.
   doc.font('Helvetica-Bold').fontSize(11)
