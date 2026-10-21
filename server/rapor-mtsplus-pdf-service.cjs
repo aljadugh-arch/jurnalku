@@ -225,65 +225,83 @@ function renderStudentPages(doc, data, bagian) {
     doc.rect(18, 18, W - 36, H - 36).lineWidth(4).strokeColor('black').stroke()
     doc.rect(26, 26, W - 52, H - 52).lineWidth(1).stroke()
 
-    // Logo Kemenag di atas, logo lembaga di bawahnya — urutan yang sama dengan
-    // rapor resmi. Sebelumnya `logo.lembagaPath` salah nama (objeknya
-    // `lembagaLogoPath`) sehingga tidak satu pun logo lembaga tercetak.
-    if (logo.kemenagPath) { try { doc.image(logo.kemenagPath, W / 2 - 45, 62, { fit: [90, 90] }) } catch {} }
-    if (logo.lembagaLogoPath) { try { doc.image(logo.lembagaLogoPath, W / 2 - 32, 160, { fit: [64, 64] }) } catch {} }
+    // ---- Tata letak mengikuti dokumen resmi "IDENTITAS RAPOR.docx" ----
+    //
+    // Proporsi diambil dari PDF hasil konversi dokumen itu (halaman 936pt):
+    //   logo Kemenag   y  2.7%  135x121pt
+    //   logo lembaga   y 21.4%  135x132pt
+    //   "RAPOR"        y 24.6%  tinggi huruf 49pt
+    //   "MADRASAH ..." y 31.6%  tinggi 27pt
+    //   nama lembaga   y 35.7%  tinggi 45pt (bisa 2 baris)
+    //   NSM / NPSN     y 47.7%
+    //   kotak nama     y 71.4%
+    //   instansi+yayasan di kaki halaman
+    //
+    // Sebelumnya sampul memakai susunan sendiri (RAPOR PESERTA DIDIK + badge
+    // STS/SAS di tengah), sehingga bentuknya berbeda dari rapor resmi madrasah.
 
-    doc.font('Helvetica-Bold').fontSize(24).fillColor('black')
-    doc.text('RAPOR PESERTA DIDIK', M, 248, { width: W - 2 * M, align: 'center', characterSpacing: 1.5 })
+    // Logo instansi di atas, logo lembaga di bawahnya.
+    if (logo.kemenagPath) { try { doc.image(logo.kemenagPath, W / 2 - 67, H * 0.027, { fit: [135, 121] }) } catch {} }
+    if (logo.lembagaLogoPath) { try { doc.image(logo.lembagaLogoPath, W / 2 - 67, H * 0.214, { fit: [135, 132] }) } catch {} }
 
-    // Jenjang diambil dari settings, bukan hardcode 'MTs'. Lembaga MI/MA akan
-    // tercetak dengan jenjang yang salah kalau ini ditanam.
-    const jenjang = safeText(settings.jenjang, 'MTs')
-    const jenjangPanjang = jenjang === 'MI' ? 'Madrasah Ibtidaiyah (MI)'
-      : jenjang === 'MA' ? 'Madrasah Aliyah (MA)'
-      : jenjang === 'MTs' ? 'Madrasah Tsanawiyah (MTs)'
-      : safeText(settings.jenjang, 'Madrasah Tsanawiyah (MTs)')
-    doc.font('Helvetica-Bold').fontSize(14)
-    doc.text(jenjangPanjang, M, 284, { width: W - 2 * M, align: 'center' })
+    // "RAPOR" — huruf besar berjarak lebar.
+    doc.font('Helvetica-Bold').fontSize(36).fillColor('black')
+    doc.text('R A P O R', M, H * 0.246, { width: W - 2 * M, align: 'center', characterSpacing: 2 })
 
-    const jenisTxt = jenisLabel(jenis)
-    doc.font('Helvetica-Bold').fontSize(12)
-    const badgeW = doc.widthOfString(jenisTxt) + 24
-    const badgeX = W / 2 - badgeW / 2
-    const badgeY = 322
-    doc.rect(badgeX, badgeY, badgeW, 22).fill('#000000')
-    doc.fillColor('white').text(jenisTxt, badgeX, badgeY + 5, { width: badgeW, align: 'center' })
+    doc.font('Helvetica-Bold').fontSize(19)
+    // Jenjang diambil dari settings, bukan ditanam. Lembaga MI/MA harus
+    // tercetak dengan jenjangnya sendiri; sebelumnya baris ini selalu
+    // "MADRASAH TSANAWIYAH" sehingga MI dan MA ikut salah.
+    const jenjangKode = String(settings.jenjang || 'MTs').toUpperCase()
+    const jenjangBaris = jenjangKode === 'MI' ? 'MADRASAH IBTIDAIYAH'
+      : jenjangKode === 'MA' ? 'MADRASAH ALIYAH'
+      : jenjangKode === 'MTS' ? 'MADRASAH TSANAWIYAH'
+      : safeText(settings.jenjang, 'MADRASAH').toUpperCase()
+    doc.text(jenjangBaris, M, H * 0.316, { width: W - 2 * M, align: 'center' })
 
-    const boxY = 386
-    doc.rect(W / 2 - 165, boxY, 330, 126).lineWidth(2).strokeColor('black').stroke()
-    doc.font('Helvetica').fontSize(11).fillColor('black')
-    doc.text('Nama Peserta Didik :', W / 2 - 148, boxY + 14, { width: 200, lineBreak: false })
-    doc.font('Helvetica-Bold').fontSize(17)
-    doc.text(safeText(siswa.nama).toUpperCase(), W / 2 - 148, boxY + 36, { width: 296, lineBreak: false })
-    doc.font('Helvetica').fontSize(11)
-    doc.text('NIS / NISN :', W / 2 - 148, boxY + 76, { width: 200, lineBreak: false })
-    doc.font('Helvetica-Bold').fontSize(14)
-    // NISN bisa berformat gabungan `lokal#nasional` di data lama — cetak bagian
-    // nasionalnya saja, sama seperti halaman identitas.
-    const nisnSampul = String(siswa.nisn || '').split('#')[1] || safeText(siswa.nisn)
-    doc.text(`${safeText(siswa.nis, '')} / ${nisnSampul}`, W / 2 - 148, boxY + 96, { width: 296, lineBreak: false })
+    // Nama lembaga: bisa panjang, jadi diberi dua baris dan lebar penuh.
+    doc.font('Helvetica-Bold').fontSize(24)
+    doc.text(safeText(settings.nama_lembaga, '').toUpperCase(), M, H * 0.357, {
+      width: W - 2 * M, align: 'center', lineGap: 2,
+    })
 
-    doc.font('Helvetica-Bold').fontSize(18)
-    doc.text(safeText(settings.nama_lembaga).toUpperCase(), M, 570, { width: W - 2 * M, align: 'center' })
-    // Yayasan dulu TIDAK PERNAH dicetak padahal datanya ada di settings.
-    if (settings.yayasan_nama) {
-      doc.font('Helvetica').fontSize(11)
-      doc.text(String(settings.yayasan_nama).toUpperCase(), M, 596, { width: W - 2 * M, align: 'center' })
+    // NSM & NPSN sejajar.
+    const idn = [settings.nsm ? `NSM: ${settings.nsm}` : '', settings.npsn ? `NPSN: ${settings.npsn}` : ''].filter(Boolean).join('    ')
+    if (idn) {
+      doc.font('Helvetica').fontSize(12)
+      doc.text(idn, M, H * 0.477, { width: W - 2 * M, align: 'center' })
     }
-    // `nama_instansi` tidak ada di skema `settings` — selalu undefined, sehingga
-    // yang tercetak hanya fallback. Pakai nilai dari DB kalau suatu saat
-    // ditambahkan, jika tidak tetap teks resmi Kementerian Agama.
+
+    // Kotak identitas peserta didik.
+    const boxY = H * 0.714
+    const boxW = 330
+    const boxH = 118
+    doc.rect(W / 2 - boxW / 2, boxY, boxW, boxH).lineWidth(1.5).strokeColor('black').stroke()
+
+    doc.font('Helvetica').fontSize(11).fillColor('black')
+    doc.text('NAMA PESERTA DIDIK', W / 2 - boxW / 2 + 18, boxY + 14, { width: boxW - 36, align: 'center', lineBreak: false })
+    doc.font('Helvetica-Bold').fontSize(15)
+    doc.text(safeText(siswa.nama, '').toUpperCase(), W / 2 - boxW / 2 + 12, boxY + 32, { width: boxW - 24, align: 'center' })
+
+    doc.font('Helvetica').fontSize(11)
+    doc.text('NIS / NISN', W / 2 - boxW / 2 + 18, boxY + 64, { width: boxW - 36, align: 'center', lineBreak: false })
+    const nisnSampul = String(siswa.nisn || '').split('#')[1] || safeText(siswa.nisn, '')
+    doc.font('Helvetica-Bold').fontSize(13)
+    doc.text(`${safeText(siswa.nis, '')} / ${nisnSampul}`, W / 2 - boxW / 2 + 12, boxY + 84, { width: boxW - 24, align: 'center', lineBreak: false })
+
+    // Kaki halaman: instansi, yayasan, alamat.
+    doc.font('Helvetica-Bold').fontSize(11)
     const instansi = safeText(settings.nama_instansi, 'KEMENTERIAN AGAMA REPUBLIK INDONESIA')
-    doc.font('Helvetica-Bold').fontSize(12)
-    doc.text(instansi.toUpperCase(), M, 622, { width: W - 2 * M, align: 'center' })
-    // Identitas wilayah di kaki sampul: alamat + kontak, data yang sudah ada
-    // di settings tetapi tidak pernah ditampilkan.
-    doc.font('Helvetica').fontSize(9)
+    doc.text(instansi.toUpperCase(), M, H - 120, { width: W - 2 * M, align: 'center' })
+    if (settings.yayasan_nama) {
+      doc.font('Helvetica').fontSize(10)
+      doc.text(String(settings.yayasan_nama).toUpperCase(), M, H - 104, { width: W - 2 * M, align: 'center' })
+    }
     const kaki = [settings.alamat, [settings.telepon ? `Telp. ${settings.telepon}` : '', settings.email || ''].filter(Boolean).join(' | ')].filter(Boolean).join('\n')
-    if (kaki) doc.text(kaki, M, 660, { width: W - 2 * M, align: 'center' })
+    if (kaki) {
+      doc.font('Helvetica').fontSize(8)
+      doc.text(kaki, M, H - 86, { width: W - 2 * M, align: 'center', lineGap: 1 })
+    }
   }
 
   // ---------- HALAMAN 2: IDENTITAS ----------

@@ -312,45 +312,70 @@ function renderBukuInduk(doc, data, bagian = 'lengkap') {
   const cetakNilai = bagian === 'lengkap' || bagian === 'nilai'
 
   // ---------- SAMPUL ----------
+  //
+  // Tata letak mengikuti dokumen resmi "IDENTITAS RAPOR.docx" (proporsi sama
+  // dengan sampul rapor): logo instansi di atas, logo lembaga, judul besar,
+  // nama lembaga, NSM/NPSN, kotak identitas, lalu kaki halaman. Sebelumnya
+  // buku induk memakai susunan sendiri dengan pas foto di tengah — bentuknya
+  // berbeda dari rapor, padahal keduanya dokumen resmi madrasah yang sama.
   doc.addPage({ size: 'A4', margin: M })
-  doc.rect(18, 18, W - 36, H - 36).lineWidth(3).strokeColor('black').stroke()
-  doc.rect(25, 25, W - 50, H - 50).lineWidth(0.8).stroke()
-  if (logo.kemenagPath) { try { doc.image(logo.kemenagPath, W / 2 - 40, 66, { fit: [80, 80] }) } catch {} }
-  if (logo.lembagaLogoPath) { try { doc.image(logo.lembagaLogoPath, W / 2 - 30, 158, { fit: [60, 60] }) } catch {} }
+  doc.rect(18, 18, W - 36, H - 36).lineWidth(4).strokeColor('black').stroke()
+  doc.rect(26, 26, W - 52, H - 52).lineWidth(1).stroke()
 
-  doc.font('Helvetica-Bold').fontSize(26).fillColor('black')
-  doc.text('BUKU INDUK SISWA', M, 246, { width: W - 2 * M, align: 'center', characterSpacing: 1.5 })
-  doc.font('Helvetica-Bold').fontSize(13)
-  doc.text(namaJenjang(settings.jenjang), M, 282, { width: W - 2 * M, align: 'center' })
-  doc.font('Helvetica').fontSize(10)
-  doc.text('Dokumen Arsip Peserta Didik', M, 302, { width: W - 2 * M, align: 'center' })
+  if (logo.kemenagPath) { try { doc.image(logo.kemenagPath, W / 2 - 67, H * 0.027, { fit: [135, 121] }) } catch {} }
+  if (logo.lembagaLogoPath) { try { doc.image(logo.lembagaLogoPath, W / 2 - 67, H * 0.214, { fit: [135, 132] }) } catch {} }
 
-  if (fotoPath) { try { doc.image(fotoPath, W / 2 - 45, 340, { fit: [90, 120] }) } catch {} }
-  else {
-    doc.rect(W / 2 - 45, 340, 90, 120).lineWidth(1).stroke()
-    doc.font('Helvetica').fontSize(8).text('PAS FOTO\n3 X 4', W / 2 - 45, 392, { width: 90, align: 'center', lineBreak: false })
+  doc.font('Helvetica-Bold').fontSize(34).fillColor('black')
+  doc.text('BUKU INDUK', M, H * 0.246, { width: W - 2 * M, align: 'center', characterSpacing: 2 })
+  doc.font('Helvetica-Bold').fontSize(17)
+  doc.text(namaJenjang(settings.jenjang).toUpperCase(), M, H * 0.316, { width: W - 2 * M, align: 'center' })
+
+  doc.font('Helvetica-Bold').fontSize(22)
+  doc.text(safeText(settings.nama_lembaga, '').toUpperCase(), M, H * 0.357, {
+    width: W - 2 * M, align: 'center', lineGap: 2,
+  })
+
+  const idn = [settings.nsm ? `NSM: ${settings.nsm}` : '', settings.npsn ? `NPSN: ${settings.npsn}` : ''].filter(Boolean).join('    ')
+  if (idn) {
+    doc.font('Helvetica').fontSize(12)
+    doc.text(idn, M, H * 0.477, { width: W - 2 * M, align: 'center' })
   }
 
-  doc.rect(W / 2 - 170, 490, 340, 100).lineWidth(1.5).stroke()
-  doc.font('Helvetica').fontSize(10).fillColor('black')
-  doc.text('Nama Peserta Didik', W / 2 - 155, 504, { width: 310, lineBreak: false })
-  doc.font('Helvetica-Bold').fontSize(17)
-  doc.text(safeText(siswa.nama).toUpperCase(), W / 2 - 155, 520, { width: 310, lineBreak: false })
-  doc.font('Helvetica').fontSize(10)
-  doc.text(`NIS ${safeText(siswa.nis, '-')}   |   NISN ${safeText(String(siswa.nisn || '').split('#')[1] || siswa.nisn, '-')}`, W / 2 - 155, 552, { width: 310, lineBreak: false })
-  doc.text(`Kelas ${safeText(siswa.rombel_nama, '-')}`, W / 2 - 155, 568, { width: 310, lineBreak: false })
+  // Kotak identitas: nama, NIS/NISN, kelas.
+  const boxY = H * 0.700
+  const boxW = 340
+  const boxH = 150
+  doc.rect(W / 2 - boxW / 2, boxY, boxW, boxH).lineWidth(1.5).strokeColor('black').stroke()
 
+  doc.font('Helvetica').fontSize(11).fillColor('black')
+  doc.text('NAMA PESERTA DIDIK', W / 2 - boxW / 2 + 18, boxY + 14, { width: boxW - 36, align: 'center', lineBreak: false })
   doc.font('Helvetica-Bold').fontSize(15)
-  doc.text(safeText(settings.nama_lembaga, '').toUpperCase(), M, 626, { width: W - 2 * M, align: 'center' })
+  doc.text(safeText(siswa.nama, '').toUpperCase(), W / 2 - boxW / 2 + 12, boxY + 32, { width: boxW - 24, align: 'center' })
+
+  doc.font('Helvetica').fontSize(11)
+  doc.text('NIS / NISN', W / 2 - boxW / 2 + 18, boxY + 64, { width: boxW - 36, align: 'center', lineBreak: false })
+  const nisnSampul = String(siswa.nisn || '').split('#')[1] || safeText(siswa.nisn, '')
+  doc.font('Helvetica-Bold').fontSize(13)
+  doc.text(`${safeText(siswa.nis, '')} / ${nisnSampul}`, W / 2 - boxW / 2 + 12, boxY + 82, { width: boxW - 24, align: 'center', lineBreak: false })
+
+  doc.font('Helvetica').fontSize(11)
+  doc.text('KELAS', W / 2 - boxW / 2 + 18, boxY + 110, { width: boxW - 36, align: 'center', lineBreak: false })
+  doc.font('Helvetica-Bold').fontSize(13)
+  doc.text(safeText(siswa.rombel_nama, '-'), W / 2 - boxW / 2 + 12, boxY + 126, { width: boxW - 24, align: 'center', lineBreak: false })
+
+  // Kaki halaman.
+  doc.font('Helvetica-Bold').fontSize(11)
+  const instansiSampul = safeText(settings.nama_instansi, 'KEMENTERIAN AGAMA REPUBLIK INDONESIA')
+  doc.text(instansiSampul.toUpperCase(), M, H - 120, { width: W - 2 * M, align: 'center' })
   if (settings.yayasan_nama) {
     doc.font('Helvetica').fontSize(10)
-    doc.text(String(settings.yayasan_nama).toUpperCase(), M, 648, { width: W - 2 * M, align: 'center' })
+    doc.text(String(settings.yayasan_nama).toUpperCase(), M, H - 104, { width: W - 2 * M, align: 'center' })
   }
-  doc.font('Helvetica-Bold').fontSize(10)
-  doc.text('KEMENTERIAN AGAMA REPUBLIK INDONESIA', M, 668, { width: W - 2 * M, align: 'center' })
-  doc.font('Helvetica').fontSize(8)
   const kaki = [settings.alamat, [settings.telepon ? `Telp. ${settings.telepon}` : '', settings.email || ''].filter(Boolean).join(' | ')].filter(Boolean).join('\n')
-  if (kaki) doc.text(kaki, M, 700, { width: W - 2 * M, align: 'center' })
+  if (kaki) {
+    doc.font('Helvetica').fontSize(8)
+    doc.text(kaki, M, H - 86, { width: W - 2 * M, align: 'center', lineGap: 1 })
+  }
 
   // ---------- IDENTITAS LENGKAP ----------
   if (cetakIdentitas) {

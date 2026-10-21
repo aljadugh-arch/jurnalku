@@ -469,23 +469,68 @@ function registerTenantRoutes(app, db, authMiddleware, uuidv4, SUPER) {
     const tid = req.params.id
     const tenant = db.prepare('SELECT slug, nama FROM tenants WHERE id = ?').get(tid)
     if (!tenant) return res.status(404).json({ error: 'Tenant tidak ditemukan' })
+
+    // Konfirmasi wajib: slug harus diketik ulang. Menghapus lembaga berarti
+    // membuang SELURUH riwayatnya (siswa, nilai, keuangan, absensi) dan tidak
+    // bisa dibatalkan. Tanpa gerbang ini, satu klik salah bisa menghapus
+    // lembaga sungguhan.
+    if (String(req.body?.konfirmasi_slug || '').trim() !== tenant.slug) {
+      return res.status(400).json({
+        error: `Ketik ulang slug lembaga ("${tenant.slug}") untuk konfirmasi penghapusan.`,
+        code: 'KONFIRMASI_SLUG',
+        slug: tenant.slug,
+      })
+    }
+
     try {
-      const tables = [
-        'absensi_ekskul', 'absensi_siswa', 'absensi_guru', 'absensi_kegiatan', 'sesi_kelas_guru',
-        'ekskul_anggota', 'tagihan', 'tabungan', 'jadwal', 'pengajar',
-        'siswa', 'gtk', 'mapel', 'rombel', 'ekskul', 'jenis_tagihan',
-        'tahun_ajaran', 'kalender_kbm', 'modul_ajar', 'kegiatan_khusus',
-        'notif_settings', 'broadcast_log', 'penilaian_harian', 'jurnal_mengajar',
-        'settings', 'users'
-      ]
-      for (const table of tables) {
-        db.prepare(`DELETE FROM ${table} WHERE tenant_id = ?`).run(tid)
+      // Daftar tabel diturunkan DARI SKEMA, bukan ditulis tangan.
+      //
+      // Versi lama memakai daftar 26 tabel hardcode. Kenyataannya ada 120
+      // tabel ber-tenant_id, sehingga penghapusan meninggalkan 94 tabel berisi
+      // data yatim — termasuk rapor, keuangan_transaksi, absensi_mapel, dan
+      // wa_queue. Data itu tidak lagi bisa diakses tapi tetap menumpuk di DB
+      // dan bisa muncul kembali bila id lembaga dipakai ulang.
+      const semuaTabel = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'").all()
+      const bertenant = []
+      for (const t of semuaTabel) {
+        try {
+          const kol = db.prepare(`PRAGMA table_info(${t.name})`).all().map(c => c.name)
+          if (kol.includes('tenant_id')) bertenant.push(t.name)
+        } catch { /* tabel rusak/virtual — lewati */ }
       }
-      db.prepare('DELETE FROM tenants WHERE id = ?').run(tid)
-      res.json({ success: true, deleted: tenant.nama })
+
+      const dihapus = {}
+      const tx = db.transaction(() => {
+        for (const table of bertenant) {
+          try {
+            const r = db.prepare(`DELETE FROM ${table} WHERE tenant_id = ?`).run(tid)
+            if (r.changes) dihapus[table] = r.changes
+          } catch (e) {
+            // Satu tabel gagal tidak boleh menggagalkan seluruh pembersihan,
+            // tetapi harus terlihat di respons agar tidak diam-diam menyisakan data.
+            dihapus[table] = `GAGAL: ${String(e.message).slice(0, 80)}`
+          }
+        }
+        // Tautan anak-anak (user_students) memakai user_id, bukan tenant_id saja.
+        try { db.prepare('DELETE FROM user_students WHERE tenant_id = ?').run(tid) } catch {}
+        db.prepare('DELETE FROM tenants WHERE id = ?').run(tid)
+      })
+      tx()
+
+      const totalBaris = Object.values(dihapus).filter(v => typeof v === 'number').reduce((a, b) => a + b, 0)
+      const gagal = Object.entries(dihapus).filter(([, v]) => typeof v === 'string')
+      console.log(`[hapus-lembaga] ${req.user.email || req.user.id} menghapus ${tenant.slug}: ${totalBaris} baris dari ${Object.keys(dihapus).length} tabel`)
+      res.json({
+        success: true,
+        deleted: tenant.nama,
+        slug: tenant.slug,
+        tabel_dibersihkan: Object.keys(dihapus).length,
+        baris_dihapus: totalBaris,
+        gagal: gagal.length ? gagal : undefined,
+      })
     } catch (e) {
       console.error('Delete tenant error:', e)
-      res.status(500).json({ error: 'Gagal menghapus lembaga' })
+      res.status(500).json({ error: 'Gagal menghapus lembaga: ' + String(e.message).slice(0, 120) })
     }
   })
 

@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import api from '../../services/api'
 import { FITUR_INFO } from '../../lib/fiturPaket'
 import toast from 'react-hot-toast'
-import { MoreVertical, ExternalLink, Ban, CheckCircle2, Globe2, Link2, ArrowLeftRight, KeyRound, Repeat } from 'lucide-react'
+import { MoreVertical, ExternalLink, Ban, CheckCircle2, Globe2, Link2, ArrowLeftRight, KeyRound, Repeat, Trash2, AlertTriangle } from 'lucide-react'
 
 type PlanRow = {
   plan: string
@@ -69,6 +69,11 @@ export default function TenantManagementPage() {
   const [created, setCreated] = useState<any>(null)
   const [unlock, setUnlock] = useState<{ tenantId: string; tenantName: string; plan: string; months: number } | null>(null)
   const [generatedKey, setGeneratedKey] = useState('')
+  // Hapus lembaga: dua langkah. Pengguna harus mengetik ulang slug, karena
+  // tindakan ini membuang SELURUH riwayat lembaga dan tidak bisa dibatalkan.
+  const [hapus, setHapus] = useState<{ id: string; slug: string; nama: string; siswa: number; user: number } | null>(null)
+  const [konfirmasi, setKonfirmasi] = useState('')
+  const [hapusSibuk, setHapusSibuk] = useState(false)
   const [generating, setGenerating] = useState(false)
   const [changePlan, setChangePlan] = useState<{ tenantId: string; tenantName: string; plan: string; mode: 'extend' | 'set'; masaNilai: number; masaSatuan: string; sampai: string } | null>(null)
   const [savingPlan, setSavingPlan] = useState(false)
@@ -154,6 +159,30 @@ export default function TenantManagementPage() {
       await api.put(`/tenants/${id}`, { aktif: aktif ? 0 : 1 })
       loadTenants()
     } catch (e) { alert('Gagal update status') }
+  }
+
+  // Hapus lembaga permanen. Server menolak bila slug yang diketik tidak cocok,
+  // jadi pemeriksaan di sini hanya untuk kenyamanan — bukan satu-satunya gerbang.
+  const hapusLembaga = async () => {
+    if (!hapus) return
+    if (konfirmasi.trim() !== hapus.slug) {
+      toast.error('Slug tidak cocok. Ketik persis seperti yang tertulis.')
+      return
+    }
+    setHapusSibuk(true)
+    try {
+      const r = await api.delete(`/tenants/${hapus.id}`, { data: { konfirmasi_slug: konfirmasi.trim() } })
+      const n = r.data?.baris_dihapus ?? 0
+      const t = r.data?.tabel_dibersihkan ?? 0
+      toast.success(`Lembaga "${hapus.nama}" dihapus. ${n} baris dari ${t} tabel dibersihkan.`)
+      if (r.data?.gagal?.length) {
+        toast.error(`${r.data.gagal.length} tabel gagal dibersihkan — periksa log server.`)
+      }
+      setHapus(null); setKonfirmasi('')
+      loadTenants()
+    } catch (e: any) {
+      toast.error(e.response?.data?.error || 'Gagal menghapus lembaga')
+    } finally { setHapusSibuk(false) }
   }
 
   const setCustomDomain = async (id: string) => {
@@ -521,6 +550,14 @@ export default function TenantManagementPage() {
                         <Repeat size={15} className="text-indigo-600" />
                         Ubah Paket Langganan
                       </button>
+                      <div className="my-1 border-t border-gray-100" />
+                      <button
+                        onClick={() => { setHapus({ id: t.id, slug: t.slug, nama: t.nama, siswa: Number(t.siswa_count) || 0, user: Number(t.user_count) || 0 }); setOpenMenuId(null) }}
+                        className="w-full flex items-center gap-2.5 px-3.5 py-2 text-sm text-red-600 hover:bg-red-50"
+                      >
+                        <Trash2 size={15} />
+                        Hapus Lembaga
+                      </button>
                     </div>
                   )}
                 </td>
@@ -531,6 +568,64 @@ export default function TenantManagementPage() {
         </div>
         {tenants.length === 0 && <div className="p-8 text-center text-gray-400">Belum ada lembaga terdaftar</div>}
       </div>
+
+      {hapus && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={() => { if (!hapusSibuk) { setHapus(null); setKonfirmasi('') } }}>
+          <div className="w-full max-w-md rounded-2xl bg-white p-5 shadow-xl" onClick={e => e.stopPropagation()}>
+            <div className="flex items-start gap-3">
+              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-red-100 text-red-600">
+                <AlertTriangle size={20} />
+              </span>
+              <div className="min-w-0">
+                <h2 className="text-lg font-bold text-gray-900">Hapus lembaga permanen</h2>
+                <p className="mt-0.5 text-sm text-gray-500">{hapus.nama}</p>
+              </div>
+            </div>
+
+            <div className="mt-4 rounded-xl border border-red-200 bg-red-50 p-3 text-xs leading-relaxed text-red-800">
+              <p className="font-semibold">Tindakan ini tidak bisa dibatalkan.</p>
+              <p className="mt-1">
+                Seluruh data lembaga akan dihapus: <strong>{hapus.siswa} siswa</strong>,{' '}
+                <strong>{hapus.user} akun pengguna</strong>, beserta nilai, rapor, keuangan,
+                absensi, dan riwayat WhatsApp.
+              </p>
+              <p className="mt-1">Domain dan subdomain lembaga ini juga akan berhenti melayani.</p>
+            </div>
+
+            <div className="mt-4">
+              <label className="mb-1 block text-sm font-medium text-gray-700">
+                Ketik <code className="rounded bg-gray-100 px-1.5 py-0.5 font-mono text-xs text-red-700">{hapus.slug}</code> untuk konfirmasi
+              </label>
+              <input
+                value={konfirmasi}
+                onChange={e => setKonfirmasi(e.target.value)}
+                placeholder={hapus.slug}
+                autoComplete="off"
+                className="w-full rounded-xl border border-gray-300 px-3 py-2 text-sm focus:border-red-500 focus:outline-none focus:ring-2 focus:ring-red-500/20"
+              />
+            </div>
+
+            <div className="mt-5 flex gap-2">
+              <button
+                type="button"
+                onClick={() => { setHapus(null); setKonfirmasi('') }}
+                disabled={hapusSibuk}
+                className="flex-1 rounded-xl border border-gray-200 py-2.5 text-sm font-semibold text-gray-600 hover:bg-gray-50 disabled:opacity-50"
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                onClick={() => void hapusLembaga()}
+                disabled={hapusSibuk || konfirmasi.trim() !== hapus.slug}
+                className="flex-1 rounded-xl bg-red-600 py-2.5 text-sm font-bold text-white hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                {hapusSibuk ? 'Menghapus...' : 'Hapus permanen'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {unlock && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => setUnlock(null)}>
         <div className="w-full max-w-md rounded-2xl bg-white p-5 shadow-xl" onClick={e => e.stopPropagation()}>
