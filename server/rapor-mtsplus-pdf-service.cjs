@@ -227,22 +227,25 @@ function renderStudentPages(doc, data, bagian) {
 
     // ---- Tata letak mengikuti dokumen resmi "IDENTITAS RAPOR.docx" ----
     //
-    // Proporsi diambil dari PDF hasil konversi dokumen itu (halaman 936pt):
-    //   logo Kemenag   y  2.7%  135x121pt
-    //   logo lembaga   y 21.4%  135x132pt
+    // Proporsi diambil dari PDF hasil konversi dokumen itu (halaman 936pt),
+    // diukur dari operator gambar + pdftotext -bbox:
+    //   logo Kemenag   y  7.3% .. 20.3%  135x121pt
     //   "RAPOR"        y 24.6%  tinggi huruf 49pt
     //   "MADRASAH ..." y 31.6%  tinggi 27pt
-    //   nama lembaga   y 35.7%  tinggi 45pt (bisa 2 baris)
+    //   nama lembaga   y 35.7%  tinggi 45pt (2 baris, sampai 41.2%)
     //   NSM / NPSN     y 47.7%
-    //   kotak nama     y 71.4%
-    //   instansi+yayasan di kaki halaman
+    //   logo lembaga   y 53.3% .. 67.4%  135x132pt  <-- DI BAWAH NSM/NPSN
+    //   kotak nama     y 71.5%
+    //   instansi+yayasan di kaki halaman (90.6% / 92.3%)
     //
-    // Sebelumnya sampul memakai susunan sendiri (RAPOR PESERTA DIDIK + badge
-    // STS/SAS di tengah), sehingga bentuknya berbeda dari rapor resmi madrasah.
+    // KOREKSI PENTING: logo lembaga sempat ditaruh di 21.4% — di ATAS judul.
+    // Akibatnya logo menutupi "R A P O R" (24.6%) dan "MADRASAH ..." (31.6%)
+    // sepanjang ~105pt. Di dokumen acuan logo itu berada di 53.3%, yaitu
+    // antara baris NSM/NPSN dan kotak identitas peserta didik.
 
-    // Logo instansi di atas, logo lembaga di bawahnya.
-    if (logo.kemenagPath) { try { doc.image(logo.kemenagPath, W / 2 - 67, H * 0.027, { fit: [135, 121] }) } catch {} }
-    if (logo.lembagaLogoPath) { try { doc.image(logo.lembagaLogoPath, W / 2 - 67, H * 0.214, { fit: [135, 132] }) } catch {} }
+    // Logo instansi di atas, logo lembaga di tengah-bawah (sesuai acuan).
+    if (logo.kemenagPath) { try { doc.image(logo.kemenagPath, W / 2 - 67, H * 0.073, { fit: [135, 121] }) } catch {} }
+    if (logo.lembagaLogoPath) { try { doc.image(logo.lembagaLogoPath, W / 2 - 67, H * 0.533, { fit: [135, 132] }) } catch {} }
 
     // "RAPOR" — huruf besar berjarak lebar.
     doc.font('Helvetica-Bold').fontSize(36).fillColor('black')
@@ -273,9 +276,11 @@ function renderStudentPages(doc, data, bagian) {
     }
 
     // Kotak identitas peserta didik.
-    const boxY = H * 0.714
+    // Kotak lama (71.4% .. 85.4%) hanya menyisakan 2.8pt ke kaki halaman
+    // (KEMENTERIAN AGAMA di 85.7%) — garis kotak hampir menempel pada teks.
+    const boxY = H * 0.706
     const boxW = 330
-    const boxH = 118
+    const boxH = 112
     doc.rect(W / 2 - boxW / 2, boxY, boxW, boxH).lineWidth(1.5).strokeColor('black').stroke()
 
     doc.font('Helvetica').fontSize(11).fillColor('black')

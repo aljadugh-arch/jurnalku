@@ -322,8 +322,19 @@ function renderBukuInduk(doc, data, bagian = 'lengkap') {
   doc.rect(18, 18, W - 36, H - 36).lineWidth(4).strokeColor('black').stroke()
   doc.rect(26, 26, W - 52, H - 52).lineWidth(1).stroke()
 
-  if (logo.kemenagPath) { try { doc.image(logo.kemenagPath, W / 2 - 67, H * 0.027, { fit: [135, 121] }) } catch {} }
-  if (logo.lembagaLogoPath) { try { doc.image(logo.lembagaLogoPath, W / 2 - 67, H * 0.214, { fit: [135, 132] }) } catch {} }
+  // Proporsi sama dengan sampul rapor (diukur dari dokumen acuan):
+  //   logo Kemenag  7.3% .. 20.3%
+  //   judul         24.6%
+  //   jenjang       31.6%
+  //   nama lembaga  35.7% (2 baris)
+  //   NSM / NPSN    47.7%
+  //   logo lembaga  53.3% .. 67.4%   <-- di bawah NSM/NPSN, bukan di atas judul
+  //   kotak data    70.0%
+  //
+  // Sebelumnya logo lembaga ditaruh di 21.4% sehingga menimpa judul
+  // "BUKU INDUK" dan baris jenjang. Sudah dikoreksi ke posisi acuan.
+  if (logo.kemenagPath) { try { doc.image(logo.kemenagPath, W / 2 - 67, H * 0.073, { fit: [135, 121] }) } catch {} }
+  if (logo.lembagaLogoPath) { try { doc.image(logo.lembagaLogoPath, W / 2 - 67, H * 0.533, { fit: [135, 132] }) } catch {} }
 
   doc.font('Helvetica-Bold').fontSize(34).fillColor('black')
   doc.text('BUKU INDUK', M, H * 0.246, { width: W - 2 * M, align: 'center', characterSpacing: 2 })
@@ -342,26 +353,32 @@ function renderBukuInduk(doc, data, bagian = 'lengkap') {
   }
 
   // Kotak identitas: nama, NIS/NISN, kelas.
-  const boxY = H * 0.700
+  //
+  // Ukuran dikoreksi: sebelumnya boxH=150 membuat kotak berakhir di 87.8%
+  // halaman, sedangkan kaki (KEMENTERIAN AGAMA ...) mulai di 85.7% — teks
+  // menembus garis bawah kotak.
+  // Kotak juga digeser turun: logo lembaga berakhir di 580.7pt, kotak lama
+  // mulai 579.2pt sehingga garis kotak menempel pada logo (−1.5pt).
+  const boxY = H * 0.706
   const boxW = 340
-  const boxH = 150
+  const boxH = 110
   doc.rect(W / 2 - boxW / 2, boxY, boxW, boxH).lineWidth(1.5).strokeColor('black').stroke()
 
   doc.font('Helvetica').fontSize(11).fillColor('black')
-  doc.text('NAMA PESERTA DIDIK', W / 2 - boxW / 2 + 18, boxY + 14, { width: boxW - 36, align: 'center', lineBreak: false })
+  doc.text('NAMA PESERTA DIDIK', W / 2 - boxW / 2 + 18, boxY + 12, { width: boxW - 36, align: 'center', lineBreak: false })
   doc.font('Helvetica-Bold').fontSize(15)
-  doc.text(safeText(siswa.nama, '').toUpperCase(), W / 2 - boxW / 2 + 12, boxY + 32, { width: boxW - 24, align: 'center' })
+  doc.text(safeText(siswa.nama, '').toUpperCase(), W / 2 - boxW / 2 + 12, boxY + 28, { width: boxW - 24, align: 'center' })
 
   doc.font('Helvetica').fontSize(11)
-  doc.text('NIS / NISN', W / 2 - boxW / 2 + 18, boxY + 64, { width: boxW - 36, align: 'center', lineBreak: false })
+  doc.text('NIS / NISN', W / 2 - boxW / 2 + 18, boxY + 50, { width: boxW - 36, align: 'center', lineBreak: false })
   const nisnSampul = String(siswa.nisn || '').split('#')[1] || safeText(siswa.nisn, '')
   doc.font('Helvetica-Bold').fontSize(13)
-  doc.text(`${safeText(siswa.nis, '')} / ${nisnSampul}`, W / 2 - boxW / 2 + 12, boxY + 82, { width: boxW - 24, align: 'center', lineBreak: false })
+  doc.text(`${safeText(siswa.nis, '')} / ${nisnSampul}`, W / 2 - boxW / 2 + 12, boxY + 66, { width: boxW - 24, align: 'center', lineBreak: false })
 
   doc.font('Helvetica').fontSize(11)
-  doc.text('KELAS', W / 2 - boxW / 2 + 18, boxY + 110, { width: boxW - 36, align: 'center', lineBreak: false })
+  doc.text('KELAS', W / 2 - boxW / 2 + 18, boxY + 80, { width: boxW - 36, align: 'center', lineBreak: false })
   doc.font('Helvetica-Bold').fontSize(13)
-  doc.text(safeText(siswa.rombel_nama, '-'), W / 2 - boxW / 2 + 12, boxY + 126, { width: boxW - 24, align: 'center', lineBreak: false })
+  doc.text(safeText(siswa.rombel_nama, '-'), W / 2 - boxW / 2 + 12, boxY + 94, { width: boxW - 24, align: 'center', lineBreak: false })
 
   // Kaki halaman.
   doc.font('Helvetica-Bold').fontSize(11)

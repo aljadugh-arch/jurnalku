@@ -59,12 +59,16 @@ const buku = baca('server/buku-induk-pdf-service.cjs')
 
 test('sampul rapor mengikuti proporsi dokumen resmi', () => {
   // Proporsi diambil dari IDENTITAS RAPOR.docx: RAPOR 24.6%, madrasah 31.6%,
-  // nama lembaga 35.7%, NSM/NPSN 47.7%, kotak nama 71.4%.
+  // nama lembaga 35.7%, NSM/NPSN 47.7%, kotak nama di paruh bawah.
+  //
+  // Kotak nama TIDAK lagi dikunci di 71.4%: angka itu membuat garis bawah
+  // kotak menembus kaki halaman (KEMENTERIAN AGAMA di 85.7%). Posisi kotak
+  // kini diuji lewat jaraknya di tests/sampul-geometri.test.cjs.
   assert.ok(/H \* 0\.246/.test(rapor), 'judul RAPOR di 24.6% tinggi halaman')
   assert.ok(/H \* 0\.316/.test(rapor), 'baris madrasah di 31.6%')
   assert.ok(/H \* 0\.357/.test(rapor), 'nama lembaga di 35.7%')
   assert.ok(/H \* 0\.477/.test(rapor), 'NSM/NPSN di 47.7%')
-  assert.ok(/H \* 0\.714/.test(rapor), 'kotak nama di 71.4%')
+  assert.ok(/H \* 0\.706/.test(rapor), 'kotak nama di paruh bawah')
 })
 
 test('sampul rapor mencetak RAPOR, bukan RAPOR PESERTA DIDIK', () => {
