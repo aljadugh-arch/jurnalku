@@ -171,6 +171,7 @@ function galatRentangJam (mulai, selesai) {
 
 const UPLOAD_DIR = path.resolve(process.env.MEDIA_ROOT || path.join(__dirname, 'uploads'))
 fs.mkdirSync(UPLOAD_DIR, { recursive: true })
+fs.mkdirSync(path.join(UPLOAD_DIR, 'tugas'), { recursive: true })
 app.use('/uploads', express.static(UPLOAD_DIR, {
   immutable: true,
   maxAge: '1y',
@@ -484,6 +485,28 @@ const storage = multer.diskStorage({
   }
 })
 const upload = multer({ storage, limits: { fileSize: 10 * 1024 * 1024, files: 1 } })
+// Upload lampiran tugas & pengumpulan LMS: dokumen/gambar/audio, maks 20 MB.
+// Disimpan di subdirektori sendiri supaya tidak campur dengan unggahan umum.
+const TUGAS_TIPE_DIIZINKAN = new Set([
+  'application/pdf',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  'image/png', 'image/jpeg', 'image/webp',
+  'audio/mpeg', 'text/plain',
+])
+const tugasStorage = multer.diskStorage({
+  destination: (_req, _file, cb) => cb(null, path.join(UPLOAD_DIR, 'tugas')),
+  filename: (_req, file, cb) => {
+    const ext = path.extname(file.originalname || '').toLowerCase().slice(0, 10)
+    cb(null, `${Date.now()}-${crypto.randomBytes(16).toString('hex')}${ext}`)
+  },
+})
+const tugasUpload = multer({
+  storage: tugasStorage,
+  limits: { fileSize: 20 * 1024 * 1024, files: 1 },
+  fileFilter: (_req, file, cb) => cb(null, TUGAS_TIPE_DIIZINKAN.has(String(file.mimetype || ''))),
+})
 const imageUpload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 5 * 1024 * 1024, files: 1 },
@@ -895,6 +918,27 @@ db.exec(`
     tenant_id TEXT NOT NULL,
     created_at TEXT DEFAULT (datetime('now'))
   );
+
+  CREATE TABLE IF NOT EXISTS tugas_pengumpulan (
+    id TEXT PRIMARY KEY,
+    tugas_id TEXT NOT NULL,
+    siswa_id TEXT NOT NULL,
+    teks TEXT NOT NULL DEFAULT '',
+    file_path TEXT NOT NULL DEFAULT '',
+    file_nama TEXT NOT NULL DEFAULT '',
+    file_ukuran INTEGER NOT NULL DEFAULT 0,
+    file_tipe TEXT NOT NULL DEFAULT '',
+    nilai INTEGER,
+    catatan_guru TEXT NOT NULL DEFAULT '',
+    submitted_at TEXT NOT NULL DEFAULT (datetime('now')),
+    terlambat INTEGER NOT NULL DEFAULT 0,
+    dinilai_at TEXT,
+    tenant_id TEXT NOT NULL
+  );
+  CREATE UNIQUE INDEX IF NOT EXISTS idx_tugas_pengumpulan_unik
+    ON tugas_pengumpulan(tenant_id, tugas_id, siswa_id);
+  CREATE INDEX IF NOT EXISTS idx_tugas_pengumpulan_tugas
+    ON tugas_pengumpulan(tenant_id, tugas_id);
 
   CREATE TABLE IF NOT EXISTS penilaian_harian (
     id TEXT PRIMARY KEY,
@@ -1666,6 +1710,20 @@ try {
     if (!raporBiodataCols.includes(col)) db.exec(`ALTER TABLE siswa ADD COLUMN ${col} ${type}`)
   }
 } catch (e) { console.error('[migrate] siswa biodata rapor failed', e.message) }
+
+// Migrasi tugas_siswa: lampiran berkas (guru) + bobot nilai untuk LMS
+// Penugasan Digital. Kolom aditif — tabel lama yang sudah terisi tidak disentuh.
+try {
+  const tugasCols = db.prepare('PRAGMA table_info(tugas_siswa)').all().map(c => c.name)
+  const addTugas = [
+    ['file_path', "TEXT NOT NULL DEFAULT ''"], ['file_nama', "TEXT NOT NULL DEFAULT ''"],
+    ['file_ukuran', 'INTEGER NOT NULL DEFAULT 0'], ['file_tipe', "TEXT NOT NULL DEFAULT ''"],
+    ['bobot', 'INTEGER NOT NULL DEFAULT 100'],
+  ]
+  for (const [col, type] of addTugas) {
+    if (!tugasCols.includes(col)) db.exec(`ALTER TABLE tugas_siswa ADD COLUMN ${col} ${type}`)
+  }
+} catch (e) { console.error('[migrate] tugas_siswa lampiran failed', e.message) }
 
 
 // Migrasi: kolom UNIQUE global (nip/nis/kode) peninggalan pra-multi-tenant bikin
@@ -5604,31 +5662,115 @@ app.get('/api/guru/wali-kelas', authMiddleware, (req, res) => {
 })
 
 
+// ==================== PENUGASAN DIGITAL (LMS) ====================
+// Guru membuat tugas (judul, deskripsi, deadline, lampiran, bobot), siswa
+// mengumpulkan (teks/berkas), guru merekap & menilai. Deadline lewat ditandai
+// "terlambat" tapi tetap diterima supaya siswa tidak kehilangan kesempatan.
+// Cakupan mengajar guru (gabungan jadwal + pengajar) untuk dropdown penugasan.
+app.get('/api/guru/tugas-scope', authMiddleware, (req, res) => {
+  const gtk = resolveGtkForUser(req.user.id, req.tenantId)
+  if (!gtk) return res.json({ mapel: [], rombel: [] })
+  const rombel = db.prepare(`SELECT DISTINCT r.id, r.nama FROM rombel r WHERE r.tenant_id=? AND (
+      EXISTS (SELECT 1 FROM jadwal j WHERE j.gtk_id=? AND j.rombel_id=r.id AND j.tenant_id=r.tenant_id)
+      OR EXISTS (SELECT 1 FROM pengajar p WHERE p.gtk_id=? AND p.rombel_id=r.id AND p.tenant_id=r.tenant_id)
+    ) ORDER BY r.nama`).all(req.tenantId, gtk.id, gtk.id)
+  const mapel = db.prepare(`SELECT DISTINCT m.id, m.nama FROM mapel m WHERE m.tenant_id=? AND (
+      EXISTS (SELECT 1 FROM jadwal j WHERE j.gtk_id=? AND j.mapel_id=m.id AND j.tenant_id=m.tenant_id)
+      OR EXISTS (SELECT 1 FROM pengajar p WHERE p.gtk_id=? AND p.mapel_id=m.id AND p.tenant_id=m.tenant_id)
+    ) ORDER BY m.nama`).all(req.tenantId, gtk.id, gtk.id)
+  res.json({ rombel, mapel })
+})
 app.get('/api/guru/tugas', authMiddleware, (req, res) => {
   const gtk = resolveGtkForUser(req.user.id, req.tenantId)
   if (!gtk) return res.json([])
-  res.json(db.prepare(`SELECT t.*, m.nama mapel_nama, r.nama rombel_nama FROM tugas_siswa t LEFT JOIN mapel m ON m.id=t.mapel_id AND m.tenant_id=t.tenant_id LEFT JOIN rombel r ON r.id=t.rombel_id AND r.tenant_id=t.tenant_id WHERE t.guru_id=? AND t.tenant_id=? ORDER BY t.created_at DESC LIMIT 50`).all(gtk.id, req.tenantId))
+  res.json(db.prepare(`SELECT t.*, m.nama mapel_nama, r.nama rombel_nama,
+      (SELECT COUNT(*) FROM tugas_pengumpulan p WHERE p.tugas_id=t.id AND p.tenant_id=t.tenant_id) AS jumlah_kumpul,
+      (SELECT COUNT(*) FROM siswa s WHERE s.rombel_id=t.rombel_id AND s.tenant_id=t.tenant_id AND COALESCE(s.status,'aktif')='aktif') AS jumlah_siswa
+    FROM tugas_siswa t LEFT JOIN mapel m ON m.id=t.mapel_id AND m.tenant_id=t.tenant_id LEFT JOIN rombel r ON r.id=t.rombel_id AND r.tenant_id=t.tenant_id
+    WHERE t.guru_id=? AND t.tenant_id=? ORDER BY t.created_at DESC LIMIT 50`).all(gtk.id, req.tenantId))
 })
-app.post('/api/guru/tugas', TEACHER, (req, res) => {
+app.post('/api/guru/tugas', TEACHER, tugasUpload.single('file'), (req, res) => {
   const gtk = resolveGtkForUser(req.user.id, req.tenantId)
-  if (!gtk) return res.status(400).json({ error: 'Akun guru belum terhubung GTK' })
-  const { mapel_id, rombel_id, judul, deskripsi, deadline } = req.body || {}
-  if (!rombel_id || !judul) return res.status(400).json({ error: 'Rombel dan judul wajib' })
+  if (!gtk) { if (req.file) { try { fs.unlinkSync(req.file.path) } catch {} }; return res.status(400).json({ error: 'Akun guru belum terhubung GTK' }) }
+  const { mapel_id, rombel_id, judul, deskripsi, deadline, bobot } = req.body || {}
+  if (!rombel_id || !judul) { if (req.file) { try { fs.unlinkSync(req.file.path) } catch {} }; return res.status(400).json({ error: 'Rombel dan judul wajib' }) }
   const allowed = db.prepare(`SELECT 1 FROM jadwal WHERE gtk_id=? AND rombel_id=? AND tenant_id=? UNION SELECT 1 FROM pengajar WHERE gtk_id=? AND rombel_id=? AND tenant_id=?`).get(gtk.id, rombel_id, req.tenantId, gtk.id, rombel_id, req.tenantId)
-  if (!allowed) return res.status(403).json({ error: 'Rombel bukan kelas yang diampu' })
+  if (!allowed) { if (req.file) { try { fs.unlinkSync(req.file.path) } catch {} }; return res.status(403).json({ error: 'Rombel bukan kelas yang diampu' }) }
   if (mapel_id) {
     const okMapel = db.prepare(`SELECT 1 FROM jadwal WHERE gtk_id=? AND rombel_id=? AND mapel_id=? AND tenant_id=? UNION SELECT 1 FROM pengajar WHERE gtk_id=? AND rombel_id=? AND mapel_id=? AND tenant_id=?`).get(gtk.id, rombel_id, mapel_id, req.tenantId, gtk.id, rombel_id, mapel_id, req.tenantId)
-    if (!okMapel) return res.status(403).json({ error: 'Mapel bukan yang diampu di rombel ini' })
+    if (!okMapel) { if (req.file) { try { fs.unlinkSync(req.file.path) } catch {} }; return res.status(403).json({ error: 'Mapel bukan yang diampu di rombel ini' }) }
   }
   const id = uuidv4()
-  db.prepare('INSERT INTO tugas_siswa (id,guru_id,mapel_id,rombel_id,judul,deskripsi,deadline,tenant_id) VALUES (?,?,?,?,?,?,?,?)').run(id, gtk.id, mapel_id || null, rombel_id, judul.trim(), deskripsi || '', deadline || null, req.tenantId)
+  const bobotVal = Number(bobot)
+  const bobotFinal = Number.isInteger(bobotVal) && bobotVal > 0 ? Math.min(bobotVal, 1000) : 100
+  db.prepare('INSERT INTO tugas_siswa (id,guru_id,mapel_id,rombel_id,judul,deskripsi,deadline,file_path,file_nama,file_ukuran,file_tipe,bobot,tenant_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)')
+    .run(id, gtk.id, mapel_id || null, rombel_id, String(judul).trim(), String(deskripsi || ''),
+      deadline || null,
+      req.file ? `/uploads/tugas/${path.basename(req.file.path)}` : '',
+      req.file ? String(req.file.originalname || '') : '',
+      req.file ? req.file.size : 0,
+      req.file ? String(req.file.mimetype || '') : '',
+      bobotFinal, req.tenantId)
   try { notificationMonitor.logActivity(db, { tenantId: req.tenantId, eventType: 'assignment_created', actorId: gtk.id, entityId: id, metadata: { rombel_id, deadline: deadline || null } }) } catch {}
   res.json({ id })
+})
+// Rekap pengumpulan satu tugas: semua siswa aktif di rombel + status kumpul + nilai.
+app.get('/api/guru/tugas/:id/pengumpulan', authMiddleware, (req, res) => {
+  const gtk = resolveGtkForUser(req.user.id, req.tenantId)
+  const t = db.prepare('SELECT * FROM tugas_siswa WHERE id=? AND tenant_id=?').get(req.params.id, req.tenantId)
+  if (!t) return res.status(404).json({ error: 'Tugas tidak ditemukan' })
+  if (gtk && t.guru_id !== gtk.id) return res.status(403).json({ error: 'Bukan tugas yang Anda buat' })
+  const siswa = db.prepare("SELECT id, nama, nis FROM siswa WHERE tenant_id=? AND rombel_id=? AND COALESCE(status,'aktif')='aktif' ORDER BY nama").all(req.tenantId, t.rombel_id)
+  const kumpul = db.prepare('SELECT * FROM tugas_pengumpulan WHERE tenant_id=? AND tugas_id=?').all(req.tenantId, t.id)
+  const bySiswa = new Map(kumpul.map(k => [k.siswa_id, k]))
+  const rows = siswa.map(s => {
+    const k = bySiswa.get(s.id)
+    return {
+      siswa_id: s.id, nama: s.nama, nis: s.nis,
+      status: k ? 'dikumpulkan' : 'belum',
+      terlambat: k ? !!k.terlambat : false,
+      submitted_at: k?.submitted_at || null,
+      nilai: k?.nilai ?? null,
+      catatan_guru: k?.catatan_guru || '',
+      dinilai_at: k?.dinilai_at || null,
+      pengumpulan_id: k?.id || null,
+      file_nama: k?.file_nama || '',
+      file_path: k?.file_path || '',
+      teks: k?.teks || '',
+    }
+  })
+  const jumlahKumpul = kumpul.length
+  res.json({ tugas: t, siswa: rows, jumlah_kumpul: jumlahKumpul, jumlah_siswa: siswa.length, jumlah_belum: siswa.length - jumlahKumpul, jumlah_terlambat: kumpul.filter(k => k.terlambat).length })
+})
+// Nilai + feedback satu pengumpulan.
+app.put('/api/guru/pengumpulan/:id/nilai', authMiddleware, (req, res) => {
+  const gtk = resolveGtkForUser(req.user.id, req.tenantId)
+  const p = db.prepare('SELECT p.*, t.guru_id, t.bobot FROM tugas_pengumpulan p JOIN tugas_siswa t ON t.id=p.tugas_id AND t.tenant_id=p.tenant_id WHERE p.id=? AND p.tenant_id=?').get(req.params.id, req.tenantId)
+  if (!p) return res.status(404).json({ error: 'Pengumpulan tidak ditemukan' })
+  if (gtk && p.guru_id !== gtk.id) return res.status(403).json({ error: 'Bukan tugas yang Anda buat' })
+  const { nilai, catatan_guru } = req.body || {}
+  const nilaiVal = nilai == null || nilai === '' ? null : Number(nilai)
+  if (nilaiVal != null && (!Number.isFinite(nilaiVal) || nilaiVal < 0 || nilaiVal > (p.bobot || 100))) {
+    return res.status(400).json({ error: `Nilai harus 0–${p.bobot || 100}` })
+  }
+  db.prepare("UPDATE tugas_pengumpulan SET nilai=?, catatan_guru=?, dinilai_at=datetime('now') WHERE id=? AND tenant_id=?")
+    .run(nilaiVal, String(catatan_guru || ''), p.id, req.tenantId)
+  res.json({ success: true })
 })
 app.delete('/api/guru/tugas/:id', TEACHER, (req, res) => {
   const gtk = resolveGtkForUser(req.user.id, req.tenantId)
   if (!gtk) return res.status(400).json({ error: 'Akun guru belum terhubung GTK' })
-  db.prepare('DELETE FROM tugas_siswa WHERE id=? AND guru_id=? AND tenant_id=?').run(req.params.id, gtk.id, req.tenantId)
+  const t = db.prepare('SELECT * FROM tugas_siswa WHERE id=? AND guru_id=? AND tenant_id=?').get(req.params.id, gtk.id, req.tenantId)
+  if (!t) return res.status(404).json({ error: 'Tugas tidak ditemukan' })
+  // Hapus berkas lampiran + berkas pengumpulan dari disk supaya uploads tidak menumpuk.
+  const files = []
+  if (t.file_path) files.push(path.join(UPLOAD_DIR, 'tugas', path.basename(t.file_path)))
+  for (const k of db.prepare('SELECT file_path FROM tugas_pengumpulan WHERE tugas_id=? AND tenant_id=? AND file_path<>?').all(t.id, req.tenantId, '')) {
+    files.push(path.join(UPLOAD_DIR, 'tugas', path.basename(k.file_path)))
+  }
+  for (const f of files) { try { if (fs.existsSync(f)) fs.unlinkSync(f) } catch {} }
+  db.prepare('DELETE FROM tugas_pengumpulan WHERE tugas_id=? AND tenant_id=?').run(t.id, req.tenantId)
+  db.prepare('DELETE FROM tugas_siswa WHERE id=? AND guru_id=? AND tenant_id=?').run(t.id, gtk.id, req.tenantId)
   res.json({ success: true })
 })
 app.get('/api/siswa/tugas', authMiddleware, (req, res) => {
@@ -5636,7 +5778,49 @@ app.get('/api/siswa/tugas', authMiddleware, (req, res) => {
   if (!sid) return res.json([])
   const siswa = db.prepare('SELECT rombel_id FROM siswa WHERE id=? AND tenant_id=?').get(sid, req.tenantId)
   if (!siswa?.rombel_id) return res.json([])
-  res.json(db.prepare(`SELECT t.*, m.nama mapel_nama, g.nama guru_nama FROM tugas_siswa t LEFT JOIN mapel m ON m.id=t.mapel_id AND m.tenant_id=t.tenant_id LEFT JOIN gtk g ON g.id=t.guru_id AND g.tenant_id=t.tenant_id WHERE t.rombel_id=? AND t.tenant_id=? ORDER BY COALESCE(t.deadline,t.created_at) DESC LIMIT 30`).all(siswa.rombel_id, req.tenantId))
+  res.json(db.prepare(`SELECT t.*, m.nama mapel_nama, g.nama guru_nama,
+      p.id AS pengumpulan_id, p.nilai, p.catatan_guru, p.submitted_at, p.terlambat, p.dinilai_at, p.teks AS pengumpulan_teks, p.file_nama AS pengumpulan_file_nama, p.file_path AS pengumpulan_file_path
+    FROM tugas_siswa t LEFT JOIN mapel m ON m.id=t.mapel_id AND m.tenant_id=t.tenant_id LEFT JOIN gtk g ON g.id=t.guru_id AND g.tenant_id=t.tenant_id
+    LEFT JOIN tugas_pengumpulan p ON p.tugas_id=t.id AND p.siswa_id=? AND p.tenant_id=t.tenant_id
+    WHERE t.rombel_id=? AND t.tenant_id=? ORDER BY COALESCE(t.deadline,t.created_at) DESC LIMIT 30`).all(sid, siswa.rombel_id, req.tenantId))
+})
+// Kumpulkan tugas (teks dan/atau berkas). Deadline lewat -> ditandai terlambat.
+app.post('/api/siswa/tugas/:id/kumpul', authMiddleware, tugasUpload.single('file'), (req, res) => {
+  const sid = selectLinkedStudent(req)
+  if (!sid) { if (req.file) { try { fs.unlinkSync(req.file.path) } catch {} }; return res.status(403).json({ error: 'Akun ini tidak terhubung ke data siswa' }) }
+  const t = db.prepare('SELECT * FROM tugas_siswa WHERE id=? AND tenant_id=?').get(req.params.id, req.tenantId)
+  if (!t) { if (req.file) { try { fs.unlinkSync(req.file.path) } catch {} }; return res.status(404).json({ error: 'Tugas tidak ditemukan' }) }
+  const siswa = db.prepare('SELECT rombel_id FROM siswa WHERE id=? AND tenant_id=?').get(sid, req.tenantId)
+  if (!siswa || String(siswa.rombel_id) !== String(t.rombel_id)) { if (req.file) { try { fs.unlinkSync(req.file.path) } catch {} }; return res.status(403).json({ error: 'Tugas ini bukan untuk rombel Anda' }) }
+  const teks = String(req.body?.teks || '').trim()
+  if (!teks && !req.file) { return res.status(400).json({ error: 'Isi jawaban teks atau lampirkan berkas' }) }
+
+  // Terlambat bila sekarang > deadline (deadline dibandingkan sebagai teks UTC
+  // "YYYY-MM-DDTHH:MM"; bila tidak ada deadline, tidak pernah terlambat).
+  let terlambat = 0
+  if (t.deadline) {
+    const dl = new Date(t.deadline.replace(' ', 'T') + (t.deadline.includes('T') ? '' : 'T00:00')).getTime()
+    if (Number.isFinite(dl) && Date.now() > dl) terlambat = 1
+  }
+
+  const nowSql = new Date().toISOString().replace('T', ' ').slice(0, 19)
+  const ada = db.prepare('SELECT * FROM tugas_pengumpulan WHERE tenant_id=? AND tugas_id=? AND siswa_id=?').get(req.tenantId, t.id, sid)
+  const id = ada?.id || uuidv4()
+  // Bila mengganti berkas lama, hapus berkas lama dari disk.
+  if (ada && req.file && ada.file_path) {
+    const lama = path.join(UPLOAD_DIR, 'tugas', path.basename(ada.file_path))
+    try { if (fs.existsSync(lama)) fs.unlinkSync(lama) } catch {}
+  }
+  const filePath = req.file ? `/uploads/tugas/${path.basename(req.file.path)}` : (ada?.file_path || '')
+  const fileName = req.file ? String(req.file.originalname || '') : (ada?.file_nama || '')
+  const fileSize = req.file ? req.file.size : (ada?.file_ukuran || 0)
+  const fileTipe = req.file ? String(req.file.mimetype || '') : (ada?.file_tipe || '')
+  db.prepare(`INSERT INTO tugas_pengumpulan (id,tugas_id,siswa_id,teks,file_path,file_nama,file_ukuran,file_tipe,nilai,catatan_guru,submitted_at,terlambat,dinilai_at,tenant_id)
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+    ON CONFLICT(tenant_id,tugas_id,siswa_id) DO UPDATE SET teks=excluded.teks,file_path=excluded.file_path,file_nama=excluded.file_nama,file_ukuran=excluded.file_ukuran,file_tipe=excluded.file_tipe,submitted_at=excluded.submitted_at,terlambat=excluded.terlambat,dinilai_at=NULL`)
+    .run(id, t.id, sid, teks, filePath, fileName, fileSize, fileTipe,
+      ada?.nilai ?? null, ada?.catatan_guru || '', nowSql, terlambat, req.tenantId)
+  res.json({ success: true, id, terlambat: !!terlambat })
 })
 
 // ==================== GURU ABSENSI (CEKLOK) ====================

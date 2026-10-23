@@ -83,6 +83,7 @@ const LaporanKeuanganPage = lazy(() => import('./pages/admin/LaporanKeuanganPage
 const BukuKasPage = lazy(() => import('./pages/admin/BukuKasPage'))
 const EkskulPage = lazy(() => import('./pages/admin/EkskulPage'))
 const GuruDashboard = lazy(() => import('./pages/guru/GuruDashboard'))
+const GuruTugasPage = lazy(() => import('./pages/guru/GuruTugasPage'))
 const GuruJurnalPage = lazy(() => import('./pages/guru/GuruJurnalPage'))
 const GuruAbsensiSiswaPage = lazy(() => import('./pages/guru/GuruAbsensiSiswaPage'))
 const GuruJadwalPage = lazy(() => import('./pages/guru/GuruJadwalPage'))
@@ -386,6 +387,7 @@ export default function App() {
         }>
           <Route index element={<GuruDashboard />} />
           <Route path="jurnal" element={<GuruJurnalPage />} />
+          <Route path="tugas" element={<GuruTugasPage />} />
           <Route path="jadwal" element={<GuruJadwalPage />} />
           <Route path="absensi-guru" element={<GuruAbsensiPage />} />
           <Route path="absensi-siswa" element={<GuruAbsensiSiswaQRPage />} />

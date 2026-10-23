@@ -133,7 +133,7 @@ export const guruMenuItems: MenuItem[] = [
     children: [
       { label: 'Jurnal Mengajar', path: '/guru/jurnal' },
       { label: 'Jadwal Saya', path: '/guru/jadwal' },
-      { label: 'Penugasan', path: '/guru#tugas' },
+      { label: 'Penugasan', path: '/guru/tugas' },
     ]
   },
   {
