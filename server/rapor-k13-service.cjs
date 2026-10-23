@@ -3,6 +3,7 @@
 // Helper murni untuk rapor K-13 (klasik): terbilang, nilai->abjad (sikap), peringkat,
 // dan pembacaan data per siswa. Semua fungsi menerima `db` sebagai argumen pertama
 // agar bisa diuji dengan better-sqlite3 :memory: tanpa HTTP.
+const { loadKkm, pickKkm, KKM_DEFAULT } = require('./kkm-service.cjs')
 
 const SATUAN = ['', 'satu', 'dua', 'tiga', 'empat', 'lima', 'enam', 'tujuh', 'delapan', 'sembilan', 'sepuluh', 'sebelas']
 const BELASAN = ['sepuluh', 'sebelas', 'dua belas', 'tiga belas', 'empat belas', 'lima belas', 'enam belas', 'tujuh belas', 'delapan belas', 'sembilan belas']
@@ -108,6 +109,12 @@ function getK13RaporData(db, tenantId, { siswaId, semester, tahunAjaran }) {
     FROM rapor_k13 rk JOIN mapel m ON m.id=rk.mapel_id
     WHERE rk.siswa_id=? AND rk.tenant_id=? AND rk.tahun_ajaran=? AND rk.semester=? ORDER BY m.nama`)
     .all(siswaId, tenantId, tahunAjaran, semester)
+    .map(row => ({
+      ...row,
+      // KKM terpusat (kkm_mapel) menang atas nilai kkm per-siswa yang tersimpan,
+      // diresolusi per tingkat jenjang siswa. Fallback ke nilai tersimpan, lalu 75.
+      kkm: pickKkm(loadKkm(db, tenantId), { mapelId: row.id, tingkat: siswa.rombel_tingkat }, Number(row.kkm) || KKM_DEFAULT.k13),
+    }))
 
   let sikap = db.prepare('SELECT * FROM sikap_k13 WHERE siswa_id=? AND tenant_id=? AND tahun_ajaran=? AND semester=?').get(siswaId, tenantId, tahunAjaran, semester) || null
 

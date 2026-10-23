@@ -52,6 +52,8 @@ const TenantManagementPage = lazy(() => import('./pages/admin/TenantManagementPa
 const RaporPage = lazy(() => import('./pages/admin/RaporPage'))
 const CetakRaporPage = lazy(() => import('./pages/admin/CetakRaporPage'))
 const BukuIndukPage = lazy(() => import('./pages/admin/BukuIndukPage'))
+const AdminKkmPage = lazy(() => import('./pages/admin/AdminKkmPage'))
+const AdminMonitoringNilaiPage = lazy(() => import('./pages/admin/AdminMonitoringNilaiPage'))
 const SuperadminLembagaPage = lazy(() => import('./pages/admin/SuperadminLembagaPage'))
 const PortalOperatorPage = lazy(() => import('./pages/admin/PortalOperatorPage'))
 const UserManagementPage = lazy(() => import('./pages/admin/UserManagementPage'))
@@ -287,6 +289,12 @@ export default function App() {
           } />
           <Route path="rekap-nilai" element={
             <ProtectedRoute allowedRoles={['admin', 'super_admin']}><GuruRekapNilaiPage /></ProtectedRoute>
+          } />
+          <Route path="kkm" element={
+            <ProtectedRoute allowedRoles={['admin', 'super_admin', 'kepala', 'operator', 'tata_usaha', 'tu']}><AdminKkmPage /></ProtectedRoute>
+          } />
+          <Route path="monitoring-nilai" element={
+            <ProtectedRoute allowedRoles={['admin', 'super_admin', 'kepala', 'operator', 'tata_usaha', 'tu']}><AdminMonitoringNilaiPage /></ProtectedRoute>
           } />
           <Route path="change-password" element={<ChangePasswordPage />} />
           <Route path="profile" element={<ProfilePage />} />

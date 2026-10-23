@@ -54,6 +54,8 @@ const { createBukuIndukPdf, createBukuIndukPdfBulk } = require('./buku-induk-pdf
 const { createKtsPdf, CARD_W: KTS_W, CARD_H: KTS_H } = require('./kts-pdf-service.cjs')
 const { createRaporK13Pdf, createK13LedgerPdf } = require('./rapor-k13-pdf-service.cjs')
 const { getK13RaporData, getPeringkatK13, getK13Ledger, normalizeK13Nilai } = require('./rapor-k13-service.cjs')
+const { loadKkm, pickKkm, kkmOverview, tingkatListTenant, KKM_DEFAULT } = require('./kkm-service.cjs')
+const { hitungMonitoringNilai } = require('./nilai-monitoring-service.cjs')
 const { parseCsv, parseExcelBuffer, parseExcelBufferAll, buildImportPreview, clampNilai, fetchGoogleSheets } = require('./nilai-import-service.cjs')
 const { hitungJadwalSholat, jadwalSholatTenant } = require('./jadwal-sholat.cjs')
 const { KOTA_SHOLAT, DEFAULT_KOTA, cariKota } = require('./kota-sholat.cjs')
@@ -997,6 +999,22 @@ db.exec(`
     UNIQUE(tenant_id, rombel_id, mapel_id)
   );
   CREATE INDEX IF NOT EXISTS idx_rapor_bobot_tenant ON rapor_bobot(tenant_id);
+
+  -- KKM (Kriteria Ketuntasan Minimal) per mapel + tingkat. tingkat '' = nilai
+  -- umum untuk mapel itu; tingkat 'VII' dst = override khusus. Resolusi paling
+  -- spesifik menang (lihat kkm-service.cjs). Tidak memakai kolom kkm bawaan di
+  -- tabel rapor/rapor_k13 agar admin bisa mengaturnya terpusat tanpa menyentuh
+  -- baris nilai per siswa.
+  CREATE TABLE IF NOT EXISTS kkm_mapel (
+    id TEXT PRIMARY KEY,
+    tenant_id TEXT NOT NULL,
+    mapel_id TEXT NOT NULL,
+    tingkat TEXT NOT NULL DEFAULT '',
+    kkm INTEGER NOT NULL DEFAULT 70,
+    updated_at TEXT,
+    UNIQUE(tenant_id, mapel_id, tingkat)
+  );
+  CREATE INDEX IF NOT EXISTS idx_kkm_mapel_tenant ON kkm_mapel(tenant_id);
 
   -- Bank Soal & Ujian
   CREATE TABLE IF NOT EXISTS bank_soal (
@@ -10022,6 +10040,45 @@ app.post('/api/rapor/generate', STAFF, (req, res) => {
   res.json({ count, message: `${count} rapor ${jenisR === 'rapor_sas' ? 'SAS' : 'STS'} berhasil digenerate` })
 })
 
+// ==================== KKM (KRITERIA KETUNTASAN MINIMAL) ====================
+// WAJIB didefinisikan SEBELUM app.put('/api/rapor/:id') — Express mencocokkan
+// rute sesuai urutan pendaftaran, jadi '/api/rapor/kkm' akan tertelan oleh
+// ':id' (dibaca sebagai id 'kkm') bila didaftarkan sesudahnya.
+const KKM_ROLES = requireRole('admin', 'super_admin', 'kepala', 'operator', 'tata_usaha', 'tu')
+
+// GET /api/rapor/kkm — daftar KKM per mapel (+ override per tingkat) + daftar tingkat.
+app.get('/api/rapor/kkm', KKM_ROLES, (req, res) => {
+  const mapelRows = db.prepare('SELECT id, nama, kelompok FROM mapel WHERE tenant_id=? ORDER BY kelompok, nama').all(req.tenantId)
+  const tingkatList = tingkatListTenant(db, req.tenantId)
+  res.json({
+    tingkat: tingkatList,
+    mapel: kkmOverview(db, req.tenantId, { mapelRows, tingkatList }),
+    default: KKM_DEFAULT,
+  })
+})
+
+// PUT /api/rapor/kkm — simpan KKM untuk (mapel_id, tingkat). tingkat '' = umum.
+// Body: { mapel_id, tingkat, kkm }. kkm 0..100.
+app.put('/api/rapor/kkm', KKM_ROLES, (req, res) => {
+  const mapelId = String(req.body?.mapel_id || '').trim()
+  const tingkat = String(req.body?.tingkat == null ? '' : req.body.tingkat).trim()
+  const kkmRaw = Number(req.body?.kkm)
+  if (!mapelId) return res.status(400).json({ error: 'mapel_id wajib' })
+  const mapel = db.prepare('SELECT id FROM mapel WHERE id=? AND tenant_id=?').get(mapelId, req.tenantId)
+  if (!mapel) return res.status(404).json({ error: 'Mata pelajaran tidak ditemukan' })
+  if (!Number.isFinite(kkmRaw) || kkmRaw < 0 || kkmRaw > 100) {
+    return res.status(400).json({ error: 'kkm harus angka 0-100' })
+  }
+  const kkm = Math.round(kkmRaw)
+  const id = uuidv4()
+  db.prepare(`INSERT INTO kkm_mapel (id, tenant_id, mapel_id, tingkat, kkm, updated_at)
+    VALUES (?,?,?,?,?,datetime('now'))
+    ON CONFLICT(tenant_id, mapel_id, tingkat)
+    DO UPDATE SET kkm=excluded.kkm, updated_at=datetime('now')`)
+    .run(id, req.tenantId, mapelId, tingkat, kkm)
+  res.json({ ok: true, mapel_id: mapelId, tingkat, kkm })
+})
+
 // PUT /api/rapor/:id — update manual satu baris rapor (admin/guru)
 // nilai_akhir dihitung ulang dari komponen yang sama dengan generate
 app.put('/api/rapor/:id', STAFF, (req, res) => {
@@ -10325,6 +10382,21 @@ app.get('/api/rapor/ledger/export/pdf', LEDGER, async (req, res) => {
     doc.end()
   } catch (e) {
     if (!res.headersSent) res.status(500).json({ error: 'Gagal export PDF' })
+  }
+})
+
+// ==================== MONITORING PENGISIAN NILAI PER GURU ====================
+// GET /api/admin/monitoring-nilai?tahun_ajaran=YYYY/YYYY&semester=ganjil|genap
+app.get('/api/admin/monitoring-nilai', KKM_ROLES, (req, res) => {
+  const tahunAjaran = String(req.query.tahun_ajaran || '').trim()
+  const semester = String(req.query.semester || '').trim()
+  if (!tahunAjaran || !['ganjil', 'genap'].includes(semester)) {
+    return res.status(400).json({ error: 'tahun_ajaran dan semester (ganjil|genap) wajib' })
+  }
+  try {
+    res.json(hitungMonitoringNilai(db, { tenantId: req.tenantId, tahunAjaran, semester }))
+  } catch (e) {
+    res.status(400).json({ error: e.message || 'Gagal menghitung monitoring nilai' })
   }
 })
 

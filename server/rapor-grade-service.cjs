@@ -1,6 +1,7 @@
 // Perhitungan nilai rapor dipakai bersama oleh generate (membuat baris baru)
 // dan refresh (menghitung ulang baris yang sudah ada) agar keduanya tidak
 // pernah menghasilkan angka berbeda untuk data sumber yang sama.
+const { loadKkm, pickKkm, KKM_DEFAULT } = require('./kkm-service.cjs')
 const JENIS_GENERATED = "'rapor_sts','rapor_sas'"
 
 // Bobot bawaan = rumus yang sudah dipakai produksi:
@@ -317,6 +318,14 @@ function computeRaporLive(db, { tenantId, siswaId, rombelId, tahunAjaran, semest
   const { from, to } = semesterRange(tahunAjaran, semester)
   const { dailyFor, asesmenFor } = makeStatements(db, { tenantId, from, to })
   const bobotRows = loadBobot(db, tenantId)
+  const kkmRows = loadKkm(db, tenantId)
+  // Tingkat/jenjang siswa menentukan override KKM per tingkat (contoh: VII vs VIII).
+  // Bungkus try/catch: skema lama/fixture mungkin belum punya kolom `tingkat`.
+  let tingkat = ''
+  try {
+    tingkat = db.prepare('SELECT tingkat FROM rombel WHERE id=? AND tenant_id=?')
+      .get(rombelId, tenantId)?.tingkat || ''
+  } catch { /* rombel tanpa kolom tingkat -> pakai '' */ }
 
   const mapelIds = db.prepare(`
     SELECT DISTINCT mapel_id FROM penilaian_harian
@@ -339,7 +348,8 @@ function computeRaporLive(db, { tenantId, siswaId, rombelId, tahunAjaran, semest
     })
     rows.push({
       mapel_id: mapelId, mapel_nama: m.nama, mapel_kelompok: m.kelompok,
-      nilai_akhir: computed.akhir, nilai_sts: computed.sts, nilai_sas: computed.sas, kkm: 70,
+      nilai_akhir: computed.akhir, nilai_sts: computed.sts, nilai_sas: computed.sas,
+      kkm: pickKkm(kkmRows, { mapelId, tingkat }, KKM_DEFAULT.merdeka),
     })
   }
   rows.sort((a, b) =>

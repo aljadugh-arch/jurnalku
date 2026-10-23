@@ -60,9 +60,11 @@ export const adminMenuItems: MenuItem[] = [
       { label: 'Input & Kelola Nilai Rapor', path: '/admin/rapor' },
       { label: 'Cetak & Ekspor Rapor', path: '/admin/cetak-rapor' },
       { label: 'Buku Induk Siswa', path: '/admin/buku-induk' },
+      { label: 'Atur KKM', path: '/admin/kkm' },
     ]
   },
   { label: 'Rekap Nilai per Mapel', icon: <ClipboardCheck size={20} />, path: '/admin/rekap-nilai' },
+  { label: 'Monitoring Pengisian Nilai', icon: <Activity size={20} />, path: '/admin/monitoring-nilai' },
   {
     label: 'Ujian & Bank Soal', icon: <FileQuestion size={20} />,
     children: [
