@@ -13,9 +13,8 @@
  * Murni dari `db` + argumen supaya bisa diuji runtime dengan DB in-memory.
  */
 
-// Bawaan bila tidak ada baris kkm_mapel: merdeka 70, K-13 75 (sama seperti
-// nilai hardcode lama di rapor-grade-service & rapor-k13-service).
-const KKM_DEFAULT = { merdeka: 70, k13: 75 }
+// Bawaan bila tidak ada baris kkm_mapel (Kurikulum Merdeka). K-13 sudah dihapus.
+const KKM_DEFAULT = { merdeka: 70 }
 
 /** Muat seluruh baris KKM satu tenant (kosong bila tabel belum ada). */
 function loadKkm(db, tenantId) {

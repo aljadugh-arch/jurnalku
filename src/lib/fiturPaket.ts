@@ -33,7 +33,7 @@ export const FITUR_INFO: Record<string, FiturInfo> = {
   },
   penilaian: {
     label: 'Penilaian & Rapor',
-    deskripsi: 'Nilai harian, STS, SAS, rapor K13, dan catatan kepribadian',
+    deskripsi: 'Nilai harian, STS, SAS, rapor Kurikulum Merdeka, dan catatan kepribadian',
   },
   keuangan: {
     label: 'Keuangan',

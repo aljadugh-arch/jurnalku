@@ -19,7 +19,7 @@ const path = require('path')
 const fs = require('fs')
 const { formatTanggalLahir } = require('./format-tanggal.cjs')
 const { getTenantSettings } = require('./tenant-settings.cjs')
-const { terbilang, nilaiKeAbjad, semesterRange } = require('./rapor-k13-service.cjs')
+const { terbilang, nilaiKeAbjad, semesterRange } = require('./rapor-format-service.cjs')
 const { computeRaporLive } = require('./rapor-grade-service.cjs')
 
 const W = 595.28

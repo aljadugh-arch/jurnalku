@@ -13,7 +13,7 @@ type MapelKkm = {
 type KkmData = {
   tingkat: string[]
   mapel: MapelKkm[]
-  default: { merdeka: number; k13: number }
+  default: { merdeka: number }
 }
 
 export default function AdminKkmPage() {
@@ -143,7 +143,7 @@ export default function AdminKkmPage() {
         <Info size={16} className="mt-0.5 flex-shrink-0" />
         <div>
           Nilai disimpan otomatis saat kolom kehilangan fokus. Bawaan bila kosong:
-          Kurikulum Merdeka <b>{data?.default.merdeka ?? 70}</b>, K-13 <b>{data?.default.k13 ?? 75}</b>.
+          Kurikulum Merdeka <b>{data?.default.merdeka ?? 70}</b>.
           Kolom tingkat yang dibiarkan kosong memakai nilai KKM Umum.
         </div>
       </div>

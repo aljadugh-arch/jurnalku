@@ -94,8 +94,11 @@ test('SEO: sitemap memuat posting publik per tenant', () => {
 test('SEO: HTML punya konten untuk crawler di dalam #root', () => {
   const s = baca('server/index.cjs')
   const r = s.indexOf('function renderIndexSeo(req)')
-  const badan = s.slice(r, r + 6000)
-  assert.ok(/id="root"><div/.test(badan) || /isiCrawler/.test(badan), 'harus ada konten crawler di #root')
+  const badan = s.slice(r, r + 9000)
+  // Konten crawler didefinisikan sebagai `isiCrawler` berisi <div id="root">.
+  // Jangan terikat offset karakter — panjang teks fitur bisa berubah.
+  const defIsi = s.slice(s.indexOf('const isiCrawler'), s.indexOf('const isiCrawler') + 300)
+  assert.ok(/id="root"><div/.test(defIsi) || /isiCrawler/.test(badan), 'harus ada konten crawler di #root')
   assert.ok(/<h1>/.test(badan), 'konten crawler harus punya h1')
 })
 

@@ -91,7 +91,7 @@ test('input tanggal TETAP memakai ISO (jangan diformat)', () => {
 })
 
 test('service PDF memakai formatter tanggal lahir', () => {
-  for (const f of ['rapor-k13-pdf-service.cjs', 'rapor-mtsplus-pdf-service.cjs', 'rapor-siswa-pdf-service.cjs', 'kts-pdf-service.cjs']) {
+  for (const f of ['rapor-mtsplus-pdf-service.cjs', 'rapor-siswa-pdf-service.cjs', 'kts-pdf-service.cjs']) {
     const isi = fs.readFileSync(path.join(AKAR, 'server', f), 'utf8')
     assert.match(isi, /formatTanggalLahir/, `${f} harus memakai formatTanggalLahir`)
   }
