@@ -49,6 +49,8 @@ function setupBackupTables(db) {
       last_run_key TEXT,
       last_run_at TEXT,
       run_claimed_at TEXT,
+      needs_reauth INTEGER DEFAULT 0,
+      reconciled_key TEXT,
       updated_at TEXT DEFAULT (datetime('now'))
     );
     CREATE TABLE IF NOT EXISTS google_drive_oauth_state (
@@ -64,6 +66,8 @@ function setupBackupTables(db) {
     "ALTER TABLE backup_config ADD COLUMN last_run_key TEXT",
     "ALTER TABLE backup_config ADD COLUMN last_run_at TEXT",
     "ALTER TABLE backup_config ADD COLUMN run_claimed_at TEXT",
+    "ALTER TABLE backup_config ADD COLUMN needs_reauth INTEGER DEFAULT 0",
+    "ALTER TABLE backup_config ADD COLUMN reconciled_key TEXT",
   ]) {
     try { db.exec(sql) }
     catch (error) {
@@ -316,8 +320,8 @@ function registerBackupRoutes(app, db, { requireRole, uuid, mediaRoot, now = () 
   const kadmin = requireRole('admin', 'super_admin')
 
   const getConfig = (tenantId) =>
-    db.prepare('SELECT tenant_id, folder_id, auto_enabled, retention_days, schedule_time, timezone, last_run_key, last_run_at, run_claimed_at FROM backup_config WHERE tenant_id = ?').get(tenantId)
-    || { tenant_id: tenantId, folder_id: null, auto_enabled: 0, retention_days: 14, schedule_time: '23:00', timezone: 'Asia/Jakarta', last_run_key: null, last_run_at: null, run_claimed_at: null }
+    db.prepare('SELECT tenant_id, folder_id, auto_enabled, retention_days, schedule_time, timezone, last_run_key, last_run_at, run_claimed_at, needs_reauth, reconciled_key FROM backup_config WHERE tenant_id = ?').get(tenantId)
+    || { tenant_id: tenantId, folder_id: null, auto_enabled: 0, retention_days: 14, schedule_time: '23:00', timezone: 'Asia/Jakarta', last_run_key: null, last_run_at: null, run_claimed_at: null, needs_reauth: 0, reconciled_key: null }
 
   const localParts = (date, timezone) => {
     const parts = new Intl.DateTimeFormat('en-CA', { timeZone: timezone || 'Asia/Jakarta', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false }).formatToParts(date)
@@ -352,12 +356,39 @@ function registerBackupRoutes(app, db, { requireRole, uuid, mediaRoot, now = () 
       db.prepare('DELETE FROM backup_log WHERE id=? AND tenant_id=?').run(row.id, tenantId)
     }
   }
+  // Token refresh OAuth mati (invalid_grant) → perlu hubungkan ulang. Service account
+  // tidak pernah kena (tanpa refresh token), jadi tidak dianggap perlu reauth.
+  const reauthTokenError = (msg) => /kedaluwarsa atau dicabut|invalid_grant|expired or revoked|token_revoked|revoked/i.test(String(msg || ''))
+  const setReauthFlag = (tenantId, value) =>
+    db.prepare("UPDATE backup_config SET needs_reauth=?, updated_at=datetime('now') WHERE tenant_id=?").run(value ? 1 : 0, tenantId)
+  // Rekonsiliasi harian: cek kesehatan token SEKALI per hari (bukan hanya saat jam
+  // backup), supaya token yang kedaluwarsa terdeteksi dini & muncul sebagai
+  // peringatan di dashboard — bukan baru ketahuan saat backup gagal di jam 23:00.
+  const reconcileDriveHealth = async (tenantId, cfg, currentDate) => {
+    let p
+    try { p = localParts(currentDate, cfg.timezone) } catch { return }
+    const key = `${p.year}-${p.month}-${p.day}`
+    if (cfg.reconciled_key === key) return
+    // Tandai sudah diperiksa hari ini dulu (galat jaringan tidak memicu spam harian).
+    db.prepare('UPDATE backup_config SET reconciled_key=? WHERE tenant_id=?').run(key, tenantId)
+    try {
+      await resolveAuth(tenantId)
+      if (cfg.needs_reauth) setReauthFlag(tenantId, 0) // sudah hubungkan ulang → bersihkan
+    } catch (e) {
+      const msg = String(e?.message || e)
+      if (reauthTokenError(msg)) setReauthFlag(tenantId, 1)
+      // Galat non-reauth (jaringan, belum dikonfigurasi) TIDAK menandai reauth.
+    }
+  }
   const automaticBackupTick = async () => {
     const currentDate = now()
     const tenants = db.prepare("SELECT id FROM tenants WHERE COALESCE(aktif,1)=1").all()
     for (const tenant of tenants) {
       const cfg = getConfig(tenant.id)
       if (!cfg.auto_enabled || !/^([01]\d|2[0-3]):[0-5]\d$/.test(cfg.schedule_time || '')) continue
+      // Rekonsiliasi token harian (sebelum cek jadwal), agar putus koneksi
+      // terdeteksi lebih awal dari jam backup.
+      await reconcileDriveHealth(tenant.id, cfg, currentDate)
       let p
       try { p = localParts(currentDate, cfg.timezone) }
       catch (error) {
@@ -377,12 +408,15 @@ function registerBackupRoutes(app, db, { requireRole, uuid, mediaRoot, now = () 
         const backup = await runBackupForTenant(tenant.id, getConfig(tenant.id), 'auto-')
         await applyRetention(tenant.id, getConfig(tenant.id), backup.token, currentDate)
         db.prepare('UPDATE backup_config SET last_run_key=?,last_run_at=?,run_claimed_at=NULL WHERE tenant_id=?').run(key, claimedAt, tenant.id)
+        setReauthFlag(tenant.id, 0) // backup berhasil → token sehat, pastikan flag bersih
       } catch (error) {
         // Jangan lepas run_claimed_at saat gagal: pertahankan lock 30 menit
         // (cek staleBefore) supaya tick 1 menit tidak mencoba ulang tiap 60 detik
         // — dulu 486 baris error menumpuk dalam sejam saat OAuth token gagal.
+        const errMsg = String(error.message || error)
+        if (reauthTokenError(errMsg)) setReauthFlag(tenant.id, 1)
         db.prepare('INSERT INTO backup_log (id,tenant_id,filename,drive_file_id,size,status,error) VALUES (?,?,?,?,?,?,?)')
-          .run(uuid(), tenant.id, `auto-${key}`, null, 0, 'error', String(error.message || error))
+          .run(uuid(), tenant.id, `auto-${key}`, null, 0, 'error', errMsg)
       }
     }
   }
@@ -415,6 +449,8 @@ function registerBackupRoutes(app, db, { requireRole, uuid, mediaRoot, now = () 
       const file = tenantTokenPath(row.tenant_id)
       fs.mkdirSync(CREDENTIAL_DIR, { recursive: true, mode: 0o700 })
       fs.writeFileSync(file, JSON.stringify({ ...token, created: Math.floor(Date.now() / 1000) }, null, 2), { mode: 0o600 })
+      // Reconnect berhasil → reset flag reauth & izinkan rekonsiliasi ulang hari ini.
+      db.prepare("UPDATE backup_config SET needs_reauth=0, reconciled_key=NULL, updated_at=datetime('now') WHERE tenant_id=?").run(row.tenant_id)
       res.send('Google Drive berhasil terhubung ke tenant ini. Anda dapat menutup halaman ini.')
     } catch (e) { res.status(502).send(`Koneksi Google Drive gagal: ${String(e.message || e)}`) }
   })
@@ -436,6 +472,7 @@ function registerBackupRoutes(app, db, { requireRole, uuid, mediaRoot, now = () 
           folder_ok = true // token OK, folder pakai default nanti
         }
         const email = auth.type === 'service_account' ? auth.sa.client_email : `oauth2:${auth.client_id}`
+        if (cfg.needs_reauth) setReauthFlag(req.tenantId, 0) // status cek berhasil → bersihkan flag
         return res.json({ connected: true, email, folder_id: folderId, folder_ok, auth_type: auth.type })
       } catch (e) {
         const email = auth.type === 'service_account' ? auth.sa.client_email : `oauth2:${auth.client_id}`
@@ -444,9 +481,23 @@ function registerBackupRoutes(app, db, { requireRole, uuid, mediaRoot, now = () 
     } catch (e) {
       const msg = String(e.message || e)
       // Token kedaluwarsa/dicabut → admin harus menghubungkan ulang.
-      const reauth_required = /kedaluwarsa atau dicabut|invalid_grant|expired or revoked/i.test(msg)
+      const reauth_required = reauthTokenError(msg)
+      if (reauth_required) setReauthFlag(req.tenantId, 1)
       return res.json({ connected: false, error: msg, reauth_required })
     }
+  })
+
+  // Peringatan ringan untuk dashboard: apakah koneksi Drive tenant ini perlu
+  // disambungkan ulang (tanpa memanggil Google — baca flag + log terakhir saja).
+  app.get('/api/google-drive/alert', kadmin, (req, res) => {
+    const cfg = getConfig(req.tenantId)
+    const lastErr = db.prepare("SELECT error, created_at FROM backup_log WHERE tenant_id=? AND status='error' ORDER BY created_at DESC LIMIT 1").get(req.tenantId)
+    res.json({
+      needs_reauth: !!cfg.needs_reauth,
+      auto_enabled: !!cfg.auto_enabled,
+      last_error: lastErr?.error || null,
+      last_error_at: lastErr?.created_at || null,
+    })
   })
 
   // Putuskan koneksi Google Drive tenant ini (hapus token). Admin lalu dapat
@@ -488,6 +539,7 @@ function registerBackupRoutes(app, db, { requireRole, uuid, mediaRoot, now = () 
       const driveFileId = await driveUpload(token, { name: filename, folderId, buffer: gz, mimeType: 'application/gzip' })
       db.prepare('INSERT INTO backup_log (id, tenant_id, filename, drive_file_id, size, status) VALUES (?,?,?,?,?,?)')
         .run(id, req.tenantId, filename, driveFileId, gz.length, 'ok')
+      setReauthFlag(req.tenantId, 0) // backup manual berhasil → token sehat
       const omitted = artifact.manifest?.media?.omitted || []
       res.json({
         id, drive_file_id: driveFileId, size: gz.length, filename,

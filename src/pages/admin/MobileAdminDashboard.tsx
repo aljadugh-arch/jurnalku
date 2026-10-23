@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { PieChart, Pie, Cell, ResponsiveContainer } from 'recharts'
 import { Link, useNavigate } from 'react-router-dom'
 import {
-  Activity, ArrowRight, CalendarCheck, ChevronRight, ClipboardCheck, LayoutGrid, Users,
+  Activity, ArrowRight, AlertCircle, CalendarCheck, ChevronRight, ClipboardCheck, LayoutGrid, Users,
 } from 'lucide-react'
 import api from '../../services/api'
 import { adminDashboardShortcuts, parseAdminDashboardShortcutKeys } from '../../lib/adminDashboardShortcuts'
@@ -52,6 +52,7 @@ export default function MobileAdminDashboard({ stats }: Props) {
   const navigate = useNavigate()
   const [menuOpen, setMenuOpen] = useState(false)
   const [monitoring, setMonitoring] = useState<any>(null)
+  const [driveAlert, setDriveAlert] = useState<{ needs_reauth?: boolean; last_error?: string | null } | null>(null)
   const settings = useSettingsStore(s => s.settings)
   const user = useAuthStore(s => s.user)
 
@@ -65,6 +66,7 @@ export default function MobileAdminDashboard({ stats }: Props) {
 
   useEffect(() => {
     api.get('/admin/monitoring').then(r => setMonitoring(r.data)).catch(() => setMonitoring(null))
+    api.get('/google-drive/alert').then(r => setDriveAlert(r.data)).catch(() => setDriveAlert(null))
   }, [])
 
   // Grid 4x2: tujuh pintasan pertama + ubin "Lainnya" yang membuka menu lengkap.
@@ -115,6 +117,22 @@ export default function MobileAdminDashboard({ stats }: Props) {
 
         {/* ── JADWAL SHOLAT (komponen bersama, sama dgn guru & bendahara) ── */}
         <JadwalSholatCard />
+
+        {/* ── PERINGATAN BACKUP GOOGLE DRIVE TERPUTUS ── */}
+        {driveAlert?.needs_reauth && (
+          <section className="rounded-3xl border border-red-200 bg-red-50 p-4 shadow-sm dark:bg-red-950/40">
+            <div className="flex items-start gap-2.5">
+              <AlertCircle size={16} className="mt-0.5 shrink-0 text-red-600" />
+              <div className="min-w-0 flex-1">
+                <p className="text-[13px] font-bold text-red-900 dark:text-red-200">Backup Google Drive terputus</p>
+                <p className="mt-0.5 text-[11px] leading-4 text-red-700 dark:text-red-300">Koneksi sudah kedaluwarsa/dicabut. Backup otomatis berhenti sampai disambungkan ulang.</p>
+              </div>
+              <Link to="/admin/backup-restore" className="shrink-0 rounded-lg bg-red-600 px-2.5 py-1.5 text-[11px] font-medium text-white">
+                Sambungkan
+              </Link>
+            </div>
+          </section>
+        )}
 
         {/* ── STATISTIK MONITORING LIVE ── */}
         <section data-admin-monitoring-card="true" className="rounded-3xl bg-white p-4 shadow-sm dark:bg-gray-900">

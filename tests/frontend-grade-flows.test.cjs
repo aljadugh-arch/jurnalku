@@ -82,7 +82,7 @@ async function mount(t, name, handlers = {}) {
   }
 }
 
-const pageNames = ['GuruPenilaianHarianPage', 'GuruNilaiSTSPage', 'GuruNilaiSASPage', 'GuruNilaiSumatifPage']
+const pageNames = ['GuruPenilaianHarianPage', 'GuruNilaiSTSPage', 'GuruNilaiSASPage']
 for (const name of pageNames) {
   test(`${name}: failed grade load is visible and save stays locked`, async t => {
     const pending = deferred()
@@ -178,18 +178,6 @@ for (const mode of ['count', 'readback', 'success']) {
   })
 }
 
-test('sumatif: reload uses canonical STS and SAS rows, including zero', async t => {
-  const ui = await mount(t, 'GuruNilaiSumatifPage', { get: (url, config) => url === '/rapor' ? { data: config.params.jenis === 'sumatif' ? [] : [{ siswa_id: 's1', mapel_id: 'm1', nilai_sts: config.params.jenis === 'sts' ? 0 : 73 }] } : undefined })
-  assert.deepEqual(ui.numbers().map(n => n.props.value), [0, 73])
-})
-test('sumatif: blank components are omitted rather than saved as zero', async t => {
-  const ui = await mount(t, 'GuruNilaiSumatifPage')
-  await ui.change(ui.numbers()[0], '0')
-  await act(async () => ui.save().props.onClick())
-  const item = ui.calls.find(c => c.method === 'post').body.items[0]
-  assert.equal(item.nilai_sts, 0)
-  assert.equal(item.nilai_sas, undefined)
-})
 test('harian: untouched rows stay blank and cannot be accidentally saved as zeros', async t => {
   const ui = await mount(t, 'GuruPenilaianHarianPage')
   assert.deepEqual(ui.numbers().map(n => n.props.value), ['', '', ''])

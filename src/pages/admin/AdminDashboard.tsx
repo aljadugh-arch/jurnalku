@@ -35,6 +35,7 @@ export default function AdminDashboard() {
   const [attendanceOverview, setAttendanceOverview] = useState<any>(null)
   const [attendanceDate, setAttendanceDate] = useState(todayJakarta)
   const [loading, setLoading] = useState(true)
+  const [driveAlert, setDriveAlert] = useState<{ needs_reauth?: boolean; last_error?: string | null } | null>(null)
 
   useEffect(() => {
     api.get('/dashboard/stats').then(res => {
@@ -46,6 +47,8 @@ export default function AdminDashboard() {
     loadClassMonitor()
     loadMonitoring()
     api.get('/dashboard/kelengkapan').then(res => setKelengkapan(res.data)).catch(() => {})
+    // Peringatan koneksi Google Drive (ringan, tanpa memanggil Google).
+    api.get('/google-drive/alert').then(res => setDriveAlert(res.data)).catch(() => setDriveAlert(null))
     const timer = window.setInterval(() => { loadClassMonitor(); loadMonitoring() }, 30000)
     return () => window.clearInterval(timer)
   }, [])
@@ -82,6 +85,21 @@ export default function AdminDashboard() {
       <div className="hidden lg:block space-y-3">
         <PageHeader title="Dashboard" subtitle="Ringkasan data sekolah/madrasah hari ini" />
         <MobileMenuGrid />
+
+      {/* Peringatan koneksi Google Drive terputus (rekonsiliasi backup) */}
+      {driveAlert?.needs_reauth && (
+        <div className="flex items-start gap-3 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-900">
+          <AlertCircle size={18} className="mt-0.5 shrink-0 text-red-600" />
+          <div className="min-w-0 flex-1">
+            <p className="font-semibold">Backup Google Drive terputus</p>
+            <p className="mt-1 text-red-700">Koneksi Google Drive lembaga ini sudah kedaluwarsa/dicabut. Backup otomatis tidak akan berjalan sampai disambungkan ulang.</p>
+            {driveAlert.last_error && <p className="mt-1 truncate text-xs text-red-500" title={driveAlert.last_error}>{driveAlert.last_error}</p>}
+          </div>
+          <Link to="/admin/backup-restore" className="shrink-0 rounded-lg bg-red-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-red-700">
+            Sambungkan ulang
+          </Link>
+        </div>
+      )}
 
       {/* Stat Cards */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5">
