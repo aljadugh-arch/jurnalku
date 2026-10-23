@@ -144,7 +144,10 @@ test('halaman tabungan & tagihan siswa tersedia di route dan menu', () => {
     assert.ok(app.includes(r), `route ${r} harus ada`)
   }
   const menu = read('src/lib/menuItems.tsx')
-  assert.ok(menu.includes("'/siswa#tabungan'") && menu.includes("'/siswa#tagihan'"))
+  // Kontrak diperbarui: anchor hash (/siswa#tabungan) dihapus karena mati di
+  // WaliDashboardPage dan diganti route nyata. Menu siswa & wali memakai route
+  // asli /siswa/tabungan dan /siswa/tagihan.
+  assert.ok(menu.includes("'/siswa/tabungan'") && menu.includes("'/siswa/tagihan'"))
 })
 
 test('tagihan siswa bisa dibayar QRIS dari halaman tagihan', () => {

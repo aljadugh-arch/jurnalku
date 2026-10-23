@@ -3255,7 +3255,7 @@ app.post('/api/auth/demo', (req, res) => {
   // Drajat) — pengunjung lembaga melihat panel akun demo di alamat sendiri.
   if (hostMilikSatuLembaga(demoHost)) return res.status(404).json({ error: 'Not found' })
   const role = String(req.body?.role || 'admin')
-  const allowed = ['admin','kepala','guru','wali_kelas','bendahara','siswa','wali_murid']
+  const allowed = ['admin','kepala','guru','wali_kelas','bendahara','siswa','wali_murid','proktor']
   if (!allowed.includes(role)) return res.status(400).json({ error: 'Role demo tidak tersedia' })
   const makeDemo = (wantRole) => {
     const tenantId = DEMO_TENANT_ID
@@ -3267,7 +3267,7 @@ app.post('/api/auth/demo', (req, res) => {
     const nama = 'Demo ' + actualRole.replace('_',' ')
     const email = `demo-${actualRole}@jurnalmadrasah.web.id`
     let gtkId = null, siswaId = null, nis = null
-    if (['guru','kepala','bendahara'].includes(actualRole)) {
+    if (['guru','kepala','bendahara','proktor'].includes(actualRole)) {
       gtkId = uuidv4()
       try { db.prepare("INSERT INTO gtk (id,nama,jenis_kelamin,email,jabatan,status_kepegawaian,tenant_id) VALUES (?,?, 'L', ?, ?, 'Tetap', ?)").run(gtkId, nama, email, actualRole, tenantId) } catch { gtkId = null }
     }
@@ -4692,6 +4692,24 @@ app.get('/api/rombel/:id/siswa', ROLE_LIHAT_SISWA_ROMBEL, (req, res) => {
   res.json(rows)
 })
 
+// Sinkronkan role wali_kelas: saat seorang GTK ditetapkan sebagai wali kelas sebuah
+// rombel, akun user yang tertaut (users.gtk_id) dipromosikan dari guru ke wali_kelas
+// supaya menu "Ledger Nilai" & "Kelas Wali Saya" (digerbang role wali_kelas) dapat
+// diakses. Bila tidak lagi wali kelas rombel mana pun, kembalikan ke guru.
+// Sebelumnya role wali_kelas hanya bisa disetel manual di Manajemen Pengguna,
+// sehingga guru yang ditetapkan lewat halaman Wali Kelas tak pernah mendapat akses.
+function syncWaliKelasRole(gtkId, tenantId) {
+  if (!gtkId) return
+  const isWali = !!db.prepare('SELECT 1 FROM rombel WHERE wali_kelas_id=? AND tenant_id=? LIMIT 1').get(gtkId, tenantId)
+  const user = db.prepare('SELECT id, role FROM users WHERE gtk_id=? AND tenant_id=? LIMIT 1').get(gtkId, tenantId)
+  if (!user) return
+  if (isWali && user.role === 'guru') {
+    db.prepare("UPDATE users SET role='wali_kelas' WHERE id=?").run(user.id)
+  } else if (!isWali && user.role === 'wali_kelas') {
+    db.prepare("UPDATE users SET role='guru' WHERE id=?").run(user.id)
+  }
+}
+
 app.post('/api/rombel', ADMIN, (req, res) => {
   const id = uuidv4()
   const { nama, tingkat, tahun_ajaran, wali_kelas_id, kapasitas, geo_latitude, geo_longitude, geo_radius, geo_lock } = req.body
@@ -4706,6 +4724,7 @@ app.post('/api/rombel', ADMIN, (req, res) => {
       geo_longitude != null && geo_longitude !== '' ? Number(geo_longitude) : null,
       geo_radius != null && geo_radius !== '' ? Number(geo_radius) : 50,
       Number(geo_lock) ? 1 : 0)
+  syncWaliKelasRole(waliKelasId, req.tenantId)
   res.json({ id })
 })
 
@@ -4716,6 +4735,7 @@ app.put('/api/rombel/:id', ADMIN, (req, res) => {
   if (waliKelasId && !db.prepare('SELECT id FROM gtk WHERE id=? AND tenant_id=?').get(waliKelasId, req.tenantId)) {
     return res.status(400).json({ error: 'Wali kelas tidak ditemukan pada lembaga ini.' })
   }
+  const lama = db.prepare('SELECT wali_kelas_id FROM rombel WHERE id=? AND tenant_id=?').get(req.params.id, req.tenantId)
   const result = db.prepare('UPDATE rombel SET nama=?, tingkat=?, tahun_ajaran=?, wali_kelas_id=?, kapasitas=?, geo_latitude=?, geo_longitude=?, geo_radius=?, geo_lock=? WHERE id=? AND tenant_id=?')
     .run(nama, tingkat, tahun_ajaran, waliKelasId, kapasitas,
       geo_latitude != null && geo_latitude !== '' ? Number(geo_latitude) : null,
@@ -4723,12 +4743,17 @@ app.put('/api/rombel/:id', ADMIN, (req, res) => {
       geo_radius != null && geo_radius !== '' ? Number(geo_radius) : 50,
       Number(geo_lock) ? 1 : 0, req.params.id, req.tenantId)
   if (!result.changes) return res.status(404).json({ error: 'Rombel tidak ditemukan.' })
+  // Wali baru (kalau ada) dipromosikan; wali lama yang diganti/dilepas didemote.
+  syncWaliKelasRole(waliKelasId, req.tenantId)
+  if (lama?.wali_kelas_id && lama.wali_kelas_id !== waliKelasId) syncWaliKelasRole(lama.wali_kelas_id, req.tenantId)
   res.json({ success: true })
 })
 
 app.delete('/api/rombel/:id', ADMIN, (req, res) => {
   try {
+    const lama = db.prepare('SELECT wali_kelas_id FROM rombel WHERE id=? AND tenant_id=?').get(req.params.id, req.tenantId)
     db.prepare('DELETE FROM rombel WHERE id = ? AND tenant_id=?').run(req.params.id, req.tenantId)
+    if (lama?.wali_kelas_id) syncWaliKelasRole(lama.wali_kelas_id, req.tenantId)
     res.json({ success: true })
   } catch (e) {
     if (e.code === 'SQLITE_CONSTRAINT_FOREIGNKEY') return res.status(400).json({ error: 'Rombel masih digunakan (siswa/jadwal/pengajar). Hapus data terkait dulu.' })

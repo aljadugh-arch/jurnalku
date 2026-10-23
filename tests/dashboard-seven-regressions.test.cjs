@@ -15,6 +15,7 @@ const header = read('src/components/layout/Header.tsx')
 const mobileHeader = read('src/components/MobileHeader.tsx')
 const sidebar = read('src/components/layout/Sidebar.tsx')
 const bottomNav = read('src/components/layout/BottomNavigation.tsx')
+const menuItems = read('src/lib/menuItems.tsx')
 
 function block(source, start, end) {
   const from = source.indexOf(start)
@@ -77,7 +78,9 @@ test('Buku Kas bendahara memiliki route, menu, CRUD tenant-aware, dan saldo berj
   assert.match(app, /BukuKasPage/)
   assert.match(app, /path="buku-kas"/)
   assert.match(app, /<BukuKasPage/)
-  assert.match(sidebar, /Buku Kas[\s\S]*\/admin\/buku-kas/)
+  // Menu bendahara kini di sumber tunggal menuItems.tsx (Sidebar menurunkannya
+  // lewat menuForRole). Buku Kas harus ada di menu kanonik bendahara.
+  assert.match(menuItems, /bendaharaMenuItems[\s\S]*Buku Kas[\s\S]*\/admin\/buku-kas/)
   assert.match(bottomNav, /Buku Kas[\s\S]*\/admin\/buku-kas/)
   const api = block(server, '// ==================== BUKU KAS', '// ==================== LAPORAN MINGGUAN')
   assert.match(api, /app\.get\('\/api\/buku-kas'/)

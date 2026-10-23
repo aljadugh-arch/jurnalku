@@ -93,7 +93,7 @@ test('operator and TU menus and direct routes omit destinations restricted to ad
 })
 
 test('operator and TU restrictions are shared by desktop and mobile navigation', () => {
-  assert.match(SIDEBAR, /menuForRole\(user\?\.role\)/)
+  assert.match(SIDEBAR, /menuForRole\(user\?\.role === 'kepala'/)
   assert.match(BOTTOM_NAV, /menuForRole\(navigationRole\)/)
 })
 

@@ -24,7 +24,7 @@ test('demo menyertakan peran wali murid', () => {
   const s = baca('src/pages/auth/LoginPage.tsx')
   assert.ok(/'siswa', 'wali_murid'/.test(s), 'tombol wali murid harus ada')
   const v = baca('server/index.cjs')
-  assert.ok(/const allowed = \['admin','kepala','guru','wali_kelas','bendahara','siswa','wali_murid'\]/.test(v),
+  assert.ok(/const allowed = \['admin','kepala','guru','wali_kelas','bendahara','siswa','wali_murid','proktor'\]/.test(v),
     'server harus mengizinkan wali_murid di /api/auth/demo')
 })
 

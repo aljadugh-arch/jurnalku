@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Calendar, ClipboardCheck, ClipboardList, BookOpen, QrCode, MapPin, Users, PenLine, ChevronRight, Clock, DoorOpen, ScrollText, UserCheck } from 'lucide-react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useLocation } from 'react-router-dom'
 import api from '../../services/api'
 import { getCurrentPosition } from '../../lib/geo'
 import toast from 'react-hot-toast'
@@ -41,6 +41,15 @@ export default function GuruDashboard() {
   const [tugasForm, setTugasForm] = useState({ judul: '', deskripsi: '', deadline: '', rombel_id: '', mapel_id: '' })
   const [classBusy, setClassBusy] = useState(false)
   const navigate = useNavigate()
+  const location = useLocation()
+
+  // Scroll ke section ber-hash (mis. menu "Penugasan" -> /guru#tugas). SiswaDashboard
+  // punya ini; GuruDashboard sebelumnya tidak, sehingga klik anchor tidak menggulir.
+  useEffect(() => {
+    if (!location.hash) return
+    const id = location.hash.slice(1)
+    setTimeout(() => document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 80)
+  }, [location.hash])
 
   const loadDashboard = () => api.get('/guru/dashboard').then(res => {
     setData(res.data)

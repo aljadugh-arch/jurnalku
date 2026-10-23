@@ -175,22 +175,41 @@ export const proktorMenuItems: MenuItem[] = [
 
 export const siswaMenuItems: MenuItem[] = [
   { label: 'Dashboard', icon: <LayoutDashboard size={20} />, path: '/siswa' },
-  { label: 'Absensi Saya', icon: <QrCode size={20} />, path: '/siswa/absensi' },
+  { label: 'Absensi Saya', icon: <UserCheck size={20} />, path: '/siswa/absensi' },
   { label: 'Jadwal', icon: <Calendar size={20} />, path: '/siswa/jadwal' },
+  { label: 'Nilai', icon: <BookOpen size={20} />, path: '/siswa/nilai' },
+  { label: 'Tugas', icon: <ClipboardCheck size={20} />, path: '/siswa/tugas' },
+  { label: 'Tagihan', icon: <DollarSign size={20} />, path: '/siswa/tagihan' },
+  { label: 'Tabungan', icon: <Wallet size={20} />, path: '/siswa/tabungan' },
   { label: 'Ekskul', icon: <Activity size={20} />, path: '/siswa/ekskul' },
   { label: 'Ujian', icon: <FileQuestion size={20} />, path: '/siswa/ujian' },
   { label: 'Perpustakaan Digital', icon: <BookOpen size={20} />, path: '/siswa/perpustakaan' },
+]
+
+// Wali murid: menu khusus. Dashboard, kehadiran, nilai, tagihan, tabungan — TIDAK
+// memuat ujian/ekskul/QRIS milik siswa. Sebelumnya wali_murid jatuh ke menu siswa
+// ber-anchor hash (/siswa#nilai, dst) yang TIDAK ada di WaliDashboardPage, sehingga
+// semua link itu mati (tidak menggulir apa pun).
+export const waliMuridMenuItems: MenuItem[] = [
+  { label: 'Dashboard', icon: <LayoutDashboard size={20} />, path: '/siswa' },
+  { label: 'Absensi Saya', icon: <UserCheck size={20} />, path: '/siswa/absensi' },
+  { label: 'Nilai', icon: <BookOpen size={20} />, path: '/siswa/nilai' },
+  { label: 'Tagihan', icon: <DollarSign size={20} />, path: '/siswa/tagihan' },
+  { label: 'Tabungan', icon: <Wallet size={20} />, path: '/siswa/tabungan' },
 ]
 
 // Bendahara: hanya modul keuangan, dashboard, dan perpustakaan — tidak boleh
 // mengakses data akademik/administrasi lain milik admin.
 export const bendaharaMenuItems: MenuItem[] = [
   { label: 'Dashboard', icon: <LayoutDashboard size={20} />, path: '/admin' },
+  { label: 'Ceklok & Rekap', icon: <MapPin size={20} />, path: '/admin/ceklok' },
   {
     label: 'Keuangan', icon: <DollarSign size={20} />,
     children: [
       { label: 'Tagihan & Pembayaran', path: '/admin/tagihan' },
       { label: 'Tabungan Siswa', path: '/admin/tabungan' },
+      { label: 'Buku Kas', path: '/admin/buku-kas' },
+      { label: 'Laporan Keuangan', path: '/admin/bendahara/laporan' },
       { label: 'Payment Gateway QRIS', path: '/admin/payment-gateway' },
     ]
   },
@@ -290,6 +309,7 @@ export function menuForRole(role?: string): MenuItem[] {
     : ['admin', 'operator', 'tata_usaha', 'tu'].includes(role || '') ? adminMenuItems
     : role === 'guru' || role === 'wali_kelas' ? guruMenuItems
     : role === 'proktor' ? proktorMenuItems
+    : role === 'wali_murid' ? waliMuridMenuItems
     : siswaMenuItems
   const visible = filterRoleItems(items, role)
   return role === 'wali_kelas'
@@ -330,12 +350,12 @@ const adminPrimaryGrid: FlatMenu[] = [
 export function primaryGridForRole(role?: string): FlatMenu[] {
   if (role === 'admin' || role === 'kepala' || role === 'super_admin' || role === 'operator') return adminPrimaryGrid
   if (role === 'siswa') return [
-    { label: 'Kehadiran', path: '/siswa#kehadiran', icon: <UserCheck size={20} /> },
-    { label: 'Tabungan', path: '/siswa#tabungan', icon: <Wallet size={20} /> },
-    { label: 'Tagihan', path: '/siswa#tagihan', icon: <Receipt size={20} /> },
-    { label: 'Nilai', path: '/siswa#nilai', icon: <BookOpen size={20} /> },
-    { label: 'Jadwal Hari Ini', path: '/siswa#jadwal', icon: <Calendar size={20} /> },
-    { label: 'Tugas', path: '/siswa#tugas', icon: <ClipboardCheck size={20} /> },
+    { label: 'Kehadiran', path: '/siswa/absensi', icon: <UserCheck size={20} /> },
+    { label: 'Tabungan', path: '/siswa/tabungan', icon: <Wallet size={20} /> },
+    { label: 'Tagihan', path: '/siswa/tagihan', icon: <Receipt size={20} /> },
+    { label: 'Nilai', path: '/siswa/nilai', icon: <BookOpen size={20} /> },
+    { label: 'Jadwal', path: '/siswa/jadwal', icon: <Calendar size={20} /> },
+    { label: 'Tugas', path: '/siswa/tugas', icon: <ClipboardCheck size={20} /> },
   ]
   return flattenMenu(menuForRole(role))
     .filter(item => !['/admin', '/guru', '/siswa'].includes(item.path))

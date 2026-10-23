@@ -56,11 +56,12 @@ test('backend menyediakan konteks jadwal mapel guru per tanggal dan siswa aktif 
 })
 
 test('menu kelas wali hanya ditampilkan untuk role wali_kelas', () => {
-  const sidebarGuruMenu = teacherMenuBlock(sidebar, 'const guruMenuItems', 'const siswaMenuItems')
-  assert.doesNotMatch(sidebarGuruMenu, /Kelas Wali Saya|\/guru\/rombel/)
-  assert.match(sidebar, /user\?\.role === 'wali_kelas'.*\/guru\/rombel/s)
+  // Sidebar kini memakai sumber tunggal menuForRole() — tidak ada lagi array
+  // lokal guru di Sidebar.tsx. Gating wali_kelas (Ledger + Kelas Wali) hidup
+  // hanya di menuItems.tsx menuForRole().
+  assert.match(sidebar, /menuForRole\(user\?\.role === 'kepala'/)
 
-  const sharedMenu = teacherMenuBlock(menuItems, 'export const guruMenuItems', 'export const siswaMenuItems')
+  const sharedMenu = teacherMenuBlock(menuItems, 'export const guruMenuItems', 'export const waliMuridMenuItems')
   assert.doesNotMatch(sharedMenu, /Kelas Wali Saya|\/guru\/rombel/)
   assert.match(menuItems, /role === 'wali_kelas'.*\/guru\/rombel/s)
 

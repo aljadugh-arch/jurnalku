@@ -409,7 +409,7 @@ export default function LoginPage() {
             >
               <p className="mb-2 text-[11px] font-semibold text-slate-500 dark:text-gray-400">Akun demo</p>
               <div className="grid grid-cols-3 gap-1.5">
-                {['admin', 'kepala', 'guru', 'bendahara', 'siswa', 'wali_murid'].map(role => (
+                {['admin', 'kepala', 'guru', 'bendahara', 'siswa', 'wali_murid', 'proktor'].map(role => (
                   <button
                     key={role}
                     type="button"

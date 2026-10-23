@@ -34,7 +34,10 @@ test('menu "Monitoring Data" ada di bawah Dashboard untuk admin dan kepala', () 
   const menu = baca(MENU)
   const sisi = baca(SIDEBAR)
 
-  for (const [nama, src] of [['menuItems.tsx', menu], ['Sidebar.tsx', sisi]]) {
+  // Sumber menu tunggal adalah menuItems.tsx. Sidebar kini menurunkannya lewat
+  // menuForRole() (bukan array lokal), jadi urutan Dashboard -> Monitoring Data
+  // hanya perlu ditegakkan di satu tempat.
+  for (const [nama, src] of [['menuItems.tsx', menu]]) {
     const baris = src.split('\n')
     const iDashboard = baris.findIndex(l => l.includes("label: 'Dashboard', icon: <LayoutDashboard size={20} />, path: '/admin' }"))
     assert.ok(iDashboard > -1, `menu Dashboard tidak ditemukan di ${nama}`)
@@ -50,6 +53,9 @@ test('menu "Monitoring Data" ada di bawah Dashboard untuk admin dan kepala', () 
       `menu Monitoring Data tidak tepat di bawah Dashboard di ${nama}: ${sesudah.trim()}`
     )
   }
+
+  // Sidebar desktop memakai sumber tunggal (menuForRole), bukan array lokal.
+  assert.ok(/menuForRole\(user\?\.role === 'kepala'/.test(sisi), 'sidebar harus memakai menuForRole sebagai sumber tunggal')
 
   // Grup sidebar admin: masuk grup DASHBOARD supaya tidak jatuh ke "LAINNYA".
   assert.ok(

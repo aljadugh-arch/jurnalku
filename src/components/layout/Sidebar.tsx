@@ -3,12 +3,7 @@ import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useSidebarStore } from '../../stores/sidebarStore'
 import { useAuthStore } from '../../stores/authStore'
 import { useSettingsStore } from '../../stores/settingsStore'
-import {
-  LayoutDashboard, Users, GraduationCap, BookOpen, Calendar,
-  ClipboardList, UserCheck, QrCode, MapPin,
-  X, ChevronDown, ChevronRight, LogOut, Layers,
-  DollarSign, FileText, Newspaper, PiggyBank, ClipboardCheck, NotebookPen, Activity
-} from 'lucide-react'
+import { X, ChevronDown, ChevronRight, LogOut } from 'lucide-react'
 import { clsx } from 'clsx'
 import { roleLabel } from '../../lib/roles'
 import { useSubscriptionStore } from '../../stores/subscriptionStore'
@@ -25,66 +20,6 @@ interface MenuItem {
 }
 
 
-const siswaMenuItems: MenuItem[] = [
-  { label: 'Dashboard', icon: <LayoutDashboard size={20} />, path: '/siswa' },
-  { label: 'Rekap Kehadiran', icon: <UserCheck size={20} />, path: '/siswa#kehadiran' },
-  { label: 'Tagihan & Pembayaran', icon: <DollarSign size={20} />, path: '/siswa#tagihan' },
-  { label: 'Top-up QRIS', icon: <QrCode size={20} />, path: '/siswa/qris-topup' },
-  { label: 'Tabungan', icon: <PiggyBank size={20} />, path: '/siswa#tabungan' },
-  { label: 'Nilai', icon: <BookOpen size={20} />, path: '/siswa#nilai' },
-  { label: 'Jadwal Hari Ini', icon: <Calendar size={20} />, path: '/siswa#jadwal' },
-  { label: 'Tugas', icon: <ClipboardCheck size={20} />, path: '/siswa#tugas' },
-  { label: 'Perpustakaan Digital', icon: <BookOpen size={20} />, path: '/siswa/perpustakaan' },
-]
-
-// Kepala Madrasah/Sekolah = pimpinan. Sesuai live bundle (Sc).
-const kepalaMenuItems: MenuItem[] = [
-  { label: 'Dashboard', icon: <LayoutDashboard size={20} />, path: '/admin' },
-  { label: 'Monitoring Data', icon: <Activity size={20} />, path: '/admin/monitoring' },
-  { label: 'Posting', icon: <Newspaper size={20} />, path: '/admin/posting' },
-  { label: 'Ceklok Saya', icon: <MapPin size={20} />, path: '/admin/ceklok' },
-  { label: 'Absensi Saya', icon: <MapPin size={20} />, path: '/admin/absensi-saya' },
-  { label: 'Data Siswa', icon: <GraduationCap size={20} />, path: '/admin/siswa' },
-  { label: 'Data GTK', icon: <Users size={20} />, path: '/admin/gtk' },
-  { label: 'Rapor Siswa', icon: <FileText size={20} />, path: '/admin/rapor' },
-  { label: 'Catatan Kepribadian', icon: <NotebookPen size={20} />, path: '/admin/catatan-kepribadian' },
-  { label: 'Rombongan Belajar', icon: <Layers size={20} />, path: '/admin/rombel' },
-  { label: 'Jurnal Mengajar', icon: <ClipboardList size={20} />, path: '/admin/jurnal' },
-  { label: 'Supervisi', icon: <ClipboardCheck size={20} />, path: '/admin/supervisi' },
-  { label: 'Administrasi Surat', icon: <NotebookPen size={20} />, path: '/admin/administrasi' },
-  { label: 'Program Belajar', icon: <BookOpen size={20} />, path: '/admin/program-belajar' },
-  { label: 'Perpustakaan Digital', icon: <BookOpen size={20} />, path: '/admin/perpustakaan' },
-  {
-    label: 'Absensi', icon: <UserCheck size={20} />,
-    children: [
-      { label: 'Presensi Siswa', path: '/admin/absensi-siswa' },
-      { label: 'Absensi QR Siswa', path: '/admin/absensi-qr-siswa' },
-      { label: 'Absensi Guru (Geolokasi)', path: '/admin/absensi-guru' },
-      { label: 'Rekapitulasi', path: '/admin/rekap-absensi' },
-    ]
-  },
-  { label: 'Kalender KBM', icon: <Calendar size={20} />, path: '/admin/kalender-kbm' },
-  {
-    label: 'Keuangan', icon: <DollarSign size={20} />,
-    children: [
-      { label: 'Tagihan & Pembayaran', path: '/admin/tagihan' },
-      { label: 'Tabungan Siswa', path: '/admin/tabungan' },
-      { label: 'E-Kantin & Cashless', path: '/admin/kantin-menu' },
-    ]
-  },
-]
-
-// Bendahara menu — sesuai live bundle (xc)
-const bendaharaMenuItems: MenuItem[] = [
-  { label: 'Dashboard Bendahara', icon: <LayoutDashboard size={20} />, path: '/admin/bendahara' },
-  { label: 'Ceklok Saya', icon: <MapPin size={20} />, path: '/admin/ceklok' },
-  { label: 'Tagihan & Pembayaran', icon: <DollarSign size={20} />, path: '/admin/tagihan' },
-  { label: 'Tabungan Siswa', icon: <PiggyBank size={20} />, path: '/admin/tabungan' },
-  { label: 'Buku Kas', icon: <FileText size={20} />, path: '/admin/buku-kas' },
-  { label: 'Laporan Keuangan', icon: <FileText size={20} />, path: '/admin/bendahara#laporan' },
-  { label: 'Perpustakaan Digital', icon: <BookOpen size={20} />, path: '/admin/perpustakaan' },
-]
-
 export default function Sidebar() {
   const { isOpen, close } = useSidebarStore()
   const { user, logout } = useAuthStore()
@@ -95,19 +30,11 @@ export default function Sidebar() {
   const [expandedMenus, setExpandedMenus] = useState<string[]>([])
   const teacherMode = bisaModeGuru(user) && location.pathname.startsWith('/guru')
 
-  const menuItems = (
-    user?.role === 'bendahara'
-      ? bendaharaMenuItems
-      : user?.role === 'kepala'
-        ? teacherMode ? menuForRole('guru') : kepalaMenuItems
-        : user?.role === 'admin' || user?.role === 'super_admin' || user?.role === 'operator' || user?.role === 'tata_usaha' || user?.role === 'tu'
-          ? menuForRole(user?.role)
-          : user?.role === 'guru' || user?.role === 'wali_kelas'
-            ? menuForRole(user?.role)
-            : user?.role === 'proktor'
-              ? menuForRole(user.role)
-              : siswaMenuItems
-  )
+  // Satu sumber kebenaran menu: menuForRole(). Sidebar sebelumnya memakai array
+  // lokal (siswaMenuItems/kepalaMenuItems/bendaharaMenuItems) yang menyimpang dari
+  // menuItems.tsx — siswa/wali/kepala/bendahara melihat menu berbeda di desktop vs
+  // mobile. Kini semua role lewat menuForRole, kecuali kepala yang sedang mode guru.
+  const menuItems = menuForRole(user?.role === 'kepala' && teacherMode ? 'guru' : user?.role)
     // menuForRole membatasi /guru/rombel hanya ketika user?.role === 'wali_kelas'.
     .map(item => ({ ...item, children: item.children?.filter(child => pathEnabled(child.path, features, settings.jenjang)) }))
     .filter(item => item.path ? pathEnabled(item.path, features, settings.jenjang) : !!item.children?.length)
@@ -130,7 +57,7 @@ export default function Sidebar() {
     { name: 'DASHBOARD', labels: ['Dashboard', 'Portal Operator', 'Monitoring Data', 'Posting'] },
     { name: 'MASTER DATA', labels: ['Data Siswa', 'PPDB', 'Data GTK', 'Mata Pelajaran', 'Rombongan Belajar', 'Tahun Ajaran', 'Manajemen Lembaga', 'Manajemen Yayasan', 'Integrasi Se-Yayasan', 'Kartu RFID', 'Alumni & Mutasi', 'Sirkulasi Perpustakaan', 'Substitusi Guru', 'Payroll & JTM', 'RKAS & BOS', 'Materi Ajar'] },
     { name: 'AKADEMIK', labels: ['Kalender KBM', 'Jadwal Pelajaran', 'Kelola Jadwal', 'Jadwal Ujian', 'Pengajar', 'Wali Kelas', 'Absensi', 'Ceklok & Rekap', 'Absensi Saya', 'Jurnal Mengajar', 'Supervisi', 'Program Belajar', 'Erkam'] },
-    { name: 'PENILAIAN & EVALUASI', labels: ['Ujian & Bank Soal', 'Bank Soal', 'Kisi-kisi Soal', 'Paket Ujian', 'Ledger Nilai', 'Rekap Nilai per Mapel', 'Rapor Siswa', 'Catatan Kepribadian', 'Penilaian'] },
+    { name: 'PENILAIAN & EVALUASI', labels: ['Ujian & Bank Soal', 'Bank Soal', 'Kisi-kisi Soal', 'Paket Ujian', 'Ledger Nilai', 'Rekap Nilai per Mapel', 'Rapor', 'Monitoring Pengisian Nilai', 'Catatan Kepribadian', 'Penilaian'] },
     { name: 'ADMINISTRASI', labels: ['Administrasi Surat'] },
     { name: 'LAYANAN', labels: ['Perpustakaan Digital', 'Generator AI Guru', 'Beasiswa', 'Bimbingan Konseling'] },
     { name: 'KEUANGAN & OPERASIONAL', labels: ['Keuangan', 'E-Kantin & Cashless', 'Buku Kas', 'Bendahara', 'E-Kantin'] },
@@ -151,8 +78,14 @@ export default function Sidebar() {
   ]
   const siswaMenuGroups: Array<{ name: string; labels: string[] }> = [
     { name: 'UTAMA', labels: ['Dashboard', 'Absensi Saya'] },
-    { name: 'AKADEMIK', labels: ['Jadwal', 'Ujian', 'Ekskul'] },
+    { name: 'AKADEMIK', labels: ['Jadwal', 'Nilai', 'Tugas', 'Ujian', 'Ekskul'] },
+    { name: 'KEUANGAN', labels: ['Tagihan', 'Tabungan'] },
     { name: 'LAINNYA', labels: ['Perpustakaan Digital'] },
+  ]
+  const waliMuridMenuGroups: Array<{ name: string; labels: string[] }> = [
+    { name: 'UTAMA', labels: ['Dashboard', 'Absensi Saya'] },
+    { name: 'AKADEMIK', labels: ['Nilai'] },
+    { name: 'KEUANGAN', labels: ['Tagihan', 'Tabungan'] },
   ]
 
   const proktorMenuGroups: Array<{ name: string; labels: string[] }> = [
@@ -170,11 +103,13 @@ export default function Sidebar() {
     ? guruMenuGroups
     : user?.role === 'siswa'
       ? siswaMenuGroups
-      : user?.role === 'proktor'
-        ? proktorMenuGroups
-        : user?.role === 'super_admin'
-          ? superAdminMenuGroups
-          : adminMenuGroups
+      : user?.role === 'wali_murid'
+        ? waliMuridMenuGroups
+        : user?.role === 'proktor'
+          ? proktorMenuGroups
+          : user?.role === 'super_admin'
+            ? superAdminMenuGroups
+            : adminMenuGroups
 
   // Safety net: item yang tidak match label manapun di atas (mis. menu baru
   // yang belum dimasukkan ke grouping) tetap tampil, bukan hilang diam-diam.
@@ -194,7 +129,7 @@ export default function Sidebar() {
   // (dan akun demo) tampil datar tanpa grup.
   // Guru & siswa juga mendapat pengelompokan — sebelumnya hanya peran
   // manajemen, sehingga sidebar guru/siswa tampil sebagai daftar datar panjang.
-  const managementRoles = ['admin', 'super_admin', 'operator', 'tata_usaha', 'tu', 'kepala', 'bendahara', 'guru', 'wali_kelas', 'siswa']
+  const managementRoles = ['admin', 'super_admin', 'operator', 'tata_usaha', 'tu', 'kepala', 'bendahara', 'guru', 'wali_kelas', 'siswa', 'wali_murid']
   const isManagementRole = managementRoles.includes(user?.role || '')
   const showGrouping = isManagementRole && isOpen
   // Kelompokkan berdasarkan grupAktif (grup yang BENAR untuk peran ini), bukan

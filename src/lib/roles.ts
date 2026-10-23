@@ -8,6 +8,11 @@ export const ROLE_LABELS: Record<string, string> = {
   proktor: 'Proktor',
   wali_kelas: 'Wali Kelas',
   siswa: 'Siswa',
+  wali_murid: 'Wali Murid',
+  bendahara: 'Bendahara',
+  operator: 'Operator',
+  tata_usaha: 'Tata Usaha',
+  tu: 'Tata Usaha',
 }
 
 export const roleLabel = (r?: string) => ROLE_LABELS[r || ''] || r || 'Guest'
