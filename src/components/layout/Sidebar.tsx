@@ -197,7 +197,13 @@ export default function Sidebar() {
   const managementRoles = ['admin', 'super_admin', 'operator', 'tata_usaha', 'tu', 'kepala', 'bendahara', 'guru', 'wali_kelas', 'siswa']
   const isManagementRole = managementRoles.includes(user?.role || '')
   const showGrouping = isManagementRole && isOpen
-  const groupedMenus = showGrouping ? getGroupedMenus(adminMenuGroups) : null
+  // Kelompokkan berdasarkan grupAktif (grup yang BENAR untuk peran ini), bukan
+  // adminMenuGroups. Sebelumnya getGroupedMenus(adminMenuGroups) memetakan nama
+  // grup admin, lalu loop render mencari grupAktif — untuk guru/siswa/proktor/
+  // superadmin nama grupnya berbeda (UTAMA, MENGAJAR, ...), sehingga SEMUA grup
+  // beresolusi ke array kosong dan sidebar desktop mereka hanya menampilkan
+  // "BELUM TERKELOMPOK". Akibatnya menu lengkap hilang di desktop.
+  const groupedMenus = showGrouping ? getGroupedMenus(grupAktif) : null
 
   return (
     <>
