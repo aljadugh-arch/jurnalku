@@ -191,6 +191,9 @@ test('tombol demo hanya tampil di host yang benar-benar dilayani server', () => 
   assert.ok(/demoHostAktif/.test(login), 'tombol demo butuh penjaga host')
   assert.ok(!/\{true && \(/.test(login),
     'jangan tampilkan tombol demo tanpa syarat di domain lembaga')
-  assert.ok(/jurnal\.cc\.cd/.test(login) && /jurnalmadrasah\.web\.id/.test(login),
-    'domain platform harus ada di daftar host demo frontend')
+  // Sumber kebenaran daftar host ada di SERVER (/api/demo-status), bukan
+  // diduplikasi di frontend — satu aturan supaya tampilan dan route tidak bisa
+  // melenceng. Frontend cukup memanggil endpoint itu.
+  assert.ok(/demo-status/.test(login),
+    'frontend harus memakai /api/demo-status, bukan daftar host hardcoded')
 })

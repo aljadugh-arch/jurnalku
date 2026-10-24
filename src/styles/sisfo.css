@@ -1,0 +1,311 @@
+/* ============================================================================
+   Design system "SISFO" — diadopsi dari sisfo.upiyptk.ac.id (lihat
+   docs/SISFO-UPIYPTK-RECON.md). Palet krem + oranye, font Poppins, kartu
+   ber-radius besar, shadow lembut. Dipakai khusus halaman publik (landing,
+   login, pengumuman, FAQ, kontak, helpdesk) — TIDAK menyentuh dashboard.
+
+   Semua kelas diberi prefiks `sk-` (sisfo-krem) supaya tidak bentrok dengan
+   utilitas Tailwind maupun kelas `.card`/`.input`/`.btn-*` yang sudah ada.
+   ============================================================================ */
+
+:root {
+  /* --- token inti (light) --- */
+  --sk-bg: #fbfaf8;
+  --sk-surface: #ffffff;
+  --sk-text: #24262d;
+  --sk-muted: #6f7785;
+  --sk-border: #e7e4df;
+  --sk-orange: #f47b20;
+  --sk-orange-dark: #df6511;
+  --sk-orange-soft: #fff4e9;
+  --sk-ink: #38404b;
+  --sk-heading: #69574f;
+
+  --sk-shadow: 0 18px 44px rgba(58, 48, 40, 0.08);
+  --sk-shadow-soft: 0 10px 30px rgba(58, 48, 40, 0.06);
+  --sk-ease: cubic-bezier(0.22, 1, 0.36, 1);
+
+  --sk-gradient: linear-gradient(135deg, #ff9a20 0%, #f27513 100%);
+  --sk-font: 'Poppins', 'Inter', system-ui, -apple-system, sans-serif;
+}
+
+/* --- canvas --- */
+.sk-root {
+  min-height: 100vh;
+  background: var(--sk-bg);
+  color: var(--sk-text);
+  font-family: var(--sk-font);
+}
+
+/* --- navbar publik --- */
+.sk-nav {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  background: rgba(255, 255, 255, 0.86);
+  backdrop-filter: blur(10px);
+  border-bottom: 1px solid var(--sk-border);
+}
+.sk-nav-inner {
+  max-width: 1160px;
+  margin: 0 auto;
+  padding: 14px 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+.sk-nav-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  text-decoration: none;
+  color: var(--sk-text);
+  font-weight: 700;
+  font-size: 17px;
+  letter-spacing: -0.01em;
+}
+.sk-nav-brand img { height: 36px; width: auto; object-fit: contain; }
+.sk-nav-menu { display: flex; align-items: center; gap: 4px; }
+.sk-nav-link {
+  padding: 8px 14px;
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--sk-muted);
+  text-decoration: none;
+  transition: color 0.15s ease, background-color 0.15s ease;
+  white-space: nowrap;
+}
+.sk-nav-link:hover { color: var(--sk-text); background: #f1efec; }
+.sk-nav-link.sk-active { color: var(--sk-orange); font-weight: 600; }
+
+/* --- badge sambutan --- */
+.sk-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 14px;
+  border-radius: 999px;
+  background: var(--sk-orange-soft);
+  color: var(--sk-orange-dark);
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+/* --- kartu --- */
+.sk-card {
+  background: var(--sk-surface);
+  border: 1px solid rgba(226, 222, 216, 0.94);
+  border-radius: 24px;
+  box-shadow: var(--sk-shadow);
+}
+.sk-card--flat {
+  border: 1px solid rgba(226, 222, 216, 0.92);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.78);
+  box-shadow: 0 12px 32px rgba(55, 46, 38, 0.045);
+  backdrop-filter: blur(8px);
+}
+
+/* --- service card (grid layanan) --- */
+.sk-service {
+  position: relative;
+  min-height: 160px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 20px 18px 52px;
+  border: 1px solid rgba(231, 228, 223, 0.88);
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: var(--sk-shadow-soft);
+  text-align: center;
+  text-decoration: none;
+  color: var(--sk-text);
+  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+}
+.sk-service:hover {
+  transform: translateY(-3px);
+  border-color: #f4d3b4;
+  box-shadow: 0 14px 34px rgba(58, 48, 40, 0.08);
+}
+.sk-service-icon {
+  width: 48px;
+  height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 14px;
+  border-radius: 50%;
+  background: var(--sk-orange-soft);
+  color: var(--sk-orange);
+}
+.sk-service h3 { margin: 0 0 4px; font-size: 16px; font-weight: 700; }
+.sk-service p { margin: 0; font-size: 11.5px; color: var(--sk-muted); }
+.sk-service-arrow {
+  position: absolute;
+  bottom: 18px;
+  left: 50%;
+  transform: translateX(-50%);
+  color: var(--sk-orange);
+  font-size: 18px;
+  transition: transform 0.2s ease;
+}
+.sk-service:hover .sk-service-arrow { transform: translateX(calc(-50% + 3px)); }
+
+/* --- tombol --- */
+.sk-btn {
+  position: relative;
+  min-height: 49px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 12px 22px;
+  border: 0;
+  border-radius: 12px;
+  background: var(--sk-gradient);
+  box-shadow: 0 10px 20px rgba(242, 117, 19, 0.17);
+  color: #fff;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  text-decoration: none;
+  transition: transform 0.18s ease, box-shadow 0.18s ease;
+}
+.sk-btn:hover { transform: translateY(-1px); box-shadow: 0 13px 24px rgba(242, 117, 19, 0.23); }
+.sk-btn:disabled { opacity: 0.6; cursor: wait; transform: none; }
+.sk-btn--ghost {
+  background: #fff;
+  border: 1px solid var(--sk-border);
+  color: var(--sk-text);
+  box-shadow: none;
+  font-weight: 600;
+}
+.sk-btn--ghost:hover { box-shadow: var(--sk-shadow-soft); }
+
+/* --- field input --- */
+.sk-field { margin-bottom: 17px; }
+.sk-field label {
+  display: block;
+  margin: 0 0 7px;
+  color: #484a51;
+  font-size: 13px;
+  font-weight: 600;
+}
+.sk-input-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+  border: 1px solid var(--sk-border);
+  border-radius: 10px;
+  background: #fff;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.sk-input-wrap:focus-within {
+  border-color: rgba(244, 123, 32, 0.42);
+  box-shadow: 0 0 0 3px rgba(244, 123, 32, 0.12);
+}
+.sk-input-icon {
+  display: flex;
+  align-items: center;
+  padding-left: 14px;
+  color: #a1a7b3;
+}
+.sk-input-wrap input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  outline: none;
+  background: transparent;
+  padding: 13px 14px;
+  font-size: 14px;
+  color: var(--sk-text);
+  font-family: var(--sk-font);
+}
+.sk-input-wrap input::placeholder { color: #a1a7b3; }
+.sk-input-toggle {
+  border: 0;
+  background: transparent;
+  padding: 0 14px;
+  cursor: pointer;
+  color: #a1a7b3;
+  display: flex;
+  align-items: center;
+}
+
+/* --- divider "atau" --- */
+.sk-divider {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 16px 0;
+  color: var(--sk-muted);
+  font-size: 12.5px;
+}
+.sk-divider::before,
+.sk-divider::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--sk-border);
+}
+
+/* --- footer --- */
+.sk-footer {
+  border-top: 1px solid var(--sk-border);
+  background: #f4f2ef;
+  padding: 28px 20px;
+}
+.sk-footer-inner {
+  max-width: 1160px;
+  margin: 0 auto;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--sk-muted);
+  font-size: 13px;
+}
+.sk-footer-links { display: flex; gap: 18px; }
+.sk-footer-links a { color: var(--sk-muted); text-decoration: none; }
+.sk-footer-links a:hover { color: var(--sk-orange); }
+
+/* --- heading halaman publik --- */
+.sk-page-head {
+  max-width: 1160px;
+  margin: 0 auto;
+  padding: 40px 20px 8px;
+}
+.sk-page-head h1 { margin: 6px 0 4px; font-size: 30px; font-weight: 800; letter-spacing: -0.02em; color: var(--sk-ink); }
+.sk-page-head p { margin: 0; color: var(--sk-muted); font-size: 15px; }
+.sk-page-head .sk-eyebrow { color: var(--sk-orange); font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; }
+
+/* --- form publik --- */
+.sk-form-card {
+  background: var(--sk-surface);
+  border: 1px solid var(--sk-border);
+  border-radius: 20px;
+  padding: 28px;
+  box-shadow: var(--sk-shadow-soft);
+}
+.sk-form-card h2 { margin: 0 0 18px; font-size: 19px; font-weight: 700; color: var(--sk-ink); }
+.sk-form-label { display: block; margin-bottom: 6px; font-size: 13px; font-weight: 600; color: #484a51; }
+.sk-form-input {
+  width: 100%;
+  padding: 11px 14px;
+  border: 1px solid var(--sk-border);
+  border-radius: 10px;
+  font-size: 14px;
+  font-family: var(--sk-font);
+  color: var(--sk-text);
+  background: #fff;
+}
+.sk-form-input:focus { outline: none; border-color: rgba(244, 123, 32, 0.42); box-shadow: 0 0 0 3px rgba(244, 123, 32, 0.12); }
+
+/* --- responsif --- */
+@media (max-width: 991px) {
+  .sk-nav-menu { display: none; }
+}

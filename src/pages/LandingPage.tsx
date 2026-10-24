@@ -7,6 +7,7 @@ import {
   Menu, X, CreditCard, GraduationCap, HeartHandshake, Building2, ScanLine,
   ClipboardCheck, Library, MonitorPlay, Landmark, BadgeCheck, PlayCircle,
   Database, Bell, Fingerprint, WalletCards, UserCheck, PieChart, Server,
+  Megaphone, HelpCircle, Newspaper,
 } from 'lucide-react'
 import api from '../services/api'
 import { labelFitur, fiturPembeda, URUTAN_FITUR } from '../lib/fiturPaket'
@@ -14,12 +15,11 @@ import { useSettingsStore } from '../stores/settingsStore'
 import { useThemeStore } from '../stores/themeStore'
 
 // ============================================================================
-// KONTEN LANDING PAGE — semua teks & daftar ada di sini.
-//
-// Kalau mau mengubah tampilan/isi, cukup edit array di bawah. Bagian yang
-// dirender otomatis mengikuti, jadi tidak perlu menyentuh JSX di bawahnya.
-// Harga paket TIDAK ada di sini: diambil dari /api/publik/paket supaya selalu
-// sama dengan yang benar-benar ditagih (admin bisa ubah lewat UI).
+// LANDING PAGE — shell (navbar/hero/footer) mengikuti design system SISFO
+// (krem + oranye, lihat src/styles/sisfo.css), sementara konten fitur/harga/
+// peran/langkah/FAQ dipertahankan dari versi sebelumnya. Harga paket TIDAK ada
+// di sini: diambil dari /api/publik/paket supaya selalu sama dengan yang
+// benar-benar ditagih (admin bisa ubah lewat UI).
 // ============================================================================
 
 const fiturUtama = [
@@ -35,30 +35,10 @@ const fiturUtama = [
 ]
 
 const perPeran = [
-  {
-    icon: Building2, peran: 'Yayasan & Kepala Sekolah',
-    ringkas: 'Pantau seluruh unit dalam satu layar.',
-    poin: ['Rekap gabungan semua unit', 'Laporan siap akreditasi', 'Kendali paket & pengguna', 'Arsip surat dan dokumen'],
-    warna: 'bg-blue-50 dark:bg-blue-950/30 border-blue-100 dark:border-blue-900', ikon: 'text-blue-600 dark:text-blue-400',
-  },
-  {
-    icon: GraduationCap, peran: 'Guru & Staf',
-    ringkas: 'Kerja administratif berkurang, waktu mengajar bertambah.',
-    poin: ['Jurnal mengajar cepat', 'Absensi sekali tap', 'Input nilai tanpa Excel', 'Modul ajar dibantu AI'],
-    warna: 'bg-emerald-50 dark:bg-emerald-950/30 border-emerald-100 dark:border-emerald-900', ikon: 'text-emerald-600 dark:text-emerald-400',
-  },
-  {
-    icon: UserCheck, peran: 'Siswa',
-    ringkas: 'Jadwal, tugas, dan nilai dalam genggaman.',
-    poin: ['Jadwal pelajaran harian', 'Kartu pelajar digital', 'Riwayat kehadiran', 'Nilai & catatan guru'],
-    warna: 'bg-violet-50 dark:bg-violet-950/30 border-violet-100 dark:border-violet-900', ikon: 'text-violet-600 dark:text-violet-400',
-  },
-  {
-    icon: HeartHandshake, peran: 'Wali Murid',
-    ringkas: 'Tahu kabar anak tanpa harus datang ke sekolah.',
-    poin: ['Notifikasi kehadiran via WA', 'Pantau nilai real-time', 'Bayar tagihan dari HP', 'Izin tidak hadir online'],
-    warna: 'bg-amber-50 dark:bg-amber-950/30 border-amber-100 dark:border-amber-900', ikon: 'text-amber-600 dark:text-amber-400',
-  },
+  { icon: Building2, peran: 'Yayasan & Kepala Sekolah', ringkas: 'Pantau seluruh unit dalam satu layar.', poin: ['Rekap gabungan semua unit', 'Laporan siap akreditasi', 'Kendali paket & pengguna', 'Arsip surat dan dokumen'], warna: 'bg-blue-50 dark:bg-blue-950/30 border-blue-100 dark:border-blue-900', ikon: 'text-blue-600 dark:text-blue-400' },
+  { icon: GraduationCap, peran: 'Guru & Staf', ringkas: 'Kerja administratif berkurang, waktu mengajar bertambah.', poin: ['Jurnal mengajar cepat', 'Absensi sekali tap', 'Input nilai tanpa Excel', 'Modul ajar dibantu AI'], warna: 'bg-emerald-50 dark:bg-emerald-950/30 border-emerald-100 dark:border-emerald-900', ikon: 'text-emerald-600 dark:text-emerald-400' },
+  { icon: UserCheck, peran: 'Siswa', ringkas: 'Jadwal, tugas, dan nilai dalam genggaman.', poin: ['Jadwal pelajaran harian', 'Kartu pelajar digital', 'Riwayat kehadiran', 'Nilai & catatan guru'], warna: 'bg-violet-50 dark:bg-violet-950/30 border-violet-100 dark:border-violet-900', ikon: 'text-violet-600 dark:text-violet-400' },
+  { icon: HeartHandshake, peran: 'Wali Murid', ringkas: 'Tahu kabar anak tanpa harus datang ke sekolah.', poin: ['Notifikasi kehadiran via WA', 'Pantau nilai real-time', 'Bayar tagihan dari HP', 'Izin tidak hadir online'], warna: 'bg-amber-50 dark:bg-amber-950/30 border-amber-100 dark:border-amber-900', ikon: 'text-amber-600 dark:text-amber-400' },
 ]
 
 const alasan = [
@@ -77,8 +57,6 @@ const langkah = [
 ]
 
 const jenjang = ['RA / TK', 'SD / MI', 'SMP / MTs', 'SMA / MA / SMK', 'Pesantren', 'Kursus & Bimbel', 'Yayasan']
-
-// Label manusiawi untuk kode fitur dari API paket.
 
 const faq = [
   { t: 'Apa itu JURNALKU?', j: 'JURNALKU adalah sistem informasi manajemen lembaga pendidikan berbasis web. Satu platform untuk data siswa dan GTK, jadwal, absensi, jurnal mengajar, penilaian, rapor, keuangan, sampai notifikasi WhatsApp ke wali murid.' },
@@ -103,9 +81,10 @@ export default function LandingPage() {
   const [faqBuka, setFaqBuka] = useState<number | null>(0)
   const [paket, setPaket] = useState<Paket[]>([])
   const [paketGagal, setPaketGagal] = useState(false)
+  // Portal summary: pengumuman + FAQ publik dari server (halaman publik baru).
+  const [pengumuman, setPengumuman] = useState<any[]>([])
+  const [faqPublik, setFaqPublik] = useState<any[]>([])
 
-  // Harga diambil dari server. Kalau gagal, seksi harga disembunyikan daripada
-  // menampilkan angka karangan yang bisa berbeda dari tagihan sebenarnya.
   useEffect(() => {
     let hidup = true
     api.get('/publik/paket')
@@ -114,11 +93,19 @@ export default function LandingPage() {
     return () => { hidup = false }
   }, [])
 
+  useEffect(() => {
+    let hidup = true
+    api.get('/publik/pengumuman', { timeout: 8000 })
+      .then(({ data }) => { if (hidup) setPengumuman(Array.isArray(data?.pengumuman) ? data.pengumuman.slice(0, 3) : []) })
+      .catch(() => {})
+    api.get('/publik/faq', { timeout: 8000 })
+      .then(({ data }) => { if (hidup) setFaqPublik(Array.isArray(data?.faq) ? data.faq.slice(0, 3) : []) })
+      .catch(() => {})
+    return () => { hidup = false }
+  }, [])
+
   const paketBayar = useMemo(() => paket.filter(p => p.harga > 0), [paket])
   const paketTrial = useMemo(() => paket.find(p => p.harga === 0), [paket])
-
-  // Fitur PEMBEDA per paket — bukan daftar yang sama diulang di semua paket.
-  // Sumber label tunggal dari lib/fiturPaket, sama dengan dashboard superadmin.
   const pembeda = useMemo(() => fiturPembeda(paket), [paket])
   const fiturPaket = (p: Paket) => {
     const kunci = pembeda[p.plan]?.length ? pembeda[p.plan] : p.fitur
@@ -134,258 +121,205 @@ export default function LandingPage() {
   ]
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-gray-950 text-slate-900 dark:text-gray-100 transition-colors">
-
-      {/* ================= NAVBAR ================= */}
-      <nav className="sticky top-0 z-50 bg-white/90 dark:bg-gray-900/90 backdrop-blur-md border-b border-slate-200 dark:border-gray-800 shadow-sm">
-        <div className="max-w-6xl mx-auto px-4 py-3.5 flex items-center justify-between gap-4">
-          <Link to="/" className="flex items-center gap-2.5 shrink-0">
-            <div className="w-10 h-10 bg-white dark:bg-gray-900 rounded-xl flex items-center justify-center border border-primary/10 dark:border-gray-800 overflow-hidden">
-              <img src={logo} alt={`Logo ${namaLembaga}`} className="w-full h-full object-contain" />
-            </div>
-            <div className="leading-tight">
-              <span className="text-lg font-bold text-slate-900 dark:text-white font-display">JURNALKU</span>
-              <p className="text-[11px] text-slate-500 dark:text-gray-400">SIMS/M Terpadu</p>
-            </div>
+    <div className="sk-root">
+      {/* ================= NAVBAR (design system SISFO) ================= */}
+      <nav className="sk-nav">
+        <div className="sk-nav-inner">
+          <Link to="/" className="sk-nav-brand">
+            <img src={logo} alt={`Logo ${namaLembaga}`} />
+            <span>{namaLembaga}</span>
           </Link>
 
-          {/* Menu desktop */}
-          <div className="hidden lg:flex items-center gap-1">
+          <div className="sk-nav-menu">
             {nav.map(n => (
-              <a key={n.href} href={n.href} className="px-3 py-2 text-sm font-medium text-slate-600 dark:text-gray-300 hover:text-primary dark:hover:text-primary rounded-lg hover:bg-slate-50 dark:hover:bg-gray-800 transition-colors">
-                {n.label}
-              </a>
+              <a key={n.href} href={n.href} className="sk-nav-link">{n.label}</a>
             ))}
+            <Link to="/pengumuman" className="sk-nav-link">Pengumuman</Link>
+            <Link to="/faq" className="sk-nav-link">FAQ</Link>
           </div>
 
-          <div className="flex items-center gap-2">
-            <button
-              onClick={toggleDark}
-              className="p-2.5 rounded-full text-slate-500 hover:bg-slate-100 dark:text-gray-400 dark:hover:bg-gray-800 transition"
-              aria-label={dark ? 'Aktifkan mode terang' : 'Aktifkan mode gelap'}
-            >
-              {dark ? <Sun size={18} className="text-amber-500" /> : <Moon size={18} />}
+          <div className="flex items-center gap-1.5">
+            <button onClick={toggleDark} className="rounded-full p-2 text-slate-400 transition hover:bg-black/5" aria-label="Ganti mode gelap/terang">
+              {dark ? <Sun size={17} className="text-amber-500" /> : <Moon size={17} />}
             </button>
-            {/* Tombol Masuk WAJIB terlihat di semua ukuran layar. Sebelumnya
-                `hidden sm:inline-flex` menyembunyikannya di bawah 640px —
-                satu-satunya jalan masuk di ponsel adalah membuka menu
-                hamburger, dan pengunjung mengira tidak ada cara login.
-                Di layar sempit padding dipadatkan supaya tetap muat
-                berdampingan dengan logo dan tombol menu. */}
-            <Link
-              to="/login"
-              className="inline-flex items-center px-3 sm:px-4 py-2.5 text-sm font-semibold text-slate-700 dark:text-gray-200 hover:text-primary dark:hover:text-primary transition-colors whitespace-nowrap"
-            >
-              Masuk
-            </Link>
-            {/* Coba Gratis tetap tombol utama, tapi di ponsel ia pindah ke
-                menu supaya baris header tidak meluber (logo + Masuk + CTA +
-                hamburger melebihi 360px). */}
-            <Link to="/register" className="hidden sm:inline-flex items-center gap-1.5 px-5 py-2.5 bg-primary text-white rounded-xl text-sm font-semibold hover:bg-primary-dark shadow-lg shadow-primary/30 transition-all whitespace-nowrap">
-              Coba Gratis <ArrowRight size={15} />
-            </Link>
-            <button
-              onClick={() => setMenuBuka(v => !v)}
-              className="lg:hidden p-2.5 rounded-lg text-slate-600 dark:text-gray-300 hover:bg-slate-100 dark:hover:bg-gray-800 transition"
-              aria-label="Menu"
-            >
+            <Link to="/login" className="sk-btn sk-btn--ghost !min-h-0 !px-4 !py-2 text-sm">Masuk</Link>
+            <Link to="/register" className="sk-btn !min-h-0 !px-4 !py-2 text-sm">Coba Gratis</Link>
+            <button onClick={() => setMenuBuka(v => !v)} className="rounded-lg p-2 text-slate-500 hover:bg-black/5 lg:hidden" aria-label="Menu">
               {menuBuka ? <X size={20} /> : <Menu size={20} />}
             </button>
           </div>
         </div>
 
-        {/* Menu mobile */}
         {menuBuka && (
-          <div className="lg:hidden border-t border-slate-200 dark:border-gray-800 bg-white dark:bg-gray-900">
-            <div className="max-w-6xl mx-auto px-4 py-3 flex flex-col">
-              {nav.map(n => (
-                <a key={n.href} href={n.href} onClick={() => setMenuBuka(false)} className="py-2.5 text-sm font-medium text-slate-700 dark:text-gray-200 hover:text-primary border-b border-slate-100 dark:border-gray-800 last:border-0">
-                  {n.label}
-                </a>
-              ))}
-              <Link to="/login" onClick={() => setMenuBuka(false)} className="py-2.5 text-sm font-semibold text-primary">Masuk ke akun</Link>
-              {/* Di ponsel tombol "Coba Gratis" disembunyikan dari header, jadi
-                  jalur daftar harus ada di menu — kalau tidak, pengunjung
-                  kehilangan CTA utama tepat di layar terkecil. */}
-              <Link to="/register" onClick={() => setMenuBuka(false)} className="mt-2 inline-flex items-center justify-center gap-2 px-5 py-3 bg-primary text-white rounded-xl text-sm font-semibold">
-                Coba Gratis <ArrowRight size={15} />
-              </Link>
-            </div>
+          <div className="border-t border-[#e7e4df] px-5 py-2 lg:hidden">
+            {nav.map(n => (
+              <a key={n.href} href={n.href} onClick={() => setMenuBuka(false)} className="block rounded-lg px-3 py-2.5 text-sm font-medium text-[#6f7785]">{n.label}</a>
+            ))}
+            <Link to="/pengumuman" onClick={() => setMenuBuka(false)} className="block rounded-lg px-3 py-2.5 text-sm font-medium text-[#6f7785]">Pengumuman</Link>
+            <Link to="/faq" onClick={() => setMenuBuka(false)} className="block rounded-lg px-3 py-2.5 text-sm font-medium text-[#6f7785]">FAQ</Link>
+            <Link to="/login" onClick={() => setMenuBuka(false)} className="block rounded-lg px-3 py-2.5 text-sm font-semibold text-[#f47b20]">Masuk</Link>
           </div>
         )}
       </nav>
 
       {/* ================= HERO ================= */}
-      <section className="relative overflow-hidden">
-        <div className="absolute inset-0 pointer-events-none">
-          <div className="absolute -top-24 -left-16 w-80 h-80 bg-primary/15 dark:bg-primary/20 rounded-full blur-3xl" />
-          <div className="absolute top-24 right-0 w-96 h-96 bg-indigo-500/15 dark:bg-indigo-500/20 rounded-full blur-3xl" />
-          <div className="absolute bottom-0 left-1/3 w-72 h-72 bg-emerald-400/10 dark:bg-emerald-500/10 rounded-full blur-3xl" />
-        </div>
-
-        <div className="relative max-w-6xl mx-auto px-4 pt-14 pb-16 sm:pt-20 sm:pb-20">
-          <div className="grid lg:grid-cols-2 gap-12 items-center">
-            <div className="text-center lg:text-left">
-              <div className="inline-flex items-center gap-2 px-3.5 py-1.5 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-900 text-emerald-700 dark:text-emerald-400 rounded-full text-xs font-semibold mb-5">
-                <BadgeCheck size={14} /> Gratis 30 hari · coba gratis sekarang juga
-              </div>
-              <h1 className="text-[2.1rem] sm:text-5xl lg:text-[3.3rem] font-extrabold text-slate-900 dark:text-white font-display leading-[1.08] mb-4 tracking-tight">
-                Administrasi Rapi,{' '}
-                <span className="bg-gradient-to-r from-primary via-indigo-500 to-purple-500 bg-clip-text text-transparent">Mengajar Tenang</span>
-              </h1>
-              <p className="text-base sm:text-lg text-slate-600 dark:text-gray-300 max-w-lg mx-auto lg:mx-0 mb-6 leading-relaxed">
-                Satu platform untuk seluruh administrasi lembaga. Wali murid dapat kabar lewat
-                WhatsApp, guru berhenti lembur di Excel.
-              </p>
-              <div className="flex flex-col sm:flex-row items-center lg:items-start justify-center lg:justify-start gap-3 mb-7">
-                <Link to="/register" className="inline-flex items-center gap-2 px-7 py-3.5 bg-primary text-white rounded-xl font-bold text-base hover:bg-primary-dark shadow-2xl shadow-primary/40 transition-all hover:scale-105">
-                  Coba Gratis 30 Hari <ArrowRight size={18} />
+      <main className="flex flex-1 items-center justify-center px-5 py-12 lg:py-16">
+        <div className="grid w-full max-w-6xl items-center gap-10 lg:grid-cols-2">
+          <section className="min-w-0">
+            <div className="sk-badge"><BadgeCheck size={14} /> Gratis 30 hari · coba gratis sekarang</div>
+            <h1 className="mt-4 text-3xl font-extrabold leading-tight tracking-tight text-[#24262d] sm:text-4xl">
+              Administrasi Rapi,{' '}
+              <span className="text-[#f47b20]">Mengajar Tenang</span>
+            </h1>
+            <p className="mt-3 max-w-lg text-base leading-relaxed text-[#6f7785]">
+              Satu platform untuk seluruh administrasi lembaga. Wali murid dapat kabar lewat
+              WhatsApp, guru berhenti lembur di Excel.
+            </p>
+            <div className="mt-6 flex flex-col gap-3 sm:flex-row">
+              <Link to="/register" className="sk-btn">
+                Coba Gratis 30 Hari <ArrowRight size={16} />
+              </Link>
+              {/^(demo\.|demo-)/.test(window.location.hostname) && (
+                <Link to="/login#demo" className="sk-btn sk-btn--ghost">
+                  <PlayCircle size={18} /> Lihat Demo
                 </Link>
-                {/* Tombol demo hanya muncul di host demo — di domain lembaga
-                    sungguhan tidak ada akun demo, jadi tombol ini akan
-                    menyesatkan. Server juga menolak /api/auth/demo di host lain. */}
-                {/^(demo\.|demo-)/.test(window.location.hostname) && (
-                  <Link to="/login#demo" className="inline-flex items-center gap-2 px-7 py-3.5 border-2 border-slate-300 dark:border-gray-700 text-slate-700 dark:text-gray-200 rounded-xl font-semibold text-base hover:bg-white dark:hover:bg-gray-800 transition-all">
-                    <PlayCircle size={19} /> Lihat Demo
-                  </Link>
-                )}
-              </div>
-              <div className="flex flex-wrap items-center justify-center lg:justify-start gap-x-6 gap-y-2 text-sm text-slate-500 dark:text-gray-400">
-                {['Gratis 30 hari', 'Coba gratis sekarang juga', 'Aktif dalam 1 menit'].map(t => (
-                  <div key={t} className="flex items-center gap-1.5">
-                    <CheckCircle size={16} className="text-emerald-500" /> <span>{t}</span>
-                  </div>
-                ))}
-              </div>
+              )}
             </div>
+            <div className="mt-6 flex flex-wrap items-center gap-x-6 gap-y-2 text-sm text-[#6f7785]">
+              {['Gratis 30 hari', 'Aktif dalam 1 menit', 'Data milik lembaga'].map(t => (
+                <div key={t} className="flex items-center gap-1.5"><CheckCircle size={16} className="text-[#f47b20]" /> <span>{t}</span></div>
+              ))}
+            </div>
+          </section>
 
-            {/* Mockup dashboard — CSS murni, tanpa gambar */}
-            <div className="relative">
-              <div className="absolute -inset-3 bg-gradient-to-tr from-primary/20 via-indigo-500/10 to-transparent rounded-[28px] blur-2xl" />
-              <div className="relative rounded-3xl border border-slate-200 dark:border-gray-800 bg-white dark:bg-gray-900 shadow-2xl overflow-hidden">
-                <div className="flex items-center gap-2 border-b border-slate-100 dark:border-gray-800 bg-slate-50 dark:bg-gray-900/80 px-4 py-3">
-                  <span className="h-3 w-3 rounded-full bg-red-400" />
-                  <span className="h-3 w-3 rounded-full bg-amber-400" />
-                  <span className="h-3 w-3 rounded-full bg-emerald-400" />
-                  <div className="ml-3 flex-1 rounded-md bg-white dark:bg-gray-800 px-3 py-1 text-[11px] text-slate-400 border border-slate-100 dark:border-gray-700">
-                    jurnal.lembaga-anda.sch.id
-                  </div>
-                </div>
-                <div className="p-4 space-y-3">
-                  <div className="grid grid-cols-3 gap-3">
-                    <div className="rounded-xl bg-primary/5 dark:bg-primary/10 border border-primary/10 p-3">
-                      <Users size={16} className="text-primary mb-1" />
-                      <p className="text-lg font-bold text-slate-800 dark:text-gray-100">486</p>
-                      <p className="text-[10px] text-slate-500 dark:text-gray-400">Siswa aktif</p>
-                    </div>
-                    <div className="rounded-xl bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-100 dark:border-emerald-900 p-3">
-                      <Shield size={16} className="text-emerald-600 mb-1" />
-                      <p className="text-lg font-bold text-slate-800 dark:text-gray-100">98%</p>
-                      <p className="text-[10px] text-slate-500 dark:text-gray-400">Hadir hari ini</p>
-                    </div>
-                    <div className="rounded-xl bg-indigo-50 dark:bg-indigo-950/30 border border-indigo-100 dark:border-indigo-900 p-3">
-                      <Wallet size={16} className="text-indigo-600 mb-1" />
-                      <p className="text-lg font-bold text-slate-800 dark:text-gray-100">Lunas</p>
-                      <p className="text-[10px] text-slate-500 dark:text-gray-400">SPP bulan ini</p>
-                    </div>
-                  </div>
-                  {[
-                    { jam: '07:00', mapel: 'Matematika', kelas: 'VII-A', warna: 'bg-primary' },
-                    { jam: '08:20', mapel: 'Bahasa Indonesia', kelas: 'VIII-B', warna: 'bg-indigo-500' },
-                    { jam: '09:40', mapel: 'IPA Terpadu', kelas: 'IX-C', warna: 'bg-emerald-500' },
-                  ].map((r, i) => (
-                    <div key={i} className="flex items-center gap-3 rounded-xl border border-slate-100 dark:border-gray-800 p-3">
-                      <span className={`h-9 w-1.5 rounded-full ${r.warna}`} />
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate text-sm font-semibold text-slate-800 dark:text-gray-100">{r.mapel}</p>
-                        <p className="text-[11px] text-slate-500 dark:text-gray-400">{r.kelas} · {r.jam}</p>
-                      </div>
-                      <CheckCircle size={16} className="shrink-0 text-emerald-500" />
-                    </div>
-                  ))}
-                  <div className="flex items-start gap-3 rounded-xl bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-100 dark:border-emerald-900 p-3">
-                    <MessageCircle size={16} className="mt-0.5 shrink-0 text-emerald-600" />
-                    <p className="text-[11px] leading-relaxed text-emerald-800 dark:text-emerald-300">
-                      <strong>Notifikasi terkirim.</strong> Wali murid menerima kabar kehadiran anaknya lewat WhatsApp.
-                    </p>
-                  </div>
-                </div>
-              </div>
+          {/* Grid layanan unggulan */}
+          <section className="min-w-0">
+            <div className="grid grid-cols-2 gap-4">
+              {[
+                { icon: GraduationCap, judul: 'PPDB', sub: 'Penerimaan Siswa Baru', to: '/ppdb' },
+                { icon: MonitorPlay, judul: 'Ujian Online', sub: 'Computer Based Test', to: '/login' },
+                { icon: BookOpen, judul: 'LMS', sub: 'Penugasan Digital', to: '/login' },
+                { icon: MessageCircle, judul: 'WhatsApp', sub: 'Kabar ke Wali Murid', to: '/login' },
+              ].map(s => (
+                <Link key={s.judul} to={s.to} className="sk-service">
+                  <div className="sk-service-icon"><s.icon size={22} /></div>
+                  <h3>{s.judul}</h3>
+                  <p>{s.sub}</p>
+                  <span className="sk-service-arrow">→</span>
+                </Link>
+              ))}
             </div>
-          </div>
+          </section>
+        </div>
+      </main>
+
+      {/* ================= PORTAL SUMMARY (pengumuman + FAQ) ================= */}
+      <section className="mx-auto max-w-6xl px-5 pb-14">
+        <div className="grid gap-4 lg:grid-cols-2">
+          <article className="sk-card--flat p-5">
+            <header className="mb-3 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span className="flex h-9 w-9 items-center justify-center rounded-full bg-[#fff4e9] text-[#f47b20]"><Megaphone size={18} /></span>
+                <h3 className="font-bold text-[#24262d]">Pengumuman</h3>
+              </div>
+              <Link to="/pengumuman" className="text-sm font-semibold text-[#f47b20] hover:underline">Lihat semua →</Link>
+            </header>
+            {pengumuman.length === 0 ? (
+              <p className="text-sm text-[#6f7785]">Belum ada pengumuman terbaru.</p>
+            ) : (
+              <ul className="space-y-2.5">
+                {pengumuman.map(p => (
+                  <li key={p.id} className="flex items-start gap-2.5">
+                    <Newspaper size={16} className="mt-0.5 shrink-0 text-[#f47b20]" />
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-semibold text-[#24262d]">{p.judul}</p>
+                      {p.ringkas && <p className="line-clamp-1 text-xs text-[#6f7785]">{p.ringkas}</p>}
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </article>
+
+          <article className="sk-card--flat p-5">
+            <header className="mb-3 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span className="flex h-9 w-9 items-center justify-center rounded-full bg-[#fff4e9] text-[#f47b20]"><HelpCircle size={18} /></span>
+                <h3 className="font-bold text-[#24262d]">FAQ Populer</h3>
+              </div>
+              <Link to="/faq" className="text-sm font-semibold text-[#f47b20] hover:underline">Lihat semua FAQ →</Link>
+            </header>
+            {faqPublik.length === 0 ? (
+              <p className="text-sm text-[#6f7785]">FAQ belum tersedia.</p>
+            ) : (
+              <ul className="space-y-2.5">
+                {faqPublik.map(f => (
+                  <li key={f.id} className="text-sm text-[#24262d]">
+                    <span className="font-semibold">{f.pertanyaan}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </article>
         </div>
       </section>
 
       {/* ================= JENJANG ================= */}
-      <section className="bg-white dark:bg-gray-900 py-10 border-y border-slate-100 dark:border-gray-800">
-        <div className="max-w-6xl mx-auto px-4">
-          <p className="text-center text-sm font-medium text-slate-500 dark:text-gray-400 mb-5">
-            Satu platform untuk semua jenjang pendidikan
-          </p>
+      <section className="border-y border-[#e7e4df] bg-white py-10">
+        <div className="mx-auto max-w-6xl px-4">
+          <p className="mb-5 text-center text-sm font-medium text-[#6f7785]">Satu platform untuk semua jenjang pendidikan</p>
           <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1">
             {jenjang.map(j => (
-              <span key={j} className="text-3xl font-bold text-slate-600 dark:text-gray-400 opacity-70 dark:opacity-60 px-3 py-1">
-                {j}
-              </span>
+              <span key={j} className="px-3 py-1 text-3xl font-bold text-slate-600 opacity-70">{j}</span>
             ))}
           </div>
         </div>
       </section>
 
       {/* ================= FITUR ================= */}
-      <section id="fitur" className="max-w-6xl mx-auto px-4 py-16 scroll-mt-20">
-        <div className="text-center mb-10">
-          <span className="text-sm font-bold text-primary uppercase tracking-wider">Fitur</span>
-          <h2 className="text-2xl sm:text-3xl font-bold text-slate-900 dark:text-white mb-2 mt-1 font-display">
-            Kelola Lembaga Tanpa Aplikasi Terpisah
-          </h2>
-          <p className="text-base text-slate-600 dark:text-gray-400 max-w-2xl mx-auto">
-            Tidak perlu berlangganan banyak aplikasi berbeda. Setiap modul membaca data yang sama,
-            jadi tidak ada pekerjaan input dua kali.
-          </p>
+      <section id="fitur" className="mx-auto max-w-6xl px-4 py-16 scroll-mt-20">
+        <div className="mb-10 text-center">
+          <span className="text-sm font-bold uppercase tracking-wider text-[#f47b20]">Fitur</span>
+          <h2 className="mt-1 mb-2 text-2xl font-bold text-[#24262d] sm:text-3xl">Kelola Lembaga Tanpa Aplikasi Terpisah</h2>
+          <p className="mx-auto max-w-2xl text-base text-[#6f7785]">Tidak perlu berlangganan banyak aplikasi berbeda. Setiap modul membaca data yang sama, jadi tidak ada pekerjaan input dua kali.</p>
         </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {fiturUtama.map((f, i) => (
-            <div key={i} className="bg-white dark:bg-gray-900 rounded-2xl p-6 shadow-sm border border-slate-100 dark:border-gray-800 hover:shadow-xl hover:border-primary/30 dark:hover:border-primary/50 hover:-translate-y-0.5 transition-all group">
-              <div className={`w-12 h-12 bg-gradient-to-br ${f.warna} rounded-xl flex items-center justify-center mb-4 group-hover:scale-110 transition-transform`}>
+            <div key={i} className="group rounded-2xl border border-[#e7e4df] bg-white p-6 shadow-[0_10px_30px_rgba(58,48,40,0.06)] transition-all hover:-translate-y-0.5 hover:shadow-[0_14px_34px_rgba(58,48,40,0.08)]">
+              <div className={`mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br ${f.warna} transition-transform group-hover:scale-110`}>
                 <f.icon size={24} className="text-white" />
               </div>
-              <h3 className="font-bold text-slate-900 dark:text-white mb-1.5 text-lg">{f.judul}</h3>
-              <p className="text-slate-600 dark:text-gray-400 text-sm leading-relaxed">{f.isi}</p>
+              <h3 className="mb-1.5 text-lg font-bold text-[#24262d]">{f.judul}</h3>
+              <p className="text-sm leading-relaxed text-[#6f7785]">{f.isi}</p>
             </div>
           ))}
         </div>
       </section>
 
       {/* ================= UNTUK SIAPA ================= */}
-      <section id="peran" className="bg-slate-100/70 dark:bg-gray-900/60 py-16 border-y border-slate-200 dark:border-gray-800 scroll-mt-20">
-        <div className="max-w-6xl mx-auto px-4">
-          <div className="text-center mb-10">
-            <span className="text-sm font-bold text-primary uppercase tracking-wider">Untuk Siapa</span>
-            <h2 className="text-2xl sm:text-3xl font-bold text-slate-900 dark:text-white mb-2 mt-1 font-display">
-              Setiap Peran Punya Tampilannya Sendiri
-            </h2>
-            <p className="text-base text-slate-600 dark:text-gray-400 max-w-2xl mx-auto">
-              Yayasan melihat rekap, guru melihat kelasnya, siswa melihat jadwalnya,
-              wali melihat kabar anaknya. Dipercaya 100+ Lembaga pendidikan.
-            </p>
+      <section id="peran" className="border-y border-[#e7e4df] bg-[#f4f2ef] py-16 scroll-mt-20">
+        <div className="mx-auto max-w-6xl px-4">
+          <div className="mb-10 text-center">
+            <span className="text-sm font-bold uppercase tracking-wider text-[#f47b20]">Untuk Siapa</span>
+            <h2 className="mt-1 mb-2 text-2xl font-bold text-[#24262d] sm:text-3xl">Setiap Peran Punya Tampilannya Sendiri</h2>
+            <p className="mx-auto max-w-2xl text-base text-[#6f7785]">Yayasan melihat rekap, guru melihat kelasnya, siswa melihat jadwalnya, wali melihat kabar anaknya. Dipercaya 100+ Lembaga pendidikan.</p>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             {perPeran.map((p, i) => (
-              <div key={i} className={`rounded-2xl border p-6 ${p.warna}`}>
-                <div className="flex items-start gap-3 mb-4">
-                  <div className="w-11 h-11 rounded-xl bg-white/70 dark:bg-gray-900/70 flex items-center justify-center shrink-0">
-                    <p.icon size={22} className={p.ikon} />
+              <div key={i} className="rounded-2xl border border-[#e7e4df] bg-white p-6">
+                <div className="mb-4 flex items-start gap-3">
+                  <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[#fff4e9]">
+                    <p.icon size={22} className="text-[#f47b20]" />
                   </div>
                   <div>
-                    <h3 className="font-bold text-slate-900 dark:text-white">{p.peran}</h3>
-                    <p className="text-sm text-slate-600 dark:text-gray-300">{p.ringkas}</p>
+                    <h3 className="font-bold text-[#24262d]">{p.peran}</h3>
+                    <p className="text-sm text-[#6f7785]">{p.ringkas}</p>
                   </div>
                 </div>
                 <ul className="space-y-2">
                   {p.poin.map(poin => (
-                    <li key={poin} className="flex items-start gap-2 text-sm text-slate-700 dark:text-gray-200">
-                      <CheckCircle size={15} className="mt-0.5 shrink-0 text-emerald-600 dark:text-emerald-400" />
+                    <li key={poin} className="flex items-start gap-2 text-sm text-[#38404b]">
+                      <CheckCircle size={15} className="mt-0.5 shrink-0 text-[#f47b20]" />
                       <span>{poin}</span>
                     </li>
                   ))}
@@ -397,15 +331,15 @@ export default function LandingPage() {
       </section>
 
       {/* ================= ALASAN (strip ringkas, bukan seksi penuh) ================= */}
-      <section className="border-y border-slate-200 dark:border-gray-800 bg-slate-100/60 dark:bg-gray-900/40">
-        <div className="max-w-6xl mx-auto px-4 py-8">
-          <div className="grid grid-cols-2 lg:grid-cols-3 gap-x-6 gap-y-5">
+      <section className="border-b border-[#e7e4df]">
+        <div className="mx-auto max-w-6xl px-4 py-8">
+          <div className="grid grid-cols-2 gap-x-6 gap-y-5 lg:grid-cols-3">
             {alasan.map((a, i) => (
               <div key={i} className="flex items-start gap-2.5">
-                <a.icon size={17} className="mt-0.5 shrink-0 text-primary" />
+                <a.icon size={17} className="mt-0.5 shrink-0 text-[#f47b20]" />
                 <div>
-                  <p className="text-sm font-bold text-slate-900 dark:text-white leading-tight">{a.judul}</p>
-                  <p className="text-xs text-slate-600 dark:text-gray-400 leading-snug mt-0.5">{a.isi}</p>
+                  <p className="text-sm font-bold leading-tight text-[#24262d]">{a.judul}</p>
+                  <p className="mt-0.5 text-xs leading-snug text-[#6f7785]">{a.isi}</p>
                 </div>
               </div>
             ))}
@@ -414,204 +348,125 @@ export default function LandingPage() {
       </section>
 
       {/* ================= CARA MULAI ================= */}
-      <section id="langkah" className="bg-white dark:bg-gray-950 py-16 border-y border-slate-200 dark:border-gray-800 scroll-mt-20">
-        <div className="max-w-6xl mx-auto px-4">
-          <div className="text-center mb-10">
-            <span className="text-sm font-bold text-primary uppercase tracking-wider">Cara Mulai</span>
-            <h2 className="text-2xl sm:text-3xl font-bold text-slate-900 dark:text-white mb-2 mt-1 font-display">Tiga Langkah, Selesai</h2>
-            <p className="text-base text-slate-600 dark:text-gray-400">Tanpa pemasangan, tanpa pelatihan panjang.</p>
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-            {langkah.map((s, i) => (
-              <div key={i} className="relative bg-slate-50 dark:bg-gray-900 rounded-2xl p-6 border border-slate-100 dark:border-gray-800">
-                <span className="absolute -top-3 -left-3 flex h-9 w-9 items-center justify-center rounded-xl bg-primary text-white text-sm font-bold shadow-lg shadow-primary/30">
-                  {i + 1}
-                </span>
-                <s.icon size={26} className="text-primary mb-3 mt-2" />
-                <h3 className="font-bold text-slate-900 dark:text-white mb-1.5">{s.judul}</h3>
-                <p className="text-sm text-slate-600 dark:text-gray-400 leading-relaxed">{s.isi}</p>
-              </div>
-            ))}
-          </div>
+      <section id="langkah" className="mx-auto max-w-6xl px-4 py-16 scroll-mt-20">
+        <div className="mb-10 text-center">
+          <span className="text-sm font-bold uppercase tracking-wider text-[#f47b20]">Cara Mulai</span>
+          <h2 className="mt-1 mb-2 text-2xl font-bold text-[#24262d] sm:text-3xl">Tiga Langkah, Selesai</h2>
+          <p className="text-base text-[#6f7785]">Tanpa pemasangan, tanpa pelatihan panjang.</p>
+        </div>
+        <div className="grid grid-cols-1 gap-5 md:grid-cols-3">
+          {langkah.map((s, i) => (
+            <div key={i} className="relative rounded-2xl border border-[#e7e4df] bg-white p-6">
+              <span className="absolute -left-3 -top-3 flex h-9 w-9 items-center justify-center rounded-xl bg-[#f47b20] text-sm font-bold text-white shadow-lg">{i + 1}</span>
+              <s.icon size={26} className="mb-3 mt-2 text-[#f47b20]" />
+              <h3 className="mb-1.5 font-bold text-[#24262d]">{s.judul}</h3>
+              <p className="text-sm leading-relaxed text-[#6f7785]">{s.isi}</p>
+            </div>
+          ))}
         </div>
       </section>
 
-      {/* ================= HARGA (dari API, bukan hardcoded) ================= */}
-      <section id="harga" className="max-w-6xl mx-auto px-4 py-16 scroll-mt-20">
-        <div className="text-center mb-10">
-          <span className="text-sm font-bold text-primary uppercase tracking-wider">Harga</span>
-          <h2 className="text-2xl sm:text-3xl font-bold text-slate-900 dark:text-white mb-2 mt-1 font-display">
-            Pilih Sesuai Kebutuhan Lembaga
-          </h2>
-          <p className="text-base text-slate-600 dark:text-gray-400 max-w-2xl mx-auto">
-            Semua paket berbayar dihitung per lembaga, bukan per pengguna. Jumlah guru dan siswa tidak menambah biaya.
-          </p>
-        </div>
-
-        {paketGagal ? (
-          <p className="text-center text-sm text-slate-500 dark:text-gray-400">
-            Informasi paket sedang tidak dapat dimuat. Silakan hubungi kami untuk daftar harga terbaru.
-          </p>
-        ) : paketBayar.length === 0 ? (
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-            {[0, 1, 2].map(i => (
-              <div key={i} className="h-72 rounded-2xl bg-slate-100 dark:bg-gray-800/50 animate-pulse" />
-            ))}
+      {/* ================= HARGA (dari API) ================= */}
+      <section id="harga" className="border-t border-[#e7e4df] bg-[#f4f2ef] py-16 scroll-mt-20">
+        <div className="mx-auto max-w-6xl px-4">
+          <div className="mb-10 text-center">
+            <span className="text-sm font-bold uppercase tracking-wider text-[#f47b20]">Harga</span>
+            <h2 className="mt-1 mb-2 text-2xl font-bold text-[#24262d] sm:text-3xl">Pilih Sesuai Kebutuhan Lembaga</h2>
+            <p className="mx-auto max-w-2xl text-base text-[#6f7785]">Semua paket berbayar dihitung per lembaga, bukan per pengguna. Jumlah guru dan siswa tidak menambah biaya.</p>
           </div>
-        ) : (
-          <>
-            <div className={`grid grid-cols-1 gap-5 ${paketBayar.length >= 3 ? 'md:grid-cols-3' : 'md:grid-cols-2 max-w-3xl mx-auto'}`}>
-              {paketBayar.map((p, i) => {
-                const disorot = i === Math.min(1, paketBayar.length - 1)
-                return (
-                  <div key={p.plan} className={`relative rounded-2xl border-2 p-6 flex flex-col ${disorot ? 'border-primary bg-white dark:bg-gray-900 shadow-2xl shadow-primary/15' : 'border-slate-200 dark:border-gray-800 bg-white dark:bg-gray-900'}`}>
-                    {disorot && (
-                      <span className="absolute -top-3 left-1/2 -translate-x-1/2 px-3 py-1 bg-primary text-white text-[11px] font-bold rounded-full whitespace-nowrap">
-                        PALING BANYAK DIPILIH
-                      </span>
-                    )}
-                    <h3 className="text-lg font-bold text-slate-900 dark:text-white">{p.label}</h3>
-                    <div className="mt-3 mb-5">
-                      <span className="text-3xl font-extrabold text-slate-900 dark:text-white">{rupiah(p.harga)}</span>
-                      <span className="text-sm text-slate-500 dark:text-gray-400">
-                        /{p.masa_satuan === 'bulan' ? 'bulan' : p.masa_satuan}
-                      </span>
-                      <p className="text-xs text-slate-500 dark:text-gray-400 mt-1">
-                        per lembaga / {p.masa_nilai} {p.masa_satuan} · jumlah guru & siswa tidak menambah biaya
-                      </p>
-                    </div>
-                    <ul className="space-y-2 mb-6 flex-1">
-                      {fiturPaket(p).map(f => (
-                        <li key={f} className="flex items-start gap-2 text-sm text-slate-700 dark:text-gray-300">
-                          <CheckCircle size={15} className="mt-0.5 shrink-0 text-emerald-600 dark:text-emerald-400" />
-                          <span>{f}</span>
-                        </li>
-                      ))}
-                    </ul>
-                    <Link to="/register" className={`w-full text-center px-5 py-3 rounded-xl font-bold transition-all ${disorot ? 'bg-primary text-white hover:bg-primary-dark shadow-lg shadow-primary/30' : 'bg-slate-100 dark:bg-gray-800 text-slate-800 dark:text-gray-100 hover:bg-slate-200 dark:hover:bg-gray-700'}`}>
-                      Mulai Paket {p.label}
-                    </Link>
-                  </div>
-                )
-              })}
+
+          {paketGagal ? (
+            <p className="text-center text-sm text-[#6f7785]">Informasi paket sedang tidak dapat dimuat. Silakan hubungi kami untuk daftar harga terbaru.</p>
+          ) : paketBayar.length === 0 ? (
+            <div className="grid grid-cols-1 gap-5 md:grid-cols-3">
+              {[0, 1, 2].map(i => <div key={i} className="h-72 animate-pulse rounded-2xl bg-[#e7e4df]" />)}
             </div>
-            {paketTrial && (
-              <p className="text-center text-sm text-slate-500 dark:text-gray-400 mt-6">
-                Belum yakin? Coba gratis sekarang juga selama <strong className="text-slate-700 dark:text-gray-200">{paketTrial.masa_nilai} {paketTrial.masa_satuan}</strong> —
-                bisa berhenti kapan saja.
-              </p>
-            )}
-          </>
-        )}
+          ) : (
+            <>
+              <div className={`grid grid-cols-1 gap-5 ${paketBayar.length >= 3 ? 'md:grid-cols-3' : 'mx-auto max-w-3xl md:grid-cols-2'}`}>
+                {paketBayar.map((p, i) => {
+                  const disorot = i === Math.min(1, paketBayar.length - 1)
+                  return (
+                    <div key={p.plan} className={`relative flex flex-col rounded-2xl border-2 bg-white p-6 ${disorot ? 'border-[#f47b20] shadow-2xl shadow-[#f47b20]/15' : 'border-[#e7e4df]'}`}>
+                      {disorot && <span className="absolute -top-3 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full bg-[#f47b20] px-3 py-1 text-[11px] font-bold text-white">PALING BANYAK DIPILIH</span>}
+                      <h3 className="text-lg font-bold text-[#24262d]">{p.label}</h3>
+                      <div className="mb-5 mt-3">
+                        <span className="text-3xl font-extrabold text-[#24262d]">{rupiah(p.harga)}</span>
+                        <span className="text-sm text-[#6f7785]">/{p.masa_satuan === 'bulan' ? 'bulan' : p.masa_satuan}</span>
+                        <p className="mt-1 text-xs text-[#6f7785]">per lembaga / {p.masa_nilai} {p.masa_satuan} · jumlah guru & siswa tidak menambah biaya</p>
+                      </div>
+                      <ul className="mb-6 flex-1 space-y-2">
+                        {fiturPaket(p).map(f => (
+                          <li key={f} className="flex items-start gap-2 text-sm text-[#38404b]">
+                            <CheckCircle size={15} className="mt-0.5 shrink-0 text-[#f47b20]" /><span>{f}</span>
+                          </li>
+                        ))}
+                      </ul>
+                      <Link to="/register" className={`w-full rounded-xl px-5 py-3 text-center font-bold transition-all ${disorot ? 'bg-[#f47b20] text-white hover:bg-[#df6511]' : 'bg-[#f1efec] text-[#24262d] hover:bg-[#e7e4df]'}`}>
+                        Mulai Paket {p.label}
+                      </Link>
+                    </div>
+                  )
+                })}
+              </div>
+              {paketTrial && (
+                <p className="mt-6 text-center text-sm text-[#6f7785]">
+                  Belum yakin? Coba gratis sekarang juga selama <strong className="text-[#24262d]">{paketTrial.masa_nilai} {paketTrial.masa_satuan}</strong> — bisa berhenti kapan saja.
+                </p>
+              )}
+            </>
+          )}
+        </div>
       </section>
 
       {/* ================= FAQ ================= */}
-      <section id="faq" className="bg-white dark:bg-gray-900 py-16 border-y border-slate-200 dark:border-gray-800 scroll-mt-20">
-        <div className="max-w-3xl mx-auto px-4">
-          <div className="text-center mb-9">
-            <span className="text-sm font-bold text-primary uppercase tracking-wider">Tanya Jawab</span>
-            <h2 className="text-2xl sm:text-3xl font-bold text-slate-900 dark:text-white mb-2 mt-1 font-display">
-              Pertanyaan yang Sering Diajukan
-            </h2>
-          </div>
-          <div className="space-y-2.5">
-            {faq.map((f, i) => {
-              const buka = faqBuka === i
-              return (
-                <div key={i} className="rounded-xl border border-slate-200 dark:border-gray-800 overflow-hidden bg-slate-50 dark:bg-gray-950/50">
-                  <button
-                    onClick={() => setFaqBuka(buka ? null : i)}
-                    className="w-full flex items-center justify-between gap-4 px-5 py-4 text-left"
-                    aria-expanded={buka}
-                  >
-                    <span className="font-semibold text-sm text-slate-900 dark:text-white">{f.t}</span>
-                    <ChevronDown size={18} className={`shrink-0 text-slate-400 transition-transform ${buka ? 'rotate-180' : ''}`} />
-                  </button>
-                  {buka && (
-                    <div className="px-5 pb-4 -mt-1">
-                      <p className="text-sm text-slate-600 dark:text-gray-300 leading-relaxed">{f.j}</p>
-                    </div>
-                  )}
-                </div>
-              )
-            })}
-          </div>
+      <section id="faq" className="mx-auto max-w-3xl px-4 py-16 scroll-mt-20">
+        <div className="mb-9 text-center">
+          <span className="text-sm font-bold uppercase tracking-wider text-[#f47b20]">Tanya Jawab</span>
+          <h2 className="mt-1 mb-2 text-2xl font-bold text-[#24262d] sm:text-3xl">Pertanyaan yang Sering Diajukan</h2>
+        </div>
+        <div className="space-y-2.5">
+          {faq.map((f, i) => {
+            const buka = faqBuka === i
+            return (
+              <div key={i} className="sk-card--flat overflow-hidden">
+                <button onClick={() => setFaqBuka(buka ? null : i)} className="flex w-full items-center justify-between gap-4 px-5 py-4 text-left" aria-expanded={buka}>
+                  <span className="text-sm font-semibold text-[#24262d]">{f.t}</span>
+                  <ChevronDown size={18} className={`shrink-0 text-[#6f7785] transition-transform ${buka ? 'rotate-180' : ''}`} />
+                </button>
+                {buka && <div className="px-5 pb-4"><p className="text-sm leading-relaxed text-[#6f7785]">{f.j}</p></div>}
+              </div>
+            )
+          })}
         </div>
       </section>
 
       {/* ================= CTA ================= */}
-      <section className="max-w-6xl mx-auto px-4 py-16">
-        <div className="relative overflow-hidden bg-gradient-to-r from-primary via-indigo-600 to-purple-600 rounded-3xl p-8 sm:p-12 text-center text-white shadow-2xl">
-          <div className="absolute -top-16 -right-10 w-64 h-64 bg-white/10 rounded-full blur-3xl pointer-events-none" />
-          <div className="absolute -bottom-20 -left-10 w-64 h-64 bg-white/10 rounded-full blur-3xl pointer-events-none" />
+      <section className="mx-auto max-w-6xl px-4 py-16">
+        <div className="relative overflow-hidden rounded-3xl p-8 text-center text-white sm:p-12" style={{ background: 'linear-gradient(135deg, #ff9a20 0%, #f27513 100%)' }}>
+          <div className="absolute -right-10 -top-16 h-64 w-64 rounded-full bg-white/10 blur-3xl" />
+          <div className="absolute -bottom-20 -left-10 h-64 w-64 rounded-full bg-white/10 blur-3xl" />
           <div className="relative">
-            <h2 className="text-2xl sm:text-3xl font-extrabold mb-3 font-display">Digitalisasi Lembaga Anda Hari Ini</h2>
-            <p className="text-lg text-white/90 mb-2 max-w-2xl mx-auto">
-              Berhenti mengejar administrasi. Biarkan sistem yang merapikan.
-            </p>
-            <p className="text-base text-white/80 mb-7 max-w-xl mx-auto">
-              Daftar sekarang — aktif seketika, konfirmasi dikirim ke WhatsApp dan email Anda.
-            </p>
-            <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
-              <Link to="/register" className="inline-flex items-center gap-2 px-8 py-3.5 bg-white text-primary rounded-xl font-bold text-lg hover:bg-gray-100 shadow-2xl transition-all hover:scale-105">
-                Mulai Coba Gratis <ArrowRight size={20} />
-              </Link>
-              <Link to="/panduan" className="inline-flex items-center gap-2 px-8 py-3.5 border-2 border-white/40 text-white rounded-xl font-semibold hover:bg-white/10 transition-all">
-                <FileText size={18} /> Baca Panduan
-              </Link>
+            <h2 className="mb-3 text-2xl font-extrabold sm:text-3xl">Digitalisasi Lembaga Anda Hari Ini</h2>
+            <p className="mx-auto mb-7 max-w-xl text-base text-white/85">Daftar sekarang — aktif seketika, konfirmasi dikirim ke WhatsApp dan email Anda.</p>
+            <div className="flex flex-col items-center justify-center gap-3 sm:flex-row">
+              <Link to="/register" className="inline-flex items-center gap-2 rounded-xl bg-white px-8 py-3.5 text-lg font-bold text-[#f47b20] transition-all hover:scale-105 hover:bg-gray-100">Mulai Coba Gratis <ArrowRight size={20} /></Link>
+              <Link to="/panduan" className="inline-flex items-center gap-2 rounded-xl border-2 border-white/40 px-8 py-3.5 font-semibold text-white hover:bg-white/10"><FileText size={18} /> Baca Panduan</Link>
             </div>
-            <p className="text-sm text-white/70 mt-5 flex items-center justify-center gap-1.5">
-              <Clock size={14} /> Gratis 30 hari. Batal kapan saja.
-            </p>
+            <p className="mt-5 flex items-center justify-center gap-1.5 text-sm text-white/75"><Clock size={14} /> Gratis 30 hari. Batal kapan saja.</p>
           </div>
         </div>
       </section>
 
       {/* ================= FOOTER ================= */}
-      <footer className="bg-slate-900 dark:bg-black text-white pt-12 pb-8 border-t border-slate-800 dark:border-gray-900">
-        <div className="max-w-6xl mx-auto px-4">
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8 mb-10">
-            <div className="lg:col-span-2">
-              <div className="flex items-center gap-2.5 mb-3">
-                <div className="h-10 w-10 overflow-hidden rounded-xl bg-white/10 flex items-center justify-center">
-                  <img src={logo} alt="Logo" className="h-full w-full object-contain" />
-                </div>
-                <div>
-                  <p className="text-base font-bold">JURNALKU</p>
-                  <p className="text-[11px] text-slate-400">SIMS/M Terpadu</p>
-                </div>
-              </div>
-              <p className="text-sm text-slate-400 leading-relaxed max-w-md">
-                Sistem informasi manajemen untuk lembaga pendidikan — madrasah, pesantren, dan kursus:
-                data siswa, absensi, jurnal mengajar, penilaian, rapor, keuangan, dan notifikasi WhatsApp.
-              </p>
-            </div>
-            <div>
-              <p className="text-sm font-bold mb-3 text-white">Produk</p>
-              <ul className="space-y-2 text-sm">
-                <li><a href="#fitur" className="text-slate-400 hover:text-white transition-colors">Fitur</a></li>
-                <li><a href="#harga" className="text-slate-400 hover:text-white transition-colors">Harga</a></li>
-                <li><a href="#peran" className="text-slate-400 hover:text-white transition-colors">Untuk Siapa</a></li>
-                <li><a href="#faq" className="text-slate-400 hover:text-white transition-colors">Tanya Jawab</a></li>
-              </ul>
-            </div>
-            <div>
-              <p className="text-sm font-bold mb-3 text-white">Mulai</p>
-              <ul className="space-y-2 text-sm">
-                <li><Link to="/register" className="text-slate-400 hover:text-white transition-colors inline-flex items-center gap-1">Daftar Lembaga <ChevronRight size={13} /></Link></li>
-                <li><Link to="/login" className="text-slate-400 hover:text-white transition-colors">Masuk</Link></li>
-                <li><Link to="/panduan" className="text-slate-400 hover:text-white transition-colors">Panduan</Link></li>
-                <li><Link to="/ppdb" className="text-slate-400 hover:text-white transition-colors">PPDB</Link></li>
-              </ul>
-            </div>
-          </div>
-          <div className="border-t border-slate-800 dark:border-gray-900 pt-5 flex flex-col sm:flex-row items-center justify-between gap-3">
-            <p className="text-sm text-slate-500">
-              © {new Date().getFullYear()} {namaLembaga === 'JURNALKU' ? 'JURNALKU' : namaLembaga}. Hak cipta dilindungi.
-            </p>
-            <p className="text-xs text-slate-500">
-              Design by <span className="font-semibold text-slate-300">aljadugh</span>
-            </p>
+      <footer className="sk-footer">
+        <div className="sk-footer-inner">
+          <span>Sistem aman &amp; terintegrasi</span>
+          <div className="sk-footer-links">
+            <Link to="/pengumuman">Pengumuman</Link>
+            <Link to="/faq">FAQ</Link>
+            <Link to="/kontak">Kontak</Link>
+            <Link to="/login">Masuk</Link>
           </div>
         </div>
       </footer>

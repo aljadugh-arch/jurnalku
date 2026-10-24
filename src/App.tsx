@@ -76,6 +76,11 @@ const ManajemenDataPage = lazy(() => import('./pages/admin/ManajemenDataPage'))
 const SmtpSettingsPage = lazy(() => import('./pages/admin/SmtpSettingsPage'))
 const PpdbPage = lazy(() => import('./pages/admin/PpdbPage'))
 const PpdbPublikPage = lazy(() => import('./pages/PpdbPublikPage'))
+const WebsitePage = lazy(() => import('./pages/admin/WebsitePage'))
+const PengumumanPage = lazy(() => import('./pages/PengumumanPage'))
+const FaqPage = lazy(() => import('./pages/FaqPage'))
+const KontakPage = lazy(() => import('./pages/KontakPage'))
+const HelpdeskPage = lazy(() => import('./pages/HelpdeskPage'))
 const CekLokAdminPage = lazy(() => import('./pages/admin/CekLokAdminPage'))
 const GuruAbsensiPage = lazy(() => import('./pages/guru/GuruAbsensiPage'))
 const BendaharaDashboard = lazy(() => import('./pages/admin/BendaharaDashboard'))
@@ -220,6 +225,10 @@ export default function App() {
         <Route path="/forgot-password" element={<ForgotPasswordPage />} />
         <Route path="/panduan" element={<PanduanPage />} />
         <Route path="/ppdb" element={<PpdbPublikPage />} />
+        <Route path="/pengumuman" element={<PengumumanPage />} />
+        <Route path="/faq" element={<FaqPage />} />
+        <Route path="/kontak" element={<KontakPage />} />
+        <Route path="/helpdesk" element={<HelpdeskPage />} />
 
         {/* Admin Routes */}
         <Route path="/admin" element={
@@ -307,6 +316,7 @@ export default function App() {
           <Route path="rekap-absensi" element={<RekapAbsensiPage />} />
           {/* Halaman baru sesuai live */}
           <Route path="posting" element={<PostingPage />} />
+          <Route path="website" element={<WebsitePage />} />
           <Route path="catatan-kepribadian" element={<CatatanKepribadianPage />} />
           <Route path="bk" element={<BkPage />} />
           <Route path="mutasi" element={<MutasiPage />} />

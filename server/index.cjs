@@ -27,6 +27,7 @@ const { importJadwalRows } = require('./jadwal-import.cjs')
 const { setupPortalCashless, registerPortalRoutes, registerKantinRoutes, selectPenilaianStudentId, normalizeStoredImageDataUrl } = require('./portal-cashless.cjs')
 const { setupPaymentGateway, registerPaymentGatewayRoutes } = require('./payment-gateway-routes.cjs')
 const { registerRoutes: registerPpdbRoutes, setupPpdbTables } = require('./ppdb.cjs')
+const { registerRoutes: registerPublikRoutes, setupPublikTables } = require('./publik.cjs')
 const { buatLayananSmtp } = require('./smtp-tenant.cjs')
 const { setupAdministrasi, registerAdministrasiRoutes } = require('./administrasi-routes.cjs')
 const { setupSupervisi, registerSupervisiRoutes } = require('./supervisi-routes.cjs')
@@ -2586,6 +2587,8 @@ registerPpdbRoutes(app, db, {
   upload: multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024, files: 5 } }),
   akarUnggahan: UPLOAD_DIR,
 })
+setupPublikTables(db)
+registerPublikRoutes(app, db, { requireRole, authMiddleware })
 
 // ---- SMTP/IMAP per lembaga ----
 const smtpLayanan = buatLayananSmtp(db, { rahasia: JWT_SECRET, logger: console })
@@ -9110,6 +9113,11 @@ app.delete('/api/jurnal/:id', STAFF, (req, res) => {
 // ==================== POSTING ====================
 
 for (const [name, definition] of [
+  ['judul', "TEXT DEFAULT ''"],
+  ['isi', "TEXT DEFAULT ''"],
+  ['kategori', "TEXT DEFAULT 'berita'"],
+  ['penulis_id', "TEXT DEFAULT ''"],
+  ['penulis_nama', "TEXT DEFAULT ''"],
   ['media', 'TEXT DEFAULT \'[]\''],
   ['activity_type', 'TEXT DEFAULT \'\''],
   ['location_lat', 'REAL'],

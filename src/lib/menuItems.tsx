@@ -112,6 +112,7 @@ export const adminMenuItems: MenuItem[] = [
   { label: 'Manajemen Lembaga', icon: <Globe size={20} />, path: '/admin/tenants' },
   { label: 'Integrasi Se-Yayasan', icon: <Users size={20} />, path: '/admin/foundation-sync' },
   { label: 'Backup & Restore', icon: <DatabaseBackup size={20} />, path: '/admin/backup-restore' },
+  { label: 'Website Lembaga', icon: <Globe size={20} />, path: '/admin/website' },
   { label: 'Lihat Website Lembaga', icon: <Globe size={20} />, path: '/', external: '/' },
   {
     label: 'E-Kantin & Cashless', icon: <DollarSign size={20} />,
