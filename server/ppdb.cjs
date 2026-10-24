@@ -21,6 +21,11 @@
 
 const crypto = require('node:crypto')
 
+// ID kanonik baris settings per tenant (sama dengan tenant-settings.cjs).
+// Diimpor di sini supaya ppdb.cjs bisa baca/tulis ppdb_nama & ppdb_judul tanpa
+// menduplikasi logika canonicalSettingsId.
+const { canonicalSettingsId: canonicalId } = require('./tenant-settings.cjs')
+
 const STATUS = Object.freeze({
   BARU: 'baru',                 // pendaftaran masuk, belum diperiksa
   TERVERIFIKASI: 'terverifikasi', // berkas lolos pemeriksaan
@@ -167,10 +172,10 @@ function buatLayananPpdb(db, { logger = console } = {}) {
     return { ok: true }
   }
 
-  /** Nomor pendaftaran urut per tenant+gelombang: PPDB-<tahun>-<urut 4 digit>. */
+  /** Nomor pendaftaran urut per tenant+gelombang: <PREFIX>-<tahun>-<urut 4 digit>. */
   function nomorBerikutnya(tenantId, gelombang) {
     const ta = (gelombang?.tahun_ajaran || String(new Date().getFullYear())).replace(/[^0-9]/g, '').slice(0, 4) || String(new Date().getFullYear())
-    const prefiks = `PPDB-${ta}-`
+    const prefiks = `${prefixNomor(tenantId)}-${ta}-`
     const row = db.prepare(
       "SELECT nomor_daftar FROM ppdb_pendaftar WHERE tenant_id=? AND nomor_daftar LIKE ? ORDER BY nomor_daftar DESC LIMIT 1"
     ).get(tenantId, prefiks + '%')
@@ -380,10 +385,40 @@ function buatLayananPpdb(db, { logger = console } = {}) {
     "SELECT id, nama, tingkat FROM rombel WHERE tenant_id=? ORDER BY tingkat, nama"
   ).all(tenantId)
 
+  // ---- Pengaturan PPDB kustom (nama modul + judul halaman publik) ----
+  const PPDB_NAMA_BAWAAN = 'PPDB'
+  const PPDB_JUDUL_BAWAAN = 'Pendaftaran Siswa Baru'
+  const bacaPengaturan = (tenantId) => {
+    try {
+      const row = db.prepare("SELECT ppdb_nama, ppdb_judul FROM settings WHERE id=? AND tenant_id=?").get(canonicalId(tenantId), tenantId)
+      return {
+        nama: String(row?.ppdb_nama || '').trim() || PPDB_NAMA_BAWAAN,
+        judul: String(row?.ppdb_judul || '').trim() || PPDB_JUDUL_BAWAAN,
+      }
+    } catch { return { nama: PPDB_NAMA_BAWAAN, judul: PPDB_JUDUL_BAWAAN } }
+  }
+  const simpanPengaturan = (tenantId, { nama, judul }) => {
+    const namaFinal = String(nama || '').trim().slice(0, 30) || PPDB_NAMA_BAWAAN
+    const judulFinal = String(judul || '').trim().slice(0, 80) || PPDB_JUDUL_BAWAAN
+    try {
+      db.prepare("UPDATE settings SET ppdb_nama=?, ppdb_judul=?, updated_at=datetime('now') WHERE id=? AND tenant_id=?")
+        .run(namaFinal, judulFinal, canonicalId(tenantId), tenantId)
+    } catch { /* kolom belum ada -> abaikan, baca pakai default */ }
+    return { nama: namaFinal, judul: judulFinal }
+  }
+  // Prefix nomor pendaftaran mengikuti nama kustom (mis. SPMB-2026-0001).
+  // Karakter non-alfanumerik diganti strip; minimal 2 huruf, fallback ke PPDB.
+  const prefixNomor = (tenantId) => {
+    const { nama } = bacaPengaturan(tenantId)
+    const p = String(nama).toUpperCase().replace(/[^A-Z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 8)
+    return p && p.replace(/-/g, '').length >= 2 ? p : PPDB_NAMA_BAWAAN
+  }
+
   return {
     STATUS, gelombangAktif, daftarGelombang, simpanGelombang, hapusGelombang,
     daftarPublik, daftarPendaftar, ambilPendaftar, ubahStatus, simpanDokumen, tandaiDaftarUlang,
     ringkasan, antrianSiswa, terimaJadiSiswa, terimaBanyak, normalHp, rombelPublik,
+    bacaPengaturan, simpanPengaturan, prefixNomor, PPDB_NAMA_BAWAAN, PPDB_JUDUL_BAWAAN,
   }
 }
 
@@ -396,6 +431,7 @@ function registerRoutes(app, db, { requireRole, authMiddleware, wrap, upload, ak
   // --- Publik (tanpa login) — halaman pendaftaran calon siswa ---
   app.get('/api/ppdb/publik/info', w((req, res) => {
     const gel = svc.gelombangAktif(req.tenantId)
+    const pengaturan = svc.bacaPengaturan(req.tenantId)
     res.json({
       dibuka: !!gel,
       gelombang: gel ? { id: gel.id, nama: gel.nama, tahun_ajaran: gel.tahun_ajaran, tanggal_buka: gel.tanggal_buka, tanggal_tutup: gel.tanggal_tutup, kuota: gel.kuota, biaya: gel.biaya, keterangan: gel.keterangan } : null,
@@ -403,6 +439,9 @@ function registerRoutes(app, db, { requireRole, authMiddleware, wrap, upload, ak
       rombel: svc.rombelPublik(req.tenantId),
       // Identitas lembaga agar halaman publik bisa menampilkan nama sekolah.
       lembaga: req.tenant ? { nama: req.tenant.nama, slug: req.tenant.slug, jenjang: req.tenant.jenjang } : null,
+      // Sebutan kustom (PPDB/SPMB/PSB/dll) + judul halaman publik.
+      nama: pengaturan.nama,
+      judul: pengaturan.judul,
     })
   }))
   app.post('/api/ppdb/publik/daftar', w((req, res) => {
@@ -469,6 +508,24 @@ function registerRoutes(app, db, { requireRole, authMiddleware, wrap, upload, ak
   }))
 
   // --- Panitia (login) ---
+  app.get('/api/ppdb/pengaturan', PANITIA, w((req, res) => {
+    // URL publik kanonik: domain_custom aktif, kalau tidak subdomain slug.base_domain.
+    let url_publik = null
+    try {
+      const t = db.prepare('SELECT slug, domain_custom, domain_status, base_domain FROM tenants WHERE id=?').get(req.tenantId)
+      if (t) {
+        const host = (t.domain_custom && t.domain_status === 'active')
+          ? String(t.domain_custom).replace(/\.$/, '')
+          : `${t.slug}.${t.base_domain || 'jurnal.cc.cd'}`
+        url_publik = `https://${host}/ppdb`
+      }
+    } catch { url_publik = null }
+    res.json({ ...svc.bacaPengaturan(req.tenantId), url_publik })
+  }))
+  app.put('/api/ppdb/pengaturan', PANITIA, w((req, res) => {
+    const p = svc.simpanPengaturan(req.tenantId, { nama: req.body?.nama, judul: req.body?.judul })
+    res.json({ success: true, ...p })
+  }))
   app.get('/api/ppdb/ringkasan', PANITIA, w((req, res) => res.json(svc.ringkasan(req.tenantId))))
   app.get('/api/ppdb/gelombang', PANITIA, w((req, res) => res.json(svc.daftarGelombang(req.tenantId))))
   app.post('/api/ppdb/gelombang', PANITIA, w((req, res) => res.json({ success: true, gelombang: svc.simpanGelombang(req.tenantId, req.body || {}) })))

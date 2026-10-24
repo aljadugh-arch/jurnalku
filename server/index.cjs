@@ -1886,7 +1886,11 @@ for (const col of [
     ['sesi_kelas_guru', 'geo_distance', 'INTEGER'],
     ['sesi_kelas_guru', 'geo_scope', 'TEXT'],
     ['template_jadwal', 'durasi_menit', 'INTEGER DEFAULT 40'],
-    ['jadwal', 'guru_piket', "TEXT DEFAULT '[]'"]
+    ['jadwal', 'guru_piket', "TEXT DEFAULT '[]'"],
+    // PPDB kustom: nama modul (PPDB/SPMB/PSB/lainnya) + judul halaman publik.
+    // Admin bisa mengganti sebutan agar sesuai istilah lembaganya.
+    ['settings', 'ppdb_nama', "TEXT DEFAULT 'PPDB'"],
+    ['settings', 'ppdb_judul', "TEXT DEFAULT 'Pendaftaran Siswa Baru'"],
     ]) {
   try { db.prepare(`ALTER TABLE ${col[0]} ADD COLUMN ${col[1]} ${col[2]}`).run() } catch {}
 }

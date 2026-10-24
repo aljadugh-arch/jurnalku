@@ -11,6 +11,8 @@ interface Info {
   gelombang: { id: string; nama: string; tahun_ajaran: string | null; tanggal_buka: string | null; tanggal_tutup: string | null; kuota: number; biaya: number; keterangan: string | null } | null
   rombel?: { id: string; nama: string; tingkat: string }[]
   lembaga?: { nama: string; slug: string; jenjang?: string } | null
+  nama?: string
+  judul?: string
 }
 
 interface Berkas { url: string; nama: string; tipe: string; ukuran: number }
@@ -123,14 +125,14 @@ export default function PpdbPublikPage() {
       <header className="bg-white border-b">
         <div className="max-w-2xl mx-auto px-4 h-14 flex items-center justify-between">
           <Link to="/" className="flex items-center gap-2 text-gray-600 hover:text-primary text-sm font-medium"><ArrowLeft size={17} /> Beranda</Link>
-          <span className="text-sm font-semibold text-gray-700">PPDB Online</span>
+          <span className="text-sm font-semibold text-gray-700">{info?.nama || 'PPDB'} Online</span>
         </div>
       </header>
 
       <div className="max-w-2xl mx-auto px-4 py-8">
         <div className="text-center mb-6">
           <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-primary/10 mb-3"><ClipboardList size={28} className="text-primary" /></div>
-          <h1 className="text-2xl font-extrabold text-gray-900">Pendaftaran Siswa Baru</h1>
+          <h1 className="text-2xl font-extrabold text-gray-900">{info?.judul || 'Pendaftaran Siswa Baru'}</h1>
           {info?.lembaga?.nama && <p className="text-sm font-medium text-gray-700 mt-1">{info.lembaga.nama}</p>}
           {info?.gelombang && (
             <p className="text-sm text-gray-500 mt-1">
@@ -143,7 +145,7 @@ export default function PpdbPublikPage() {
         {!info?.dibuka ? (
           <div className="rounded-2xl border border-amber-200 bg-amber-50 p-6 text-center">
             <p className="font-semibold text-amber-800">Pendaftaran belum dibuka</p>
-            <p className="text-sm text-amber-700 mt-1">Silakan hubungi panitia PPDB lembaga untuk informasi jadwal pendaftaran.</p>
+            <p className="text-sm text-amber-700 mt-1">Silakan hubungi panitia {info?.nama || 'PPDB'} lembaga untuk informasi jadwal pendaftaran.</p>
           </div>
         ) : hasil ? (
           <div className="rounded-2xl border border-green-200 bg-green-50 p-6 text-center">
@@ -250,7 +252,7 @@ export default function PpdbPublikPage() {
               ) : (
                 <form onSubmit={kirimDaftarUlang} className="rounded-2xl border bg-white p-5 space-y-4">
                   <p className="text-sm text-gray-600">Sudah mendaftar dan berkas sudah diverifikasi? Masukkan nomor pendaftaran untuk daftar ulang.</p>
-                  <div><label className={labelKelas}>Nomor pendaftaran *</label><input required value={du.nomor_daftar} onChange={e => setDu({ ...du, nomor_daftar: e.target.value.toUpperCase() })} className={inputKelas} placeholder="PPDB-2026-0001" /></div>
+                  <div><label className={labelKelas}>Nomor pendaftaran *</label><input required value={du.nomor_daftar} onChange={e => setDu({ ...du, nomor_daftar: e.target.value.toUpperCase() })} className={inputKelas} placeholder={`${info?.nama || 'PPDB'}-${new Date().getFullYear()}-0001`} /></div>
                   <div><label className={labelKelas}>NISN (untuk verifikasi)</label><input value={du.nisn} onChange={e => setDu({ ...du, nisn: e.target.value })} className={inputKelas} placeholder="10 digit" maxLength={10} /></div>
                   <button type="submit" disabled={kirim} className="w-full flex items-center justify-center gap-2 rounded-lg bg-primary py-3 text-sm font-semibold text-white disabled:opacity-50">
                     {kirim ? <Loader2 size={16} className="animate-spin" /> : <Search size={16} />} Daftar Ulang
@@ -284,7 +286,7 @@ export default function PpdbPublikPage() {
             ) : (
               <form onSubmit={cekStatus} className="rounded-2xl border bg-white p-5 space-y-4">
                 <p className="text-sm text-gray-600">Masukkan nomor pendaftaran dan NISN untuk melihat status.</p>
-                <div><label className={labelKelas}>Nomor pendaftaran *</label><input required value={cek.nomor_daftar} onChange={e => setCek({ ...cek, nomor_daftar: e.target.value.toUpperCase() })} className={inputKelas} placeholder="PPDB-2026-0001" /></div>
+                <div><label className={labelKelas}>Nomor pendaftaran *</label><input required value={cek.nomor_daftar} onChange={e => setCek({ ...cek, nomor_daftar: e.target.value.toUpperCase() })} className={inputKelas} placeholder={`${info?.nama || 'PPDB'}-${new Date().getFullYear()}-0001`} /></div>
                 <div><label className={labelKelas}>NISN</label><input value={cek.nisn} onChange={e => setCek({ ...cek, nisn: e.target.value })} className={inputKelas} placeholder="10 digit" maxLength={10} /></div>
                 <button type="submit" disabled={kirim} className="w-full flex items-center justify-center gap-2 rounded-lg bg-primary py-3 text-sm font-semibold text-white disabled:opacity-50">
                   {kirim ? <Loader2 size={16} className="animate-spin" /> : <Search size={16} />} Cek Status
