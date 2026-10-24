@@ -1,11 +1,21 @@
 /* ============================================================================
    Design system "SISFO" — diadopsi dari sisfo.upiyptk.ac.id (lihat
    docs/SISFO-UPIYPTK-RECON.md). Palet krem + oranye, font Poppins, kartu
-   ber-radius besar, shadow lembut. Dipakai khusus halaman publik (landing,
-   login, pengumuman, FAQ, kontak, helpdesk) — TIDAK menyentuh dashboard.
+   ber-radius besar, shadow lembut. Dipakai halaman publik (landing, login,
+   register, panduan, pengumuman, FAQ, kontak, helpdesk, PPDB) — TIDAK menyentuh
+   dashboard.
 
-   Semua kelas diberi prefiks `sk-` (sisfo-krem) supaya tidak bentrok dengan
-   utilitas Tailwind maupun kelas `.card`/`.input`/`.btn-*` yang sudah ada.
+   Semua kelas berprefiks `sk-` (sisfo-krem) supaya tidak bentrok dengan
+   utilitas Tailwind. SETIAP nilai warna memakai `var(--sk-*)` sehingga mode
+   gelap bisa menimpa token di blok `.dark` — tidak ada lagi hardcode krem/putih
+   yang membuat dark theme "tidak merata".
+
+   Tokens (light) diambil persis dari CSS referensi:
+     --sk-bg #fbfaf8 · --sk-surface #ffffff · --sk-text #24262d
+     --sk-muted #6f7785 · --sk-border #e7e4df · --sk-orange #f47b20
+   Tokens (dark) mengikuti palet gelap referensi + konsisten dgn Jurnalku:
+     --sk-bg #0b0f19 · --sk-surface #141c2e · --sk-text #f1f5f9
+     --sk-muted #94a3b8 · --sk-border rgba(255,255,255,.11)
    ============================================================================ */
 
 :root {
@@ -20,6 +30,23 @@
   --sk-orange-soft: #fff4e9;
   --sk-ink: #38404b;
   --sk-heading: #69574f;
+  --sk-label: #484a51;
+
+  /* --- elemen turunan (semua via var, ditimpa di .dark) --- */
+  --sk-nav-bg: rgba(255, 255, 255, 0.86);
+  --sk-nav-hover: #f1efec;
+  --sk-footer-bg: #f4f2ef;
+  --sk-card-border: rgba(226, 222, 216, 0.94);
+  --sk-flat-bg: rgba(255, 255, 255, 0.78);
+  --sk-flat-border: rgba(226, 222, 216, 0.92);
+  --sk-flat-shadow: 0 12px 32px rgba(55, 46, 38, 0.045);
+  --sk-service-border: rgba(231, 228, 223, 0.88);
+  --sk-service-bg: rgba(255, 255, 255, 0.92);
+  --sk-service-hover-border: #f4d3b4;
+  --sk-icon-muted: #a1a7b3;
+  --sk-input-bg: #ffffff;
+  --sk-ghost-bg: #ffffff;
+  --sk-badge-text: #df6511;
 
   --sk-shadow: 0 18px 44px rgba(58, 48, 40, 0.08);
   --sk-shadow-soft: 0 10px 30px rgba(58, 48, 40, 0.06);
@@ -27,6 +54,39 @@
 
   --sk-gradient: linear-gradient(135deg, #ff9a20 0%, #f27513 100%);
   --sk-font: 'Poppins', 'Inter', system-ui, -apple-system, sans-serif;
+}
+
+/* --- mode gelap: timpa token, bukan tambah hardcode per elemen --- */
+.dark {
+  --sk-bg: #0b0f19;
+  --sk-surface: #141c2e;
+  --sk-text: #f1f5f9;
+  --sk-muted: #94a3b8;
+  --sk-border: rgba(255, 255, 255, 0.11);
+  --sk-ink: #e2e8f0;
+  --sk-heading: #f1f5f9;
+  --sk-label: #cbd5e1;
+  --sk-orange: #ff9d3b;
+  --sk-orange-dark: #f47b20;
+  --sk-orange-soft: rgba(244, 123, 32, 0.16);
+  --sk-badge-text: #ffad5a;
+
+  --sk-nav-bg: rgba(11, 15, 25, 0.86);
+  --sk-nav-hover: rgba(255, 255, 255, 0.06);
+  --sk-footer-bg: #0d1220;
+  --sk-card-border: rgba(255, 255, 255, 0.11);
+  --sk-flat-bg: rgba(20, 28, 46, 0.78);
+  --sk-flat-border: rgba(255, 255, 255, 0.1);
+  --sk-flat-shadow: 0 12px 32px rgba(0, 0, 0, 0.4);
+  --sk-service-border: rgba(255, 255, 255, 0.1);
+  --sk-service-bg: rgba(20, 28, 46, 0.92);
+  --sk-service-hover-border: rgba(244, 123, 32, 0.4);
+  --sk-icon-muted: #64748b;
+  --sk-input-bg: #141c2e;
+  --sk-ghost-bg: #141c2e;
+
+  --sk-shadow: 0 20px 50px rgba(0, 0, 0, 0.55);
+  --sk-shadow-soft: 0 10px 30px rgba(0, 0, 0, 0.4);
 }
 
 /* --- canvas --- */
@@ -42,7 +102,7 @@
   position: sticky;
   top: 0;
   z-index: 50;
-  background: rgba(255, 255, 255, 0.86);
+  background: var(--sk-nav-bg);
   backdrop-filter: blur(10px);
   border-bottom: 1px solid var(--sk-border);
 }
@@ -77,7 +137,7 @@
   transition: color 0.15s ease, background-color 0.15s ease;
   white-space: nowrap;
 }
-.sk-nav-link:hover { color: var(--sk-text); background: #f1efec; }
+.sk-nav-link:hover { color: var(--sk-text); background: var(--sk-nav-hover); }
 .sk-nav-link.sk-active { color: var(--sk-orange); font-weight: 600; }
 
 /* --- badge sambutan --- */
@@ -88,7 +148,7 @@
   padding: 7px 14px;
   border-radius: 999px;
   background: var(--sk-orange-soft);
-  color: var(--sk-orange-dark);
+  color: var(--sk-badge-text);
   font-size: 12.5px;
   font-weight: 600;
 }
@@ -96,15 +156,15 @@
 /* --- kartu --- */
 .sk-card {
   background: var(--sk-surface);
-  border: 1px solid rgba(226, 222, 216, 0.94);
+  border: 1px solid var(--sk-card-border);
   border-radius: 24px;
   box-shadow: var(--sk-shadow);
 }
 .sk-card--flat {
-  border: 1px solid rgba(226, 222, 216, 0.92);
+  border: 1px solid var(--sk-flat-border);
   border-radius: 18px;
-  background: rgba(255, 255, 255, 0.78);
-  box-shadow: 0 12px 32px rgba(55, 46, 38, 0.045);
+  background: var(--sk-flat-bg);
+  box-shadow: var(--sk-flat-shadow);
   backdrop-filter: blur(8px);
 }
 
@@ -116,9 +176,9 @@
   flex-direction: column;
   align-items: center;
   padding: 20px 18px 52px;
-  border: 1px solid rgba(231, 228, 223, 0.88);
+  border: 1px solid var(--sk-service-border);
   border-radius: 20px;
-  background: rgba(255, 255, 255, 0.92);
+  background: var(--sk-service-bg);
   box-shadow: var(--sk-shadow-soft);
   text-align: center;
   text-decoration: none;
@@ -127,8 +187,8 @@
 }
 .sk-service:hover {
   transform: translateY(-3px);
-  border-color: #f4d3b4;
-  box-shadow: 0 14px 34px rgba(58, 48, 40, 0.08);
+  border-color: var(--sk-service-hover-border);
+  box-shadow: var(--sk-shadow);
 }
 .sk-service-icon {
   width: 48px;
@@ -177,7 +237,7 @@
 .sk-btn:hover { transform: translateY(-1px); box-shadow: 0 13px 24px rgba(242, 117, 19, 0.23); }
 .sk-btn:disabled { opacity: 0.6; cursor: wait; transform: none; }
 .sk-btn--ghost {
-  background: #fff;
+  background: var(--sk-ghost-bg);
   border: 1px solid var(--sk-border);
   color: var(--sk-text);
   box-shadow: none;
@@ -190,7 +250,7 @@
 .sk-field label {
   display: block;
   margin: 0 0 7px;
-  color: #484a51;
+  color: var(--sk-label);
   font-size: 13px;
   font-weight: 600;
 }
@@ -200,7 +260,7 @@
   align-items: center;
   border: 1px solid var(--sk-border);
   border-radius: 10px;
-  background: #fff;
+  background: var(--sk-input-bg);
   transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
 .sk-input-wrap:focus-within {
@@ -211,7 +271,7 @@
   display: flex;
   align-items: center;
   padding-left: 14px;
-  color: #a1a7b3;
+  color: var(--sk-icon-muted);
 }
 .sk-input-wrap input {
   flex: 1;
@@ -224,13 +284,13 @@
   color: var(--sk-text);
   font-family: var(--sk-font);
 }
-.sk-input-wrap input::placeholder { color: #a1a7b3; }
+.sk-input-wrap input::placeholder { color: var(--sk-icon-muted); }
 .sk-input-toggle {
   border: 0;
   background: transparent;
   padding: 0 14px;
   cursor: pointer;
-  color: #a1a7b3;
+  color: var(--sk-icon-muted);
   display: flex;
   align-items: center;
 }
@@ -255,7 +315,7 @@
 /* --- footer --- */
 .sk-footer {
   border-top: 1px solid var(--sk-border);
-  background: #f4f2ef;
+  background: var(--sk-footer-bg);
   padding: 28px 20px;
 }
 .sk-footer-inner {
@@ -292,7 +352,7 @@
   box-shadow: var(--sk-shadow-soft);
 }
 .sk-form-card h2 { margin: 0 0 18px; font-size: 19px; font-weight: 700; color: var(--sk-ink); }
-.sk-form-label { display: block; margin-bottom: 6px; font-size: 13px; font-weight: 600; color: #484a51; }
+.sk-form-label { display: block; margin-bottom: 6px; font-size: 13px; font-weight: 600; color: var(--sk-label); }
 .sk-form-input {
   width: 100%;
   padding: 11px 14px;
@@ -301,9 +361,29 @@
   font-size: 14px;
   font-family: var(--sk-font);
   color: var(--sk-text);
-  background: #fff;
+  background: var(--sk-input-bg);
 }
 .sk-form-input:focus { outline: none; border-color: rgba(244, 123, 32, 0.42); box-shadow: 0 0 0 3px rgba(244, 123, 32, 0.12); }
+.sk-form-input::placeholder { color: var(--sk-icon-muted); }
+
+/* --- elemen bantu (konten panjang: FAQ/jawaban, panduan) --- */
+.sk-prose { color: var(--sk-text); }
+.sk-prose h1, .sk-prose h2, .sk-prose h3 { color: var(--sk-ink); }
+.sk-prose p, .sk-prose li { color: var(--sk-muted); }
+.sk-prose a { color: var(--sk-orange); }
+.sk-prose strong { color: var(--sk-text); }
+
+/* --- utilitas semantik (pengganti hex hardcoded, dark-aware) --- */
+.sk-txt { color: var(--sk-text); }
+.sk-txt-muted { color: var(--sk-muted); }
+.sk-txt-accent { color: var(--sk-orange); }
+.sk-txt-heading { color: var(--sk-heading); }
+.sk-txt-ink { color: var(--sk-ink); }
+.sk-bg-soft { background-color: var(--sk-orange-soft); }
+.sk-bg-subtle { background-color: var(--sk-nav-hover); }
+.sk-bg-section { background-color: var(--sk-footer-bg); }
+.sk-border-soft { border-color: var(--sk-border); }
+.sk-border-accent { border-color: var(--sk-service-hover-border); }
 
 /* --- responsif --- */
 @media (max-width: 991px) {

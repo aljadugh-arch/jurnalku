@@ -151,13 +151,13 @@ export default function LandingPage() {
         </div>
 
         {menuBuka && (
-          <div className="border-t border-[#e7e4df] px-5 py-2 lg:hidden">
+          <div className="border-t sk-border-soft px-5 py-2 lg:hidden">
             {nav.map(n => (
-              <a key={n.href} href={n.href} onClick={() => setMenuBuka(false)} className="block rounded-lg px-3 py-2.5 text-sm font-medium text-[#6f7785]">{n.label}</a>
+              <a key={n.href} href={n.href} onClick={() => setMenuBuka(false)} className="block rounded-lg px-3 py-2.5 text-sm font-medium sk-txt-muted">{n.label}</a>
             ))}
-            <Link to="/pengumuman" onClick={() => setMenuBuka(false)} className="block rounded-lg px-3 py-2.5 text-sm font-medium text-[#6f7785]">Pengumuman</Link>
-            <Link to="/faq" onClick={() => setMenuBuka(false)} className="block rounded-lg px-3 py-2.5 text-sm font-medium text-[#6f7785]">FAQ</Link>
-            <Link to="/login" onClick={() => setMenuBuka(false)} className="block rounded-lg px-3 py-2.5 text-sm font-semibold text-[#f47b20]">Masuk</Link>
+            <Link to="/pengumuman" onClick={() => setMenuBuka(false)} className="block rounded-lg px-3 py-2.5 text-sm font-medium sk-txt-muted">Pengumuman</Link>
+            <Link to="/faq" onClick={() => setMenuBuka(false)} className="block rounded-lg px-3 py-2.5 text-sm font-medium sk-txt-muted">FAQ</Link>
+            <Link to="/login" onClick={() => setMenuBuka(false)} className="block rounded-lg px-3 py-2.5 text-sm font-semibold sk-txt-accent">Masuk</Link>
           </div>
         )}
       </nav>
@@ -167,11 +167,11 @@ export default function LandingPage() {
         <div className="grid w-full max-w-6xl items-center gap-10 lg:grid-cols-2">
           <section className="min-w-0">
             <div className="sk-badge"><BadgeCheck size={14} /> Gratis 30 hari · coba gratis sekarang</div>
-            <h1 className="mt-4 text-3xl font-extrabold leading-tight tracking-tight text-[#24262d] sm:text-4xl">
+            <h1 className="mt-4 text-3xl font-extrabold leading-tight tracking-tight sk-txt sm:text-4xl">
               Administrasi Rapi,{' '}
-              <span className="text-[#f47b20]">Mengajar Tenang</span>
+              <span className="sk-txt-accent">Mengajar Tenang</span>
             </h1>
-            <p className="mt-3 max-w-lg text-base leading-relaxed text-[#6f7785]">
+            <p className="mt-3 max-w-lg text-base leading-relaxed sk-txt-muted">
               Satu platform untuk seluruh administrasi lembaga. Wali murid dapat kabar lewat
               WhatsApp, guru berhenti lembur di Excel.
             </p>
@@ -185,9 +185,9 @@ export default function LandingPage() {
                 </Link>
               )}
             </div>
-            <div className="mt-6 flex flex-wrap items-center gap-x-6 gap-y-2 text-sm text-[#6f7785]">
+            <div className="mt-6 flex flex-wrap items-center gap-x-6 gap-y-2 text-sm sk-txt-muted">
               {['Gratis 30 hari', 'Aktif dalam 1 menit', 'Data milik lembaga'].map(t => (
-                <div key={t} className="flex items-center gap-1.5"><CheckCircle size={16} className="text-[#f47b20]" /> <span>{t}</span></div>
+                <div key={t} className="flex items-center gap-1.5"><CheckCircle size={16} className="sk-txt-accent" /> <span>{t}</span></div>
               ))}
             </div>
           </section>
@@ -219,21 +219,21 @@ export default function LandingPage() {
           <article className="sk-card--flat p-5">
             <header className="mb-3 flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <span className="flex h-9 w-9 items-center justify-center rounded-full bg-[#fff4e9] text-[#f47b20]"><Megaphone size={18} /></span>
-                <h3 className="font-bold text-[#24262d]">Pengumuman</h3>
+                <span className="flex h-9 w-9 items-center justify-center rounded-full sk-bg-soft sk-txt-accent"><Megaphone size={18} /></span>
+                <h3 className="font-bold sk-txt">Pengumuman</h3>
               </div>
-              <Link to="/pengumuman" className="text-sm font-semibold text-[#f47b20] hover:underline">Lihat semua →</Link>
+              <Link to="/pengumuman" className="text-sm font-semibold sk-txt-accent hover:underline">Lihat semua →</Link>
             </header>
             {pengumuman.length === 0 ? (
-              <p className="text-sm text-[#6f7785]">Belum ada pengumuman terbaru.</p>
+              <p className="text-sm sk-txt-muted">Belum ada pengumuman terbaru.</p>
             ) : (
               <ul className="space-y-2.5">
                 {pengumuman.map(p => (
                   <li key={p.id} className="flex items-start gap-2.5">
-                    <Newspaper size={16} className="mt-0.5 shrink-0 text-[#f47b20]" />
+                    <Newspaper size={16} className="mt-0.5 shrink-0 sk-txt-accent" />
                     <div className="min-w-0">
-                      <p className="truncate text-sm font-semibold text-[#24262d]">{p.judul}</p>
-                      {p.ringkas && <p className="line-clamp-1 text-xs text-[#6f7785]">{p.ringkas}</p>}
+                      <p className="truncate text-sm font-semibold sk-txt">{p.judul}</p>
+                      {p.ringkas && <p className="line-clamp-1 text-xs sk-txt-muted">{p.ringkas}</p>}
                     </div>
                   </li>
                 ))}
@@ -244,17 +244,17 @@ export default function LandingPage() {
           <article className="sk-card--flat p-5">
             <header className="mb-3 flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <span className="flex h-9 w-9 items-center justify-center rounded-full bg-[#fff4e9] text-[#f47b20]"><HelpCircle size={18} /></span>
-                <h3 className="font-bold text-[#24262d]">FAQ Populer</h3>
+                <span className="flex h-9 w-9 items-center justify-center rounded-full sk-bg-soft sk-txt-accent"><HelpCircle size={18} /></span>
+                <h3 className="font-bold sk-txt">FAQ Populer</h3>
               </div>
-              <Link to="/faq" className="text-sm font-semibold text-[#f47b20] hover:underline">Lihat semua FAQ →</Link>
+              <Link to="/faq" className="text-sm font-semibold sk-txt-accent hover:underline">Lihat semua FAQ →</Link>
             </header>
             {faqPublik.length === 0 ? (
-              <p className="text-sm text-[#6f7785]">FAQ belum tersedia.</p>
+              <p className="text-sm sk-txt-muted">FAQ belum tersedia.</p>
             ) : (
               <ul className="space-y-2.5">
                 {faqPublik.map(f => (
-                  <li key={f.id} className="text-sm text-[#24262d]">
+                  <li key={f.id} className="text-sm sk-txt">
                     <span className="font-semibold">{f.pertanyaan}</span>
                   </li>
                 ))}
@@ -265,9 +265,9 @@ export default function LandingPage() {
       </section>
 
       {/* ================= JENJANG ================= */}
-      <section className="border-y border-[#e7e4df] bg-white py-10">
+      <section className="border-y sk-border-soft bg-white py-10">
         <div className="mx-auto max-w-6xl px-4">
-          <p className="mb-5 text-center text-sm font-medium text-[#6f7785]">Satu platform untuk semua jenjang pendidikan</p>
+          <p className="mb-5 text-center text-sm font-medium sk-txt-muted">Satu platform untuk semua jenjang pendidikan</p>
           <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1">
             {jenjang.map(j => (
               <span key={j} className="px-3 py-1 text-3xl font-bold text-slate-600 opacity-70">{j}</span>
@@ -279,47 +279,47 @@ export default function LandingPage() {
       {/* ================= FITUR ================= */}
       <section id="fitur" className="mx-auto max-w-6xl px-4 py-16 scroll-mt-20">
         <div className="mb-10 text-center">
-          <span className="text-sm font-bold uppercase tracking-wider text-[#f47b20]">Fitur</span>
-          <h2 className="mt-1 mb-2 text-2xl font-bold text-[#24262d] sm:text-3xl">Kelola Lembaga Tanpa Aplikasi Terpisah</h2>
-          <p className="mx-auto max-w-2xl text-base text-[#6f7785]">Tidak perlu berlangganan banyak aplikasi berbeda. Setiap modul membaca data yang sama, jadi tidak ada pekerjaan input dua kali.</p>
+          <span className="text-sm font-bold uppercase tracking-wider sk-txt-accent">Fitur</span>
+          <h2 className="mt-1 mb-2 text-2xl font-bold sk-txt sm:text-3xl">Kelola Lembaga Tanpa Aplikasi Terpisah</h2>
+          <p className="mx-auto max-w-2xl text-base sk-txt-muted">Tidak perlu berlangganan banyak aplikasi berbeda. Setiap modul membaca data yang sama, jadi tidak ada pekerjaan input dua kali.</p>
         </div>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {fiturUtama.map((f, i) => (
-            <div key={i} className="group rounded-2xl border border-[#e7e4df] bg-white p-6 shadow-[0_10px_30px_rgba(58,48,40,0.06)] transition-all hover:-translate-y-0.5 hover:shadow-[0_14px_34px_rgba(58,48,40,0.08)]">
+            <div key={i} className="group rounded-2xl border sk-border-soft bg-white p-6 shadow-[0_10px_30px_rgba(58,48,40,0.06)] transition-all hover:-translate-y-0.5 hover:shadow-[0_14px_34px_rgba(58,48,40,0.08)]">
               <div className={`mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br ${f.warna} transition-transform group-hover:scale-110`}>
                 <f.icon size={24} className="text-white" />
               </div>
-              <h3 className="mb-1.5 text-lg font-bold text-[#24262d]">{f.judul}</h3>
-              <p className="text-sm leading-relaxed text-[#6f7785]">{f.isi}</p>
+              <h3 className="mb-1.5 text-lg font-bold sk-txt">{f.judul}</h3>
+              <p className="text-sm leading-relaxed sk-txt-muted">{f.isi}</p>
             </div>
           ))}
         </div>
       </section>
 
       {/* ================= UNTUK SIAPA ================= */}
-      <section id="peran" className="border-y border-[#e7e4df] bg-[#f4f2ef] py-16 scroll-mt-20">
+      <section id="peran" className="border-y sk-border-soft sk-bg-section py-16 scroll-mt-20">
         <div className="mx-auto max-w-6xl px-4">
           <div className="mb-10 text-center">
-            <span className="text-sm font-bold uppercase tracking-wider text-[#f47b20]">Untuk Siapa</span>
-            <h2 className="mt-1 mb-2 text-2xl font-bold text-[#24262d] sm:text-3xl">Setiap Peran Punya Tampilannya Sendiri</h2>
-            <p className="mx-auto max-w-2xl text-base text-[#6f7785]">Yayasan melihat rekap, guru melihat kelasnya, siswa melihat jadwalnya, wali melihat kabar anaknya. Dipercaya 100+ Lembaga pendidikan.</p>
+            <span className="text-sm font-bold uppercase tracking-wider sk-txt-accent">Untuk Siapa</span>
+            <h2 className="mt-1 mb-2 text-2xl font-bold sk-txt sm:text-3xl">Setiap Peran Punya Tampilannya Sendiri</h2>
+            <p className="mx-auto max-w-2xl text-base sk-txt-muted">Yayasan melihat rekap, guru melihat kelasnya, siswa melihat jadwalnya, wali melihat kabar anaknya. Dipercaya 100+ Lembaga pendidikan.</p>
           </div>
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             {perPeran.map((p, i) => (
-              <div key={i} className="rounded-2xl border border-[#e7e4df] bg-white p-6">
+              <div key={i} className="rounded-2xl border sk-border-soft bg-white p-6">
                 <div className="mb-4 flex items-start gap-3">
-                  <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[#fff4e9]">
-                    <p.icon size={22} className="text-[#f47b20]" />
+                  <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl sk-bg-soft">
+                    <p.icon size={22} className="sk-txt-accent" />
                   </div>
                   <div>
-                    <h3 className="font-bold text-[#24262d]">{p.peran}</h3>
-                    <p className="text-sm text-[#6f7785]">{p.ringkas}</p>
+                    <h3 className="font-bold sk-txt">{p.peran}</h3>
+                    <p className="text-sm sk-txt-muted">{p.ringkas}</p>
                   </div>
                 </div>
                 <ul className="space-y-2">
                   {p.poin.map(poin => (
-                    <li key={poin} className="flex items-start gap-2 text-sm text-[#38404b]">
-                      <CheckCircle size={15} className="mt-0.5 shrink-0 text-[#f47b20]" />
+                    <li key={poin} className="flex items-start gap-2 text-sm sk-txt-ink">
+                      <CheckCircle size={15} className="mt-0.5 shrink-0 sk-txt-accent" />
                       <span>{poin}</span>
                     </li>
                   ))}
@@ -331,15 +331,15 @@ export default function LandingPage() {
       </section>
 
       {/* ================= ALASAN (strip ringkas, bukan seksi penuh) ================= */}
-      <section className="border-b border-[#e7e4df]">
+      <section className="border-b sk-border-soft">
         <div className="mx-auto max-w-6xl px-4 py-8">
           <div className="grid grid-cols-2 gap-x-6 gap-y-5 lg:grid-cols-3">
             {alasan.map((a, i) => (
               <div key={i} className="flex items-start gap-2.5">
-                <a.icon size={17} className="mt-0.5 shrink-0 text-[#f47b20]" />
+                <a.icon size={17} className="mt-0.5 shrink-0 sk-txt-accent" />
                 <div>
-                  <p className="text-sm font-bold leading-tight text-[#24262d]">{a.judul}</p>
-                  <p className="mt-0.5 text-xs leading-snug text-[#6f7785]">{a.isi}</p>
+                  <p className="text-sm font-bold leading-tight sk-txt">{a.judul}</p>
+                  <p className="mt-0.5 text-xs leading-snug sk-txt-muted">{a.isi}</p>
                 </div>
               </div>
             ))}
@@ -350,33 +350,33 @@ export default function LandingPage() {
       {/* ================= CARA MULAI ================= */}
       <section id="langkah" className="mx-auto max-w-6xl px-4 py-16 scroll-mt-20">
         <div className="mb-10 text-center">
-          <span className="text-sm font-bold uppercase tracking-wider text-[#f47b20]">Cara Mulai</span>
-          <h2 className="mt-1 mb-2 text-2xl font-bold text-[#24262d] sm:text-3xl">Tiga Langkah, Selesai</h2>
-          <p className="text-base text-[#6f7785]">Tanpa pemasangan, tanpa pelatihan panjang.</p>
+          <span className="text-sm font-bold uppercase tracking-wider sk-txt-accent">Cara Mulai</span>
+          <h2 className="mt-1 mb-2 text-2xl font-bold sk-txt sm:text-3xl">Tiga Langkah, Selesai</h2>
+          <p className="text-base sk-txt-muted">Tanpa pemasangan, tanpa pelatihan panjang.</p>
         </div>
         <div className="grid grid-cols-1 gap-5 md:grid-cols-3">
           {langkah.map((s, i) => (
-            <div key={i} className="relative rounded-2xl border border-[#e7e4df] bg-white p-6">
+            <div key={i} className="relative rounded-2xl border sk-border-soft bg-white p-6">
               <span className="absolute -left-3 -top-3 flex h-9 w-9 items-center justify-center rounded-xl bg-[#f47b20] text-sm font-bold text-white shadow-lg">{i + 1}</span>
-              <s.icon size={26} className="mb-3 mt-2 text-[#f47b20]" />
-              <h3 className="mb-1.5 font-bold text-[#24262d]">{s.judul}</h3>
-              <p className="text-sm leading-relaxed text-[#6f7785]">{s.isi}</p>
+              <s.icon size={26} className="mb-3 mt-2 sk-txt-accent" />
+              <h3 className="mb-1.5 font-bold sk-txt">{s.judul}</h3>
+              <p className="text-sm leading-relaxed sk-txt-muted">{s.isi}</p>
             </div>
           ))}
         </div>
       </section>
 
       {/* ================= HARGA (dari API) ================= */}
-      <section id="harga" className="border-t border-[#e7e4df] bg-[#f4f2ef] py-16 scroll-mt-20">
+      <section id="harga" className="border-t sk-border-soft sk-bg-section py-16 scroll-mt-20">
         <div className="mx-auto max-w-6xl px-4">
           <div className="mb-10 text-center">
-            <span className="text-sm font-bold uppercase tracking-wider text-[#f47b20]">Harga</span>
-            <h2 className="mt-1 mb-2 text-2xl font-bold text-[#24262d] sm:text-3xl">Pilih Sesuai Kebutuhan Lembaga</h2>
-            <p className="mx-auto max-w-2xl text-base text-[#6f7785]">Semua paket berbayar dihitung per lembaga, bukan per pengguna. Jumlah guru dan siswa tidak menambah biaya.</p>
+            <span className="text-sm font-bold uppercase tracking-wider sk-txt-accent">Harga</span>
+            <h2 className="mt-1 mb-2 text-2xl font-bold sk-txt sm:text-3xl">Pilih Sesuai Kebutuhan Lembaga</h2>
+            <p className="mx-auto max-w-2xl text-base sk-txt-muted">Semua paket berbayar dihitung per lembaga, bukan per pengguna. Jumlah guru dan siswa tidak menambah biaya.</p>
           </div>
 
           {paketGagal ? (
-            <p className="text-center text-sm text-[#6f7785]">Informasi paket sedang tidak dapat dimuat. Silakan hubungi kami untuk daftar harga terbaru.</p>
+            <p className="text-center text-sm sk-txt-muted">Informasi paket sedang tidak dapat dimuat. Silakan hubungi kami untuk daftar harga terbaru.</p>
           ) : paketBayar.length === 0 ? (
             <div className="grid grid-cols-1 gap-5 md:grid-cols-3">
               {[0, 1, 2].map(i => <div key={i} className="h-72 animate-pulse rounded-2xl bg-[#e7e4df]" />)}
@@ -387,22 +387,22 @@ export default function LandingPage() {
                 {paketBayar.map((p, i) => {
                   const disorot = i === Math.min(1, paketBayar.length - 1)
                   return (
-                    <div key={p.plan} className={`relative flex flex-col rounded-2xl border-2 bg-white p-6 ${disorot ? 'border-[#f47b20] shadow-2xl shadow-[#f47b20]/15' : 'border-[#e7e4df]'}`}>
+                    <div key={p.plan} className={`relative flex flex-col rounded-2xl border-2 bg-white p-6 ${disorot ? 'border-[#f47b20] shadow-2xl shadow-[#f47b20]/15' : 'sk-border-soft'}`}>
                       {disorot && <span className="absolute -top-3 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full bg-[#f47b20] px-3 py-1 text-[11px] font-bold text-white">PALING BANYAK DIPILIH</span>}
-                      <h3 className="text-lg font-bold text-[#24262d]">{p.label}</h3>
+                      <h3 className="text-lg font-bold sk-txt">{p.label}</h3>
                       <div className="mb-5 mt-3">
-                        <span className="text-3xl font-extrabold text-[#24262d]">{rupiah(p.harga)}</span>
-                        <span className="text-sm text-[#6f7785]">/{p.masa_satuan === 'bulan' ? 'bulan' : p.masa_satuan}</span>
-                        <p className="mt-1 text-xs text-[#6f7785]">per lembaga / {p.masa_nilai} {p.masa_satuan} · jumlah guru & siswa tidak menambah biaya</p>
+                        <span className="text-3xl font-extrabold sk-txt">{rupiah(p.harga)}</span>
+                        <span className="text-sm sk-txt-muted">/{p.masa_satuan === 'bulan' ? 'bulan' : p.masa_satuan}</span>
+                        <p className="mt-1 text-xs sk-txt-muted">per lembaga / {p.masa_nilai} {p.masa_satuan} · jumlah guru & siswa tidak menambah biaya</p>
                       </div>
                       <ul className="mb-6 flex-1 space-y-2">
                         {fiturPaket(p).map(f => (
-                          <li key={f} className="flex items-start gap-2 text-sm text-[#38404b]">
-                            <CheckCircle size={15} className="mt-0.5 shrink-0 text-[#f47b20]" /><span>{f}</span>
+                          <li key={f} className="flex items-start gap-2 text-sm sk-txt-ink">
+                            <CheckCircle size={15} className="mt-0.5 shrink-0 sk-txt-accent" /><span>{f}</span>
                           </li>
                         ))}
                       </ul>
-                      <Link to="/register" className={`w-full rounded-xl px-5 py-3 text-center font-bold transition-all ${disorot ? 'bg-[#f47b20] text-white hover:bg-[#df6511]' : 'bg-[#f1efec] text-[#24262d] hover:bg-[#e7e4df]'}`}>
+                      <Link to="/register" className={`w-full rounded-xl px-5 py-3 text-center font-bold transition-all ${disorot ? 'bg-[#f47b20] text-white hover:bg-[#df6511]' : 'sk-bg-subtle sk-txt hover:bg-[#e7e4df]'}`}>
                         Mulai Paket {p.label}
                       </Link>
                     </div>
@@ -410,8 +410,8 @@ export default function LandingPage() {
                 })}
               </div>
               {paketTrial && (
-                <p className="mt-6 text-center text-sm text-[#6f7785]">
-                  Belum yakin? Coba gratis sekarang juga selama <strong className="text-[#24262d]">{paketTrial.masa_nilai} {paketTrial.masa_satuan}</strong> — bisa berhenti kapan saja.
+                <p className="mt-6 text-center text-sm sk-txt-muted">
+                  Belum yakin? Coba gratis sekarang juga selama <strong className="sk-txt">{paketTrial.masa_nilai} {paketTrial.masa_satuan}</strong> — bisa berhenti kapan saja.
                 </p>
               )}
             </>
@@ -422,8 +422,8 @@ export default function LandingPage() {
       {/* ================= FAQ ================= */}
       <section id="faq" className="mx-auto max-w-3xl px-4 py-16 scroll-mt-20">
         <div className="mb-9 text-center">
-          <span className="text-sm font-bold uppercase tracking-wider text-[#f47b20]">Tanya Jawab</span>
-          <h2 className="mt-1 mb-2 text-2xl font-bold text-[#24262d] sm:text-3xl">Pertanyaan yang Sering Diajukan</h2>
+          <span className="text-sm font-bold uppercase tracking-wider sk-txt-accent">Tanya Jawab</span>
+          <h2 className="mt-1 mb-2 text-2xl font-bold sk-txt sm:text-3xl">Pertanyaan yang Sering Diajukan</h2>
         </div>
         <div className="space-y-2.5">
           {faq.map((f, i) => {
@@ -431,10 +431,10 @@ export default function LandingPage() {
             return (
               <div key={i} className="sk-card--flat overflow-hidden">
                 <button onClick={() => setFaqBuka(buka ? null : i)} className="flex w-full items-center justify-between gap-4 px-5 py-4 text-left" aria-expanded={buka}>
-                  <span className="text-sm font-semibold text-[#24262d]">{f.t}</span>
-                  <ChevronDown size={18} className={`shrink-0 text-[#6f7785] transition-transform ${buka ? 'rotate-180' : ''}`} />
+                  <span className="text-sm font-semibold sk-txt">{f.t}</span>
+                  <ChevronDown size={18} className={`shrink-0 sk-txt-muted transition-transform ${buka ? 'rotate-180' : ''}`} />
                 </button>
-                {buka && <div className="px-5 pb-4"><p className="text-sm leading-relaxed text-[#6f7785]">{f.j}</p></div>}
+                {buka && <div className="px-5 pb-4"><p className="text-sm leading-relaxed sk-txt-muted">{f.j}</p></div>}
               </div>
             )
           })}
@@ -450,7 +450,7 @@ export default function LandingPage() {
             <h2 className="mb-3 text-2xl font-extrabold sm:text-3xl">Digitalisasi Lembaga Anda Hari Ini</h2>
             <p className="mx-auto mb-7 max-w-xl text-base text-white/85">Daftar sekarang — aktif seketika, konfirmasi dikirim ke WhatsApp dan email Anda.</p>
             <div className="flex flex-col items-center justify-center gap-3 sm:flex-row">
-              <Link to="/register" className="inline-flex items-center gap-2 rounded-xl bg-white px-8 py-3.5 text-lg font-bold text-[#f47b20] transition-all hover:scale-105 hover:bg-gray-100">Mulai Coba Gratis <ArrowRight size={20} /></Link>
+              <Link to="/register" className="inline-flex items-center gap-2 rounded-xl bg-white px-8 py-3.5 text-lg font-bold sk-txt-accent transition-all hover:scale-105 hover:bg-gray-100">Mulai Coba Gratis <ArrowRight size={20} /></Link>
               <Link to="/panduan" className="inline-flex items-center gap-2 rounded-xl border-2 border-white/40 px-8 py-3.5 font-semibold text-white hover:bg-white/10"><FileText size={18} /> Baca Panduan</Link>
             </div>
             <p className="mt-5 flex items-center justify-center gap-1.5 text-sm text-white/75"><Clock size={14} /> Gratis 30 hari. Batal kapan saja.</p>

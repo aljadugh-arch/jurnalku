@@ -91,7 +91,7 @@ export default function HelpdeskPage() {
             <div className="sk-form-card text-center">
               <img src={settings.logo || '/logo-jurnalku-256.png'} alt="" className="mx-auto h-[68px] w-[68px] object-contain" />
               <h2 className="mt-3">Helpdesk {namaLembaga}</h2>
-              <p className="text-sm text-[#6f7785]">Tim pengelola sistem informasi lembaga</p>
+              <p className="text-sm sk-txt-muted">Tim pengelola sistem informasi lembaga</p>
               {wa && (
                 <a
                   className="sk-btn mt-4 w-full"

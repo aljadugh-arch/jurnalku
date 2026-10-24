@@ -38,24 +38,24 @@ export default function PengumumanPage() {
       />
       <section className="mx-auto max-w-[1160px] px-5 pb-16 pt-6">
         {gagal ? (
-          <div className="sk-card--flat p-8 text-center text-sm text-[#6f7785]">
+          <div className="sk-card--flat p-8 text-center text-sm sk-txt-muted">
             Pengumuman sedang tidak dapat dimuat. Silakan coba lagi.
           </div>
         ) : data.length === 0 ? (
-          <div className="sk-card--flat p-8 text-center text-sm text-[#6f7785]">
+          <div className="sk-card--flat p-8 text-center text-sm sk-txt-muted">
             Belum ada pengumuman terbaru.
           </div>
         ) : (
           <div className="space-y-4">
             {data.map(p => (
               <article key={p.id} className="sk-card--flat p-5">
-                <div className="mb-1 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-[#f47b20]">
+                <div className="mb-1 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wide sk-txt-accent">
                   <span>{p.kategori}</span>
                   <span className="text-[#cbd5e1]">•</span>
-                  <span className="text-[#6f7785]">{tgl(p.created_at)}</span>
+                  <span className="sk-txt-muted">{tgl(p.created_at)}</span>
                 </div>
-                <h2 className="text-lg font-bold text-[#24262d]">{p.judul}</h2>
-                {p.ringkas && <p className="mt-1 text-sm leading-relaxed text-[#6f7785]">{p.ringkas}</p>}
+                <h2 className="text-lg font-bold sk-txt">{p.judul}</h2>
+                {p.ringkas && <p className="mt-1 text-sm leading-relaxed sk-txt-muted">{p.ringkas}</p>}
               </article>
             ))}
           </div>

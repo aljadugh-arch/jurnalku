@@ -70,15 +70,15 @@ export default function KontakPage() {
           <aside className="space-y-4">
             <div className="sk-form-card">
               <h2>{namaLembaga}</h2>
-              <ul className="space-y-3 text-sm text-[#6f7785]">
+              <ul className="space-y-3 text-sm sk-txt-muted">
                 {s.telepon && (
-                  <li className="flex items-center gap-2.5"><Phone size={16} className="text-[#f47b20]" /> {s.telepon}</li>
+                  <li className="flex items-center gap-2.5"><Phone size={16} className="sk-txt-accent" /> {s.telepon}</li>
                 )}
                 {s.email && (
-                  <li className="flex items-center gap-2.5"><Mail size={16} className="text-[#f47b20]" /> {s.email}</li>
+                  <li className="flex items-center gap-2.5"><Mail size={16} className="sk-txt-accent" /> {s.email}</li>
                 )}
                 {s.alamat && (
-                  <li className="flex items-start gap-2.5"><MessageCircle size={16} className="mt-0.5 text-[#f47b20]" /> {s.alamat}</li>
+                  <li className="flex items-start gap-2.5"><MessageCircle size={16} className="mt-0.5 sk-txt-accent" /> {s.alamat}</li>
                 )}
                 {!s.telepon && !s.email && !s.alamat && (
                   <li>Informasi kontak belum diatur. Silakan gunakan formulir di samping.</li>
@@ -87,7 +87,7 @@ export default function KontakPage() {
             </div>
             <div className="sk-form-card">
               <h2>Butuh bantuan akun?</h2>
-              <p className="text-sm text-[#6f7785]">Untuk kendala login, password, atau SSO, gunakan Helpdesk.</p>
+              <p className="text-sm sk-txt-muted">Untuk kendala login, password, atau SSO, gunakan Helpdesk.</p>
             </div>
           </aside>
         </div>

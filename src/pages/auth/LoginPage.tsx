@@ -179,12 +179,12 @@ export default function LoginPage() {
           {/* Kolom intro + layanan */}
           <section className="hidden min-w-0 lg:block">
             <div className="sk-badge">Selamat Datang</div>
-            <h1 className="mt-4 text-4xl font-extrabold leading-tight tracking-tight text-[#24262d]">
+            <h1 className="mt-4 text-4xl font-extrabold leading-tight tracking-tight sk-txt">
               Selamat Datang di{' '}
-              <span className="block text-[#f47b20]">{namaLembaga}</span>
+              <span className="block sk-txt-accent">{namaLembaga}</span>
             </h1>
-            <h2 className="mt-2 text-base font-semibold text-[#6f7785]">Sistem Informasi Madrasah &amp; Sekolah</h2>
-            <p className="mt-3 max-w-lg text-sm leading-relaxed text-[#6f7785]">
+            <h2 className="mt-2 text-base font-semibold sk-txt-muted">Sistem Informasi Madrasah &amp; Sekolah</h2>
+            <p className="mt-3 max-w-lg text-sm leading-relaxed sk-txt-muted">
               Satu platform terpadu untuk seluruh administrasi lembaga — data siswa,
               absensi, jurnal mengajar, penilaian, rapor, keuangan, sampai notifikasi
               WhatsApp ke wali murid.
@@ -207,11 +207,11 @@ export default function LoginPage() {
             <div className="sk-card mx-auto w-full max-w-full sm:max-w-[500px] px-6 py-6 sm:px-8">
               {/* Identitas lembaga (mark + judul) */}
               <div className="mb-5 text-center">
-                <div className="mx-auto mb-4 flex h-[75px] w-[75px] items-center justify-center overflow-hidden rounded-full border border-[#eee8e1] bg-white shadow-[0_8px_22px_rgba(52,45,40,0.08)]">
+                <div className="mx-auto mb-4 flex h-[75px] w-[75px] items-center justify-center overflow-hidden rounded-full border sk-border-soft bg-white shadow-[0_8px_22px_rgba(52,45,40,0.08)]">
                   <img src={logo} alt="Logo" className="h-[68px] w-[68px] object-contain" />
                 </div>
-                <h2 className="text-[23px] font-extrabold tracking-tight text-[#69574f]">Masuk ke Akun Anda</h2>
-                <p className="mx-auto mt-1.5 max-w-[365px] text-[13px] leading-snug text-[#6f7785]">
+                <h2 className="text-[23px] font-extrabold tracking-tight sk-txt-heading">Masuk ke Akun Anda</h2>
+                <p className="mx-auto mt-1.5 max-w-[365px] text-[13px] leading-snug sk-txt-muted">
                   Silakan masuk menggunakan akun lembaga Anda untuk melanjutkan.
                 </p>
               </div>
@@ -229,14 +229,14 @@ export default function LoginPage() {
               )}
 
               {/* Pilihan cara masuk: sandi atau OTP (wali murid). */}
-              <div className="mb-4 grid grid-cols-2 gap-1 rounded-xl bg-[#f1efec] p-1">
+              <div className="mb-4 grid grid-cols-2 gap-1 rounded-xl sk-bg-subtle p-1">
                 {([['sandi', 'Username / NIS'], ['otp', 'Nomor WA (OTP)']] as const).map(([id, label]) => (
                   <button
                     key={id}
                     type="button"
                     onClick={() => { setMode(id); setError(''); setInfo(''); setOtpTerkirim(false); setKode('') }}
                     className={`rounded-lg py-2 text-xs font-semibold transition ${
-                      mode === id ? 'bg-white text-[#f47b20] shadow-sm' : 'text-slate-500 hover:text-slate-700'
+                      mode === id ? 'bg-white sk-txt-accent shadow-sm' : 'text-slate-500 hover:text-slate-700'
                     }`}
                   >
                     {label}
@@ -297,7 +297,7 @@ export default function LoginPage() {
                   )}
 
                   {otpTerkirim && (
-                    <button type="button" onClick={() => void handleMintaOtp()} disabled={loading} className="w-full text-center text-[11px] font-semibold text-[#f47b20] hover:underline disabled:opacity-50">
+                    <button type="button" onClick={() => void handleMintaOtp()} disabled={loading} className="w-full text-center text-[11px] font-semibold sk-txt-accent hover:underline disabled:opacity-50">
                       Kirim ulang kode
                     </button>
                   )}
@@ -322,7 +322,7 @@ export default function LoginPage() {
                   <div className="sk-field">
                     <div className="mb-1.5 flex items-center justify-between gap-2">
                       <label htmlFor="login-password">Password</label>
-                      <Link to="/forgot-password" className="text-[11px] font-semibold text-[#f47b20] hover:underline">Lupa Password?</Link>
+                      <Link to="/forgot-password" className="text-[11px] font-semibold sk-txt-accent hover:underline">Lupa Password?</Link>
                     </div>
                     <div className="sk-input-wrap">
                       <input
@@ -351,12 +351,12 @@ export default function LoginPage() {
 
               {/* Banner PPDB: pendaftaran mandiri calon siswa tanpa akun. */}
               {ppdb.dibuka && (
-                <div className="mt-4 rounded-xl border border-[#f4d3b4] bg-[#fff4e9] p-3">
+                <div className="mt-4 rounded-xl border sk-border-accent sk-bg-soft p-3">
                   <div className="flex items-start gap-2.5">
-                    <ClipboardList size={18} className="mt-0.5 shrink-0 text-[#f47b20]" />
+                    <ClipboardList size={18} className="mt-0.5 shrink-0 sk-txt-accent" />
                     <div className="min-w-0 flex-1">
-                      <p className="text-xs font-bold text-[#484a51]">Pendaftaran siswa baru dibuka</p>
-                      <p className="mt-0.5 text-[11px] leading-snug text-[#6f7785]">
+                      <p className="text-xs font-bold sk-txt-heading">Pendaftaran siswa baru dibuka</p>
+                      <p className="mt-0.5 text-[11px] leading-snug sk-txt-muted">
                         {ppdb.nama ? `${ppdb.nama} — ` : ''}Calon siswa/wali bisa mendaftar tanpa akun.
                       </p>
                       <div className="mt-2 flex flex-wrap items-center gap-2">
@@ -381,8 +381,8 @@ export default function LoginPage() {
 
               {/* Akun demo (hanya host yang diizinkan server). */}
               {demoHostAktif && (
-                <div id="demo" ref={demoRef} tabIndex={-1} className="mt-5 scroll-mt-4 rounded-xl border border-[#e7e4df] bg-white/70 p-3 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#f47b20]">
-                  <p className="mb-2 text-[11px] font-semibold text-slate-500">Akun demo</p>
+                <div id="demo" ref={demoRef} tabIndex={-1} className="mt-5 scroll-mt-4 rounded-xl border sk-border-soft sk-bg-subtle p-3 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#f47b20]">
+                  <p className="mb-2 text-[11px] font-semibold sk-txt-muted">Akun demo</p>
                   <div className="grid grid-cols-3 gap-1.5">
                     {['admin', 'kepala', 'guru', 'bendahara', 'siswa', 'wali_murid', 'proktor'].map(role => (
                       <button
@@ -390,7 +390,7 @@ export default function LoginPage() {
                         type="button"
                         disabled={loading}
                         onClick={() => handleDemo(role)}
-                        className="rounded-lg border border-[#e7e4df] bg-white px-2 py-1.5 text-[11px] font-semibold capitalize text-slate-600 transition hover:bg-[#f1efec] disabled:opacity-50"
+                        className="rounded-lg border sk-border-soft sk-card px-2 py-1.5 text-[11px] font-semibold capitalize sk-txt-muted transition hover:sk-bg-subtle disabled:opacity-50"
                       >
                         {role === 'wali_murid' ? 'wali murid' : role.replace('_', ' ')}
                       </button>
@@ -399,9 +399,9 @@ export default function LoginPage() {
                 </div>
               )}
 
-              <p className="mt-5 text-center text-xs text-[#6f7785]">
+              <p className="mt-5 text-center text-xs sk-txt-muted">
                 Belum punya akun?{' '}
-                <Link to="/register" className="font-semibold text-[#f47b20] hover:underline">Daftar gratis</Link>
+                <Link to="/register" className="font-semibold sk-txt-accent hover:underline">Daftar gratis</Link>
               </p>
             </div>
           </section>

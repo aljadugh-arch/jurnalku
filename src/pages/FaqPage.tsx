@@ -27,9 +27,9 @@ export default function FaqPage() {
       />
       <section className="mx-auto max-w-3xl px-5 pb-16 pt-6">
         {gagal ? (
-          <div className="sk-card--flat p-8 text-center text-sm text-[#6f7785]">FAQ sedang tidak dapat dimuat.</div>
+          <div className="sk-card--flat p-8 text-center text-sm sk-txt-muted">FAQ sedang tidak dapat dimuat.</div>
         ) : faq.length === 0 ? (
-          <div className="sk-card--flat p-8 text-center text-sm text-[#6f7785]">FAQ belum tersedia.</div>
+          <div className="sk-card--flat p-8 text-center text-sm sk-txt-muted">FAQ belum tersedia.</div>
         ) : (
           <div className="space-y-2.5">
             {faq.map(f => {
@@ -41,12 +41,12 @@ export default function FaqPage() {
                     className="flex w-full items-center justify-between gap-4 px-5 py-4 text-left"
                     aria-expanded={terbuka}
                   >
-                    <span className="font-semibold text-sm text-[#24262d]">{f.pertanyaan}</span>
-                    <ChevronDown size={18} className={`shrink-0 text-[#6f7785] transition-transform ${terbuka ? 'rotate-180' : ''}`} />
+                    <span className="font-semibold text-sm sk-txt">{f.pertanyaan}</span>
+                    <ChevronDown size={18} className={`shrink-0 sk-txt-muted transition-transform ${terbuka ? 'rotate-180' : ''}`} />
                   </button>
                   {terbuka && (
                     <div className="px-5 pb-4">
-                      <p className="text-sm leading-relaxed text-[#6f7785]">{f.jawaban}</p>
+                      <p className="text-sm leading-relaxed sk-txt-muted">{f.jawaban}</p>
                     </div>
                   )}
                 </div>
