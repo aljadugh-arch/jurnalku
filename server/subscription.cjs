@@ -71,7 +71,7 @@ const FEATURE_PREFIXES = {
   posting: ['/api/posting'],
   modul_ajar: ['/api/modul-ajar', '/api/ai-documents', '/api/lms'],
   backup_drive: ['/api/backup', '/api/google-drive'],
-  website: ['/api/tenant/domain', '/api/tenant/domain-status', '/api/tenant/verify-domain', '/api/posting/public'],
+  website: ['/api/tenant/domain', '/api/tenant/domain-status', '/api/tenant/verify-domain'],
   cashless: ['/api/cashless'],
   ekantin: ['/api/kantin'],
   rest_api: ['/api/external'],
