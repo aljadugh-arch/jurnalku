@@ -197,9 +197,9 @@ export default function LandingPage() {
             <div className="grid grid-cols-2 gap-4">
               {[
                 { icon: GraduationCap, judul: 'PPDB', sub: 'Penerimaan Siswa Baru', to: '/ppdb' },
-                { icon: MonitorPlay, judul: 'Ujian Online', sub: 'Computer Based Test', to: '/login' },
-                { icon: BookOpen, judul: 'LMS', sub: 'Penugasan Digital', to: '/login' },
-                { icon: MessageCircle, judul: 'WhatsApp', sub: 'Kabar ke Wali Murid', to: '/login' },
+                { icon: MonitorPlay, judul: 'Ujian Online', sub: 'Computer Based Test', to: '/ujian-online' },
+                { icon: BookOpen, judul: 'LMS', sub: 'Penugasan Digital', to: '/lms' },
+                { icon: MessageCircle, judul: 'WhatsApp', sub: 'Kabar ke Wali Murid', to: '/whatsapp' },
               ].map(s => (
                 <Link key={s.judul} to={s.to} className="sk-service">
                   <div className="sk-service-icon"><s.icon size={22} /></div>

@@ -81,6 +81,9 @@ const PengumumanPage = lazy(() => import('./pages/PengumumanPage'))
 const FaqPage = lazy(() => import('./pages/FaqPage'))
 const KontakPage = lazy(() => import('./pages/KontakPage'))
 const HelpdeskPage = lazy(() => import('./pages/HelpdeskPage'))
+const UjianOnlinePage = lazy(() => import('./pages/UjianOnlinePage'))
+const LmsPublikPage = lazy(() => import('./pages/LmsPublikPage'))
+const WhatsAppPublikPage = lazy(() => import('./pages/WhatsAppPublikPage'))
 const CekLokAdminPage = lazy(() => import('./pages/admin/CekLokAdminPage'))
 const GuruAbsensiPage = lazy(() => import('./pages/guru/GuruAbsensiPage'))
 const BendaharaDashboard = lazy(() => import('./pages/admin/BendaharaDashboard'))
@@ -229,6 +232,9 @@ export default function App() {
         <Route path="/faq" element={<FaqPage />} />
         <Route path="/kontak" element={<KontakPage />} />
         <Route path="/helpdesk" element={<HelpdeskPage />} />
+        <Route path="/ujian-online" element={<UjianOnlinePage />} />
+        <Route path="/lms" element={<LmsPublikPage />} />
+        <Route path="/whatsapp" element={<WhatsAppPublikPage />} />
 
         {/* Admin Routes */}
         <Route path="/admin" element={

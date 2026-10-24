@@ -20,9 +20,9 @@ const getRedirectPath = (role: string) => {
 // ke halaman login).
 const layanan = [
   { icon: GraduationCap, judul: 'PPDB', sub: 'Penerimaan Siswa Baru', href: '/ppdb' },
-  { icon: MonitorPlay, judul: 'Ujian Online', sub: 'Computer Based Test', href: '/login' },
-  { icon: BookOpen, judul: 'LMS', sub: 'Penugasan Digital', href: '/login' },
-  { icon: MessageCircle, judul: 'WhatsApp', sub: 'Kabar ke Wali Murid', href: '/login' },
+  { icon: MonitorPlay, judul: 'Ujian Online', sub: 'Computer Based Test', href: '/ujian-online' },
+  { icon: BookOpen, judul: 'LMS', sub: 'Penugasan Digital', href: '/lms' },
+  { icon: MessageCircle, judul: 'WhatsApp', sub: 'Kabar ke Wali Murid', href: '/whatsapp' },
 ]
 
 /**
