@@ -146,11 +146,13 @@ Gradien tombol: `linear-gradient(135deg, #ff9a20 0%, #f27513 100%)`
 | Design system (`src/styles/sisfo.css`, prefiks `sk-*`) | SELESAI lokal | token palet + komponen (card, service, btn, field, navbar, footer, form) |
 | Font Poppins (index.html) | SELESAI lokal | dipakai hanya kelas `sk-*` |
 | LoginPage — layout split sisfo | SELESAI lokal | preserve semua logika (OTP wali, akun demo, banner PPDB, koneksi lambat) |
-| LandingPage — adopsi navbar/hero/footer | BELUM | iterasi berikutnya |
-| Pengumuman publik | BELUM | butuh tabel + route backend |
-| FAQ publik | BELUM | butuh tabel + route backend |
-| Kontak | BELUM | butuh tabel + route backend |
-| Helpdesk tiket | BELUM | butuh tabel + route backend |
-| Chat AI publik | BELUM | opsional (gap) |
+| LandingPage — navbar/hero/footer + portal summary | SELESAI lokal | konten fitur/harga/peran/langkah dipertahankan |
+| Pengumuman publik | SELESAI lokal | `/pengumuman` — menumpang tabel posting |
+| FAQ publik | SELESAI lokal | `/faq` + tabel baru |
+| Kontak | SELESAI lokal | `/kontak` + tabel baru |
+| Helpdesk tiket | SELESAI lokal | `/helpdesk` + tabel baru |
+| Admin kelola konten | SELESAI lokal | `/admin/website` (FAQ + kontak + tiket) |
+| Chat AI publik | TIDAK diadopsi | gap (Jurnalku sudah punya chatbot WA) |
 
-TIDAK deploy live — menunggu audit Master. Semua perubahan lokal + staging.
+TIDAK deploy live — menunggu audit Master. Commit lokal `be43f52` (tanpa push).
+Tes 1528/1528 HIJAU, `npm run build` sukses, verifikasi visual desktop+CDP.
