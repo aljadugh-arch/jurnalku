@@ -3,6 +3,7 @@ import { MapPin, Clock, Loader2, CheckCircle } from 'lucide-react'
 import toast from 'react-hot-toast'
 import api from '../../services/api'
 import { useSettingsStore } from '../../stores/settingsStore'
+import { getCurrentPosition } from '../../lib/geo'
 import { announceAttendanceSuccess, playFeedbackSound, primeFeedbackSound } from '../../lib/feedbackSound'
 import MobileCeklok from '../admin/MobileCeklok'
 
@@ -23,29 +24,23 @@ export default function GuruAbsensiPage() {
     } catch (err: any) { toast.error(err.response?.data?.error || 'Gagal memuat data ceklok') }
   }
 
-  const getLocation = (): Promise<{lat: number, lng: number, acc: number}> => {
-    return new Promise((resolve, reject) => {
-      if (!navigator.geolocation) return reject(new Error('Geolocation tidak didukung'))
-      // maximumAge:0 memaksa fix baru (bukan cache) agar lebih presisi.
-      navigator.geolocation.getCurrentPosition(
-        pos => resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude, acc: pos.coords.accuracy }),
-        err => reject(err),
-        { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
-      )
-    })
-  }
-
   const handleCeklok = async (type: 'masuk' | 'pulang') => {
     // AudioContext harus dibuka di dalam gestur klik, bukan saat respons tiba.
     primeFeedbackSound()
     setLoading(true)
     try {
-      const loc = await getLocation()
+      // Memakai helper geolokasi bersama: GPS presisi tinggi dulu, fallback ke
+      // posisi jaringan (WiFi/seluler) bila GPS timeout di dalam gedung. Tanpa
+      // fallback ini guru di dalam ruangan tidak pernah bisa ceklok.
+      const p = await getCurrentPosition()
+      const loc = { lat: p.latitude, lng: p.longitude, acc: p.accuracy }
       setLocation(loc)
-      // Tolak fix GPS yang terlalu kasar (biasanya masih pakai IP/WiFi, belum lock satelit).
-      if (loc.acc && loc.acc > 200) {
+      // Tolak hanya bila posisi benar-benar kasar (IP-level, belum lock sama
+      // sekali). Batas 500 m sejalan dengan toleransi server (AKURASI_MAKS 200 m):
+      // posisi jaringan dalam gedung wajar 100-200 m dan TIDAK boleh ditolak.
+      if (loc.acc && loc.acc > 500) {
         playFeedbackSound('error')
-        toast.error(`Sinyal GPS lemah (akurasi ±${Math.round(loc.acc)}m). Keluar ruangan / aktifkan GPS presisi tinggi lalu coba lagi.`)
+        toast.error(`Sinyal lokasi sangat lemah (akurasi ±${Math.round(loc.acc)}m). Pindah ke area terbuka atau aktifkan GPS, lalu coba lagi.`)
         return
       }
       const res = await api.post('/guru/ceklok', { type, latitude: loc.lat, longitude: loc.lng, accuracy: loc.acc })

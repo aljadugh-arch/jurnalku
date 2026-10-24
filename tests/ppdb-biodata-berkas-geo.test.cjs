@@ -37,9 +37,9 @@ test('haversine: ±0.0001 derajat lintang ≈ 11 meter', () => {
   assert.ok(d > 10 && d < 12, `dapat ${d}`)
 })
 
-test('toleransi akurasi dibatasi 60 m (tidak bisa dipalsukan)', () => {
+test('toleransi akurasi dibatasi 200 m (tidak bisa dipalsukan)', () => {
   assert.strictEqual(toleransiAkurasi(20), 20)
-  assert.strictEqual(toleransiAkurasi(99999), 60)
+  assert.strictEqual(toleransiAkurasi(99999), 200)
   assert.strictEqual(toleransiAkurasi(null), 0)
   assert.strictEqual(toleransiAkurasi(-5), 0)
 })
@@ -70,12 +70,12 @@ test('geo: benar-benar jauh tetap DITOLAK walau ada toleransi', () => {
   assert.match(h.error, /di luar area kelas/i)
 })
 
-test('geo: akurasi palsu besar tidak meloloskan posisi jauh (toleransi dibatasi 60m)', () => {
+test('geo: akurasi palsu besar tidak meloloskan posisi jauh (toleransi dibatasi 200m)', () => {
   const db = dbUji()
   db.prepare('INSERT INTO rombel VALUES (?,?,?,?,?,?,?,?)').run('r1', 't1', 'VII-A', 'VII', LAT, LNG, 10, 1)
-  const jauh = 200 / 111320 // 200 meter
+  const jauh = 400 / 111320 // 400 meter — jauh melampaui radius+lantai+toleransi
   const h = validateClassGeo(db, 't1', 'r1', LAT + jauh, LNG, 5000)
-  assert.strictEqual(h.ok, false, 'toleransi maksimal 60m: 10+60=70m < 200m, harus ditolak')
+  assert.strictEqual(h.ok, false, 'toleransi maksimal 200m: 25+200=225m < 400m, harus ditolak')
 })
 
 test('geo: akurasi 60m masih menolong kasus wajar (radius 10 + 60 = 70m)', () => {

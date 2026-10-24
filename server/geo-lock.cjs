@@ -14,11 +14,18 @@ function haversineMeters(lat1, lng1, lat2, lng2) {
 
 // Batas akurasi GPS yang masih dianggap masuk akal (meter).
 //
-// 60 m: di atas ini posisi dianggap tidak layak untuk penegakan radius. Batas
-// ini SENGAJA ketat — toleransi besar (mis. 500 m) membuka celah: siapa pun bisa
-// mengirim `accuracy: 5000` dan lolos dari jarak ratusan meter. Akurasi hanya
-// dipakai sebagai koreksi kecil atas keterbatasan alat, bukan sebagai izin.
-const AKURASI_MAKS = 60
+// 200 m: di atas ini posisi dianggap tidak layak untuk penegakan radius. Batas
+// ini SENGAJA terbatas — toleransi besar (mis. 500 m) membuka celah: siapa pun
+// bisa mengirim `accuracy: 5000` dan lolos dari jarak ratusan meter. Akurasi
+// hanya dipakai sebagai koreksi kecil atas keterbatasan alat, bukan sebagai izin.
+//
+// Kenapa 200 (naik dari 60): posisi dalam gedung — satu-satunya yang didapat
+// lewat fallback jaringan (WiFi/seluler) — wajar melaporkan akurasi 100-200 m.
+// Membatasi ke 60 m membuat guru yang SUDAH berdiri di lokasinya tetap ditolak
+// karena toleransinya dipotong lebih kecil dari ketidakpastian alatnya sendiri.
+// 200 m masih jauh di bawah "bisa memalsukan posisi" (accuracy: 5000 tidak
+// meloloskan apa pun), jadi keamanan penegakan radius tetap terjaga.
+const AKURASI_MAKS = 200
 
 // Toleransi akurasi: GPS perangkat melaporkan sendiri tingkat ketelitiannya
 // (coords.accuracy). Jarak ukur tidak pernah lebih tepat dari itu. Tanpa

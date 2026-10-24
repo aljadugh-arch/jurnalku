@@ -72,8 +72,11 @@ export default function MobileGuruDashboard() {
     if (!jadwal?.id) return toast.error('Tidak ada jadwal mengajar hari ini')
     setBusy(true)
     try {
-      let lok: any = {}
-      try { lok = await getCurrentPosition() } catch { lok = {} }
+      let lok: any
+      try { lok = await getCurrentPosition() } catch (e: any) {
+        toast.error(e?.message || 'Gagal membaca lokasi — izinkan akses lokasi lalu coba lagi')
+        return
+      }
       await api.post('/guru/sesi-kelas/masuk', { jadwal_id: jadwal.id, latitude: lok.latitude, longitude: lok.longitude, accuracy: lok.accuracy })
       toast.success(`Masuk kelas ${jadwal.rombel_nama || ''}`.trim())
       await load()

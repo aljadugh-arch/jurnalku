@@ -65,9 +65,14 @@ export default function GuruDashboard() {
     if (!jadwal?.id) return toast.error('Tidak ada jadwal mengajar hari ini')
     setClassBusy(true)
     try {
-      // Kirim lokasi bila tersedia — server menolak bila di luar area kelas.
-      let lok: any = {}
-      try { lok = await getCurrentPosition() } catch { lok = {} }
+      // Baca lokasi dengan fallback (GPS -> jaringan). Bila gagal, tampilkan
+      // alasan sebenarnya (izin ditolak/timeout), bukan kirim koordinat kosong
+      // yang berakhir "Lokasi tidak terbaca".
+      let lok: any
+      try { lok = await getCurrentPosition() } catch (e: any) {
+        toast.error(e?.message || 'Gagal membaca lokasi — izinkan akses lokasi lalu coba lagi')
+        return
+      }
       await api.post('/guru/sesi-kelas/masuk', { jadwal_id: jadwal.id, latitude: lok.latitude, longitude: lok.longitude, accuracy: lok.accuracy })
       toast.success(`Masuk kelas ${jadwal.rombel_nama}`)
       await loadDashboard()
