@@ -37,11 +37,19 @@ test('endpoint membatasi ke siswa AKTIF dan melapor jumlah', () => {
   assert.ok(/jumlah: siswaRows\.length/.test(blok), 'melapor jumlah siswa ter-update')
 })
 
-test('UI RaporPage menampilkan kontrol tanggal massal per kelas', () => {
+test('UI RaporPage menampilkan kontrol tanggal massal (kelas + semua kelas)', () => {
   assert.ok(/tanggal-massal/.test(rapor), 'panggil endpoint massal')
-  assert.ok(/Tanggal Pembagian \(seluruh kelas\)/.test(rapor), 'label input tanggal massal')
-  assert.ok(/Set untuk Kelas/.test(rapor), 'tombol set untuk kelas')
+  assert.ok(/Tanggal Pembagian \(massal\)/.test(rapor), 'label input tanggal massal')
+  assert.ok(/Kelas Ini/.test(rapor), 'tombol Kelas Ini')
+  assert.ok(/'Semua Kelas'/.test(rapor), 'tombol Semua Kelas')
   assert.ok(/simpanTanggalMassal/.test(rapor), 'fungsi simpan massal')
+})
+
+test('endpoint mendukung cakupan seluruh lembaga (rombel_id all/kosong)', () => {
+  const blok = index.slice(index.indexOf('tanggal-massal'), index.indexOf("// Bobot nilai rapor"))
+  assert.ok(/semuaKelas = !rombel_id \|\| rombel_id === 'all'/.test(blok), 'deteksi cakupan semua kelas')
+  assert.ok(/Hanya admin yang bisa mengisi tanggal untuk seluruh kelas/.test(blok), 'gate admin untuk semua kelas')
+  assert.ok(/cakupan: semuaKelas \? 'semua kelas' : 'satu kelas'/.test(blok), 'lapor cakupan di respons')
 })
 
 test('input per-siswa (Tanggal Pembagian) tetap ada', () => {

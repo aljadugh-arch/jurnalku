@@ -116,14 +116,15 @@ export default function RaporPage() {
     } catch (e: any) { setBobotMsg(`✗ ${e.response?.data?.error || 'Gagal menghapus bobot'}`) }
     finally { setBobotSaving(false) }
   }
-  const simpanTanggalMassal = async () => {
-    if (!selectedRombel) { setTanggalMassalMsg('✗ Pilih kelas dulu'); return }
+  const simpanTanggalMassal = async (cakupan: 'rombel' | 'semua' = 'rombel') => {
+    if (cakupan === 'rombel' && !selectedRombel) { setTanggalMassalMsg('✗ Pilih kelas dulu'); return }
     setTanggalMassalSaving(true); setTanggalMassalMsg('')
     try {
       const { data } = await api.post('/rapor/pelengkap/tanggal-massal', {
-        rombel_id: selectedRombel, tahun_ajaran: tahunAjaran, semester, jenis, tanggal_pembagian: tanggalMassal,
+        rombel_id: cakupan === 'rombel' ? selectedRombel : 'all',
+        tahun_ajaran: tahunAjaran, semester, jenis, tanggal_pembagian: tanggalMassal,
       })
-      setTanggalMassalMsg(`✓ Tanggal pembagian diset untuk ${data.jumlah} siswa`)
+      setTanggalMassalMsg(`✓ Tanggal pembagian diset untuk ${data.jumlah} siswa (${data.cakupan})`)
       setTanggalMassal('')
     } catch (e: any) { setTanggalMassalMsg(`✗ ${e.response?.data?.error || 'Gagal menyimpan tanggal'}`) }
     finally { setTanggalMassalSaving(false) }
@@ -458,10 +459,11 @@ export default function RaporPage() {
           <Field label="Jenis Rapor"><select value={jenis} onChange={e => setJenis(e.target.value as any)} className="input"><option value="rapor_sts">Rapor STS (Sumatif Tengah Semester)</option><option value="rapor_sas">Rapor SAS (Sumatif Akhir Semester)</option></select></Field>
         </div>
         {msg && <p className={`mt-3 text-sm ${msg.startsWith('✓') ? 'text-green-600' : 'text-red-600'}`}>{msg}</p>}
-        {selectedRombel && !foundationTenantId && (
+        {!foundationTenantId && (
           <div className="mt-3 flex flex-wrap items-end gap-2 border-t border-gray-100 pt-3">
-            <Field label="Tanggal Pembagian (seluruh kelas)"><input type="date" value={tanggalMassal} onChange={e => setTanggalMassal(e.target.value)} className="input" /></Field>
-            <button onClick={simpanTanggalMassal} disabled={tanggalMassalSaving || !tanggalMassal} className="btn-primary flex items-center gap-2 text-sm"><Save className="w-4 h-4" />{tanggalMassalSaving ? 'Menyimpan...' : 'Set untuk Kelas'}</button>
+            <Field label="Tanggal Pembagian (massal)"><input type="date" value={tanggalMassal} onChange={e => setTanggalMassal(e.target.value)} className="input" /></Field>
+            <button onClick={() => simpanTanggalMassal('rombel')} disabled={tanggalMassalSaving || !tanggalMassal || !selectedRombel} className="btn-secondary flex items-center gap-2 text-sm"><Save className="w-4 h-4" />Kelas Ini</button>
+            <button onClick={() => simpanTanggalMassal('semua')} disabled={tanggalMassalSaving || !tanggalMassal} className="btn-primary flex items-center gap-2 text-sm"><Save className="w-4 h-4" />{tanggalMassalSaving ? 'Menyimpan...' : 'Semua Kelas'}</button>
             {tanggalMassalMsg && <p className={`text-sm ${tanggalMassalMsg.startsWith('✓') ? 'text-green-600' : 'text-red-600'}`}>{tanggalMassalMsg}</p>}
           </div>
         )}
