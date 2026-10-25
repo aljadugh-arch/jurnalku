@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import toast from 'react-hot-toast'
-import { Save, ScrollText } from 'lucide-react'
+import { Save, ScrollText, Search } from 'lucide-react'
 import api from '../../services/api'
 
 // Disederhanakan: hanya Sikap (umum) + Catatan Wali Kelas + Saran.
@@ -23,6 +23,7 @@ export default function CatatanKepribadianPage() {
   const [tahunAjaran, setTahunAjaran] = useState('2026/2027')
   const [semester, setSemester] = useState('ganjil')
   const [saving, setSaving] = useState(false)
+  const [search, setSearch] = useState('')
 
   useEffect(() => { api.get('/rombel').then(r => setRombels(r.data)).catch(() => toast.error('Gagal memuat rombel')) }, [])
   useEffect(() => {
@@ -48,6 +49,14 @@ export default function CatatanKepribadianPage() {
       saran: c.saran || '',
     }
   }), [siswa, catatan])
+
+  // Pencarian HANYA memfilter tampilan; data yang disimpan (rows) tetap lengkap
+  // supaya Simpan Semua tidak pernah menghapus siswa yang sedang terfilter.
+  const visibleRows = useMemo<Row[]>(() => {
+    const q = search.trim().toLowerCase()
+    if (!q) return rows
+    return rows.filter(r => (r.nama || '').toLowerCase().includes(q) || String(r.nis || '').includes(q))
+  }, [rows, search])
 
   const update = (siswaId: string, field: keyof Row, value: string) => {
     setCatatan(prev => {
@@ -100,14 +109,26 @@ export default function CatatanKepribadianPage() {
         </div>
       </div>
 
-      {rows.length === 0 ? (
+      {rombelId && (
+        <div className="relative">
+          <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+          <input
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder="Cari nama / NIS siswa…"
+            className="w-full rounded-lg border px-3 py-2 pl-9 dark:border-gray-700 dark:bg-gray-800"
+          />
+        </div>
+      )}
+
+      {visibleRows.length === 0 ? (
         <div className="rounded-xl border bg-white p-10 text-center text-gray-400 dark:border-gray-800 dark:bg-gray-900">
           <ScrollText size={42} className="mx-auto mb-3 opacity-60" />
-          <p>Pilih rombel untuk mengisi catatan kepribadian.</p>
+          <p>{!rombelId ? 'Pilih rombel untuk mengisi catatan kepribadian.' : search.trim() ? 'Siswa tidak ditemukan.' : 'Tidak ada siswa di rombel ini.'}</p>
         </div>
       ) : (
         <div className="space-y-3">
-          {rows.map(r => (
+          {visibleRows.map(r => (
             <div key={r.siswa_id} className="rounded-xl border bg-white p-4 shadow-sm dark:border-gray-800 dark:bg-gray-900">
               <div className="mb-3">
                 <p className="font-semibold text-gray-900 dark:text-gray-100">{r.nama}</p>

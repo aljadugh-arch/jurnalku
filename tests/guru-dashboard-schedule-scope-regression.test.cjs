@@ -33,13 +33,20 @@ test('empat kartu dashboard guru sama tinggi dan memakai tindakan sesuai jadwal 
   assert.doesNotMatch(dashboard, /length \+ ' JP'/)
 })
 
-test('fitur guru mengambil konteks jadwal harian tanpa fallback seluruh rombel tenant', () => {
-  for (const source of [attendance, personality, assessment]) {
+test('absensi & penilaian memakai konteks jadwal harian; catatan kepribadian memakai seluruh siswa yang diampu', () => {
+  // Absensi dan penilaian tetap berbasis jadwal pada tanggal itu.
+  for (const source of [attendance, assessment]) {
     assert.match(source, /\/guru\/jadwal-context/)
   }
   assert.doesNotMatch(attendance, /api\.get\('\/rombel'\)/)
-  assert.doesNotMatch(personality, /api\.get\('\/siswa'\)/)
   assert.doesNotMatch(assessment, /api\.get\('\/guru\/pengajar-saya'\)/)
+
+  // Catatan kepribadian memakai /api/siswa (seluruh siswa yang diampu guru:
+  // wali kelas / pengajar / jadwal) supaya pencarian siswa selalu menemukan
+  // siswa, bukan hanya siswa pada jadwal tanggal itu. Isolasi data tetap
+  // terjaga — /api/siswa untuk guru TIDAK pernah mengembalikan seluruh tenant.
+  assert.match(personality, /api\.get\('\/siswa'\)/)
+  assert.doesNotMatch(personality, /\/guru\/jadwal-context/)
   assert.match(personality, /placeholder="Cari nama \/ NIS/)
   assert.match(schedule, /Jadwal mengajar selama satu pekan/)
 })
@@ -50,9 +57,14 @@ test('backend menyediakan konteks jadwal mapel guru per tanggal dan siswa aktif 
   assert.match(server, /j\.gtk_id=\?[^`]*j\.tenant_id=\?[^`]*j\.jenis_kegiatan='mapel'/s)
   assert.match(server, /COALESCE\(s\.status,'aktif'\)='aktif'/)
   assert.match(server, /jadwal_id/)
-  assert.match(server, /teacherCanAccessStudentOnDate/)
   assert.match(server, /app\.post\('\/api\/catatan-kepribadian'/)
-  assert.match(server, /Siswa tidak sesuai jadwal mengajar Anda pada tanggal tersebut/)
+  // POST catatan-kepribadian kini memvalidasi scope luas (wali kelas / pengajar
+  // / jadwal) lewat teacherCanAccessStudent — konsisten dengan GET, DELETE, dan
+  // /api/siswa — supaya guru bisa menyimpan catatan untuk seluruh siswa yang
+  // diampu, bukan hanya siswa pada jadwal tanggal itu.
+  assert.match(server, /teacherCanAccessStudent\(req, siswa_id\)/)
+  assert.match(server, /Tanggal tidak valid/)
+  assert.match(server, /Siswa bukan tanggung jawab Anda/)
 })
 
 test('menu kelas wali hanya ditampilkan untuk role wali_kelas', () => {

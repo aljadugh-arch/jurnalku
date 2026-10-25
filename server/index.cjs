@@ -9455,7 +9455,8 @@ function teacherCanAccessStudent(req, siswaId) {
 app.post('/api/catatan-kepribadian', TEACHER, (req, res) => {
   const { siswa_id, catatan, aspek, tanggal } = req.body
   if (!siswa_id || !String(catatan || '').trim() || !tanggal) return res.status(400).json({ error: 'siswa_id, catatan, dan tanggal wajib' })
-  if (!teacherCanAccessStudentOnDate(req, siswa_id, tanggal)) return res.status(403).json({ error: 'Siswa tidak sesuai jadwal mengajar Anda pada tanggal tersebut' })
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(tanggal))) return res.status(400).json({ error: 'Tanggal tidak valid' })
+  if (!teacherCanAccessStudent(req, siswa_id)) return res.status(403).json({ error: 'Siswa bukan tanggung jawab Anda (wali kelas, pengajar, atau jadwal mengajar)' })
   const siswa = db.prepare('SELECT id FROM siswa WHERE id=? AND tenant_id=?').get(siswa_id, req.tenantId)
   if (!siswa) return res.status(404).json({ error: 'Siswa tidak ditemukan' })
   const id = uuidv4()

@@ -48,11 +48,13 @@ export default function CatatanKepribadianGuru() {
     }
   }
 
-  const fetchSiswa = async (tanggal = form.tanggal) => {
+  const fetchSiswa = async () => {
     try {
-      const res = await api.get('/guru/jadwal-context', { params: { tanggal } })
-      setSiswaList(res.data.siswa || [])
-    } catch { toast.error('Gagal memuat siswa sesuai jadwal mengajar') }
+      // Semua siswa yang diampu guru (bukan hanya jadwal hari itu), supaya
+      // pencarian siswa di form selalu menemukan siswa yang diampu.
+      const res = await api.get('/siswa')
+      setSiswaList(res.data || [])
+    } catch { toast.error('Gagal memuat siswa') }
   }
 
   useEffect(() => { fetchData() }, [])
@@ -227,7 +229,6 @@ export default function CatatanKepribadianGuru() {
                     const tanggal = e.target.value
                     setForm({ ...form, tanggal, siswa_id: '' })
                     setSiswaSearch('')
-                    fetchSiswa(tanggal)
                   }}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
                 />
