@@ -4988,7 +4988,8 @@ app.post('/api/absensi-ekskul/bulk', STAFF, (req, res) => {
   const validStatuses = new Set(['hadir', 'izin', 'sakit', 'alpa'])
   const allowedMember = db.prepare('SELECT 1 FROM ekskul_anggota WHERE ekskul_id=? AND siswa_id=? AND tenant_id=?')
   if (data.some(d => !d.siswa_id || !validStatuses.has(d.status) || !allowedMember.get(ekskul_id, d.siswa_id, req.tenantId))) return res.status(400).json({ error: 'Peserta atau status absensi tidak valid' })
-  try { assertKbmActive(req, tanggal) } catch (e) { return res.status(400).json({ error: e.message }) }
+  // Ekstrakurikuler berjalan di luar KBM (termasuk akhir pekan/libur), jadi absensi
+  // ekskul TIDAK digerbang assertKbmActive — beda dengan absensi pelajaran reguler.
   let count = 0
   for (const d of data) {
     const exists = db.prepare('SELECT id FROM absensi_ekskul WHERE siswa_id = ? AND ekskul_id = ? AND tanggal = ? AND tenant_id = ?').get(d.siswa_id, ekskul_id, tanggal, req.tenantId)
