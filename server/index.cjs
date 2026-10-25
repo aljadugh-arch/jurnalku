@@ -9875,6 +9875,30 @@ app.put('/api/rapor/pelengkap', STAFF, (req, res) => {
   res.json({ success: true })
 })
 
+// Set tanggal pembagian MASSAL untuk satu kelas (rombel). Input per-siswa
+// (PUT /api/rapor/pelengkap) tetap ada; ini shortcut agar cetak massal tidak
+// perlu mengisi tanggal 30+ siswa satu per satu.
+app.post('/api/rapor/pelengkap/tanggal-massal', STAFF, (req, res) => {
+  const { rombel_id, tahun_ajaran, semester, jenis = 'rapor_sts', tanggal_pembagian } = req.body
+  if (!rombel_id || !tahun_ajaran || !semester) return res.status(400).json({ error: 'Data kelas tidak lengkap' })
+  const validationError = validateRaporPeriod(tahun_ajaran, semester, jenis)
+  if (validationError) return res.status(400).json({ error: validationError })
+  if (!canManageRaporRombel(req, rombel_id)) return res.status(404).json({ error: 'Rombel tidak ditemukan' })
+  const tanggal = String(tanggal_pembagian || '').trim()
+  if (tanggal && (!/^\d{4}-\d{2}-\d{2}$/.test(tanggal) || Number.isNaN(Date.parse(`${tanggal}T00:00:00Z`)))) return res.status(400).json({ error: 'tanggal_pembagian tidak valid' })
+  const siswaRows = db.prepare(`SELECT id FROM siswa WHERE rombel_id=? AND tenant_id=? AND COALESCE(status,'aktif')='aktif'`).all(rombel_id, req.tenantId)
+  if (!siswaRows.length) return res.status(404).json({ error: 'Tidak ada siswa aktif di kelas ini' })
+  const upsert = db.prepare(`INSERT INTO rapor_pelengkap (id,siswa_id,tahun_ajaran,semester,jenis,tanggal_pembagian,tenant_id,updated_at)
+    VALUES (?,?,?,?,?,?,?,datetime('now'))
+    ON CONFLICT(tenant_id,siswa_id,tahun_ajaran,semester,jenis) DO UPDATE SET
+      tanggal_pembagian=excluded.tanggal_pembagian,updated_at=datetime('now')`)
+  const tx = db.transaction(() => {
+    for (const s of siswaRows) upsert.run(uuidv4(), s.id, tahun_ajaran, semester, jenis, tanggal, req.tenantId)
+  })
+  tx()
+  res.json({ success: true, jumlah: siswaRows.length })
+})
+
 // Bobot nilai rapor (padanan "bobot Sumatif / SAS" RDM). Baris paling spesifik
 // menang: (mapel+rombel) > mapel > rombel > default tenant > rumus bawaan.
 const BOBOT_FIELDS = ['sts_harian', 'sts_sts', 'sts_sas', 'sas_harian', 'sas_sts', 'sas_sas']

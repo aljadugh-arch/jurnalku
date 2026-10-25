@@ -61,6 +61,10 @@ export default function RaporPage() {
   const [importLoading, setImportLoading] = useState(false)
   const [importPreview, setImportPreview] = useState<any>(null)
   const [csvText, setCsvText] = useState('')
+  // Tanggal pembagian massal (satu tanggal untuk seluruh siswa di kelas).
+  const [tanggalMassal, setTanggalMassal] = useState('')
+  const [tanggalMassalSaving, setTanggalMassalSaving] = useState(false)
+  const [tanggalMassalMsg, setTanggalMassalMsg] = useState('')
 
   useEffect(() => { loadRombel(); loadSettings() }, [foundationTenantId])
   useEffect(() => { setSelectedSiswa(''); setRapor([]); setRingkasan(null); if (selectedRombel) loadSiswa() }, [selectedRombel, foundationTenantId])
@@ -111,6 +115,18 @@ export default function RaporPage() {
       await loadBobot()
     } catch (e: any) { setBobotMsg(`✗ ${e.response?.data?.error || 'Gagal menghapus bobot'}`) }
     finally { setBobotSaving(false) }
+  }
+  const simpanTanggalMassal = async () => {
+    if (!selectedRombel) { setTanggalMassalMsg('✗ Pilih kelas dulu'); return }
+    setTanggalMassalSaving(true); setTanggalMassalMsg('')
+    try {
+      const { data } = await api.post('/rapor/pelengkap/tanggal-massal', {
+        rombel_id: selectedRombel, tahun_ajaran: tahunAjaran, semester, jenis, tanggal_pembagian: tanggalMassal,
+      })
+      setTanggalMassalMsg(`✓ Tanggal pembagian diset untuk ${data.jumlah} siswa`)
+      setTanggalMassal('')
+    } catch (e: any) { setTanggalMassalMsg(`✗ ${e.response?.data?.error || 'Gagal menyimpan tanggal'}`) }
+    finally { setTanggalMassalSaving(false) }
   }
   const loadSiswa = async () => {
     try {
@@ -442,6 +458,13 @@ export default function RaporPage() {
           <Field label="Jenis Rapor"><select value={jenis} onChange={e => setJenis(e.target.value as any)} className="input"><option value="rapor_sts">Rapor STS (Sumatif Tengah Semester)</option><option value="rapor_sas">Rapor SAS (Sumatif Akhir Semester)</option></select></Field>
         </div>
         {msg && <p className={`mt-3 text-sm ${msg.startsWith('✓') ? 'text-green-600' : 'text-red-600'}`}>{msg}</p>}
+        {selectedRombel && !foundationTenantId && (
+          <div className="mt-3 flex flex-wrap items-end gap-2 border-t border-gray-100 pt-3">
+            <Field label="Tanggal Pembagian (seluruh kelas)"><input type="date" value={tanggalMassal} onChange={e => setTanggalMassal(e.target.value)} className="input" /></Field>
+            <button onClick={simpanTanggalMassal} disabled={tanggalMassalSaving || !tanggalMassal} className="btn-primary flex items-center gap-2 text-sm"><Save className="w-4 h-4" />{tanggalMassalSaving ? 'Menyimpan...' : 'Set untuk Kelas'}</button>
+            {tanggalMassalMsg && <p className={`text-sm ${tanggalMassalMsg.startsWith('✓') ? 'text-green-600' : 'text-red-600'}`}>{tanggalMassalMsg}</p>}
+          </div>
+        )}
       </div>
 
       {!foundationTenantId && (
