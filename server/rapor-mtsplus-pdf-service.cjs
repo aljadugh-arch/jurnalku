@@ -81,6 +81,11 @@ function romawi(n) {
   const s = String(n ?? '').trim()
   const table = { 1: 'I', 2: 'II', 3: 'III', 4: 'IV', 5: 'V', 6: 'VI', 7: 'VII', 8: 'VIII', 9: 'IX', 10: 'X', 11: 'XI', 12: 'XII' }
   if (/^\d+$/.test(s)) return table[parseInt(s, 10)] || s
+  // Nama rombel yang diawali "KELAS"/"Kelas" (mis. "KELAS 2", "Kelas 2-A"):
+  // buang kata "Kelas" lalu romawi-kan angka di depannya, supaya label "Kelas:"
+  // dan "Wali Kelas" pada rapor tidak menghasilkan "Kelas KELAS 2" ganda.
+  const m = s.match(/^kelas[\s-]+(\d+)(.*)$/i)
+  if (m) return (table[parseInt(m[1], 10)] || m[1]) + (m[2] || '')
   return s
 }
 

@@ -128,6 +128,13 @@ test('romawi hanya mengubah angka murni, bukan nama rombel', () => {
   assert.equal(fn('VII-B'), 'VII-B')
   assert.equal(fn(''), '')
   assert.equal(fn(null), '')
+  // Nama rombel ber-prefiks "KELAS" (tenant tertentu menyimpan "KELAS 2") harus
+  // dibuang kata "Kelas"-nya supaya label "Kelas:"/"Wali Kelas" tidak ganda.
+  assert.equal(fn('KELAS 2'), 'II')
+  assert.equal(fn('Kelas 2'), 'II')
+  assert.equal(fn('KELAS 6'), 'VI')
+  assert.equal(fn('KELAS 2-A'), 'II-A')
+  assert.equal(fn('kelas 2'), 'II')
 })
 
 test('NISN bergabung (#) dicetak bagian nasionalnya saja', () => {
