@@ -47,7 +47,7 @@ function GambarPanduan({ src, alt }: { src?: string; alt: string }) {
   return (
     <a href={src} target="_blank" rel="noreferrer" className="block">
       <img src={src} alt={alt} onError={() => setGagal(true)}
-        className="w-full rounded-lg border sk-border-soft hover:border-[#f47b20]/50 transition" />
+        className="w-full rounded-lg border sk-border-soft hover:border-[var(--sk-orange)]/50 transition" />
     </a>
   )
 }

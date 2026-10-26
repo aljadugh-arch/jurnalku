@@ -25,9 +25,9 @@
   --sk-text: #24262d;
   --sk-muted: #6f7785;
   --sk-border: #e7e4df;
-  --sk-orange: #f47b20;
-  --sk-orange-dark: #df6511;
-  --sk-orange-soft: #fff4e9;
+  --sk-orange: var(--color-primary, #1e40af);
+  --sk-orange-dark: var(--color-primary-dark, #1e3a8a);
+  --sk-orange-soft: color-mix(in srgb, var(--color-primary, #1e40af) 8%, #ffffff);
   --sk-ink: #38404b;
   --sk-heading: #69574f;
   --sk-label: #484a51;
@@ -42,17 +42,17 @@
   --sk-flat-shadow: 0 12px 32px rgba(55, 46, 38, 0.045);
   --sk-service-border: rgba(231, 228, 223, 0.88);
   --sk-service-bg: rgba(255, 255, 255, 0.92);
-  --sk-service-hover-border: #f4d3b4;
+  --sk-service-hover-border: color-mix(in srgb, var(--color-primary, #1e40af) 24%, #ffffff);
   --sk-icon-muted: #a1a7b3;
   --sk-input-bg: #ffffff;
   --sk-ghost-bg: #ffffff;
-  --sk-badge-text: #df6511;
+  --sk-badge-text: var(--color-primary-dark, #1e3a8a);
 
   --sk-shadow: 0 18px 44px rgba(58, 48, 40, 0.08);
   --sk-shadow-soft: 0 10px 30px rgba(58, 48, 40, 0.06);
   --sk-ease: cubic-bezier(0.22, 1, 0.36, 1);
 
-  --sk-gradient: linear-gradient(135deg, #ff9a20 0%, #f27513 100%);
+  --sk-gradient: linear-gradient(135deg, var(--color-primary, #1e40af) 0%, var(--color-primary-dark, #1e3a8a) 100%);
   --sk-font: 'Poppins', 'Inter', system-ui, -apple-system, sans-serif;
 }
 
@@ -66,10 +66,10 @@
   --sk-ink: #e2e8f0;
   --sk-heading: #f1f5f9;
   --sk-label: #cbd5e1;
-  --sk-orange: #ff9d3b;
-  --sk-orange-dark: #f47b20;
-  --sk-orange-soft: rgba(244, 123, 32, 0.16);
-  --sk-badge-text: #ffad5a;
+  --sk-orange: var(--color-primary-light, #3b82f6);
+  --sk-orange-dark: var(--color-primary, #1e40af);
+  --sk-orange-soft: color-mix(in srgb, var(--color-primary, #1e40af) 16%, transparent);
+  --sk-badge-text: var(--color-primary-light, #3b82f6);
 
   --sk-nav-bg: rgba(11, 15, 25, 0.86);
   --sk-nav-hover: rgba(255, 255, 255, 0.06);

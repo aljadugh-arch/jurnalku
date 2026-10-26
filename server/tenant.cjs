@@ -696,7 +696,7 @@ app.get('/api/superadmin/pengguna', authMiddleware, (req, res) => {
     if (!userFoundationId) return res.status(403).json({ error: 'Tenant tidak tergabung dalam yayasan' })
     if (!['admin', 'super_admin', 'operator', 'kepala'].includes(req.user.role)) return res.status(403).json({ error: 'Forbidden' })
 
-    const { search, limit = 100, offset = 0, tenant_id } = req.query
+    const { search, limit = 100, offset = 0, tenant_id, rombel_id } = req.query
     let targetTenants = db.prepare('SELECT id FROM tenants WHERE foundation_id = ? AND aktif = 1').all(userFoundationId).map(t => t.id)
     if (tenant_id) {
       if (!targetTenants.includes(tenant_id)) return res.status(403).json({ error: 'Tenant tidak dalam yayasan yang sama' })

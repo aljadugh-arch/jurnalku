@@ -317,6 +317,7 @@ export function menuForRole(role?: string): MenuItem[] {
     ? [
         ...visible,
         { label: 'Ledger Nilai', icon: <ClipboardCheck size={20} />, path: '/guru/nilai-ledger' },
+        { label: 'Catatan Wali Kelas', icon: <ScrollText size={20} />, path: '/guru/catatan-wali-kelas' },
         { label: 'Kelas Wali Saya', icon: <Layers size={20} />, path: '/guru/rombel' },
       ]
     : visible

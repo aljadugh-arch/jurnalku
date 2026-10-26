@@ -69,12 +69,12 @@ export default function PublicShell({ children, active }: { children: ReactNode;
                 key={n.to}
                 to={n.to}
                 onClick={() => setBuka(false)}
-                className={`block rounded-lg px-3 py-2.5 text-sm font-medium ${active === n.label ? 'text-[#f47b20]' : 'text-[#6f7785]'}`}
+                className={`block rounded-lg px-3 py-2.5 text-sm font-medium ${active === n.label ? 'text-[var(--sk-orange)]' : 'text-[#6f7785]'}`}
               >
                 {n.label}
               </Link>
             ))}
-            <Link to="/login" onClick={() => setBuka(false)} className="block rounded-lg px-3 py-2.5 text-sm font-semibold text-[#f47b20]">
+            <Link to="/login" onClick={() => setBuka(false)} className="block rounded-lg px-3 py-2.5 text-sm font-semibold text-[var(--sk-orange)]">
               Masuk
             </Link>
           </div>

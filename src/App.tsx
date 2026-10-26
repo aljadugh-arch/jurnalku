@@ -106,6 +106,7 @@ const GuruRekapNilaiPage = lazy(() => import('./pages/guru/GuruRekapNilaiPage'))
 const GuruKoreksiJawabanPage = lazy(() => import('./pages/guru/GuruKoreksiJawabanPage'))
 const GuruPostingPage = lazy(() => import('./pages/guru/GuruPostingPage'))
 const GuruCatatanKepribadianPage = lazy(() => import('./pages/guru/GuruCatatanKepribadianPage'))
+const WaliKelasCatatanRaporPage = lazy(() => import('./pages/guru/WaliKelasCatatanRaporPage'))
 const GuruAbsensiEkskulPage = lazy(() => import('./pages/guru/GuruAbsensiEkskulPage'))
 const GuruAbsensiSiswaQRPage = lazy(() => import('./pages/guru/GuruAbsensiSiswaQRPage'))
 const SiswaDashboard = lazy(() => import('./pages/siswa/SiswaDashboard'))
@@ -427,6 +428,9 @@ export default function App() {
           {/* Halaman baru sesuai live */}
           <Route path="posting" element={<GuruPostingPage />} />
           <Route path="catatan-kepribadian" element={<GuruCatatanKepribadianPage />} />
+          <Route path="catatan-wali-kelas" element={
+            <ProtectedRoute allowedRoles={['wali_kelas']} exactRoles><WaliKelasCatatanRaporPage /></ProtectedRoute>
+          } />
           <Route path="absensi-ekskul" element={<GuruAbsensiEkskulPage />} />
           <Route path="perpustakaan" element={<PerpustakaanPage />} />
           <Route path="absensi-harian" element={<Navigate to="/guru/absensi-siswa" replace />} />

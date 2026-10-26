@@ -381,7 +381,7 @@ export default function LoginPage() {
 
               {/* Akun demo (hanya host yang diizinkan server). */}
               {demoHostAktif && (
-                <div id="demo" ref={demoRef} tabIndex={-1} className="mt-5 scroll-mt-4 rounded-xl border sk-border-soft sk-bg-subtle p-3 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#f47b20]">
+                <div id="demo" ref={demoRef} tabIndex={-1} className="mt-5 scroll-mt-4 rounded-xl border sk-border-soft sk-bg-subtle p-3 focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--sk-orange)]">
                   <p className="mb-2 text-[11px] font-semibold sk-txt-muted">Akun demo</p>
                   <div className="grid grid-cols-3 gap-1.5">
                     {['admin', 'kepala', 'guru', 'bendahara', 'siswa', 'wali_murid', 'proktor'].map(role => (

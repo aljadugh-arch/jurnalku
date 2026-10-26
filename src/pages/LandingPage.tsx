@@ -357,7 +357,7 @@ export default function LandingPage() {
         <div className="grid grid-cols-1 gap-5 md:grid-cols-3">
           {langkah.map((s, i) => (
             <div key={i} className="relative rounded-2xl border sk-border-soft bg-white p-6">
-              <span className="absolute -left-3 -top-3 flex h-9 w-9 items-center justify-center rounded-xl bg-[#f47b20] text-sm font-bold text-white shadow-lg">{i + 1}</span>
+              <span className="absolute -left-3 -top-3 flex h-9 w-9 items-center justify-center rounded-xl bg-[var(--sk-orange)] text-sm font-bold text-white shadow-lg">{i + 1}</span>
               <s.icon size={26} className="mb-3 mt-2 sk-txt-accent" />
               <h3 className="mb-1.5 font-bold sk-txt">{s.judul}</h3>
               <p className="text-sm leading-relaxed sk-txt-muted">{s.isi}</p>
@@ -387,8 +387,8 @@ export default function LandingPage() {
                 {paketBayar.map((p, i) => {
                   const disorot = i === Math.min(1, paketBayar.length - 1)
                   return (
-                    <div key={p.plan} className={`relative flex flex-col rounded-2xl border-2 bg-white p-6 ${disorot ? 'border-[#f47b20] shadow-2xl shadow-[#f47b20]/15' : 'sk-border-soft'}`}>
-                      {disorot && <span className="absolute -top-3 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full bg-[#f47b20] px-3 py-1 text-[11px] font-bold text-white">PALING BANYAK DIPILIH</span>}
+                    <div key={p.plan} className={`relative flex flex-col rounded-2xl border-2 bg-white p-6 ${disorot ? 'border-[var(--sk-orange)] shadow-2xl shadow-[var(--sk-orange)]/15' : 'sk-border-soft'}`}>
+                      {disorot && <span className="absolute -top-3 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full bg-[var(--sk-orange)] px-3 py-1 text-[11px] font-bold text-white">PALING BANYAK DIPILIH</span>}
                       <h3 className="text-lg font-bold sk-txt">{p.label}</h3>
                       <div className="mb-5 mt-3">
                         <span className="text-3xl font-extrabold sk-txt">{rupiah(p.harga)}</span>
@@ -402,7 +402,7 @@ export default function LandingPage() {
                           </li>
                         ))}
                       </ul>
-                      <Link to="/register" className={`w-full rounded-xl px-5 py-3 text-center font-bold transition-all ${disorot ? 'bg-[#f47b20] text-white hover:bg-[#df6511]' : 'sk-bg-subtle sk-txt hover:bg-[#e7e4df]'}`}>
+                      <Link to="/register" className={`w-full rounded-xl px-5 py-3 text-center font-bold transition-all ${disorot ? 'bg-[var(--sk-orange)] text-white hover:bg-[var(--sk-orange-dark)]' : 'sk-bg-subtle sk-txt hover:bg-[#e7e4df]'}`}>
                         Mulai Paket {p.label}
                       </Link>
                     </div>
@@ -443,7 +443,7 @@ export default function LandingPage() {
 
       {/* ================= CTA ================= */}
       <section className="mx-auto max-w-6xl px-4 py-16">
-        <div className="relative overflow-hidden rounded-3xl p-8 text-center text-white sm:p-12" style={{ background: 'linear-gradient(135deg, #ff9a20 0%, #f27513 100%)' }}>
+        <div className="relative overflow-hidden rounded-3xl p-8 text-center text-white sm:p-12" style={{ background: 'var(--sk-gradient)' }}>
           <div className="absolute -right-10 -top-16 h-64 w-64 rounded-full bg-white/10 blur-3xl" />
           <div className="absolute -bottom-20 -left-10 h-64 w-64 rounded-full bg-white/10 blur-3xl" />
           <div className="relative">

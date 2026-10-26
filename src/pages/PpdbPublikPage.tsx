@@ -114,7 +114,7 @@ export default function PpdbPublikPage() {
     } finally { setKirim(false) }
   }
 
-  const inputKelas = 'w-full px-3 py-2.5 border rounded-lg text-sm focus:ring-2 focus:ring-[#f47b20]/30 focus:border-[#f47b20] outline-none sk-form-input'
+  const inputKelas = 'w-full px-3 py-2.5 border rounded-lg text-sm focus:ring-2 focus:ring-[var(--sk-orange)]/30 focus:border-[var(--sk-orange)] outline-none sk-form-input'
   const labelKelas = 'sk-form-label'
   const judulSeksi = 'flex items-center gap-2 text-sm font-bold sk-txt pt-2 pb-1 border-b sk-border-soft'
 
