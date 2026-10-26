@@ -11,6 +11,10 @@ import { useThemeStore } from '../../stores/themeStore'
 // (TURNSTILE_SECRET di server/.env), tidak pernah dikirim ke frontend.
 const TURNSTILE_SITEKEY = '0x4AAAAAAFmtqoLgyTGINDCB'
 const turnstileApi = () => (window as any).turnstile
+// Root domain yang widget-nya terdaftar (menambah root mengizinkan semua subdomain).
+// Domain custom lembaga tidak tercakup → widget tidak dirender & token tidak wajib.
+const TURNSTILE_COVERED_ROOTS = ['cc.cd', 'jurnalmadrasah.web.id', 'jurnalku.biz.id', 'idjurnal.my.id', 'idjurnal.web.id', 'idjurnal.biz.id']
+const turnstileCoversHost = (host: string) => TURNSTILE_COVERED_ROOTS.some((r) => host === r || host.endsWith('.' + r))
 
 const getRedirectPath = (role: string) => {
   if (['admin', 'super_admin', 'kepala', 'bendahara', 'operator', 'tata_usaha', 'tu'].includes(role)) return '/admin'
@@ -38,6 +42,9 @@ const layanan = [
  */
 export default function LoginPage() {
   const { settings } = useSettingsStore()
+  // Turnstile hanya aktif di domain platform (root domain tercakup + subdomain-nya).
+  // Domain custom lembaga tidak dirender widgetnya agar login tetap jalan.
+  const turnstileAktif = turnstileCoversHost(window.location.hostname.toLowerCase())
   const { dark, toggle: toggleDark } = useThemeStore()
   const logo = settings.logo || '/logo-jurnalku-256.png'
   const namaLembaga = settings.nama_lembaga || 'JURNALKU'
@@ -145,8 +152,8 @@ export default function LoginPage() {
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
     setError('')
-    const token = turnstileApi()?.getResponse?.() || ''
-    if (!token) {
+    const token = turnstileAktif ? turnstileApi()?.getResponse?.() || '' : ''
+    if (turnstileAktif && !token) {
       setError('Selesaikan verifikasi keamanan (centang CAPTCHA) terlebih dahulu.')
       return
     }
@@ -355,8 +362,10 @@ export default function LoginPage() {
                     </div>
                   </div>
 
-                  {/* Cloudflare Turnstile — verifikasi anti-bot sebelum login. */}
-                  <div className="cf-turnstile" data-sitekey={TURNSTILE_SITEKEY} data-theme="auto" data-language="id"></div>
+                  {/* Cloudflare Turnstile — verifikasi anti-bot sebelum login (hanya domain platform). */}
+                  {turnstileAktif && (
+                    <div className="cf-turnstile" data-sitekey={TURNSTILE_SITEKEY} data-theme="auto" data-language="id"></div>
+                  )}
 
                   <button type="submit" disabled={loading} className="sk-btn w-full">
                     {loading ? 'Memproses...' : (<>Masuk Sekarang <ArrowRight size={16} /></>)}

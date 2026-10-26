@@ -3533,8 +3533,22 @@ async function verifyTurnstile(token, ip) {
     return false
   }
 }
+// Root domain yang widget Turnstile-nya terdaftar. Menambah root domain
+// mengizinkan SEMUA subdomain-nya (perilaku Cloudflare, bukan wildcard). Domain
+// custom lembaga (sekolahku.sch.id, dsb.) tidak tercakup dan Turnstile dilewati.
+const TURNSTILE_COVERED_ROOTS = ['cc.cd', 'jurnalmadrasah.web.id', 'jurnalku.biz.id', 'idjurnal.my.id', 'idjurnal.web.id', 'idjurnal.biz.id']
+const turnstileCoversHost = (host) => {
+  if (!host) return false
+  return TURNSTILE_COVERED_ROOTS.some((r) => host === r || host.endsWith('.' + r))
+}
+
 const turnstileLoginGuard = async (req, res, next) => {
   if (!TURNSTILE_SECRET) return next()
+  // Root domain yang widget-nya terdaftar: menambah root domain mengizinkan SEMUA
+  // subdomain-nya (tidak perlu wildcard). Domain custom lembaga (mis. sekolahku.sch.id)
+  // TIDAK tercakup → Turnstile dilewati di sana supaya login tidak rusak.
+  const host = String(req.headers['x-forwarded-host'] || req.headers.host || '').split(',')[0].trim().split(':')[0].toLowerCase()
+  if (!turnstileCoversHost(host)) return next()
   const token = req.body?.turnstileToken || req.body?.turnstile_token
   if (await verifyTurnstile(token, req.ip)) return next()
   return res.status(403).json({ error: 'Verifikasi keamanan gagal. Muat ulang halaman lalu coba lagi.', code: 'TURNSTILE_FAILED' })
