@@ -24,9 +24,10 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
 
-    <!-- Cloudflare Turnstile (anti-bot pada halaman login). Script dimuat global
-         (kecil + di-cache) dan hanya me-render widget di elemen .cf-turnstile. -->
-    <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
+    <!-- Cloudflare Turnstile (anti-bot pada halaman login). render=explicit: widget
+         dirender manual via window.turnstile.render() di LoginPage (implicit rawan
+         terlewat di SPA React karena script bisa termuat sebelum div dirender). -->
+    <script src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit" async defer></script>
 
 
     <!-- Isi di antara penanda SEO:START/SEO:END diganti per permintaan oleh server

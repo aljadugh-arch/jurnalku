@@ -45,6 +45,49 @@ export default function LoginPage() {
   // Turnstile hanya aktif di domain platform (root domain tercakup + subdomain-nya).
   // Domain custom lembaga tidak dirender widgetnya agar login tetap jalan.
   const turnstileAktif = turnstileCoversHost(window.location.hostname.toLowerCase())
+  const turnstileRef = useRef<HTMLDivElement>(null)
+  const [turnstileWidgetId, setTurnstileWidgetId] = useState<string | null>(null)
+  const [turnstileGagal, setTurnstileGagal] = useState(false)
+
+  // Render widget Turnstile secara EKSPLISIT (lebih andal daripada implicit di SPA,
+  // karena script bisa termuat sebelum React me-render div). Gagal dimuat → tampilkan
+  // pesan yang terlihat, bukan gagal senyap.
+  useEffect(() => {
+    if (!turnstileAktif) return
+    const container = turnstileRef.current
+    if (!container) return
+    let widgetId: string | undefined
+    let batal = false
+    const renderWidget = () => {
+      const ts = (window as any).turnstile
+      if (!ts || typeof ts.render !== 'function') return false
+      try {
+        widgetId = ts.render(container, {
+          sitekey: TURNSTILE_SITEKEY,
+          theme: 'auto',
+          language: 'id',
+          'error-callback': () => { if (!batal) setTurnstileGagal(true) },
+        })
+        setTurnstileWidgetId(widgetId || null)
+        return true
+      } catch {
+        if (!batal) setTurnstileGagal(true)
+        return true // hentikan retry, error sudah ditampilkan
+      }
+    }
+    if (renderWidget()) {
+      return () => { try { (window as any).turnstile?.remove(widgetId) } catch { /* abaikan */ } }
+    }
+    let n = 0
+    const timer = setInterval(() => {
+      n += 1
+      if (renderWidget() || n > 40) clearInterval(timer) // maks ~12 detik
+    }, 300)
+    return () => {
+      clearInterval(timer)
+      try { (window as any).turnstile?.remove(widgetId) } catch { /* abaikan */ }
+    }
+  }, [turnstileAktif])
   const { dark, toggle: toggleDark } = useThemeStore()
   const logo = settings.logo || '/logo-jurnalku-256.png'
   const namaLembaga = settings.nama_lembaga || 'JURNALKU'
@@ -152,7 +195,7 @@ export default function LoginPage() {
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
     setError('')
-    const token = turnstileAktif ? turnstileApi()?.getResponse?.() || '' : ''
+    const token = turnstileAktif && turnstileWidgetId ? (turnstileApi()?.getResponse?.(turnstileWidgetId) || '') : ''
     if (turnstileAktif && !token) {
       setError('Selesaikan verifikasi keamanan (centang CAPTCHA) terlebih dahulu.')
       return
@@ -165,7 +208,7 @@ export default function LoginPage() {
     } catch (err: any) {
       setError(pesanGagalJaringan(err))
       // Token Turnstile single-use — reset agar percobaan berikutnya dapat token baru.
-      try { turnstileApi()?.reset?.() } catch { /* abaikan */ }
+      try { if (turnstileWidgetId) turnstileApi()?.reset?.(turnstileWidgetId) } catch { /* abaikan */ }
     } finally {
       setLoading(false)
     }
@@ -364,7 +407,12 @@ export default function LoginPage() {
 
                   {/* Cloudflare Turnstile — verifikasi anti-bot sebelum login (hanya domain platform). */}
                   {turnstileAktif && (
-                    <div className="cf-turnstile" data-sitekey={TURNSTILE_SITEKEY} data-theme="auto" data-language="id"></div>
+                    <div>
+                      <div ref={turnstileRef}></div>
+                      {turnstileGagal && (
+                        <p className="text-[11px] font-medium text-rose-600">Verifikasi keamanan gagal dimuat. Muat ulang halaman lalu coba lagi.</p>
+                      )}
+                    </div>
                   )}
 
                   <button type="submit" disabled={loading} className="sk-btn w-full">
