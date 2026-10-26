@@ -196,7 +196,7 @@ function tenantMiddleware(db) {
     // even if bad legacy data accidentally maps one as a custom domain.
     const canonicalHost = BASE_DOMAINS.some(bd => host === bd || host === `www.${bd}`)
     if (!tenant && !canonicalHost && host !== 'localhost') {
-      tenant = db.prepare("SELECT * FROM tenants WHERE lower(trim(domain_custom, '.')) = ? AND aktif = 1").get(host.replace(/\.$/, ''))
+      tenant = db.prepare("SELECT * FROM tenants WHERE lower(trim(domain_custom, '.')) = ? AND aktif = 1").get(host.replace(/\.$/, '').replace(/^www\./, ''))
     }
 
     req.isRegisteredTenantHost = Boolean(tenant)
@@ -213,7 +213,7 @@ function tenantMiddleware(db) {
       // semua domain jatuh ke default.
       try {
         const q = db.prepare('SELECT * FROM tenants WHERE lower(trim(base_domain, \'.\'))=? AND aktif=1')
-        const rows = typeof q.all === 'function' ? q.all(host.replace(/\.$/, '')) : []
+        const rows = typeof q.all === 'function' ? q.all(host.replace(/\.$/, '').replace(/^www\./, '')) : []
         if (rows.length === 1) tenant = rows[0]
       } catch { /* biarkan jatuh ke default */ }
     }
@@ -225,7 +225,7 @@ function tenantMiddleware(db) {
     // nonaktif tidak diblokir — ia diam-diam berubah menjadi "platform", dan
     // subdomainnya tetap menjawab 200. Nonaktif harus berarti TERTUTUP.
     if (!tenant) {
-      const hostBersih = host.replace(/\.$/, '')
+      const hostBersih = host.replace(/\.$/, '').replace(/^www\./, '')
       let mati = db.prepare("SELECT * FROM tenants WHERE COALESCE(aktif,1)<>1 AND lower(trim(domain_custom,'.'))=?").get(hostBersih)
       if (!mati) {
         const mb = BASE_DOMAINS.find(bd => hostBersih.endsWith('.' + bd))

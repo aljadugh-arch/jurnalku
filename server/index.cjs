@@ -121,7 +121,7 @@ const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS || 'https://jurnal.cc.cd,ht
 //
 // Urutan: domain_custom (diverifikasi) -> base_domain (domain platform).
 const tenantDariHost = (host) => {
-  const h = String(host || '').toLowerCase().trim().replace(/\.$/, '')
+  const h = String(host || '').toLowerCase().trim().replace(/\.$/, '').replace(/^www\./, '')
   if (!h) return null
   try {
     const custom = db.prepare('SELECT id FROM tenants WHERE lower(trim(domain_custom, \'.\')) = ? AND aktif = 1').get(h)
