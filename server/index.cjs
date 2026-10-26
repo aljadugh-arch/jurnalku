@@ -470,6 +470,27 @@ const apiLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false
 })
+// Anti-scraping: endpoint publik (tanpa auth) dibatasi jauh lebih ketat supaya
+// data landing/tenant/geocode tidak bisa dipanen massal oleh scraper. Endpoint
+// ber-auth tetap memakai apiLimiter yang longgar di bawah. Ambang bisa disetel
+// via SCRAPE_MAX_PER_IP tanpa ubah kode. /api/caddy/ask SENGAJA dikecualikan:
+// dipanggil Caddy (on_demand_tls) dari localhost — rate-limit bisa memutus
+// penerbitan sertifikat subdomain baru.
+const PUBLIC_SCRAPE_PATHS = [
+  '/api/health', '/api/settings', '/api/tenant/info', '/api/geocode/search',
+]
+const scrapeLimiter = rateLimit({
+  windowMs: 5 * 60 * 1000,
+  max: Number(process.env.SCRAPE_MAX_PER_IP || 120),
+  skip: (req) => {
+    const p = String(req.originalUrl || '').split('?')[0]
+    return !PUBLIC_SCRAPE_PATHS.some((path) => p === path || p.startsWith(path + '/'))
+  },
+  message: { error: 'Terlalu banyak permintaan. Coba lagi beberapa saat lagi.' },
+  standardHeaders: true,
+  legacyHeaders: false,
+})
+app.use('/api/', scrapeLimiter)
 app.use('/api/', apiLimiter)
 
 // Limiter untuk endpoint pembuatan akun / reset password. Sebelumnya hanya
