@@ -207,6 +207,7 @@ export const bendaharaMenuItems: MenuItem[] = [
   {
     label: 'Keuangan', icon: <DollarSign size={20} />,
     children: [
+      { label: 'Kasir Cepat (Scan)', path: '/admin/kasir' },
       { label: 'Tagihan & Pembayaran', path: '/admin/tagihan' },
       { label: 'Tabungan Siswa', path: '/admin/tabungan' },
       { label: 'Buku Kas', path: '/admin/buku-kas' },

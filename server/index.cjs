@@ -1863,6 +1863,8 @@ for (const col of [
   ['siswa', 'rfid_uid', 'TEXT'],
   ['settings', 'kts_template', 'TEXT'],
   ['absensi_guru', 'keterangan', "TEXT DEFAULT ''"],
+  // Jarak (meter) dari titik sekolah saat absen hadir — dihitung backend saat geolokasi aktif.
+  ['absensi_guru', 'jarak_dari_sekolah', 'REAL'],
   // Absensi siswa: pisah masuk & pulang (Item 1)
   ['absensi_siswa', 'waktu_masuk', 'TEXT'],
   ['absensi_siswa', 'waktu_pulang', 'TEXT'],
@@ -2703,6 +2705,66 @@ app.get('/api/bendahara/dashboard', BENDAHARA, (req,res) => {
   `).all(tid, tid, tid).map(r => r.bulan).filter(Boolean)
 
   res.json({ bulan, periode: { mulai: rentang.awal, selesai: rentang.akhir }, tagihan_belum, lunas_bulan_ini, saldo_tabungan, siswa_aktif, tabungan_setor, tabungan_tarik, kas_masuk, kas_keluar, tagihan_bulan_ini, bulan_tersedia })
+})
+
+// ==================== REKAP KEUANGAN HARIAN / MINGGUAN / BULANAN ====================
+// Rekap mutasi kas, tabungan, dan pembayaran tagihan per periode. Mode harian &
+// mingguan dipakai dashboard bendahara untuk melihat arus kas jangka pendek
+// (harian = 1 hari, mingguan = Senin s/d Minggu dari tanggal yang dipilih).
+function mingguRange(tanggal) {
+  const d = new Date(tanggal + 'T00:00:00Z')
+  const diff = (d.getUTCDay() + 6) % 7 // hari sejak Senin (0=Senin)
+  const mulai = new Date(d); mulai.setUTCDate(d.getUTCDate() - diff)
+  const selesai = new Date(mulai); selesai.setUTCDate(mulai.getUTCDate() + 6)
+  return { awal: mulai.toISOString().slice(0, 10), akhir: selesai.toISOString().slice(0, 10) }
+}
+function daftarTanggal(mulai, selesai) {
+  const out = []
+  const d = new Date(mulai + 'T00:00:00Z')
+  const end = new Date(selesai + 'T00:00:00Z')
+  while (d <= end) { out.push(d.toISOString().slice(0, 10)); d.setUTCDate(d.getUTCDate() + 1) }
+  return out
+}
+app.get('/api/bendahara/rekap', BENDAHARA, (req, res) => {
+  const tid = req.tenantId
+  const mode = ['harian', 'mingguan', 'bulanan'].includes(String(req.query.mode)) ? String(req.query.mode) : 'harian'
+  const validTanggal = (v) => /^\d{4}-\d{2}-\d{2}$/.test(String(v || '')) ? String(v) : ''
+  let mulai, selesai, label
+  if (mode === 'harian') {
+    const d = validTanggal(req.query.tanggal) || todayJakarta()
+    mulai = d; selesai = d; label = `Harian ${d}`
+  } else if (mode === 'mingguan') {
+    const d = validTanggal(req.query.tanggal) || todayJakarta()
+    const r = mingguRange(d); mulai = r.awal; selesai = r.akhir
+    label = `Mingguan ${mulai} s/d ${selesai}`
+  } else {
+    const bulan = normalisasiBulan(req.query.bulan) || bulanBerjalanWib()
+    const r = rentangBulan(bulan); mulai = r.awal; selesai = r.akhir
+    label = bulanTeks(bulan) ? `${bulanTeks(bulan).bulan} ${bulanTeks(bulan).tahun}` : bulan
+  }
+  const agg = (sql) => db.prepare(sql).get(tid, mulai, selesai)
+  const kas_masuk = agg("SELECT coalesce(sum(nominal),0) total, count(*) jumlah FROM keuangan_transaksi WHERE tenant_id=? AND tipe='masuk' AND tanggal>=? AND tanggal<=?")
+  const kas_keluar = agg("SELECT coalesce(sum(nominal),0) total, count(*) jumlah FROM keuangan_transaksi WHERE tenant_id=? AND tipe='keluar' AND tanggal>=? AND tanggal<=?")
+  const tabungan_setor = agg("SELECT coalesce(sum(nominal),0) total, count(*) jumlah FROM tabungan WHERE tenant_id=? AND tipe='setor' AND tanggal>=? AND tanggal<=?")
+  const tabungan_tarik = agg("SELECT coalesce(sum(nominal),0) total, count(*) jumlah FROM tabungan WHERE tenant_id=? AND tipe='tarik' AND tanggal>=? AND tanggal<=?")
+  const pembayaran = agg("SELECT count(*) jumlah, coalesce(sum(nominal),0) total FROM tagihan WHERE tenant_id=? AND status='lunas' AND tanggal_bayar>=? AND tanggal_bayar<=?")
+  const saldo_tabungan = db.prepare("SELECT coalesce(sum(CASE WHEN tipe='setor' THEN nominal ELSE -nominal END),0) saldo FROM tabungan WHERE tenant_id=?").get(tid).saldo
+  // Rincian per hari untuk mode mingguan & bulanan (harian tidak butuh).
+  let rincian = []
+  if (mode !== 'harian') {
+    const dates = daftarTanggal(mulai, selesai)
+    const kasMap = new Map()
+    for (const r of db.prepare("SELECT tanggal, sum(CASE WHEN tipe='masuk' THEN nominal ELSE 0 END) masuk, sum(CASE WHEN tipe='keluar' THEN nominal ELSE 0 END) keluar FROM keuangan_transaksi WHERE tenant_id=? AND tanggal>=? AND tanggal<=? GROUP BY tanggal").all(tid, mulai, selesai)) kasMap.set(r.tanggal, r)
+    const tabMap = new Map()
+    for (const r of db.prepare("SELECT tanggal, sum(CASE WHEN tipe='setor' THEN nominal ELSE 0 END) setor, sum(CASE WHEN tipe='tarik' THEN nominal ELSE 0 END) tarik FROM tabungan WHERE tenant_id=? AND tanggal>=? AND tanggal<=? GROUP BY tanggal").all(tid, mulai, selesai)) tabMap.set(r.tanggal, r)
+    const bayarMap = new Map()
+    for (const r of db.prepare("SELECT tanggal_bayar tanggal, count(*) jumlah, coalesce(sum(nominal),0) total FROM tagihan WHERE tenant_id=? AND status='lunas' AND tanggal_bayar>=? AND tanggal_bayar<=? GROUP BY tanggal_bayar").all(tid, mulai, selesai)) bayarMap.set(r.tanggal, r)
+    rincian = dates.map(tanggal => {
+      const k = kasMap.get(tanggal) || {}, t = tabMap.get(tanggal) || {}, b = bayarMap.get(tanggal) || {}
+      return { tanggal, kas_masuk: k.masuk || 0, kas_keluar: k.keluar || 0, tabungan_setor: t.setor || 0, tabungan_tarik: t.tarik || 0, pembayaran: b.total || 0, jml_bayar: b.jumlah || 0 }
+    })
+  }
+  res.json({ mode, mulai, selesai, label, kas_masuk, kas_keluar, tabungan_setor, tabungan_tarik, pembayaran, saldo_tabungan, rincian })
 })
 
 // Panduan pengguna — publik (tanpa login) supaya bisa dibuka dari halaman depan
@@ -7632,6 +7694,29 @@ app.get('/api/tagihan/siswa', BENDAHARA, (req, res) => {
   res.json(db.prepare(sql + ' ORDER BY r.nama, s.nama').all(...params))
 })
 
+// Lookup siswa untuk input keuangan cepat (kasir): scan QR, tap RFID, atau
+// ketik NIS/NISN -> langsung muncul data siswa + tagihan belum bayar + saldo.
+app.post('/api/keuangan/lookup-siswa', BENDAHARA, (req, res) => {
+  const { token, rfid_uid, nis } = req.body || {}
+  let siswa = null
+  if (token || rfid_uid) siswa = resolveStudentByScan(db, req.tenantId, { token, rfid_uid })
+  if (!siswa && nis) {
+    const q = String(nis).trim()
+    if (q) siswa = db.prepare('SELECT * FROM siswa WHERE (nis = ? OR nisn = ?) AND tenant_id = ?').get(q, q, req.tenantId)
+  }
+  if (!siswa) return res.status(404).json({ error: 'Siswa tidak ditemukan — periksa QR/kartu/NIS' })
+  if (String(siswa.status || 'aktif') !== 'aktif') return res.status(404).json({ error: 'Siswa berstatus nonaktif' })
+  const rombel = siswa.rombel_id ? db.prepare('SELECT nama FROM rombel WHERE id=? AND tenant_id=?').get(siswa.rombel_id, req.tenantId) : null
+  const tagihan_belum = db.prepare(`SELECT t.*, jt.nama AS jenis_nama FROM tagihan t LEFT JOIN jenis_tagihan jt ON jt.id=t.jenis_tagihan_id AND jt.tenant_id=t.tenant_id WHERE t.siswa_id=? AND t.tenant_id=? AND t.status='belum_bayar' ORDER BY t.tahun DESC, t.bulan DESC, t.created_at DESC`).all(siswa.id, req.tenantId)
+  const saldo = db.prepare('SELECT saldo_akhir FROM tabungan WHERE siswa_id=? AND tenant_id=? ORDER BY created_at DESC LIMIT 1').get(siswa.id, req.tenantId)
+  res.json({
+    siswa: { id: siswa.id, nama: siswa.nama, nis: siswa.nis, nisn: siswa.nisn || null, jenis_kelamin: siswa.jenis_kelamin, foto: siswa.foto || null, rombel: rombel?.nama || null },
+    saldo_tabungan: saldo ? saldo.saldo_akhir : 0,
+    tagihan_belum,
+    total_tagihan_belum: tagihan_belum.reduce((n, t) => n + (Number(t.nominal) || 0), 0),
+  })
+})
+
 app.get('/api/jenis-tagihan', BENDAHARA, (req, res) => {
   res.json(db.prepare('SELECT * FROM jenis_tagihan WHERE tenant_id=? ORDER BY nama').all(req.tenantId))
 })
@@ -8421,7 +8506,7 @@ app.put('/api/tahun-ajaran/:id/activate', ADMIN, (req, res) => {
 })
 
 // ==================== ABSENSI SISWA ====================
-app.get('/api/absensi-siswa', authMiddleware, (req, res) => {
+app.get('/api/absensi-siswa', STAFF, (req, res) => {
   const { tanggal, rombel_id, siswa_id } = req.query
   if (isTeacherContext(req)) {
     const access = siswa_id
@@ -8531,6 +8616,9 @@ app.post('/api/absensi-siswa/bulk-range', STAFF, (req, res) => {
       else count++
     }
   }
+  // Notif WA ke wali murid SENGAJA tidak dikirim pada simpan rentang: rentang bisa
+  // mencakup banyak hari sekaligus (30 siswa x 7 hari = 200+ pesan). Absensi harian
+  // biasa (POST /absensi-siswa/bulk) tetap mengirim notif per siswa.
   res.json({ count, already, dates: activeDates, jenis: normalizedJenis })
 })
 
@@ -8786,7 +8874,7 @@ app.post('/api/external/v1/absensi/scan', apiKeyMiddleware, (req, res) => {
 })
 
 // ==================== ABSENSI GURU ====================
-app.get('/api/absensi-guru', authMiddleware, (req, res) => {
+app.get('/api/absensi-guru', STAFF, (req, res) => {
   const { tanggal } = req.query
   let sql = `SELECT a.*, g.nama as gtk_nama, g.nip FROM absensi_guru a LEFT JOIN gtk g ON a.gtk_id = g.id WHERE a.tenant_id = ?`
   const params = [req.tenantId]
@@ -8796,17 +8884,42 @@ app.get('/api/absensi-guru', authMiddleware, (req, res) => {
 })
 
 app.post('/api/absensi-guru', STAFF, async (req, res) => {
-  const { gtk_id, tanggal, status, waktu_masuk, waktu_pulang, latitude, longitude, foto_selfie, keterangan } = req.body
+  const { gtk_id, tanggal, status, waktu_masuk, waktu_pulang, latitude, longitude, accuracy, foto_selfie, keterangan } = req.body
+  if (!gtk_id || !tanggal || !status) return res.status(400).json({ error: 'gtk_id, tanggal, dan status wajib diisi' })
+  try { assertKbmActive(req, tanggal) } catch (e) { return res.status(400).json({ error: e.message }) }
   let normalizedSelfie = null
   try { normalizedSelfie = await normalizeStoredImageDataUrl(foto_selfie, 'foto selfie') } catch (e) { return res.status(400).json({ error: e.message }) }
+  // Geolokasi: status "hadir" yang dicatat real-time (tanggal hari ini) wajib lolos
+  // radius sekolah bila geofence sudah dikonfigurasi. Input retroaktif (tanggal lalu)
+  // tidak mensyaratkan GPS karena petugas tidak mungkin berdiri di lokasi pada hari itu.
+  let jarak = null
+  if (status === 'hadir' && tanggal === todayJakarta()) {
+    const geo = getTenantSettings(db, req.tenantId, 'geo_latitude, geo_longitude, geo_radius')
+    if (geo && geo.geo_latitude != null && geo.geo_longitude != null) {
+      const lat = Number(latitude), lng = Number(longitude)
+      if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+        return res.status(400).json({ error: 'Lokasi GPS wajib untuk status hadir hari ini — izinkan akses lokasi lalu coba lagi.' })
+      }
+      const { haversineMeters, toleransiAkurasi, AKURASI_MAKS } = require('./geo-lock.cjs')
+      jarak = haversineMeters(lat, lng, Number(geo.geo_latitude), Number(geo.geo_longitude))
+      const tol = toleransiAkurasi(accuracy)
+      const batas = Number(geo.geo_radius || 200) + tol
+      if (jarak > batas) {
+        const ketAkurasi = tol > 0 ? `, akurasi GPS ±${Math.round(tol)}m` : ''
+        const saran = Number(accuracy) > AKURASI_MAKS ? ' Sinyal GPS lemah — coba di ruang terbuka.' : ' Mendekatlah ke lokasi sekolah.'
+        return res.status(400).json({ error: `Di luar radius sekolah (${Math.round(jarak)}m dari titik sekolah${ketAkurasi}; batas ${Math.round(Number(geo.geo_radius || 200))}m + toleransi = ${Math.round(batas)}m).${saran}`, geo: { distance: Math.round(jarak), radius: Number(geo.geo_radius || 200), toleransi: Math.round(tol) } })
+      }
+    }
+  }
   const id = uuidv4()
   const exists = db.prepare('SELECT id FROM absensi_guru WHERE gtk_id = ? AND tanggal = ? AND tenant_id = ?').get(gtk_id, tanggal, req.tenantId)
+  const jarakBulat = jarak != null ? Math.round(jarak) : null
   if (exists) {
-    db.prepare('UPDATE absensi_guru SET status=?, waktu_masuk=?, waktu_pulang=?, latitude=?, longitude=?, foto_selfie=?, keterangan=? WHERE id=? AND tenant_id=?').run(status, waktu_masuk||null, waktu_pulang||null, latitude||null, longitude||null, normalizedSelfie||null, keterangan||'', exists.id, req.tenantId)
-    return res.json({ id: exists.id, updated: true })
+    db.prepare('UPDATE absensi_guru SET status=?, waktu_masuk=?, waktu_pulang=?, latitude=?, longitude=?, foto_selfie=?, keterangan=?, jarak_dari_sekolah=? WHERE id=? AND tenant_id=?').run(status, waktu_masuk||null, waktu_pulang||null, latitude||null, longitude||null, normalizedSelfie||null, keterangan||'', jarakBulat, exists.id, req.tenantId)
+    return res.json({ id: exists.id, updated: true, geo: jarakBulat != null ? { distance: jarakBulat } : undefined })
   }
-  db.prepare('INSERT INTO absensi_guru (id, gtk_id, tanggal, status, waktu_masuk, waktu_pulang, latitude, longitude, foto_selfie, tenant_id) VALUES (?,?,?,?,?,?,?,?,?,?)').run(id, gtk_id, tanggal, status, waktu_masuk||null, waktu_pulang||null, latitude||null, longitude||null, normalizedSelfie||null, req.tenantId)
-  res.json({ id })
+  db.prepare('INSERT INTO absensi_guru (id, gtk_id, tanggal, status, waktu_masuk, waktu_pulang, latitude, longitude, foto_selfie, keterangan, jarak_dari_sekolah, tenant_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)').run(id, gtk_id, tanggal, status, waktu_masuk||null, waktu_pulang||null, latitude||null, longitude||null, normalizedSelfie||null, keterangan||'', jarakBulat, req.tenantId)
+  res.json({ id, geo: jarakBulat != null ? { distance: jarakBulat } : undefined })
 })
 
 app.get('/api/absensi-guru/jadwal-harian', STAFF, (req, res) => {

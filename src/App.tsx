@@ -88,6 +88,7 @@ const CekLokAdminPage = lazy(() => import('./pages/admin/CekLokAdminPage'))
 const GuruAbsensiPage = lazy(() => import('./pages/guru/GuruAbsensiPage'))
 const BendaharaDashboard = lazy(() => import('./pages/admin/BendaharaDashboard'))
 const LaporanKeuanganPage = lazy(() => import('./pages/admin/LaporanKeuanganPage'))
+const KasirKeuanganPage = lazy(() => import('./pages/admin/KasirKeuanganPage'))
 const BukuKasPage = lazy(() => import('./pages/admin/BukuKasPage'))
 const EkskulPage = lazy(() => import('./pages/admin/EkskulPage'))
 const GuruDashboard = lazy(() => import('./pages/guru/GuruDashboard'))
@@ -268,6 +269,7 @@ export default function App() {
           <Route path="tahun-ajaran" element={<TahunAjaranPage />} />
           <Route path="tagihan" element={<TagihanPage />} />
           <Route path="tabungan" element={<TabunganPage />} />
+          <Route path="kasir" element={<KasirKeuanganPage />} />
           <Route path="perpustakaan" element={<PerpustakaanPage />} />
           <Route path="settings" element={
             <ProtectedRoute allowedRoles={['admin', 'super_admin']}><SettingsPage /></ProtectedRoute>

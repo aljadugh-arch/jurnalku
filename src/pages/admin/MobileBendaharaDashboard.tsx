@@ -1,8 +1,11 @@
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   ArrowDownLeft, ArrowUpRight, BookOpen, ChevronRight, FileBarChart,
-  Landmark, PiggyBank, ReceiptText, Target, UserCheck, WalletCards,
+  Landmark, PiggyBank, ReceiptText, Target, UserCheck, WalletCards, TrendingUp, TrendingDown,
 } from 'lucide-react'
+import api from '../../services/api'
+import { todayWib } from '../../lib/dateFormat'
 import MobileDashboardHeader from '../../components/MobileDashboardHeader'
 import JadwalSholatCard from '../../components/JadwalSholatCard'
 import MonthFilter, { labelBulan } from '../../components/MonthFilter'
@@ -35,6 +38,13 @@ const quickMenus = [
 
 export default function MobileBendaharaDashboard({ data, bulan, onUbahBulan }: { data: BendaharaData | null; bulan?: string; onUbahBulan?: (b: string) => void }) {
   const navigate = useNavigate()
+  const [rekapMode, setRekapMode] = useState<'harian' | 'mingguan'>('harian')
+  const [rekapTanggal, setRekapTanggal] = useState(() => todayWib())
+  const [rekap, setRekap] = useState<any>(null)
+  useEffect(() => {
+    api.get('/bendahara/rekap', { params: { mode: rekapMode, tanggal: rekapTanggal } })
+      .then(r => setRekap(r.data)).catch(() => setRekap(null))
+  }, [rekapMode, rekapTanggal])
   const paid = Number(data?.lunas_bulan_ini?.jumlah || 0)
   const unpaid = Number(data?.tagihan_belum?.jumlah || 0)
   const totalBills = paid + unpaid
@@ -94,6 +104,41 @@ export default function MobileBendaharaDashboard({ data, bulan, onUbahBulan }: {
               <p className="mt-0.5 break-words text-sm font-bold text-slate-900 dark:text-white">{rupiah(Number(data?.tabungan_tarik?.total || 0))}</p>
               <p className="mt-0.5 break-words text-[10px] text-slate-400">{data?.tabungan_tarik?.jumlah || 0} penarikan</p>
             </button>
+          </div>
+        </section>
+
+        {/* ── REKAP KEUANGAN HARIAN / MINGGUAN ── */}
+        <section className="rounded-3xl bg-white p-4 shadow-sm dark:bg-gray-900">
+          <div className="mb-3 flex items-center justify-between gap-2">
+            <h2 className="text-sm font-bold text-slate-900 dark:text-white">Rekap Keuangan</h2>
+            <div className="flex gap-1 rounded-lg bg-slate-100 p-1 dark:bg-gray-800">
+              {(['harian', 'mingguan'] as const).map(m => (
+                <button key={m} onClick={() => setRekapMode(m)} className={`rounded-md px-2.5 py-1 text-xs font-semibold transition ${rekapMode === m ? 'bg-white text-emerald-600 shadow dark:bg-gray-700' : 'text-slate-500'}`}>{m === 'harian' ? 'Harian' : 'Mingguan'}</button>
+              ))}
+            </div>
+          </div>
+          <input type="date" value={rekapTanggal} onChange={e => setRekapTanggal(e.target.value)} className="mb-3 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm dark:border-gray-700 dark:bg-gray-800" />
+          <div className="grid grid-cols-2 gap-3">
+            <div className="rounded-2xl bg-emerald-50 p-3 dark:bg-emerald-500/10">
+              <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15"><TrendingUp size={16} /></span>
+              <p className="mt-2 text-[10px] font-medium uppercase tracking-wide text-slate-400">Kas Masuk</p>
+              <p className="break-words text-sm font-bold text-slate-900 dark:text-white">{rupiah(Number(rekap?.kas_masuk?.total || 0))}</p>
+            </div>
+            <div className="rounded-2xl bg-rose-50 p-3 dark:bg-rose-500/10">
+              <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-rose-100 text-rose-700 dark:bg-rose-500/15"><TrendingDown size={16} /></span>
+              <p className="mt-2 text-[10px] font-medium uppercase tracking-wide text-slate-400">Kas Keluar</p>
+              <p className="break-words text-sm font-bold text-slate-900 dark:text-white">{rupiah(Number(rekap?.kas_keluar?.total || 0))}</p>
+            </div>
+            <div className="rounded-2xl bg-blue-50 p-3 dark:bg-blue-500/10">
+              <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-100 text-blue-700 dark:bg-blue-500/15"><ReceiptText size={16} /></span>
+              <p className="mt-2 text-[10px] font-medium uppercase tracking-wide text-slate-400">Pembayaran</p>
+              <p className="break-words text-sm font-bold text-slate-900 dark:text-white">{rupiah(Number(rekap?.pembayaran?.total || 0))}</p>
+            </div>
+            <div className="rounded-2xl bg-teal-50 p-3 dark:bg-teal-500/10">
+              <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-teal-100 text-teal-700 dark:bg-teal-500/15"><PiggyBank size={16} /></span>
+              <p className="mt-2 text-[10px] font-medium uppercase tracking-wide text-slate-400">Setor Tabungan</p>
+              <p className="break-words text-sm font-bold text-slate-900 dark:text-white">{rupiah(Number(rekap?.tabungan_setor?.total || 0))}</p>
+            </div>
           </div>
         </section>
 

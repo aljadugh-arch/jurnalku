@@ -98,7 +98,7 @@ function GtkRecapTable({ data }: { data: any[] }) {
             <th className="text-left px-4 py-3 font-medium text-gray-600">Jabatan</th>
             <th className="text-left px-4 py-3 font-medium text-gray-600">Mata Pelajaran Diampu</th>
             <th className="text-center px-4 py-3 font-medium text-gray-600">Jumlah JTM</th>
-            <th className="text-center px-4 py-3 font-medium text-emerald-600">Jumlah Kehadiran</th>
+            <th className="text-center px-4 py-3 font-medium text-emerald-600" title="Hari hadir unik = ceklok + sesi masuk kelas, dihitung sekali per tanggal">Jumlah Kehadiran</th>
             <th className="text-center px-4 py-3 font-medium text-teal-600">Pulang</th>
             <th className="text-center px-4 py-3 font-medium text-yellow-600">Sakit</th>
             <th className="text-center px-4 py-3 font-medium text-purple-600">Izin</th>
@@ -215,11 +215,18 @@ export default function RekapAbsensiPage() {
       return { mulai: `${bulan}-01`, selesai: `${bulan}-${String(lastDay).padStart(2, '0')}` }
     }
     if (mode === 'semester') {
-      const year = yearWib()
-      return { mulai: `${year}-07-01`, selesai: `${year}-12-31` }
+      // Rentang semester mengikuti pilihan tahun ajaran + semester (ganjil/genap),
+      // sama seperti backend buildRekapRange. Sebelumnya hardcoded ganjil tahun berjalan
+      // sehingga memilih "Genap" atau tahun ajaran lain tidak mengubah rentang kategori.
+      const [taAwal, taAkhir] = String(tahunAjaran).split('/').map(Number)
+      const year = semester === 'ganjil' ? taAwal : taAkhir
+      if (!year) return { mulai: from, selesai: to }
+      return semester === 'ganjil'
+        ? { mulai: `${year}-07-01`, selesai: `${year}-12-31` }
+        : { mulai: `${year}-01-01`, selesai: `${year}-06-30` }
     }
     return { mulai: from, selesai: to }
-  }, [bulan, mode, from, to])
+  }, [bulan, mode, from, to, semester, tahunAjaran])
 
   const loadCategoryRecap = useCallback(async () => {
     const range = reportRange()
@@ -516,8 +523,8 @@ export default function RekapAbsensiPage() {
 
       {/* Summary Cards */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-        <div className="bg-blue-50 rounded-xl p-4 border border-blue-100">
-          <p className="text-xs text-blue-600 font-medium">Hadir</p>
+        <div className="bg-blue-50 rounded-xl p-4 border border-blue-100" title={tab === 'gtk' && category === 'kehadiran' ? 'Hadir dari catatan ceklok — kolom "Jumlah Kehadiran" di tabel menambahkan sesi masuk kelas' : undefined}>
+          <p className="text-xs text-blue-600 font-medium">{tab === 'gtk' && category === 'kehadiran' ? 'Hadir (Ceklok)' : 'Hadir'}</p>
           <p className="text-2xl font-bold text-blue-800 mt-1">{activeSummary.hadir}</p>
         </div>
         <div className="bg-yellow-50 rounded-xl p-4 border border-yellow-100">

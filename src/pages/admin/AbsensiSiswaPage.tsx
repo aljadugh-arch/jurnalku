@@ -302,11 +302,17 @@ export default function AbsensiSiswaPage({ qrMode = false }: { qrMode?: boolean 
     finally { setLoading(false) }
   }
 
+  // Hitung status secara eksplisit. Siswa yang belum ditandai TIDAK dihitung sebagai
+  // alpha (sebelumnya ikut dihitung alpha padahal saat disimpan parsial mereka tidak
+  // mendapat record apa pun — rekap lalu menampilkan "kosong", bukan "alpha").
+  const statusCount = { hadir: 0, sakit: 0, izin: 0, alpha: 0 }
+  for (const s of Object.values(absensi)) if (s && statusCount[s as keyof typeof statusCount] != null) statusCount[s as keyof typeof statusCount]++
   const summary = {
-    hadir: Object.values(absensi).filter(s => s === 'hadir').length,
-    sakit: Object.values(absensi).filter(s => s === 'sakit').length,
-    izin: Object.values(absensi).filter(s => s === 'izin').length,
-    alpha: siswaList.length - Object.values(absensi).filter(s => s && s !== 'alpha').length,
+    hadir: statusCount.hadir,
+    sakit: statusCount.sakit,
+    izin: statusCount.izin,
+    alpha: statusCount.alpha,
+    belum: siswaList.length - (statusCount.hadir + statusCount.sakit + statusCount.izin + statusCount.alpha),
   }
 
   return (
@@ -346,7 +352,7 @@ export default function AbsensiSiswaPage({ qrMode = false }: { qrMode?: boolean 
         allOptionLabel="Semua lembaga yayasan (gabungan)"
       />
 
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-5 gap-4">
         <div className="bg-green-50 border border-green-100 rounded-xl p-4 text-center">
           <p className="text-2xl font-bold text-green-700">{summary.hadir}</p>
           <p className="text-sm text-green-600">Hadir</p>
@@ -362,6 +368,10 @@ export default function AbsensiSiswaPage({ qrMode = false }: { qrMode?: boolean 
         <div className="bg-red-50 border border-red-100 rounded-xl p-4 text-center">
           <p className="text-2xl font-bold text-red-700">{summary.alpha}</p>
           <p className="text-sm text-red-600">Alpha</p>
+        </div>
+        <div className="bg-gray-50 border border-gray-200 rounded-xl p-4 text-center" title="Siswa yang belum dipilih statusnya — tidak akan tersimpan saat disimpan parsial">
+          <p className="text-2xl font-bold text-gray-600">{summary.belum}</p>
+          <p className="text-sm text-gray-500">Belum</p>
         </div>
       </div>
 

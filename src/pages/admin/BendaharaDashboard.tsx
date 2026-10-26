@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { BarChart3, BookOpen, CreditCard, DollarSign, MapPin, PiggyBank, Users, TrendingUp, TrendingDown, Receipt } from 'lucide-react'
 import api from '../../services/api'
 import MobileBendaharaDashboard from './MobileBendaharaDashboard'
+import RekapKeuanganPanel from './RekapKeuanganPanel'
 import MonthFilter, { bulanSekarang, labelBulan } from '../../components/MonthFilter'
 
 export default function BendaharaDashboard() {
@@ -85,6 +86,9 @@ export default function BendaharaDashboard() {
         ))}
       </div>
     </div>
+
+    {/* Rekap keuangan harian / mingguan / bulanan */}
+    <RekapKeuanganPanel />
 
     <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
       <button onClick={() => navigate('/admin/buku-kas')} className="inline-flex items-center justify-center gap-2 rounded-2xl bg-emerald-600 p-4 text-sm font-semibold text-white"><BookOpen size={18}/> Buku Kas</button>
