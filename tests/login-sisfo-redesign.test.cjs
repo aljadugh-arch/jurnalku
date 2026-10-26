@@ -15,7 +15,7 @@ const login = fs.readFileSync(path.join(AKAR, 'src/pages/auth/LoginPage.tsx'), '
 const sisfo = fs.readFileSync(path.join(AKAR, 'src/styles/sisfo.css'), 'utf8')
 
 test('design system sisfo punya token palet + kelas komponen', () => {
-  assert.ok(sisfo.includes('--sk-orange: #f47b20'), 'aksen oranye utama')
+  assert.ok(sisfo.includes('--sk-orange: var(--color-primary'), 'aksen mengikuti warna utama yang bisa diatur di setting')
   assert.ok(sisfo.includes('--sk-bg: #fbfaf8'), 'canvas krem')
   assert.ok(sisfo.includes("'Poppins'"), 'font Poppins')
   assert.ok(/\.sk-card\b/.test(sisfo), 'kelas kartu')
