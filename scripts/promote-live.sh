@@ -143,6 +143,17 @@ tunggu_sehat https://jurnalmadrasah.web.id/api/health || exit 1
 ACTIVATED=0
 ln -sfn "$BACKUP" "$LIVE/.rollback-current"
 ln -sfn "$SECONDARY_BACKUP" "$SECONDARY_LIVE/.rollback-current"
+
+# Retensi snapshot rollback: sisakan 5 terbaru, hapus sisanya. Tanpa ini tiap
+# deploy menumpuk salinan penuh dist+server di webroot (pernah ~200 dir / 2.5GB,
+# sebagian berisi salinan DB + .env yang sensitif). Glob .rollback-20* hanya
+# menyentuh snapshot bertimestamp, bukan symlink .rollback-current.
+bersihkan_rollback() {
+  local dir="$1"
+  ls -1dt "$dir"/.rollback-20* 2>/dev/null | tail -n +6 | xargs -r rm -rf
+}
+bersihkan_rollback "$LIVE"
+bersihkan_rollback "$SECONDARY_LIVE"
 REMOTE
 
 node scripts/check-live-frontend-sync.mjs jurnal.cc.cd jurnalmadrasah.web.id

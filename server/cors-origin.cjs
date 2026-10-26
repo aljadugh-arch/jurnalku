@@ -6,13 +6,13 @@
 //   1. tanpa header Origin  -> izin (curl, same-origin, klien mobile)
 //   2. bukan production     -> izin (dev)
 //   3. origin ada di daftar -> izin
-//   4. subdomain jurnal.cc.cd / jurnalmadrasah.web.id / cc.cd / web.id -> izin
+//   4. subdomain jurnal.cc.cd / jurnalmadrasah.web.id / cc.cd -> izin
 //   5. host adalah domain kustom tenant aktif -> izin
 //   6. selain itu           -> tolak dengan status 403
 function buatPemeriksaOrigin({ allowedOrigins = [], isProd = true, cariTenantDomain = () => null } = {}) {
   const daftar = (Array.isArray(allowedOrigins) ? allowedOrigins : [])
     .map(s => String(s).trim()).filter(Boolean)
-  const polaSubdomain = /^https:\/\/[a-z0-9][a-z0-9.-]+\.(jurnal\.cc\.cd|jurnalmadrasah\.web\.id|cc\.cd|web\.id)$/i
+  const polaSubdomain = /^https:\/\/[a-z0-9][a-z0-9.-]+\.(jurnal\.cc\.cd|jurnalmadrasah\.web\.id|cc\.cd)$/i
 
   return function periksaOrigin(origin, cb) {
     if (!origin) return cb(null, true) // curl / same-origin / mobile

@@ -88,6 +88,13 @@ const app = express()
 const PORT = process.env.PORT || 3001
 const IS_PROD = process.env.NODE_ENV === 'production'
 const JWT_SECRET = process.env.JWT_SECRET || (!IS_PROD ? crypto.randomBytes(32).toString('hex') : '')
+// Keamanan: production TIDAK boleh start dengan secret kosong — token jadi bisa
+// dipalsukan oleh siapa pun (role super_admin). Gagal cepat lebih baik daripada
+// diam-diam memakai secret "". Isi server/.env (JWT_SECRET=...) atau env PM2.
+if (IS_PROD && !JWT_SECRET) {
+  console.error('FATAL: JWT_SECRET wajib diisi saat production (server/.env atau env PM2). Menolak start.')
+  process.exit(1)
+}
 // Sesi login normal bertahan lintas penutupan aplikasi. JWT_SECRET production
 // tetap wajib stabil di environment; menggantinya memang akan mencabut sesi lama.
 const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '30d'
