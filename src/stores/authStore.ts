@@ -26,6 +26,25 @@ interface AuthState {
 export const canAccessTeacherDashboard = (user: User | null) =>
   !!user && (user.role === 'guru' || user.role === 'wali_kelas' || (user.role === 'kepala' && !!user.can_teach))
 
+// Handoff token lintas-origin: saat registrasi dengan domain sendiri, sesi
+// dibawa dari platform (jurnal.cc.cd) ke domain lembaga lewat fragment URL
+// (#token=...). Fragment tidak pernah dikirim ke server, jadi token tidak
+// bocor ke access log. Dikonsumsi SEKALI saat modul dimuat (sebelum state awal
+// dibaca) supaya refresh langsung dianggap sudah login, lalu fragment dibersihkan.
+;(function konsumsiTokenHandoff() {
+  if (typeof window === 'undefined') return
+  const m = window.location.hash.match(/[#&]token=([^&]+)/)
+  if (!m) return
+  try {
+    const token = decodeURIComponent(m[1])
+    if (!token) return
+    localStorage.setItem('jurnalku_token', token)
+    sessionStorage.removeItem('jurnalku_token')
+    const bersih = window.location.href.replace(/[#&]token=[^&]*/, '').replace(/#$/, '')
+    window.history.replaceState(null, '', bersih)
+  } catch { /* token tak valid — abaikan */ }
+})()
+
 const storedToken = () => localStorage.getItem('jurnalku_token')
 const AUTH_RETRY_MS = 3000
 

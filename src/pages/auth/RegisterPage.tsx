@@ -129,6 +129,38 @@ export default function RegisterPage() {
     } finally { setLoading(false) }
   }
 
+  // Buka dashboard di alamat resmi lembaga. Saat domain sendiri sudah aktif,
+  // arahkan ke domain milik lembaga (BUKAN tetap di platform jurnal.cc.cd),
+  // membawa token lewat fragment URL supaya sesi login tidak hilang saat
+  // berpindah origin (localStorage tidak dibagikan antar-origin).
+  const bukaDashboard = () => {
+    if (!hasil) return
+    const token = localStorage.getItem('jurnalku_token')
+    const tujuan = (origin: string) =>
+      token ? `${origin}/admin#token=${encodeURIComponent(token)}` : `${origin}/admin`
+    if (hasil.domainCustom && hasil.domainStatus === 'active') {
+      window.location.href = tujuan(`https://${hasil.domainCustom}`)
+      return
+    }
+    // Domain custom belum aktif (pending) — jangan arahkan ke domain yang DNS-nya
+    // belum tersambung; tetap di platform sampai pengguna verifikasi di Pengaturan.
+    if (hasil.domainCustom) {
+      navigate('/admin')
+      return
+    }
+    // Subdomain: arahkan ke alamat subdomain tenant bila berbeda host dari halaman ini.
+    if (hasil.url) {
+      try {
+        const target = new URL(hasil.url)
+        if (target.host !== window.location.host) {
+          window.location.href = tujuan(target.origin)
+          return
+        }
+      } catch { /* URL tidak valid — jatuh ke navigasi SPA */ }
+    }
+    navigate('/admin')
+  }
+
   // ── Layar konfirmasi setelah registrasi berhasil ──────────────────────────
   if (hasil) {
     return (
@@ -181,7 +213,7 @@ export default function RegisterPage() {
 
             <div className="mt-6 flex flex-col gap-3 sm:flex-row">
               <button
-                onClick={() => navigate('/admin')}
+                onClick={bukaDashboard}
                 className="sk-btn flex-1"
               >
                 Masuk ke Dashboard <ArrowRight size={16} />
