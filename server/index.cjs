@@ -479,6 +479,10 @@ const apiLimiter = rateLimit({
 const PUBLIC_SCRAPE_PATHS = [
   '/api/health', '/api/settings', '/api/tenant/info', '/api/geocode/search',
 ]
+// State ban progresif: IP pelanggar endpoint publik ditangguhkan makin lama pada
+// pelanggaran berikutnya. In-memory, bukan persisten — restart server me-reset ban.
+const scrapeBan = new Map() // ip -> { violations, until }
+const scrapeBanDuration = (n) => Math.min(6 * 60 * 60 * 1000, 10 * 60 * 1000 * Math.pow(2, n - 1))
 const scrapeLimiter = rateLimit({
   windowMs: 5 * 60 * 1000,
   max: Number(process.env.SCRAPE_MAX_PER_IP || 120),
@@ -486,9 +490,28 @@ const scrapeLimiter = rateLimit({
     const p = String(req.originalUrl || '').split('?')[0]
     return !PUBLIC_SCRAPE_PATHS.some((path) => p === path || p.startsWith(path + '/'))
   },
-  message: { error: 'Terlalu banyak permintaan. Coba lagi beberapa saat lagi.' },
+  handler: (req, res) => {
+    // Progressive ban: tiap pelanggaran menaikkan masa ban 10m → 20m → 40m → …
+    // cap 6 jam. In-memory (reset saat restart); entri kedaluwarsa dibersihkan
+    // saat diakses. Sekolah di balik NAT jarang menyentuh 120 req/5mnt ke endpoint
+    // publik (settings di-cache SPA), jadi false-positive kecil.
+    const rec = scrapeBan.get(req.ip) || { violations: 0, until: 0 }
+    rec.violations += 1
+    rec.until = Date.now() + scrapeBanDuration(rec.violations)
+    scrapeBan.set(req.ip, rec)
+    res.status(429).json({ error: 'Terlalu banyak permintaan. Akses ditangguhkan sementara.' })
+  },
   standardHeaders: true,
   legacyHeaders: false,
+})
+// Ban aktif: IP yang sedang ditangguhkan ditolak sebelum menyentuh limiter mana pun.
+app.use('/api/', (req, res, next) => {
+  const rec = scrapeBan.get(req.ip)
+  if (rec && rec.until > Date.now()) {
+    return res.status(403).json({ error: 'Akses ditangguhkan sementara karena aktivitas mencurigakan.' })
+  }
+  if (rec) scrapeBan.delete(req.ip)
+  next()
 })
 app.use('/api/', scrapeLimiter)
 app.use('/api/', apiLimiter)
