@@ -7,6 +7,11 @@ import api, { pesanGagalJaringan } from '../../services/api'
 import toast from 'react-hot-toast'
 import { useThemeStore } from '../../stores/themeStore'
 
+// Site key Turnstile (PUBLIK — aman di kode). Secret key ada di server
+// (TURNSTILE_SECRET di server/.env), tidak pernah dikirim ke frontend.
+const TURNSTILE_SITEKEY = '0x4AAAAAAFmtqoLgyTGINDCB'
+const turnstileApi = () => (window as any).turnstile
+
 const getRedirectPath = (role: string) => {
   if (['admin', 'super_admin', 'kepala', 'bendahara', 'operator', 'tata_usaha', 'tu'].includes(role)) return '/admin'
   if (role === 'guru' || role === 'wali_kelas') return '/guru'
@@ -140,13 +145,20 @@ export default function LoginPage() {
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
     setError('')
+    const token = turnstileApi()?.getResponse?.() || ''
+    if (!token) {
+      setError('Selesaikan verifikasi keamanan (centang CAPTCHA) terlebih dahulu.')
+      return
+    }
     setLoading(true)
     try {
-      await loginWithCredentials(email, password)
+      await loginWithCredentials(email, password, token)
       const user = useAuthStore.getState().user
       navigate(getRedirectPath(user?.role || 'siswa'))
     } catch (err: any) {
       setError(pesanGagalJaringan(err))
+      // Token Turnstile single-use — reset agar percobaan berikutnya dapat token baru.
+      try { turnstileApi()?.reset?.() } catch { /* abaikan */ }
     } finally {
       setLoading(false)
     }
@@ -342,6 +354,9 @@ export default function LoginPage() {
                       </button>
                     </div>
                   </div>
+
+                  {/* Cloudflare Turnstile — verifikasi anti-bot sebelum login. */}
+                  <div className="cf-turnstile" data-sitekey={TURNSTILE_SITEKEY} data-theme="auto" data-language="id"></div>
 
                   <button type="submit" disabled={loading} className="sk-btn w-full">
                     {loading ? 'Memproses...' : (<>Masuk Sekarang <ArrowRight size={16} /></>)}

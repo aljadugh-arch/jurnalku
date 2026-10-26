@@ -12,7 +12,7 @@ interface AuthState {
   authReady: boolean
   authError: string | null
   login: (user: User, token: string) => void
-  loginWithCredentials: (email: string, password: string) => Promise<void>
+  loginWithCredentials: (email: string, password: string, turnstileToken?: string) => Promise<void>
   mintaOtp: (phone: string) => Promise<{ ok: boolean; pesan: string }>
   loginDenganOtp: (phone: string, code: string) => Promise<void>
   masukLembaga: (tenantId: string) => Promise<void>
@@ -60,7 +60,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     sessionStorage.removeItem('jurnalku_token')
     set({ user, token, isAuthenticated: true, authReady: true })
   },
-  loginWithCredentials: async (email, password) => {
+  loginWithCredentials: async (email, password, turnstileToken) => {
     // Login memakai batas waktu jauh lebih pendek dari 90 detik. Di koneksi
     // lemah, menunggu 90 detik terasa seperti aplikasi rusak. 20 detik cukup:
     // bila server tidak menjawab dalam waktu itu, pengguna diberi tahu dan
@@ -69,16 +69,17 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     // Satu kali coba ulang otomatis HANYA untuk kegagalan jaringan/timeout.
     // Percobaan ulang tidak boleh terjadi saat server menolak (401 sandi
     // salah) — itu menambah hitungan rate-limit tanpa mengubah hasil.
+    const payload = { email, password, turnstileToken }
     let res
     try {
-      res = await api.post('/auth/login', { email, password }, { timeout: 20000 })
+      res = await api.post('/auth/login', payload, { timeout: 20000 })
     } catch (err: any) {
       // Jangan mengulang saat perangkat jelas-jelas offline: percobaan kedua
       // hanya menambah 20 detik menunggu tanpa kemungkinan berhasil.
       const offline = typeof navigator !== 'undefined' && navigator.onLine === false
       if (offline || !bisaDiulang(err)) throw err
       await new Promise(r => setTimeout(r, 1200))
-      res = await api.post('/auth/login', { email, password }, { timeout: 20000 })
+      res = await api.post('/auth/login', payload, { timeout: 20000 })
     }
     localStorage.setItem('jurnalku_token', res.data.token)
     sessionStorage.removeItem('jurnalku_token')

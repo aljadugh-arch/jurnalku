@@ -98,6 +98,9 @@ if (IS_PROD && !JWT_SECRET) {
 // Sesi login normal bertahan lintas penutupan aplikasi. JWT_SECRET production
 // tetap wajib stabil di environment; menggantinya memang akan mencabut sesi lama.
 const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '30d'
+// Turnstile (Cloudflare): secret untuk verifikasi token CAPTCHA di halaman login.
+// Kosong = fitur nonaktif (dev/test). Isi TURNSTILE_SECRET di server/.env untuk aktif.
+const TURNSTILE_SECRET = process.env.TURNSTILE_SECRET || ''
 const todayJakarta = () => new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Jakarta' })
 const timeJakarta = () => new Date().toLocaleTimeString('en-GB', { timeZone: 'Asia/Jakarta', hour: '2-digit', minute: '2-digit', hour12: false })
 
@@ -3509,7 +3512,35 @@ app.get('/api/demo-status', (req, res) => {
   res.json({ aktif, host })
 })
 
-app.post('/api/auth/login', authLimiter, loginAccountLimiter, (req, res) => {
+// Verifikasi Turnstile (Cloudflare) — anti-bot pada login. Token bersifat
+// single-use & kedaluwarsa 300 detik; siteverify memakainya lalu tak bisa dipakai
+// lagi. Nonaktif bila TURNSTILE_SECRET kosong (dev/test).
+async function verifyTurnstile(token, ip) {
+  if (!TURNSTILE_SECRET) return true
+  if (!token) return false
+  try {
+    const body = new URLSearchParams({ secret: TURNSTILE_SECRET, response: String(token) })
+    if (ip) body.append('remoteip', ip)
+    const r = await fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body,
+      signal: AbortSignal.timeout(5000),
+    })
+    const data = await r.json()
+    return data.success === true
+  } catch {
+    return false
+  }
+}
+const turnstileLoginGuard = async (req, res, next) => {
+  if (!TURNSTILE_SECRET) return next()
+  const token = req.body?.turnstileToken || req.body?.turnstile_token
+  if (await verifyTurnstile(token, req.ip)) return next()
+  return res.status(403).json({ error: 'Verifikasi keamanan gagal. Muat ulang halaman lalu coba lagi.', code: 'TURNSTILE_FAILED' })
+}
+
+app.post('/api/auth/login', turnstileLoginGuard, authLimiter, loginAccountLimiter, (req, res) => {
   const { email, password } = req.body
   const vErr = vLogin(req.body); if (vErr) return res.status(400).json({ error: vErr })
   // AKAR BUG: tidak ada middleware yang mengisi req.tenantId untuk route login,
