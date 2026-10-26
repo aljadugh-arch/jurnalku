@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { formatTanggalLahir } from '../../lib/tanggalLahir'
-import { Search, Plus, Edit, Trash2, Download, Upload, X, Camera, ChevronRight, UsersRound, KeyRound, RefreshCw } from 'lucide-react'
+import { Search, Plus, Edit, Trash2, Download, Upload, X, Camera, ChevronRight, UsersRound, KeyRound, RefreshCw, QrCode } from 'lucide-react'
 import toast from 'react-hot-toast'
 import api from '../../services/api'
 import ImportExcel from '../../components/ImportExcel'
@@ -9,6 +9,8 @@ import Modal from '../../components/ui/Modal'
 import { thumbUrl } from '../../lib/thumbUrl'
 import { unduhExcel } from '../../utils/excelExport'
 import { useSettingsStore } from '../../stores/settingsStore'
+import { QRCodeCanvas } from 'qrcode.react'
+import QRCode from 'qrcode'
 
 interface Siswa {
   id: string
@@ -61,6 +63,27 @@ function SiswaPhoto({ foto, nama, size = 'w-12 h-12' }: { foto?: string; nama: s
   useEffect(() => setFailed(false), [foto])
   if (foto && !failed) return <img src={thumbUrl(foto, 96)} alt={nama} loading="lazy" onError={() => setFailed(true)} className={`${size} rounded-full object-cover border border-gray-200`} />
   return <div className={`${size} rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold text-sm`}>{getInitials(nama)}</div>
+}
+
+// QR siswa memakai UUID internal (siswa.id) — sama seperti yang dipakai scanner
+// kasir/kantin/absensi, jadi tidak berubah saat NIS/NISN diedit.
+const downloadStudentQrPng = async (siswa: Siswa) => {
+  try {
+    const canvas = document.createElement('canvas')
+    await QRCode.toCanvas(canvas, siswa.id, { width: 1200, margin: 2, errorCorrectionLevel: 'M', color: { dark: '#000000', light: '#ffffff' } })
+    const blob = await new Promise<Blob>((resolve, reject) => canvas.toBlob(b => b ? resolve(b) : reject(new Error('gagal buat QR')), 'image/png'))
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `qr-${(siswa.nama || 'siswa').replace(/[^a-z0-9._-]+/gi, '-')}-${siswa.id}.png`
+    document.body.appendChild(link)
+    link.click()
+    link.remove()
+    setTimeout(() => URL.revokeObjectURL(url), 1000)
+    toast.success('QR siswa diunduh')
+  } catch {
+    toast.error('Gagal membuat QR')
+  }
 }
 
 export default function DataSiswaPage() {
@@ -597,6 +620,20 @@ export default function DataSiswaPage() {
               <span className={`px-2 py-1 rounded-full text-xs font-medium ${statusBadge(selectedSiswa.status)}`}>
                 {selectedSiswa.status}
               </span>
+            </div>
+          </div>
+
+          {/* QR Siswa — nilai = UUID internal, terbaca oleh kasir/kantin/absensi */}
+          <div className="px-5 pb-5 border-t border-gray-100 pt-4">
+            <div className="flex flex-col items-center gap-3">
+              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">QR Siswa</p>
+              <div className="rounded-xl border border-gray-100 bg-white p-3">
+                <QRCodeCanvas value={selectedSiswa.id} size={160} level="M" marginSize={2} />
+              </div>
+              <p className="text-xs text-gray-400 text-center leading-relaxed">Scan QR ini di kasir, kantin, atau absensi siswa.<br />NIS {selectedSiswa.nis || '-'} · NISN {selectedSiswa.nisn || '-'}</p>
+              <button onClick={() => downloadStudentQrPng(selectedSiswa)} className="inline-flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg text-sm font-semibold hover:bg-purple-700">
+                <Download size={16} /> Unduh QR PNG
+              </button>
             </div>
           </div>
           </div>

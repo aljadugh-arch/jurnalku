@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   ArrowDownLeft, ArrowUpRight, BookOpen, ChevronRight, FileBarChart,
-  Landmark, PiggyBank, ReceiptText, Target, UserCheck, WalletCards, TrendingUp, TrendingDown,
+  Landmark, PiggyBank, ReceiptText, Target, UserCheck, WalletCards, TrendingUp, TrendingDown, QrCode,
 } from 'lucide-react'
 import api from '../../services/api'
 import { todayWib } from '../../lib/dateFormat'
@@ -28,6 +28,7 @@ const rupiah = (value: number) => new Intl.NumberFormat('id-ID', {
 }).format(value || 0)
 
 const quickMenus = [
+  { label: 'Kasir Cepat (Scan)', path: '/admin/kasir', icon: QrCode, tile: 'bg-purple-500', bg: 'bg-purple-50' },
   { label: 'Tagihan', path: '/admin/tagihan', icon: ReceiptText, tile: 'bg-emerald-500', bg: 'bg-emerald-50' },
   { label: 'Tabungan', path: '/admin/tabungan', icon: PiggyBank, tile: 'bg-blue-500', bg: 'bg-blue-50' },
   { label: 'Buku Kas', path: '/admin/buku-kas', icon: BookOpen, tile: 'bg-violet-500', bg: 'bg-violet-50' },
