@@ -3534,7 +3534,7 @@ app.get('/api/auth/me/foto', authMiddleware, (req, res) => {
   res.json({ foto: gtk?.foto || null })
 })
 
-app.post('/api/auth/register', accountLimiter, (req, res) => {
+app.post('/api/auth/register', accountLimiter, async (req, res) => {
   const { nama_lembaga, nama, email, password, no_hp, domain_type, custom_domain, slug: slugInput, base_domain } = req.body
   const vErr = vRegister(req.body); if (vErr) return res.status(400).json({ error: vErr })
   const exists = db.prepare('SELECT id FROM users WHERE email = ?').get(email)
@@ -3595,12 +3595,22 @@ app.post('/api/auth/register', accountLimiter, (req, res) => {
   if (domainVal) {
     const hasil = customDomain.terapkanDomain(domainVal)
     provisioned = hasil.ok
-    domainPesan = hasil.ok
-      ? `Domain ${domainVal} sudah dilayani server.`
-      : `Domain ${domainVal} terdaftar sebagai pending: ${hasil.message}`
     if (hasil.ok) {
-      db.prepare('UPDATE tenants SET domain_status = ? WHERE id = ?').run('active', tenantId)
-      domainStatus = 'active'
+      // 'active' HANYA kalau A record domain mengarah ke IP server ini. Caddy
+      // terpasang tapi DNS salah/menuju server lain = domain tak akan sampai ke
+      // sini; biarkan 'pending' supaya redirect 301 subdomain (tenantMiddleware)
+      // tidak mengunci lembaga dari dua alamat sekaligus.
+      const ipServer = customDomain.publicIp()
+      const ips = await customDomain.cekDnsA(domainVal)
+      if (ipServer && ips.includes(ipServer)) {
+        db.prepare('UPDATE tenants SET domain_status = ? WHERE id = ?').run('active', tenantId)
+        domainStatus = 'active'
+        domainPesan = `Domain ${domainVal} sudah dilayani server.`
+      } else {
+        domainPesan = `Domain ${domainVal} terpasang, tapi DNS belum mengarah ke ${ipServer || 'server'} (saat ini: ${ips.join(', ') || 'belum ada record A'}). Tunggu propagasi, lalu klik Verifikasi di menu Pengaturan Domain.`
+      }
+    } else {
+      domainPesan = `Domain ${domainVal} terdaftar sebagai pending: ${hasil.message}`
     }
   }
 

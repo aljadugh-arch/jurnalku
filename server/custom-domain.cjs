@@ -55,6 +55,19 @@ function resolveA(host) {
   })
 }
 
+/** Resolve A record via resolver sistem, fallback ke dig @8.8.8.8 bila kosong. */
+async function cekDnsA(domain) {
+  let ips = []
+  try { ips = await resolveA(domain) } catch { ips = [] }
+  if (!ips.length) {
+    try {
+      const out = execFileSync('dig', ['+short', domain, 'A', '@8.8.8.8'], { timeout: 10000 }).toString().trim()
+      ips = out.split('\n').map(s => s.trim()).filter(Boolean)
+    } catch { /* resolver sistem cukup */ }
+  }
+  return ips
+}
+
 /**
  * Jalankan skrip penerapan blok Caddy untuk satu domain.
  * Mengembalikan { ok, already, message } — tidak pernah throw supaya pemanggil
@@ -77,4 +90,4 @@ function terapkanDomain(domain, { liveDir, scriptDir, timeout = 120000 } = {}) {
   }
 }
 
-module.exports = { publicIp, normalisasiDomain, resolveA, terapkanDomain }
+module.exports = { publicIp, normalisasiDomain, resolveA, cekDnsA, terapkanDomain }

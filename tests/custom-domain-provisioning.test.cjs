@@ -132,8 +132,11 @@ test('provision-domain.sh membatalkan perubahan bila Caddyfile tidak valid', () 
 test('registrasi & panel tidak menandai domain active sebelum vhost terpasang', () => {
   const idx = read('server/index.cjs')
   const tenant = read('server/tenant.cjs')
-  // Registrasi: status hanya 'active' di dalam cabang hasil.ok.
-  assert.match(idx, /if \(hasil\.ok\) \{[\s\S]{0,200}domain_status = \?[\s\S]{0,120}'active'/)
+  // Registrasi: status 'active' hanya setelah Caddy terpasang (hasil.ok) DAN
+  // A record domain terverifikasi mengarah ke IP server (cekDnsA + includes).
+  assert.match(idx, /if \(hasil\.ok\) \{[\s\S]{0,600}domain_status = \?[\s\S]{0,120}'active'/)
+  assert.match(idx, /cekDnsA\(domainVal\)/)
+  assert.match(idx, /ips\.includes\(ipServer\)/)
   // Panel superadmin (PUT /api/tenants/:id/domain) memakai terapkanDomain.
   assert.match(tenant, /customDomain\.terapkanDomain\(d\)/)
   assert.match(tenant, /const status = hasil\.ok \? 'active' : 'pending'/)
