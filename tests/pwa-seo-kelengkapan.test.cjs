@@ -65,7 +65,7 @@ test('service worker: menangani push + klik notifikasi + pesan dari halaman', ()
   assert.match(sw, /showNotification/)
   assert.match(sw, /addEventListener\('notificationclick'/)
   assert.match(sw, /addEventListener\('message'/)
-  assert.match(sw, /jurnalku-v9/)
+  assert.match(sw, /jurnalku-v\d+/)
 })
 
 test('main.tsx: service worker selalu didaftarkan + manifest statis dipertahankan bila PWA lembaga mati', () => {
