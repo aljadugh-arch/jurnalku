@@ -98,9 +98,9 @@ if (IS_PROD && !JWT_SECRET) {
 // Sesi login normal bertahan lintas penutupan aplikasi. JWT_SECRET production
 // tetap wajib stabil di environment; menggantinya memang akan mencabut sesi lama.
 const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '30d'
-// Turnstile (Cloudflare): secret untuk verifikasi token CAPTCHA di halaman login.
-// Kosong = fitur nonaktif (dev/test). Isi TURNSTILE_SECRET di server/.env untuk aktif.
-const TURNSTILE_SECRET = process.env.TURNSTILE_SECRET || ''
+// reCAPTCHA (Google): secret untuk verifikasi token CAPTCHA di halaman login.
+// Kosong = fitur nonaktif (dev/test). Isi RECAPTCHA_SECRET di server/.env untuk aktif.
+const RECAPTCHA_SECRET = process.env.RECAPTCHA_SECRET || ''
 const todayJakarta = () => new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Jakarta' })
 const timeJakarta = () => new Date().toLocaleTimeString('en-GB', { timeZone: 'Asia/Jakarta', hour: '2-digit', minute: '2-digit', hour12: false })
 
@@ -3512,16 +3512,15 @@ app.get('/api/demo-status', (req, res) => {
   res.json({ aktif, host })
 })
 
-// Verifikasi Turnstile (Cloudflare) — anti-bot pada login. Token bersifat
-// single-use & kedaluwarsa 300 detik; siteverify memakainya lalu tak bisa dipakai
-// lagi. Nonaktif bila TURNSTILE_SECRET kosong (dev/test).
-async function verifyTurnstile(token, ip) {
-  if (!TURNSTILE_SECRET) return true
+// Verifikasi reCAPTCHA (Google) — anti-bot pada login. Token single-use.
+// Nonaktif bila RECAPTCHA_SECRET kosong (dev/test).
+async function verifyRecaptcha(token, ip) {
+  if (!RECAPTCHA_SECRET) return true
   if (!token) return false
   try {
-    const body = new URLSearchParams({ secret: TURNSTILE_SECRET, response: String(token) })
+    const body = new URLSearchParams({ secret: RECAPTCHA_SECRET, response: String(token) })
     if (ip) body.append('remoteip', ip)
-    const r = await fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify', {
+    const r = await fetch('https://www.google.com/recaptcha/api/siteverify', {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body,
@@ -3533,28 +3532,28 @@ async function verifyTurnstile(token, ip) {
     return false
   }
 }
-// Root domain yang widget Turnstile-nya terdaftar. Menambah root domain
-// mengizinkan SEMUA subdomain-nya (perilaku Cloudflare, bukan wildcard). Domain
-// custom lembaga (sekolahku.sch.id, dsb.) tidak tercakup dan Turnstile dilewati.
-const TURNSTILE_COVERED_ROOTS = ['cc.cd', 'jurnalmadrasah.web.id', 'jurnalku.biz.id', 'idjurnal.my.id', 'idjurnal.web.id', 'idjurnal.biz.id']
-const turnstileCoversHost = (host) => {
+// Root domain yang widget reCAPTCHA-nya terdaftar. reCAPTCHA otomatis mencakup
+// SEMUA subdomain dari domain yang didaftarkan (tidak perlu wildcard). Domain
+// custom lembaga (sekolahku.sch.id, dsb.) tidak tercakup dan reCAPTCHA dilewati.
+const RECAPTCHA_COVERED_ROOTS = ['cc.cd', 'jurnalmadrasah.web.id', 'jurnalku.biz.id', 'idjurnal.my.id', 'idjurnal.web.id', 'idjurnal.biz.id']
+const recaptchaCoversHost = (host) => {
   if (!host) return false
-  return TURNSTILE_COVERED_ROOTS.some((r) => host === r || host.endsWith('.' + r))
+  return RECAPTCHA_COVERED_ROOTS.some((r) => host === r || host.endsWith('.' + r))
 }
 
-const turnstileLoginGuard = async (req, res, next) => {
-  if (!TURNSTILE_SECRET) return next()
+const recaptchaLoginGuard = async (req, res, next) => {
+  if (!RECAPTCHA_SECRET) return next()
   // Root domain yang widget-nya terdaftar: menambah root domain mengizinkan SEMUA
   // subdomain-nya (tidak perlu wildcard). Domain custom lembaga (mis. sekolahku.sch.id)
-  // TIDAK tercakup → Turnstile dilewati di sana supaya login tidak rusak.
+  // TIDAK tercakup → reCAPTCHA dilewati di sana supaya login tidak rusak.
   const host = String(req.headers['x-forwarded-host'] || req.headers.host || '').split(',')[0].trim().split(':')[0].toLowerCase()
-  if (!turnstileCoversHost(host)) return next()
-  const token = req.body?.turnstileToken || req.body?.turnstile_token
-  if (await verifyTurnstile(token, req.ip)) return next()
-  return res.status(403).json({ error: 'Verifikasi keamanan gagal. Muat ulang halaman lalu coba lagi.', code: 'TURNSTILE_FAILED' })
+  if (!recaptchaCoversHost(host)) return next()
+  const token = req.body?.recaptchaToken || req.body?.recaptcha_token || req.body?.g_recaptcha_response
+  if (await verifyRecaptcha(token, req.ip)) return next()
+  return res.status(403).json({ error: 'Verifikasi keamanan gagal. Muat ulang halaman lalu coba lagi.', code: 'RECAPTCHA_FAILED' })
 }
 
-app.post('/api/auth/login', turnstileLoginGuard, authLimiter, loginAccountLimiter, (req, res) => {
+app.post('/api/auth/login', recaptchaLoginGuard, authLimiter, loginAccountLimiter, (req, res) => {
   const { email, password } = req.body
   const vErr = vLogin(req.body); if (vErr) return res.status(400).json({ error: vErr })
   // AKAR BUG: tidak ada middleware yang mengisi req.tenantId untuk route login,

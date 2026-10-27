@@ -7,14 +7,14 @@ import api, { pesanGagalJaringan } from '../../services/api'
 import toast from 'react-hot-toast'
 import { useThemeStore } from '../../stores/themeStore'
 
-// Site key Turnstile (PUBLIK — aman di kode). Secret key ada di server
-// (TURNSTILE_SECRET di server/.env), tidak pernah dikirim ke frontend.
-const TURNSTILE_SITEKEY = '0x4AAAAAAFmtqoLgyTGINDCB'
-const turnstileApi = () => (window as any).turnstile
-// Root domain yang widget-nya terdaftar (menambah root mengizinkan semua subdomain).
+// Site key reCAPTCHA v2 (PUBLIK — aman di kode). Secret key ada di server
+// (RECAPTCHA_SECRET di server/.env), tidak pernah dikirim ke frontend.
+const RECAPTCHA_SITEKEY = '6Lft1QIuAAAAAEvEEzG_qYGX0Pwj8GZdcT92YEgk'
+const recaptchaApi = () => (window as any).grecaptcha
+// Root domain yang widget-nya terdaftar (reCAPTCHA otomatis mencakup semua subdomain).
 // Domain custom lembaga tidak tercakup → widget tidak dirender & token tidak wajib.
-const TURNSTILE_COVERED_ROOTS = ['cc.cd', 'jurnalmadrasah.web.id', 'jurnalku.biz.id', 'idjurnal.my.id', 'idjurnal.web.id', 'idjurnal.biz.id']
-const turnstileCoversHost = (host: string) => TURNSTILE_COVERED_ROOTS.some((r) => host === r || host.endsWith('.' + r))
+const RECAPTCHA_COVERED_ROOTS = ['cc.cd', 'jurnalmadrasah.web.id', 'jurnalku.biz.id', 'idjurnal.my.id', 'idjurnal.web.id', 'idjurnal.biz.id']
+const recaptchaCoversHost = (host: string) => RECAPTCHA_COVERED_ROOTS.some((r) => host === r || host.endsWith('.' + r))
 
 const getRedirectPath = (role: string) => {
   if (['admin', 'super_admin', 'kepala', 'bendahara', 'operator', 'tata_usaha', 'tu'].includes(role)) return '/admin'
@@ -42,41 +42,40 @@ const layanan = [
  */
 export default function LoginPage() {
   const { settings } = useSettingsStore()
-  // Turnstile hanya aktif di domain platform (root domain tercakup + subdomain-nya).
+  // reCAPTCHA hanya aktif di domain platform (root domain tercakup + subdomain-nya).
   // Domain custom lembaga tidak dirender widgetnya agar login tetap jalan.
-  const turnstileAktif = turnstileCoversHost(window.location.hostname.toLowerCase())
-  const turnstileRef = useRef<HTMLDivElement>(null)
-  const [turnstileWidgetId, setTurnstileWidgetId] = useState<string | null>(null)
-  const [turnstileGagal, setTurnstileGagal] = useState(false)
+  const recaptchaAktif = recaptchaCoversHost(window.location.hostname.toLowerCase())
+  const recaptchaRef = useRef<HTMLDivElement>(null)
+  const [recaptchaWidgetId, setRecaptchaWidgetId] = useState<number | null>(null)
+  const [recaptchaGagal, setRecaptchaGagal] = useState(false)
 
-  // Render widget Turnstile secara EKSPLISIT (lebih andal daripada implicit di SPA,
+  // Render widget reCAPTCHA v2 secara EKSPLISIT (lebih andal daripada implicit di SPA,
   // karena script bisa termuat sebelum React me-render div). Gagal dimuat → tampilkan
   // pesan yang terlihat, bukan gagal senyap.
   useEffect(() => {
-    if (!turnstileAktif) return
-    const container = turnstileRef.current
+    if (!recaptchaAktif) return
+    const container = recaptchaRef.current
     if (!container) return
-    let widgetId: string | undefined
+    let widgetId: number | undefined
     let batal = false
     const renderWidget = () => {
-      const ts = (window as any).turnstile
-      if (!ts || typeof ts.render !== 'function') return false
+      const gr = (window as any).grecaptcha
+      if (!gr || typeof gr.render !== 'function') return false
       try {
-        widgetId = ts.render(container, {
-          sitekey: TURNSTILE_SITEKEY,
-          theme: 'auto',
-          language: 'id',
-          'error-callback': () => { if (!batal) setTurnstileGagal(true) },
+        widgetId = gr.render(container, {
+          sitekey: RECAPTCHA_SITEKEY,
+          hl: 'id',
+          'error-callback': () => { if (!batal) setRecaptchaGagal(true) },
         })
-        setTurnstileWidgetId(widgetId || null)
+        setRecaptchaWidgetId(widgetId ?? null)
         return true
       } catch {
-        if (!batal) setTurnstileGagal(true)
+        if (!batal) setRecaptchaGagal(true)
         return true // hentikan retry, error sudah ditampilkan
       }
     }
     if (renderWidget()) {
-      return () => { try { (window as any).turnstile?.remove(widgetId) } catch { /* abaikan */ } }
+      return () => { try { recaptchaApi()?.reset(widgetId) } catch { /* abaikan */ } }
     }
     let n = 0
     const timer = setInterval(() => {
@@ -85,9 +84,9 @@ export default function LoginPage() {
     }, 300)
     return () => {
       clearInterval(timer)
-      try { (window as any).turnstile?.remove(widgetId) } catch { /* abaikan */ }
+      try { recaptchaApi()?.reset(widgetId) } catch { /* abaikan */ }
     }
-  }, [turnstileAktif])
+  }, [recaptchaAktif])
   const { dark, toggle: toggleDark } = useThemeStore()
   const logo = settings.logo || '/logo-jurnalku-256.png'
   const namaLembaga = settings.nama_lembaga || 'JURNALKU'
@@ -195,8 +194,8 @@ export default function LoginPage() {
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
     setError('')
-    const token = turnstileAktif && turnstileWidgetId ? (turnstileApi()?.getResponse?.(turnstileWidgetId) || '') : ''
-    if (turnstileAktif && !token) {
+    const token = recaptchaAktif && recaptchaWidgetId != null ? (recaptchaApi()?.getResponse?.(recaptchaWidgetId) || '') : ''
+    if (recaptchaAktif && !token) {
       setError('Selesaikan verifikasi keamanan (centang CAPTCHA) terlebih dahulu.')
       return
     }
@@ -207,8 +206,8 @@ export default function LoginPage() {
       navigate(getRedirectPath(user?.role || 'siswa'))
     } catch (err: any) {
       setError(pesanGagalJaringan(err))
-      // Token Turnstile single-use — reset agar percobaan berikutnya dapat token baru.
-      try { if (turnstileWidgetId) turnstileApi()?.reset?.(turnstileWidgetId) } catch { /* abaikan */ }
+      // Token reCAPTCHA single-use — reset agar percobaan berikutnya dapat token baru.
+      try { if (recaptchaWidgetId != null) recaptchaApi()?.reset?.(recaptchaWidgetId) } catch { /* abaikan */ }
     } finally {
       setLoading(false)
     }
@@ -405,11 +404,11 @@ export default function LoginPage() {
                     </div>
                   </div>
 
-                  {/* Cloudflare Turnstile — verifikasi anti-bot sebelum login (hanya domain platform). */}
-                  {turnstileAktif && (
+                  {/* reCAPTCHA v2 — verifikasi anti-bot sebelum login (hanya domain platform). */}
+                  {recaptchaAktif && (
                     <div>
-                      <div ref={turnstileRef}></div>
-                      {turnstileGagal && (
+                      <div ref={recaptchaRef}></div>
+                      {recaptchaGagal && (
                         <p className="text-[11px] font-medium text-rose-600">Verifikasi keamanan gagal dimuat. Muat ulang halaman lalu coba lagi.</p>
                       )}
                     </div>
