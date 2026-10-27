@@ -12,7 +12,7 @@ interface AuthState {
   authReady: boolean
   authError: string | null
   login: (user: User, token: string) => void
-  loginWithCredentials: (email: string, password: string, recaptchaToken?: string) => Promise<void>
+  loginWithCredentials: (email: string, password: string, captchaToken?: string, captchaJawaban?: string) => Promise<void>
   mintaOtp: (phone: string) => Promise<{ ok: boolean; pesan: string }>
   loginDenganOtp: (phone: string, code: string) => Promise<void>
   masukLembaga: (tenantId: string) => Promise<void>
@@ -60,7 +60,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     sessionStorage.removeItem('jurnalku_token')
     set({ user, token, isAuthenticated: true, authReady: true })
   },
-  loginWithCredentials: async (email, password, recaptchaToken) => {
+  loginWithCredentials: async (email, password, captchaToken, captchaJawaban) => {
     // Login memakai batas waktu jauh lebih pendek dari 90 detik. Di koneksi
     // lemah, menunggu 90 detik terasa seperti aplikasi rusak. 20 detik cukup:
     // bila server tidak menjawab dalam waktu itu, pengguna diberi tahu dan
@@ -69,7 +69,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     // Satu kali coba ulang otomatis HANYA untuk kegagalan jaringan/timeout.
     // Percobaan ulang tidak boleh terjadi saat server menolak (401 sandi
     // salah) — itu menambah hitungan rate-limit tanpa mengubah hasil.
-    const payload = { email, password, recaptchaToken }
+    const payload = { email, password, captchaToken, captchaJawaban }
     let res
     try {
       res = await api.post('/auth/login', payload, { timeout: 20000 })

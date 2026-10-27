@@ -98,9 +98,6 @@ if (IS_PROD && !JWT_SECRET) {
 // Sesi login normal bertahan lintas penutupan aplikasi. JWT_SECRET production
 // tetap wajib stabil di environment; menggantinya memang akan mencabut sesi lama.
 const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '30d'
-// reCAPTCHA (Google): secret untuk verifikasi token CAPTCHA di halaman login.
-// Kosong = fitur nonaktif (dev/test). Isi RECAPTCHA_SECRET di server/.env untuk aktif.
-const RECAPTCHA_SECRET = process.env.RECAPTCHA_SECRET || ''
 const todayJakarta = () => new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Jakarta' })
 const timeJakarta = () => new Date().toLocaleTimeString('en-GB', { timeZone: 'Asia/Jakarta', hour: '2-digit', minute: '2-digit', hour12: false })
 
@@ -3512,48 +3509,50 @@ app.get('/api/demo-status', (req, res) => {
   res.json({ aktif, host })
 })
 
-// Verifikasi reCAPTCHA (Google) — anti-bot pada login. Token single-use.
-// Nonaktif bila RECAPTCHA_SECRET kosong (dev/test).
-async function verifyRecaptcha(token, ip) {
-  if (!RECAPTCHA_SECRET) return true
-  if (!token) return false
+// ===== CAPTCHA self-hosted (matematika) — anti-bot pada login =====
+// Tidak bergantung ke layanan eksternal (Google/Cloudflare) yang bisa gagal
+// dimuat di jaringan tertentu. Tantangan berupa soal penjumlahan + token HMAC
+// stateless: jawaban ditandatangani HMAC(SHA256) dengan JWT_SECRET, sehingga
+// tidak perlu menyimpan state di server. Token kedaluwarsa 5 menit.
+function buatCaptcha() {
+  const a = Math.floor(Math.random() * 9) + 1
+  const b = Math.floor(Math.random() * 9) + 1
+  const jawaban = a + b
+  const ts = Date.now()
+  const sig = crypto.createHmac('sha256', JWT_SECRET).update(`${jawaban}.${ts}`).digest('hex')
+  return { soal: `${a} + ${b}`, token: `${ts}.${sig}` }
+}
+
+function verifikasiCaptcha(token, jawaban) {
   try {
-    const body = new URLSearchParams({ secret: RECAPTCHA_SECRET, response: String(token) })
-    if (ip) body.append('remoteip', ip)
-    const r = await fetch('https://www.google.com/recaptcha/api/siteverify', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body,
-      signal: AbortSignal.timeout(5000),
-    })
-    const data = await r.json()
-    return data.success === true
+    const s = String(token || '')
+    const dot = s.lastIndexOf('.')
+    if (dot < 0) return false
+    const ts = Number(s.slice(0, dot))
+    const sig = s.slice(dot + 1)
+    if (!Number.isFinite(ts) || !sig) return false
+    if (Date.now() - ts > 5 * 60 * 1000) return false // kedaluwarsa 5 menit
+    const expected = crypto.createHmac('sha256', JWT_SECRET).update(`${String(jawaban || '').trim()}.${ts}`).digest('hex')
+    return sig === expected
   } catch {
     return false
   }
 }
-// Root domain yang widget reCAPTCHA-nya terdaftar. reCAPTCHA otomatis mencakup
-// SEMUA subdomain dari domain yang didaftarkan (tidak perlu wildcard). Domain
-// custom lembaga (sekolahku.sch.id, dsb.) tidak tercakup dan reCAPTCHA dilewati.
-const RECAPTCHA_COVERED_ROOTS = ['cc.cd', 'jurnalmadrasah.web.id', 'jurnalku.biz.id', 'idjurnal.my.id', 'idjurnal.web.id', 'idjurnal.biz.id']
-const recaptchaCoversHost = (host) => {
-  if (!host) return false
-  return RECAPTCHA_COVERED_ROOTS.some((r) => host === r || host.endsWith('.' + r))
+
+// Tantangan CAPTCHA baru — dipanggil frontend saat halaman login dimuat.
+app.get('/api/captcha/challenge', (req, res) => {
+  const c = buatCaptcha()
+  res.set('Cache-Control', 'no-store')
+  res.json({ soal: c.soal, token: c.token })
+})
+
+const captchaLoginGuard = (req, res, next) => {
+  const { captchaToken, captchaJawaban } = req.body || {}
+  if (verifikasiCaptcha(captchaToken, captchaJawaban)) return next()
+  return res.status(403).json({ error: 'Jawaban CAPTCHA salah atau kedaluwarsa. Muat ulang halaman lalu coba lagi.', code: 'CAPTCHA_FAILED' })
 }
 
-const recaptchaLoginGuard = async (req, res, next) => {
-  if (!RECAPTCHA_SECRET) return next()
-  // Root domain yang widget-nya terdaftar: menambah root domain mengizinkan SEMUA
-  // subdomain-nya (tidak perlu wildcard). Domain custom lembaga (mis. sekolahku.sch.id)
-  // TIDAK tercakup → reCAPTCHA dilewati di sana supaya login tidak rusak.
-  const host = String(req.headers['x-forwarded-host'] || req.headers.host || '').split(',')[0].trim().split(':')[0].toLowerCase()
-  if (!recaptchaCoversHost(host)) return next()
-  const token = req.body?.recaptchaToken || req.body?.recaptcha_token || req.body?.g_recaptcha_response
-  if (await verifyRecaptcha(token, req.ip)) return next()
-  return res.status(403).json({ error: 'Verifikasi keamanan gagal. Muat ulang halaman lalu coba lagi.', code: 'RECAPTCHA_FAILED' })
-}
-
-app.post('/api/auth/login', recaptchaLoginGuard, authLimiter, loginAccountLimiter, (req, res) => {
+app.post('/api/auth/login', captchaLoginGuard, authLimiter, loginAccountLimiter, (req, res) => {
   const { email, password } = req.body
   const vErr = vLogin(req.body); if (vErr) return res.status(400).json({ error: vErr })
   // AKAR BUG: tidak ada middleware yang mengisi req.tenantId untuk route login,

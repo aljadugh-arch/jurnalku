@@ -1,20 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate, Navigate, Link } from 'react-router-dom'
-import { Eye, EyeOff, ArrowRight, Moon, Sun, ClipboardList, GraduationCap, MonitorPlay, BookOpen, MessageCircle } from 'lucide-react'
+import { Eye, EyeOff, ArrowRight, Moon, Sun, ClipboardList, GraduationCap, MonitorPlay, BookOpen, MessageCircle, RefreshCw } from 'lucide-react'
 import { useAuthStore } from '../../stores/authStore'
 import { useSettingsStore } from '../../stores/settingsStore'
 import api, { pesanGagalJaringan } from '../../services/api'
 import toast from 'react-hot-toast'
 import { useThemeStore } from '../../stores/themeStore'
-
-// Site key reCAPTCHA v2 (PUBLIK — aman di kode). Secret key ada di server
-// (RECAPTCHA_SECRET di server/.env), tidak pernah dikirim ke frontend.
-const RECAPTCHA_SITEKEY = '6Lft1QIuAAAAAEvEEzG_qYGX0Pwj8GZdcT92YEgk'
-const recaptchaApi = () => (window as any).grecaptcha
-// Root domain yang widget-nya terdaftar (reCAPTCHA otomatis mencakup semua subdomain).
-// Domain custom lembaga tidak tercakup → widget tidak dirender & token tidak wajib.
-const RECAPTCHA_COVERED_ROOTS = ['cc.cd', 'jurnalmadrasah.web.id', 'jurnalku.biz.id', 'idjurnal.my.id', 'idjurnal.web.id', 'idjurnal.biz.id']
-const recaptchaCoversHost = (host: string) => RECAPTCHA_COVERED_ROOTS.some((r) => host === r || host.endsWith('.' + r))
 
 const getRedirectPath = (role: string) => {
   if (['admin', 'super_admin', 'kepala', 'bendahara', 'operator', 'tata_usaha', 'tu'].includes(role)) return '/admin'
@@ -42,65 +33,23 @@ const layanan = [
  */
 export default function LoginPage() {
   const { settings } = useSettingsStore()
-  // reCAPTCHA hanya aktif di domain platform (root domain tercakup + subdomain-nya).
-  // Domain custom lembaga tidak dirender widgetnya agar login tetap jalan.
-  const recaptchaAktif = recaptchaCoversHost(window.location.hostname.toLowerCase())
-  const recaptchaRef = useRef<HTMLDivElement>(null)
-  const [recaptchaWidgetId, setRecaptchaWidgetId] = useState<number | null>(null)
-  const [recaptchaGagal, setRecaptchaGagal] = useState(false)
+  // CAPTCHA self-hosted: soal matematika dari server sendiri (tanpa layanan eksternal).
+  const [captcha, setCaptcha] = useState<{ soal: string; token: string } | null>(null)
+  const [captchaJawaban, setCaptchaJawaban] = useState('')
+  const [captchaGagal, setCaptchaGagal] = useState(false)
 
-  // Render widget reCAPTCHA v2 secara EKSPLISIT (lebih andal daripada implicit di SPA,
-  // karena script bisa termuat sebelum React me-render div). Gagal dimuat → tampilkan
-  // pesan yang terlihat, bukan gagal senyap.
-  useEffect(() => {
-    if (!recaptchaAktif) return
-    const container = recaptchaRef.current
-    if (!container) return
-    let widgetId: number | undefined
-    let batal = false
-    let rendered = false
-    const renderWidget = () => {
-      if (rendered || batal) return true
-      const gr = (window as any).grecaptcha
-      if (!gr || typeof gr.render !== 'function') return false
-      try {
-        widgetId = gr.render(container, {
-          sitekey: RECAPTCHA_SITEKEY,
-          hl: 'id',
-          'error-callback': () => { if (!batal) setRecaptchaGagal(true) },
-        })
-        rendered = true
-        setRecaptchaWidgetId(widgetId ?? null)
-        return true
-      } catch {
-        rendered = true
-        if (!batal) setRecaptchaGagal(true)
-        return true // hentikan retry, error sudah ditampilkan
-      }
+  const muatCaptcha = async () => {
+    setCaptchaGagal(false)
+    try {
+      const { data } = await api.get('/captcha/challenge', { timeout: 8000 })
+      setCaptcha({ soal: data.soal, token: data.token })
+      setCaptchaJawaban('')
+    } catch {
+      setCaptcha(null)
+      setCaptchaGagal(true)
     }
-    // Pola resmi: render saat grecaptcha benar-benar siap (menghindari race di
-    // perangkat/jaringan lambat). Fallback polling tetap ada di bawah.
-    const gr0 = (window as any).grecaptcha
-    if (gr0 && typeof gr0.ready === 'function') {
-      try { gr0.ready(() => { if (!batal) renderWidget() }) } catch { /* abaikan */ }
-    }
-    if (renderWidget()) {
-      return () => { try { recaptchaApi()?.reset(widgetId) } catch { /* abaikan */ } }
-    }
-    let n = 0
-    const timer = setInterval(() => {
-      n += 1
-      if (renderWidget()) { clearInterval(timer); return }
-      if (n >= 40) { // ~12 detik tanpa script termuat → tampilkan error (jangan gagal senyap)
-        clearInterval(timer)
-        if (!batal) setRecaptchaGagal(true)
-      }
-    }, 300)
-    return () => {
-      clearInterval(timer)
-      try { recaptchaApi()?.reset(widgetId) } catch { /* abaikan */ }
-    }
-  }, [recaptchaAktif])
+  }
+  useEffect(() => { void muatCaptcha() }, [])
   const { dark, toggle: toggleDark } = useThemeStore()
   const logo = settings.logo || '/logo-jurnalku-256.png'
   const namaLembaga = settings.nama_lembaga || 'JURNALKU'
@@ -208,20 +157,19 @@ export default function LoginPage() {
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
     setError('')
-    const token = recaptchaAktif && recaptchaWidgetId != null ? (recaptchaApi()?.getResponse?.(recaptchaWidgetId) || '') : ''
-    if (recaptchaAktif && !token) {
-      setError('Selesaikan verifikasi keamanan (centang CAPTCHA) terlebih dahulu.')
+    if (!captcha?.token || !captchaJawaban.trim()) {
+      setError('Jawab soal CAPTCHA (penjumlahan) terlebih dahulu.')
       return
     }
     setLoading(true)
     try {
-      await loginWithCredentials(email, password, token)
+      await loginWithCredentials(email, password, captcha.token, captchaJawaban.trim())
       const user = useAuthStore.getState().user
       navigate(getRedirectPath(user?.role || 'siswa'))
     } catch (err: any) {
       setError(pesanGagalJaringan(err))
-      // Token reCAPTCHA single-use — reset agar percobaan berikutnya dapat token baru.
-      try { if (recaptchaWidgetId != null) recaptchaApi()?.reset?.(recaptchaWidgetId) } catch { /* abaikan */ }
+      // Soal CAPTCHA single-use — muat soal baru untuk percobaan berikutnya.
+      void muatCaptcha()
     } finally {
       setLoading(false)
     }
@@ -418,15 +366,32 @@ export default function LoginPage() {
                     </div>
                   </div>
 
-                  {/* reCAPTCHA v2 — verifikasi anti-bot sebelum login (hanya domain platform). */}
-                  {recaptchaAktif && (
-                    <div>
-                      <div ref={recaptchaRef}></div>
-                      {recaptchaGagal && (
-                        <p className="text-[11px] font-medium text-rose-600">Verifikasi keamanan gagal dimuat (koneksi ke Google terputus). Periksa koneksi internet, lalu muat ulang halaman.</p>
-                      )}
+                  {/* CAPTCHA self-hosted — soal matematika, tanpa ketergantungan eksternal. */}
+                  <div className="sk-field">
+                    <label htmlFor="login-captcha">Verifikasi: berapa hasilnya?</label>
+                    <div className="flex items-center gap-2">
+                      <span className="shrink-0 rounded-lg border sk-border-accent sk-bg-soft px-3 py-2 text-sm font-bold tabular-nums sk-txt-heading">
+                        {captcha?.soal ? `${captcha.soal} =` : '…'}
+                      </span>
+                      <div className="sk-input-wrap flex-1">
+                        <input
+                          id="login-captcha"
+                          type="text"
+                          inputMode="numeric"
+                          autoComplete="off"
+                          value={captchaJawaban}
+                          onChange={(e) => setCaptchaJawaban(e.target.value)}
+                          placeholder="Jawaban"
+                        />
+                      </div>
+                      <button type="button" onClick={() => void muatCaptcha()} aria-label="Ganti soal" title="Ganti soal" className="sk-input-toggle">
+                        <RefreshCw size={16} />
+                      </button>
                     </div>
-                  )}
+                    {captchaGagal && (
+                      <p className="mt-1 text-[11px] font-medium text-rose-600">Gagal memuat soal CAPTCHA. Tekan tombol ↻ untuk muat ulang.</p>
+                    )}
+                  </div>
 
                   <button type="submit" disabled={loading} className="sk-btn w-full">
                     {loading ? 'Memproses...' : (<>Masuk Sekarang <ArrowRight size={16} /></>)}

@@ -24,10 +24,8 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
 
-    <!-- reCAPTCHA v2 (Google, anti-bot pada halaman login). render=explicit: widget
-         dirender manual via window.grecaptcha.render() di LoginPage (implicit rawan
-         terlewat di SPA React karena script bisa termuat sebelum div dirender). -->
-    <script src="https://www.google.com/recaptcha/api.js?render=explicit" async defer></script>
+    <!-- CAPTCHA self-hosted (soal matematika) dirender penuh di server sendiri;
+         tidak ada script pihak ketiga (Google/Cloudflare) yang dibutuhkan. -->
 
 
     <!-- Isi di antara penanda SEO:START/SEO:END diganti per permintaan oleh server
