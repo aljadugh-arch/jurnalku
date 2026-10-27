@@ -9747,17 +9747,19 @@ app.post('/api/catatan-kepribadian/bulk', STAFF, (req, res) => {
   const { tahun_ajaran, semester, data } = req.body
   if (!tahun_ajaran || !semester || !Array.isArray(data)) return res.status(400).json({ error: 'tahun_ajaran, semester, data wajib' })
   if (data.some(d => d.siswa_id && !teacherCanAccessStudent(req, d.siswa_id))) return res.status(403).json({ error: 'Terdapat siswa di luar cakupan pengajaran Anda' })
-  const upsert = db.prepare(`INSERT INTO catatan_kepribadian (id, siswa_id, tahun_ajaran, semester, sikap_spiritual, sikap_sosial, kelakuan, kerajinan, kerapian, kedisiplinan, catatan_wali_kelas, saran, tenant_id, updated_at)
-    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,datetime('now'))
+  const upsert = db.prepare(`INSERT INTO catatan_kepribadian (id, siswa_id, tahun_ajaran, semester, sikap_spiritual, sikap_sosial, sikap_umum, kelakuan, kerajinan, kerapian, kedisiplinan, catatan_wali_kelas, saran, tenant_id, updated_at)
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,datetime('now'))
     ON CONFLICT(siswa_id, tahun_ajaran, semester, tenant_id) DO UPDATE SET
-    sikap_spiritual=excluded.sikap_spiritual, sikap_sosial=excluded.sikap_sosial, kelakuan=excluded.kelakuan, kerajinan=excluded.kerajinan, kerapian=excluded.kerapian, kedisiplinan=excluded.kedisiplinan, catatan_wali_kelas=excluded.catatan_wali_kelas, saran=excluded.saran, updated_at=datetime('now')`)
+    sikap_spiritual=excluded.sikap_spiritual, sikap_sosial=excluded.sikap_sosial, sikap_umum=excluded.sikap_umum, kelakuan=excluded.kelakuan, kerajinan=excluded.kerajinan, kerapian=excluded.kerapian, kedisiplinan=excluded.kedisiplinan, catatan_wali_kelas=excluded.catatan_wali_kelas, saran=excluded.saran, updated_at=datetime('now')`)
   let count = 0
   const tx = db.transaction(rows => {
     for (const d of rows) {
       if (!d.siswa_id) continue
       const siswa = db.prepare('SELECT id FROM siswa WHERE id=? AND tenant_id=?').get(d.siswa_id, req.tenantId)
       if (!siswa) continue
-      upsert.run(uuidv4(), d.siswa_id, tahun_ajaran, semester, d.sikap_spiritual || '', d.sikap_sosial || '', d.kelakuan || 'Baik', d.kerajinan || 'Baik', d.kerapian || 'Baik', d.kedisiplinan || 'Baik', d.catatan_wali_kelas || '', d.saran || '', req.tenantId)
+      // 'sikap_umum' (field baru) — 'sikap_spiritual' lama tetap diterima untuk kompatibilitas.
+      const umum = d.sikap_umum || d.sikap_spiritual || ''
+      upsert.run(uuidv4(), d.siswa_id, tahun_ajaran, semester, d.sikap_spiritual || '', d.sikap_sosial || '', umum, d.kelakuan || 'Baik', d.kerajinan || 'Baik', d.kerapian || 'Baik', d.kedisiplinan || 'Baik', d.catatan_wali_kelas || '', d.saran || '', req.tenantId)
       count++
     }
   })
@@ -9910,6 +9912,13 @@ app.get('/api/rapor/ringkasan', authMiddleware, (req, res) => {
   const kepribadian = db.prepare(`SELECT sikap_spiritual,sikap_sosial,sikap_umum,kelakuan,kerajinan,kerapian,kedisiplinan,catatan_wali_kelas,saran
     FROM catatan_kepribadian WHERE siswa_id=? AND tahun_ajaran=? AND semester=? AND tenant_id=? ORDER BY updated_at DESC LIMIT 1`)
     .get(siswa_id, tahun_ajaran, semester, req.tenantId) || {}
+  // Fallback: bila wali kelas belum menulis catatan wali kelas semesteran, pakai
+  // catatan harian terbaru (fitur Catatan Kepribadian) supaya tidak tampil kosong/hardcoded.
+  if (!kepribadian.catatan_wali_kelas && !kepribadian.saran) {
+    const harian = db.prepare(`SELECT catatan_wali_kelas, saran FROM catatan_kepribadian WHERE siswa_id=? AND tenant_id=? AND semester LIKE 'harian-%' ORDER BY updated_at DESC LIMIT 1`)
+      .get(siswa_id, req.tenantId) || {}
+    if (harian.catatan_wali_kelas) kepribadian.catatan_wali_kelas = harian.catatan_wali_kelas
+  }
   const pelengkap = db.prepare(`SELECT id,siswa_id,tahun_ajaran,semester,jenis,prestasi,catatan_wali_kelas,tanggapan_orang_tua,keputusan,tanggal_pembagian,updated_at FROM rapor_pelengkap
     WHERE tenant_id=? AND siswa_id=? AND tahun_ajaran=? AND semester=? AND jenis=?`)
     .get(req.tenantId, siswa_id, tahun_ajaran, semester, jenis) || {}

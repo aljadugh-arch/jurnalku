@@ -168,6 +168,12 @@ async function loadStudentData(db, { tenantId, siswaId, tahunAjaran, semester, j
   const kepribadian = db.prepare(`SELECT sikap_spiritual,sikap_sosial,sikap_umum,kelakuan,kerajinan,kerapian,kedisiplinan,catatan_wali_kelas,saran
     FROM catatan_kepribadian WHERE siswa_id=? AND tahun_ajaran=? AND semester=? AND tenant_id=? ORDER BY updated_at DESC LIMIT 1`)
     .get(siswaId, tahunAjaran, semester, tenantId) || {}
+  // Fallback: pakai catatan harian terbaru bila catatan wali kelas semesteran kosong.
+  if (!kepribadian.catatan_wali_kelas && !kepribadian.saran) {
+    const harian = db.prepare(`SELECT catatan_wali_kelas, saran FROM catatan_kepribadian WHERE siswa_id=? AND tenant_id=? AND semester LIKE 'harian-%' ORDER BY updated_at DESC LIMIT 1`)
+      .get(siswaId, tenantId) || {}
+    if (harian.catatan_wali_kelas) kepribadian.catatan_wali_kelas = harian.catatan_wali_kelas
+  }
 
   const pelengkap = db.prepare(`SELECT prestasi,catatan_wali_kelas,tanggapan_orang_tua,tanggal_pembagian FROM rapor_pelengkap WHERE tenant_id=? AND siswa_id=? AND tahun_ajaran=? AND semester=? AND jenis=?`)
     .get(tenantId, siswaId, tahunAjaran, semester, jenis) || {}
