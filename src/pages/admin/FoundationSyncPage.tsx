@@ -117,9 +117,9 @@ export default function FoundationSyncPage() {
         </div>
       ) : (
         <>
-          <div className="flex rounded-lg border border-gray-300 overflow-hidden w-fit">
-            <button onClick={() => setTab('sync')} className={`px-4 py-2 text-sm font-medium ${tab === 'sync' ? 'bg-primary text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>Sinkron Siswa</button>
-            <button onClick={() => setTab('keuangan')} className={`px-4 py-2 text-sm font-medium ${tab === 'keuangan' ? 'bg-primary text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>Keuangan Lintas Lembaga</button>
+          <div className="flex w-full rounded-lg border border-gray-300 overflow-hidden sm:w-fit">
+            <button onClick={() => setTab('sync')} className={`flex-1 px-4 py-2 text-sm font-medium sm:flex-none ${tab === 'sync' ? 'bg-primary text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>Sinkron Siswa</button>
+            <button onClick={() => setTab('keuangan')} className={`flex-1 px-4 py-2 text-sm font-medium sm:flex-none ${tab === 'keuangan' ? 'bg-primary text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>Keuangan Lintas Lembaga</button>
           </div>
 
           {tab === 'sync' && (
@@ -158,34 +158,50 @@ export default function FoundationSyncPage() {
                   ) : filtered.length === 0 ? (
                     <p className="py-8 text-center text-sm text-gray-400">Tidak ada siswa.</p>
                   ) : (
-                    <div className="overflow-x-auto">
-                      <table className="w-full text-sm">
-                        <thead><tr className="bg-gray-50 border-b">
-                          <th className="text-left px-3 py-2 font-medium text-gray-600 w-10"><input type="checkbox" checked={filtered.length > 0 && selected.size === filtered.length} onChange={toggleAll} /></th>
-                          <th className="text-left px-3 py-2 font-medium text-gray-600">Nama</th>
-                          <th className="text-left px-3 py-2 font-medium text-gray-600">NIS / NISN</th>
-                          <th className="text-left px-3 py-2 font-medium text-gray-600">Rombel</th>
-                        </tr></thead>
-                        <tbody className="divide-y divide-gray-100">
-                          {filtered.map(s => (
-                            <tr key={s.id} className="hover:bg-gray-50">
-                              <td className="px-3 py-2"><input type="checkbox" checked={selected.has(s.id)} onChange={() => toggle(s.id)} /></td>
-                              <td className="px-3 py-2 font-medium text-gray-800">{s.nama}</td>
-                              <td className="px-3 py-2 text-gray-600">{s.nis}{s.nisn ? ` / ${s.nisn}` : ''}</td>
-                              <td className="px-3 py-2 text-gray-600">{s.rombel_nama || '-'}</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
+                    <>
+                      {/* Desktop: tabel */}
+                      <div className="hidden lg:block overflow-x-auto">
+                        <table className="w-full text-sm">
+                          <thead><tr className="bg-gray-50 border-b">
+                            <th className="text-left px-3 py-2 font-medium text-gray-600 w-10"><input type="checkbox" checked={filtered.length > 0 && selected.size === filtered.length} onChange={toggleAll} /></th>
+                            <th className="text-left px-3 py-2 font-medium text-gray-600">Nama</th>
+                            <th className="text-left px-3 py-2 font-medium text-gray-600">NIS / NISN</th>
+                            <th className="text-left px-3 py-2 font-medium text-gray-600">Rombel</th>
+                          </tr></thead>
+                          <tbody className="divide-y divide-gray-100">
+                            {filtered.map(s => (
+                              <tr key={s.id} className="hover:bg-gray-50">
+                                <td className="px-3 py-2"><input type="checkbox" checked={selected.has(s.id)} onChange={() => toggle(s.id)} /></td>
+                                <td className="px-3 py-2 font-medium text-gray-800">{s.nama}</td>
+                                <td className="px-3 py-2 text-gray-600">{s.nis}{s.nisn ? ` / ${s.nisn}` : ''}</td>
+                                <td className="px-3 py-2 text-gray-600">{s.rombel_nama || '-'}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                      {/* Mobile: kartu (mudah dicentang di layar sempit) */}
+                      <div className="lg:hidden space-y-2">
+                        {filtered.map(s => (
+                          <label key={s.id} className="flex items-start gap-3 rounded-xl border border-gray-200 p-3 cursor-pointer active:bg-gray-50 dark:border-gray-700">
+                            <input type="checkbox" checked={selected.has(s.id)} onChange={() => toggle(s.id)} className="mt-1 h-4 w-4 shrink-0" />
+                            <div className="min-w-0 flex-1">
+                              <p className="truncate text-sm font-medium text-gray-800 dark:text-gray-100">{s.nama}</p>
+                              <p className="text-xs text-gray-500">NIS: {s.nis}{s.nisn ? ` · NISN: ${s.nisn}` : ''}</p>
+                              {s.rombel_nama && <p className="text-xs text-gray-400">{s.rombel_nama}</p>}
+                            </div>
+                          </label>
+                        ))}
+                      </div>
+                    </>
                   )}
 
-                  <div className="flex items-center gap-3 mt-4">
-                    <button onClick={doSync} disabled={syncing || selected.size === 0} className="btn-primary flex items-center gap-2 disabled:opacity-50">
+                  <div className="mt-4 lg:flex lg:items-center lg:gap-3">
+                    <button onClick={doSync} disabled={syncing || selected.size === 0} className="btn-primary flex w-full items-center justify-center gap-2 disabled:opacity-50 lg:w-auto">
                       <ArrowRight className="w-4 h-4" />{syncing ? 'Menarik...' : `Tarik ${selected.size} Siswa`}
                     </button>
                     {syncResult && (
-                      <span className="text-sm text-green-700 flex items-center gap-1">
+                      <span className="mt-2 flex items-center gap-1 text-sm text-green-700 lg:mt-0">
                         <CheckCircle2 size={16} /> {syncResult.imported} siswa ditarik{syncResult.skippedNis ? `, ${syncResult.skippedNis} NIS bentrok dilewati` : ''}{syncResult.skippedNik ? `, ${syncResult.skippedNik} NIK bentrok dilewati` : ''}
                       </span>
                     )}
