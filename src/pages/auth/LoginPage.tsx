@@ -80,7 +80,11 @@ export default function LoginPage() {
     let n = 0
     const timer = setInterval(() => {
       n += 1
-      if (renderWidget() || n > 40) clearInterval(timer) // maks ~12 detik
+      if (renderWidget()) { clearInterval(timer); return }
+      if (n >= 40) { // ~12 detik tanpa script termuat → tampilkan error (jangan gagal senyap)
+        clearInterval(timer)
+        if (!batal) setRecaptchaGagal(true)
+      }
     }, 300)
     return () => {
       clearInterval(timer)
@@ -409,7 +413,7 @@ export default function LoginPage() {
                     <div>
                       <div ref={recaptchaRef}></div>
                       {recaptchaGagal && (
-                        <p className="text-[11px] font-medium text-rose-600">Verifikasi keamanan gagal dimuat. Muat ulang halaman lalu coba lagi.</p>
+                        <p className="text-[11px] font-medium text-rose-600">Verifikasi keamanan gagal dimuat (koneksi ke Google terputus). Periksa koneksi internet, lalu muat ulang halaman.</p>
                       )}
                     </div>
                   )}
