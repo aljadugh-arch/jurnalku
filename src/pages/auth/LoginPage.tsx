@@ -58,7 +58,9 @@ export default function LoginPage() {
     if (!container) return
     let widgetId: number | undefined
     let batal = false
+    let rendered = false
     const renderWidget = () => {
+      if (rendered || batal) return true
       const gr = (window as any).grecaptcha
       if (!gr || typeof gr.render !== 'function') return false
       try {
@@ -67,12 +69,20 @@ export default function LoginPage() {
           hl: 'id',
           'error-callback': () => { if (!batal) setRecaptchaGagal(true) },
         })
+        rendered = true
         setRecaptchaWidgetId(widgetId ?? null)
         return true
       } catch {
+        rendered = true
         if (!batal) setRecaptchaGagal(true)
         return true // hentikan retry, error sudah ditampilkan
       }
+    }
+    // Pola resmi: render saat grecaptcha benar-benar siap (menghindari race di
+    // perangkat/jaringan lambat). Fallback polling tetap ada di bawah.
+    const gr0 = (window as any).grecaptcha
+    if (gr0 && typeof gr0.ready === 'function') {
+      try { gr0.ready(() => { if (!batal) renderWidget() }) } catch { /* abaikan */ }
     }
     if (renderWidget()) {
       return () => { try { recaptchaApi()?.reset(widgetId) } catch { /* abaikan */ } }
