@@ -1,4 +1,4 @@
-const CACHE = 'jurnalku-v9'
+const CACHE = 'jurnalku-v10'
 
 self.addEventListener('install', event => event.waitUntil(
   caches.open(CACHE).then(() => self.skipWaiting())
