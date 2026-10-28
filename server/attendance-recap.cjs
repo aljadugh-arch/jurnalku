@@ -107,9 +107,39 @@ function getEkskulRecap(db, tenantId, from, to, rombelId = '') {
   return { category: 'ekskul', from, to, summary: aggregate(detail), detail }
 }
 
+// Rekap jamaah punya dua sumber: input harian (absensi_kegiatan, per tanggal) dan
+// rekap manual (jamaah_rekap_manual, "Input Jumlah" = jumlah hadir per periode).
+// Rekap manual diprioritaskan karena banyak lembaga mencatat jamaah lewat jumlah
+// hadir per periode, bukan input harian — tanpa ini rekap tampak kosong.
+function getJamaahRecap(db, tenantId, from, to, rombelId = '') {
+  const rombelFilter = ` AND (?= '' OR s.rombel_id = ?)`
+  const rombelParams = [rombelId, rombelId]
+  if (tableExists(db, 'jamaah_rekap_manual')) {
+    const manual = db.prepare(`SELECT s.id,s.nama,s.nis,s.nisn,r.nama rombel_nama,jr.nama_sesi kegiatan_nama,
+        jr.jumlah_hadir hadir, jr.jumlah_hadir total, 0 sakit, 0 izin, 0 alpha, 0 lain
+        FROM jamaah_rekap_manual jr
+        JOIN siswa s ON s.id=jr.siswa_id AND s.tenant_id=jr.tenant_id
+        LEFT JOIN rombel r ON r.id=s.rombel_id AND r.tenant_id=s.tenant_id
+        WHERE jr.tenant_id=? AND COALESCE(s.status,'aktif')='aktif'${rombelFilter}
+          AND jr.created_at = (SELECT MAX(created_at) FROM jamaah_rekap_manual m2 WHERE m2.siswa_id=jr.siswa_id AND m2.tenant_id=jr.tenant_id)
+        ORDER BY r.nama,s.nama`).all(tenantId, ...rombelParams).map(normalizeRow)
+    if (manual.length) return { category: 'jamaah', from, to, summary: aggregate(manual), detail: manual }
+  }
+  // Fallback: input harian.
+  if (!tableExists(db, 'absensi_kegiatan') || !tableExists(db, 'jamaah_sesi')) return { category: 'jamaah', from, to, summary: EMPTY(), detail: [] }
+  const detail = db.prepare(`SELECT s.id,s.nama,s.nis,s.nisn,r.nama rombel_nama,j.nama kegiatan_nama,
+      COUNT(a.id) total,${statusCase('a.status', 'a.id')}
+      FROM siswa s LEFT JOIN rombel r ON r.id=s.rombel_id AND r.tenant_id=s.tenant_id
+      LEFT JOIN absensi_kegiatan a ON a.siswa_id=s.id AND a.tenant_id=s.tenant_id AND a.tanggal BETWEEN ? AND ?
+      LEFT JOIN jamaah_sesi j ON j.id=a.kegiatan_id AND j.tenant_id=a.tenant_id
+      WHERE s.tenant_id=?${rombelFilter} AND j.id IS NOT NULL GROUP BY s.id,j.id ORDER BY r.nama,s.nama,j.nama`).all(from, to, tenantId, ...rombelParams).map(normalizeRow)
+  return { category: 'jamaah', from, to, summary: aggregate(detail), detail }
+}
+
 function getCategoryRecap(db, tenantId, category, from, to, rombelId = '', mapelId = '', groupBy = '') {
   if (String(category) === 'mapel' && String(groupBy) === 'guru') return getMapelGuruRecap(db, tenantId, from, to, rombelId, mapelId)
   if (String(category) === 'ekskul') return getEkskulRecap(db, tenantId, from, to, rombelId)
+  if (String(category) === 'jamaah') return getJamaahRecap(db, tenantId, from, to, rombelId)
   const rombelFilter = ` AND (?= '' OR s.rombel_id = ?)`
   const rombelParams = [rombelId, rombelId]
   const mapelIdTrim = String(mapelId || '').trim()

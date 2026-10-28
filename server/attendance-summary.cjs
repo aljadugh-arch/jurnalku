@@ -51,9 +51,17 @@ function studentAttendance(db, tenantId, studentId, limit = 100) {
   // tahfidz_absensi). Gabungkan tanpa dobel per (tanggal, nama kegiatan).
   const ekskul = dedupeActivityRows([...extracurricular, ...tahfidz])
   const qrStatuses = qr.flatMap(row => [row.status ? { status: row.status } : null, row.status_pulang ? { status: row.status_pulang } : null].filter(Boolean))
+  // Jamaah punya dua jalur: input harian (absensi_kegiatan) dan rekap manual
+  // (jamaah_rekap_manual, "Input Jumlah"). Rekap manual diprioritaskan bila ada
+  // karena banyak lembaga mencatat jamaah lewat jumlah hadir per periode.
+  let jamaahSummary = summary(jamaah)
+  try {
+    const manual = db.prepare('SELECT jumlah_hadir, minimal_hadir FROM jamaah_rekap_manual WHERE siswa_id=? AND tenant_id=? ORDER BY created_at DESC LIMIT 1').get(studentId, tenantId)
+    if (manual) jamaahSummary = { total: Number(manual.minimal_hadir) || 0, hadir: Number(manual.jumlah_hadir) || 0, sakit: 0, izin: 0, alpha: 0, lain: 0 }
+  } catch {}
   return {
     rekap_kehadiran: {
-      qr_masuk_pulang: summary(qrStatuses), mapel: summary(mapel), jamaah: summary(jamaah),
+      qr_masuk_pulang: summary(qrStatuses), mapel: summary(mapel), jamaah: jamaahSummary,
       kokurikuler: summary(kokurikuler), ekskul: summary(ekskul), kegiatan_lain: summary(kegiatanLain),
     },
     qr_masuk_pulang_detail: qr, mapel_detail: mapel, jamaah_detail: jamaah,
