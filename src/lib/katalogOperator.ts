@@ -89,6 +89,7 @@ export const MENU_INTERNAL = [
   { nama: 'Buku Induk', keterangan: 'Arsip lengkap tiap siswa', path: '/admin/buku-induk' },
   { nama: 'Keuangan', keterangan: 'Tagihan, tabungan, buku kas', path: '/admin/laporan-keuangan' },
   { nama: 'Absensi', keterangan: 'Presensi siswa dan rekap', path: '/admin/absensi-siswa' },
+  { nama: 'Panduan Pengguna', keterangan: 'Tutorial & cara isi tiap menu', path: '/panduan' },
 ]
 
 export function saringAplikasi(cari: string, kategori: string, favorit: string[], hanyaFavorit: boolean) {

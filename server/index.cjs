@@ -6894,6 +6894,22 @@ app.get('/api/siswa/dashboard', authMiddleware, enforceTenantAccess, (req, res) 
   const absensi_detail = attendance.qr_masuk_pulang_detail.slice(0, 20)
   const kegiatan_detail = db.prepare(`SELECT a.tanggal,a.status,a.keterangan,k.nama kegiatan_nama,k.jenis FROM absensi_kegiatan a LEFT JOIN kegiatan_khusus k ON k.id=a.kegiatan_id AND k.tenant_id=a.tenant_id WHERE a.siswa_id=? AND a.tenant_id=? AND k.id IS NOT NULL ORDER BY a.tanggal DESC LIMIT 20`).all(siswa.id, req.tenantId)
   const jamaah_detail = db.prepare(`SELECT a.tanggal,a.status,a.keterangan,j.nama sesi_nama FROM absensi_kegiatan a LEFT JOIN jamaah_sesi j ON j.id=a.kegiatan_id AND j.tenant_id=a.tenant_id WHERE a.siswa_id=? AND a.tenant_id=? AND j.id IS NOT NULL ORDER BY a.tanggal DESC LIMIT 20`).all(siswa.id, req.tenantId)
+  // Status lolos/tidak lolos absensi jamaah: jumlah hadir dibanding batas minimal.
+  // Prioritas: rekap manual (kalau admin sudah generate) -> ambang sesi terakhir.
+  let jamaah_rekap = { hadir: 0, minimal_hadir: 10, hasil: 'tidak_lolos' }
+  try {
+    const jamaahHadir = Number(attendance.rekap_kehadiran?.jamaah?.hadir) || 0
+    const manual = db.prepare('SELECT jumlah_hadir, minimal_hadir FROM jamaah_rekap_manual WHERE siswa_id=? AND tenant_id=? ORDER BY created_at DESC LIMIT 1').get(siswa.id, req.tenantId)
+    let hadir, min
+    if (manual) {
+      hadir = Number(manual.jumlah_hadir) || 0
+      min = Number(manual.minimal_hadir) || 10
+    } else {
+      hadir = jamaahHadir
+      min = Number(db.prepare('SELECT minimal_hadir FROM jamaah_sesi WHERE tenant_id=? ORDER BY COALESCE(mulai,created_at) DESC LIMIT 1').get(req.tenantId)?.minimal_hadir) || 10
+    }
+    jamaah_rekap = { hadir, minimal_hadir: min, hasil: hadir >= min ? 'lolos' : 'tidak_lolos' }
+  } catch {}
   const ekskul_detail = db.prepare(`SELECT a.tanggal,a.status,a.keterangan,e.nama ekskul_nama FROM absensi_ekskul a LEFT JOIN ekskul e ON e.id=a.ekskul_id AND e.tenant_id=a.tenant_id WHERE a.siswa_id=? AND a.tenant_id=? ORDER BY a.tanggal DESC LIMIT 20`).all(siswa.id, req.tenantId)
   const tagihan_detail = db.prepare(`SELECT t.id,t.bulan,t.tahun,t.nominal,t.status,t.tanggal_bayar,t.keterangan,j.nama as jenis_nama FROM tagihan t LEFT JOIN jenis_tagihan j ON j.id=t.jenis_tagihan_id AND j.tenant_id=t.tenant_id WHERE t.siswa_id=? AND t.tenant_id=? ORDER BY t.tahun DESC,t.bulan DESC LIMIT 20`).all(siswa.id, req.tenantId)
   const nilai_detail = db.prepare(`SELECT p.tanggal,p.sikap,p.keaktifan,p.pengetahuan,p.catatan,m.nama as mapel_nama FROM penilaian_harian p LEFT JOIN mapel m ON m.id=p.mapel_id AND m.tenant_id=p.tenant_id WHERE p.siswa_id=? AND p.tenant_id=? ORDER BY p.tanggal DESC LIMIT 20`).all(siswa.id, req.tenantId)
@@ -6912,7 +6928,7 @@ app.get('/api/siswa/dashboard', authMiddleware, enforceTenantAccess, (req, res) 
     try { kokurikuler_detail = db.prepare(`SELECT a.tanggal,a.status,a.keterangan,k.nama kegiatan_nama,k.jenis FROM absensi_kegiatan a LEFT JOIN kegiatan_khusus k ON k.id=a.kegiatan_id AND k.tenant_id=a.tenant_id WHERE a.siswa_id=? AND a.tenant_id=? AND k.jenis='kokurikuler' ORDER BY a.tanggal DESC LIMIT 20`).all(siswa.id, req.tenantId) } catch { kokurikuler_detail = [] }
     try { kegiatan_lain_detail = db.prepare(`SELECT a.tanggal,a.status,a.keterangan,k.nama kegiatan_nama,k.jenis FROM absensi_kegiatan a LEFT JOIN kegiatan_khusus k ON k.id=a.kegiatan_id AND k.tenant_id=a.tenant_id WHERE a.siswa_id=? AND a.tenant_id=? AND (k.jenis IS NULL OR k.jenis NOT IN ('kokurikuler')) ORDER BY a.tanggal DESC LIMIT 20`).all(siswa.id, req.tenantId) } catch { kegiatan_lain_detail = [] }
   }
-  res.json({ children, siswa, jadwal_hari_ini: jadwal, mode_ujian: !!examTemplateId, tugas, rekap: { hadir, sakit, izin, alpha }, ...attendance, rekap_lengkap: { kbm: rekapKategori(absensi_detail), kegiatan: rekapKategori(kegiatan_detail), jamaah: rekapKategori(jamaah_detail), ekskul: rekapKategori(ekskul_detail), kokurikuler: rekapKategori(kokurikuler_detail), kegiatan_lain: rekapKategori(kegiatan_lain_detail) }, absensi_detail, kegiatan_detail, jamaah_detail, ekskul_detail: attendance.ekskul_detail, kokurikuler_detail: attendance.kokurikuler_detail, kegiatan_lain_detail: attendance.kegiatan_lain_detail, tagihan_detail, nilai_detail: nilaiAll, tabungan_detail, tagihan, tabungan, catatan_kepribadian })
+  res.json({ children, siswa, jadwal_hari_ini: jadwal, mode_ujian: !!examTemplateId, tugas, rekap: { hadir, sakit, izin, alpha }, ...attendance, rekap_lengkap: { kbm: rekapKategori(absensi_detail), kegiatan: rekapKategori(kegiatan_detail), jamaah: rekapKategori(jamaah_detail), ekskul: rekapKategori(ekskul_detail), kokurikuler: rekapKategori(kokurikuler_detail), kegiatan_lain: rekapKategori(kegiatan_lain_detail) }, absensi_detail, kegiatan_detail, jamaah_detail, jamaah_rekap, ekskul_detail: attendance.ekskul_detail, kokurikuler_detail: attendance.kokurikuler_detail, kegiatan_lain_detail: attendance.kegiatan_lain_detail, tagihan_detail, nilai_detail: nilaiAll, tabungan_detail, tagihan, tabungan, catatan_kepribadian })
 })
 
 // ==================== SISWA JADWAL ====================

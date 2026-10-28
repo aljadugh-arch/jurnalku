@@ -205,6 +205,12 @@ export default function SiswaDashboard() {
             <div className="grid grid-cols-2 gap-x-2 gap-y-0.5 text-[11px]">
               {ATTENDANCE_STATUSES.map(([statusLabel, statusKey, color]) => <span key={statusKey} className={color}>{statusLabel} {recap?.[statusKey] || 0}</span>)}
             </div>
+            {label === 'Jamaah' && data.jamaah_rekap?.hasil && (
+              <span className={`mt-1.5 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold ${data.jamaah_rekap.hasil === 'lolos' ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}>
+                {data.jamaah_rekap.hasil === 'lolos' ? 'Lolos' : 'Tidak Lolos'}
+                <span className="font-normal opacity-75">· hadir {data.jamaah_rekap.hadir}/{data.jamaah_rekap.minimal_hadir}</span>
+              </span>
+            )}
           </div>)}
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
