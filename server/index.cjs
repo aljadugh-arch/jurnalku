@@ -11030,6 +11030,18 @@ app.post('/api/ujian/:paketId/mulai', EXAM_ROLES, (req, res) => {
   if (paket.status !== 'aktif') return res.status(400).json({ error: 'Ujian belum dibuka' })
   if (paket.password && req.body.password !== paket.password) return res.status(403).json({ error: 'Password ujian salah' })
   const siswaId = req.user?.siswa_id || req.user?.id
+  // Isolasi rombel: siswa hanya boleh mengerjakan ujian untuk rombel yang
+  // ditetapkan di paket. Guru/admin/staff tetap bisa membuka untuk pratinjau.
+  if (req.user?.role === 'siswa') {
+    let paketRombelIds = []
+    try { paketRombelIds = (JSON.parse(paket.rombel_ids || '[]') || []).map(String) } catch {}
+    if (paketRombelIds.length) {
+      const rombelId = db.prepare('SELECT rombel_id FROM siswa WHERE id = ? AND tenant_id = ?').get(siswaId, req.tenantId)?.rombel_id
+      if (!rombelId || !paketRombelIds.includes(String(rombelId))) {
+        return res.status(403).json({ error: 'Ujian ini bukan untuk rombel Anda' })
+      }
+    }
+  }
   // CBT: wajib validasi token terlebih dahulu
   if (paket.model === 'cbt') {
     const tokenCount = db.prepare('SELECT COUNT(*) as c FROM token_cbt WHERE paket_id = ? AND tenant_id = ?').get(paket.id, req.tenantId)
