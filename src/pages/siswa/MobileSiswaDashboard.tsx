@@ -173,6 +173,13 @@ export default function MobileSiswaDashboard() {
                 style={{ width: `${Math.min(100, Math.max(0, attendancePct))}%` }}
               />
             </div>
+            {data.jamaah_rekap?.hasil && (
+              <div className="mt-2 flex items-center gap-1.5">
+                <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${data.jamaah_rekap.hasil === 'lolos' ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}>
+                  Jamaah: {data.jamaah_rekap.hasil === 'lolos' ? 'Lolos' : 'Tidak Lolos'} ({data.jamaah_rekap.hadir}/{data.jamaah_rekap.minimal_hadir})
+                </span>
+              </div>
+            )}
           </div>
           <div className="w-9 h-9 rounded-full bg-indigo-600 text-white flex items-center justify-center shrink-0">
             <CheckCircle2 size={18} />

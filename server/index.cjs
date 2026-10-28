@@ -6896,19 +6896,21 @@ app.get('/api/siswa/dashboard', authMiddleware, enforceTenantAccess, (req, res) 
   const jamaah_detail = db.prepare(`SELECT a.tanggal,a.status,a.keterangan,j.nama sesi_nama FROM absensi_kegiatan a LEFT JOIN jamaah_sesi j ON j.id=a.kegiatan_id AND j.tenant_id=a.tenant_id WHERE a.siswa_id=? AND a.tenant_id=? AND j.id IS NOT NULL ORDER BY a.tanggal DESC LIMIT 20`).all(siswa.id, req.tenantId)
   // Status lolos/tidak lolos absensi jamaah: jumlah hadir dibanding batas minimal.
   // Prioritas: rekap manual (kalau admin sudah generate) -> ambang sesi terakhir.
-  let jamaah_rekap = { hadir: 0, minimal_hadir: 10, hasil: 'tidak_lolos' }
+  // null bila tidak ada data jamaah sama sekali (manual maupun input harian),
+  // supaya badge tidak muncul untuk siswa yang lembaganya tidak memakai jamaah.
+  let jamaah_rekap = null
   try {
-    const jamaahHadir = Number(attendance.rekap_kehadiran?.jamaah?.hadir) || 0
+    const jH = attendance.rekap_kehadiran?.jamaah || {}
+    const jamaahHadir = Number(jH.hadir) || 0
     const manual = db.prepare('SELECT jumlah_hadir, minimal_hadir FROM jamaah_rekap_manual WHERE siswa_id=? AND tenant_id=? ORDER BY created_at DESC LIMIT 1').get(siswa.id, req.tenantId)
-    let hadir, min
     if (manual) {
-      hadir = Number(manual.jumlah_hadir) || 0
-      min = Number(manual.minimal_hadir) || 10
-    } else {
-      hadir = jamaahHadir
-      min = Number(db.prepare('SELECT minimal_hadir FROM jamaah_sesi WHERE tenant_id=? ORDER BY COALESCE(mulai,created_at) DESC LIMIT 1').get(req.tenantId)?.minimal_hadir) || 10
+      const hadir = Number(manual.jumlah_hadir) || 0
+      const min = Number(manual.minimal_hadir) || 10
+      jamaah_rekap = { hadir, minimal_hadir: min, hasil: hadir >= min ? 'lolos' : 'tidak_lolos' }
+    } else if (jamaahHadir > 0) {
+      const min = Number(db.prepare('SELECT minimal_hadir FROM jamaah_sesi WHERE tenant_id=? ORDER BY COALESCE(mulai,created_at) DESC LIMIT 1').get(req.tenantId)?.minimal_hadir) || 10
+      jamaah_rekap = { hadir: jamaahHadir, minimal_hadir: min, hasil: jamaahHadir >= min ? 'lolos' : 'tidak_lolos' }
     }
-    jamaah_rekap = { hadir, minimal_hadir: min, hasil: hadir >= min ? 'lolos' : 'tidak_lolos' }
   } catch {}
   const ekskul_detail = db.prepare(`SELECT a.tanggal,a.status,a.keterangan,e.nama ekskul_nama FROM absensi_ekskul a LEFT JOIN ekskul e ON e.id=a.ekskul_id AND e.tenant_id=a.tenant_id WHERE a.siswa_id=? AND a.tenant_id=? ORDER BY a.tanggal DESC LIMIT 20`).all(siswa.id, req.tenantId)
   const tagihan_detail = db.prepare(`SELECT t.id,t.bulan,t.tahun,t.nominal,t.status,t.tanggal_bayar,t.keterangan,j.nama as jenis_nama FROM tagihan t LEFT JOIN jenis_tagihan j ON j.id=t.jenis_tagihan_id AND j.tenant_id=t.tenant_id WHERE t.siswa_id=? AND t.tenant_id=? ORDER BY t.tahun DESC,t.bulan DESC LIMIT 20`).all(siswa.id, req.tenantId)
