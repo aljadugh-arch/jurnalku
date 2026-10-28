@@ -30,3 +30,6 @@ backup/
 
 # Dependensi uji frontend (dipasang scripts/siapkan-dependensi-uji.sh)
 .test-deps/
+
+# Artefak perekaman panduan (frame + video sementara, lokal saja)
+tmp/
