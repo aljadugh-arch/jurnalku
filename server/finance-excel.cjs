@@ -154,7 +154,7 @@ function commitFinance(db, tenant, actor, rows, policy, errors = []) {
       }
       if (row.sheet === 'Tagihan') db.prepare('INSERT INTO tagihan(id,siswa_id,jenis_tagihan_id,bulan,tahun,nominal,status,tanggal_bayar,metode_bayar,keterangan,tenant_id) VALUES(?,?,?,?,?,?,?,?,?,?,?)').run(row.id, row.siswa_id, row.jenis_id, row.bulan, row.tahun, row.nominal, row.status, row.tanggal_bayar, row.metode, row.keterangan, tenant)
       else if (row.sheet === 'Tabungan') {
-        const last = db.prepare('SELECT saldo_akhir FROM tabungan WHERE siswa_id=? AND tenant_id=? ORDER BY created_at DESC LIMIT 1').get(row.siswa_id, tenant)?.saldo_akhir || 0
+        const last = db.prepare('SELECT saldo_akhir FROM tabungan WHERE siswa_id=? AND tenant_id=? ORDER BY created_at DESC, rowid DESC LIMIT 1').get(row.siswa_id, tenant)?.saldo_akhir || 0
         const next = last + (row.tipe === 'setor' ? row.nominal : -row.nominal)
         if (next < 0) throw Error(`Saldo tidak cukup baris ${row.row}`)
         db.prepare('INSERT INTO tabungan(id,siswa_id,tanggal,tipe,nominal,saldo_akhir,keterangan,tenant_id) VALUES(?,?,?,?,?,?,?,?)').run(row.id, row.siswa_id, row.tanggal, row.tipe, row.nominal, next, row.keterangan, tenant)

@@ -123,7 +123,7 @@ function tagihanAnak(db, tenantId, siswaId) {
 }
 
 function saldoAnak(db, tenantId, siswaId) {
-  const row = db.prepare('SELECT saldo_akhir FROM tabungan WHERE siswa_id=? AND tenant_id=? ORDER BY created_at DESC LIMIT 1').get(siswaId, tenantId)
+  const row = db.prepare('SELECT saldo_akhir FROM tabungan WHERE siswa_id=? AND tenant_id=? ORDER BY created_at DESC, rowid DESC LIMIT 1').get(siswaId, tenantId)
   return row ? Number(row.saldo_akhir || 0) : 0
 }
 

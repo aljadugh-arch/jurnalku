@@ -280,7 +280,7 @@ function queueFinanceReports(db,{tenantId,date,time,force=false}) {
   for(const l of fallback){ const k=l.user_id+':'+l.student_id; if(seen.has(k))continue; seen.add(k); pairs.push(l) }
 
   const unpaidStmt=db.prepare(`SELECT j.nama AS jenis,t.nominal,t.bulan,t.tahun FROM tagihan t JOIN jenis_tagihan j ON j.id=t.jenis_tagihan_id AND j.tenant_id=t.tenant_id WHERE t.siswa_id=? AND t.tenant_id=? AND t.status='belum_bayar' ORDER BY t.tahun DESC,t.bulan DESC`)
-  const saldoStmt=db.prepare('SELECT saldo_akhir FROM tabungan WHERE siswa_id=? AND tenant_id=? ORDER BY created_at DESC LIMIT 1')
+  const saldoStmt=db.prepare('SELECT saldo_akhir FROM tabungan WHERE siswa_id=? AND tenant_id=? ORDER BY created_at DESC, rowid DESC LIMIT 1')
   const paidStmt=db.prepare(`SELECT j.nama AS jenis,t.nominal FROM tagihan t JOIN jenis_tagihan j ON j.id=t.jenis_tagihan_id AND j.tenant_id=t.tenant_id WHERE t.siswa_id=? AND t.tenant_id=? AND t.status='lunas' AND substr(COALESCE(t.tanggal_bayar,''),1,7)=? ORDER BY t.tanggal_bayar DESC`)
   const rupiah=n=>'Rp'+(Number(n)||0).toLocaleString('id-ID')
 

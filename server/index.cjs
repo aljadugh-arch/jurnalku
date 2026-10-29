@@ -6930,7 +6930,7 @@ app.get('/api/siswa/dashboard', authMiddleware, enforceTenantAccess, (req, res) 
   try {
     const jH = attendance.rekap_kehadiran?.jamaah || {}
     const jamaahHadir = Number(jH.hadir) || 0
-    const manual = db.prepare('SELECT jumlah_hadir, minimal_hadir FROM jamaah_rekap_manual WHERE siswa_id=? AND tenant_id=? ORDER BY created_at DESC LIMIT 1').get(siswa.id, req.tenantId)
+    const manual = db.prepare('SELECT jumlah_hadir, minimal_hadir FROM jamaah_rekap_manual WHERE siswa_id=? AND tenant_id=? ORDER BY created_at DESC, rowid DESC LIMIT 1').get(siswa.id, req.tenantId)
     if (manual) {
       const hadir = Number(manual.jumlah_hadir) || 0
       const min = Number(manual.minimal_hadir) || 10
@@ -7848,7 +7848,7 @@ app.post('/api/keuangan/lookup-siswa', BENDAHARA, (req, res) => {
   if (String(siswa.status || 'aktif') !== 'aktif') return res.status(404).json({ error: 'Siswa berstatus nonaktif' })
   const rombel = siswa.rombel_id ? db.prepare('SELECT nama FROM rombel WHERE id=? AND tenant_id=?').get(siswa.rombel_id, req.tenantId) : null
   const tagihan_belum = db.prepare(`SELECT t.*, jt.nama AS jenis_nama FROM tagihan t LEFT JOIN jenis_tagihan jt ON jt.id=t.jenis_tagihan_id AND jt.tenant_id=t.tenant_id WHERE t.siswa_id=? AND t.tenant_id=? AND t.status='belum_bayar' ORDER BY t.tahun DESC, t.bulan DESC, t.created_at DESC`).all(siswa.id, req.tenantId)
-  const saldo = db.prepare('SELECT saldo_akhir FROM tabungan WHERE siswa_id=? AND tenant_id=? ORDER BY created_at DESC LIMIT 1').get(siswa.id, req.tenantId)
+  const saldo = db.prepare('SELECT saldo_akhir FROM tabungan WHERE siswa_id=? AND tenant_id=? ORDER BY created_at DESC, rowid DESC LIMIT 1').get(siswa.id, req.tenantId)
   res.json({
     siswa: { id: siswa.id, nama: siswa.nama, nis: siswa.nis, nisn: siswa.nisn || null, jenis_kelamin: siswa.jenis_kelamin, foto: siswa.foto || null, rombel: rombel?.nama || null },
     saldo_tabungan: saldo ? saldo.saldo_akhir : 0,
@@ -8008,7 +8008,7 @@ app.get('/api/tabungan/ringkasan-bulanan', BENDAHARA, (req, res) => {
 
 app.get('/api/tabungan/saldo', BENDAHARA, (req, res) => {
   const { rombel_id } = req.query
-  let sql = `SELECT s.id, s.nis, s.nama,s.rombel_id,r.nama rombel_nama, COALESCE((SELECT saldo_akhir FROM tabungan WHERE siswa_id = s.id AND tenant_id = ? ORDER BY created_at DESC LIMIT 1), 0) as saldo FROM siswa s LEFT JOIN rombel r ON r.id=s.rombel_id AND r.tenant_id=s.tenant_id WHERE s.status = 'aktif' AND s.tenant_id = ?`
+  let sql = `SELECT s.id, s.nis, s.nama,s.rombel_id,r.nama rombel_nama, COALESCE((SELECT saldo_akhir FROM tabungan WHERE siswa_id = s.id AND tenant_id = ? ORDER BY created_at DESC, rowid DESC LIMIT 1), 0) as saldo FROM siswa s LEFT JOIN rombel r ON r.id=s.rombel_id AND r.tenant_id=s.tenant_id WHERE s.status = 'aktif' AND s.tenant_id = ?`
   const params = [req.tenantId, req.tenantId]
   if (rombel_id) { sql += ' AND s.rombel_id = ?'; params.push(rombel_id) }
   sql += ' ORDER BY r.nama,s.nama'
@@ -8021,7 +8021,7 @@ app.post('/api/tabungan', BENDAHARA, (req, res) => {
   if (!siswa_id) return res.status(400).json({ error: 'siswa_id wajib diisi' })
   if (!['setor', 'tarik'].includes(tipe)) return res.status(400).json({ error: 'tipe harus setor atau tarik' })
   if (!Number.isFinite(nominal) || nominal <= 0) return res.status(400).json({ error: 'nominal wajib berupa angka lebih dari 0' })
-  const lastSaldo = db.prepare('SELECT saldo_akhir FROM tabungan WHERE siswa_id = ? AND tenant_id = ? ORDER BY created_at DESC LIMIT 1').get(siswa_id, req.tenantId)
+  const lastSaldo = db.prepare('SELECT saldo_akhir FROM tabungan WHERE siswa_id = ? AND tenant_id = ? ORDER BY created_at DESC, rowid DESC LIMIT 1').get(siswa_id, req.tenantId)
   const currentSaldo = lastSaldo ? lastSaldo.saldo_akhir : 0
   const saldo_akhir = tipe === 'setor' ? currentSaldo + nominal : currentSaldo - nominal
   if (saldo_akhir < 0) return res.status(400).json({ error: 'Saldo tidak mencukupi' })
