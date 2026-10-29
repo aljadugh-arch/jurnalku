@@ -54,11 +54,11 @@ test('Buku Kas menerima parameter bulan', () => {
   assert.ok(iSaldo < iFilter, 'saldo harus diakumulasi SEBELUM baris disaring')
 })
 
-test('Buku Kas memakai MonthFilter di UI', () => {
+test('Buku Kas memakai pemilih periode di UI', () => {
   const ui = baca('src/pages/admin/BukuKasPage.tsx')
-  assert.ok(ui.includes('MonthFilter'), 'harus memakai MonthFilter')
-  assert.ok(ui.includes('izinkanSemua'), 'harus menyediakan pilihan semua periode')
-  assert.ok(/params: bulan \? \{ bulan \}/.test(ui), 'bulan harus dikirim ke API')
+  assert.ok(ui.includes('PeriodeFilter'), 'harus memakai PeriodeFilter')
+  assert.ok(ui.includes("periode.mode === 'bulan'"), 'mode bulan harus dikenali')
+  assert.ok(/params\.bulan = bulan/.test(ui), 'bulan harus dikirim ke API')
 })
 
 test('dashboard wali murid ada dan dipakai untuk peran wali_murid', () => {
