@@ -120,7 +120,6 @@ function roleItems(role?: string, hideStaffCeklok?: boolean): NavItem[] {
 
   return [
     { label: 'Home', path: '/admin', icon: <Home size={iconSize} /> },
-    { label: 'Setting', path: '/admin/settings', icon: <Settings size={iconSize} /> },
     { label: 'Kalender', path: '/admin/kalender-kbm', icon: <Calendar size={iconSize} /> },
     { label: 'Presensi', path: '/admin/absensi-siswa', icon: <UserCheck size={iconSize} /> },
     ...(hideStaffCeklok ? [] : [ceklokStaff]),
@@ -148,6 +147,7 @@ function roleItems(role?: string, hideStaffCeklok?: boolean): NavItem[] {
     { label: 'Notif WA', path: '/admin/notif-settings', icon: <Settings size={iconSize} /> },
     { label: 'WA Gateway', path: '/admin/wa-gateway', icon: <Settings size={iconSize} /> },
     { label: 'Pengguna', path: '/admin/users', icon: <ShieldCheck size={iconSize} /> },
+    { label: 'Setting', path: '/admin/settings', icon: <Settings size={iconSize} /> },
     { label: 'REST API', path: '/admin/developer-api', icon: <Settings size={iconSize} /> },
     { label: 'Backup', path: '/admin/backup-restore', icon: <ShieldCheck size={iconSize} /> },
     { label: 'Website', path: '/', icon: <Home size={iconSize} />, external: '/' },
@@ -261,19 +261,34 @@ export default function BottomNavigation() {
               <span className="leading-none">{item.label}</span>
             </Link>
           ))}
-          <button
-            type="button"
-            onClick={() => setOpen(v => !v)}
-            className={clsx(
-              'flex min-h-14 flex-col items-center justify-center gap-0.5 rounded-2xl text-[11px] font-semibold transition',
-              open || activeMore
-                ? 'bg-primary text-white shadow-lg shadow-primary/25'
-                : 'text-gray-500 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-800'
-            )}
-          >
-            <MoreHorizontal size={iconSize} />
-            <span className="leading-none">Lainnya</span>
-          </button>
+          {managementRole ? (
+            <Link
+              to="/admin/settings"
+              className={clsx(
+                'flex min-h-14 flex-col items-center justify-center gap-0.5 rounded-2xl text-[11px] font-semibold transition',
+                isActive(location.pathname, '/admin/settings')
+                  ? 'bg-primary text-white shadow-lg shadow-primary/25'
+                  : 'text-gray-500 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-800'
+              )}
+            >
+              <Settings size={iconSize} />
+              <span className="leading-none">Pengaturan</span>
+            </Link>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setOpen(v => !v)}
+              className={clsx(
+                'flex min-h-14 flex-col items-center justify-center gap-0.5 rounded-2xl text-[11px] font-semibold transition',
+                open || activeMore
+                  ? 'bg-primary text-white shadow-lg shadow-primary/25'
+                  : 'text-gray-500 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-800'
+              )}
+            >
+              <MoreHorizontal size={iconSize} />
+              <span className="leading-none">Lainnya</span>
+            </button>
+          )}
         </div>
       </nav>
     </>

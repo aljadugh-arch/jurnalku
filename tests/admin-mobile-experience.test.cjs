@@ -121,9 +121,10 @@ test('staff clock has tabs, digital clock, and today/week histories', () => {
   assert.match(SERVER, /UPDATE users SET gtk_id=\? WHERE id=\? AND tenant_id=\?/)
 })
 
-test('bottom navigation has Home Calendar Presensi Ceklok and Lainnya for admin kepala', () => {
+test('bottom navigation admin/kepala: Home, Kalender, Presensi, Ceklok, lalu Pengaturan', () => {
   for (const label of ['Home', 'Kalender', 'Presensi', 'Ceklok']) assert.match(NAV, new RegExp(`label: '${label}'`))
-  assert.match(NAV, />Lainnya</)
+  assert.match(NAV, />Pengaturan</)
+  assert.match(NAV, /to="\/admin\/settings"/)
   assert.match(NAV, /variant="all"/)
 })
 

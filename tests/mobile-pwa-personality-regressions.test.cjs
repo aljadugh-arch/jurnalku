@@ -15,9 +15,9 @@ const serviceWorker = read('public/sw.js')
 const guruNotes = read('src/pages/guru/GuruCatatanKepribadianPage.tsx')
 const server = read('server/index.cjs')
 
-test('bottom navbar admin dan kepala berisi empat menu utama lalu Lainnya', () => {
+test('bottom navbar admin dan kepala berisi empat menu utama lalu Pengaturan', () => {
   const adminItems = bottomNavigation.match(/\n  return \[\n([\s\S]*?)\n  \]\n}\n\nfunction isActive/)?.[1] || ''
-  const kepalaItems = bottomNavigation.match(/if \(role === 'kepala'\) \{\n    return \[\n([\s\S]*?)\n    \]\n  }/)?.[1] || ''
+  const kepalaItems = bottomNavigation.match(/if \(role === 'kepala'\) \{\n    return \[\n([\s\S]*?)\n    \]\n  \}/)?.[1] || ''
   const expectedOrder = [
     "label: 'Home', path: '/admin'",
     "label: 'Kalender', path: '/admin/kalender-kbm'",
@@ -31,7 +31,8 @@ test('bottom navbar admin dan kepala berisi empat menu utama lalu Lainnya', () =
     }
   }
   assert.match(bottomNavigation, /const primary = items\.slice\(0, 4\)/)
-  assert.match(bottomNavigation, /<span className="leading-none">Lainnya<\/span>/)
+  assert.match(bottomNavigation, /managementRole \?/)
+  assert.match(bottomNavigation, /<span className="leading-none">Pengaturan<\/span>/)
 })
 
 test('posting tersedia di menu Lainnya admin/kepala dan navigasi guru', () => {
