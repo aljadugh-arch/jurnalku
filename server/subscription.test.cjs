@@ -35,8 +35,10 @@ test('expired tenant locks while default platform never locks', () => {
 test('lite cannot enable drive backup or institution website', () => {
   const selected = normalizeFeatureSelection({ backup_drive: true, website: true, absensi: true }, 'lite')
   assert.equal(selected.absensi, true)
-  assert.equal(selected.backup_drive, false)
-  assert.equal(selected.website, false)
+  // Fitur di luar paket DIHAPUS (tidak distempel false) supaya snapshot lama
+  // tidak menimpa hak saat paket ditambah fitur baru.
+  assert.equal(selected.backup_drive, undefined)
+  assert.equal(selected.website, undefined)
 })
 
 test('tenant can disable otherwise allowed modules', () => {

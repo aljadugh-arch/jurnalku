@@ -152,7 +152,17 @@ function normalizeFeatureSelection(input, plan, planDefs = null) {
   const allowed = new Set(
     def ? (Array.isArray(def) ? def : def.fitur) : (PLAN_FEATURES[plan] || PLAN_FEATURES.trial)
   )
-  return Object.fromEntries(FEATURE_KEYS.map(key => [key, allowed.has(key) && input?.[key] !== false]))
+  // Hanya simpan fitur yang ADA di paket. Fitur di luar paket DIHAPUS (bukan
+  // diset false) supaya snapshot lama tidak menimpa hak saat paket berubah.
+  // Sebelumnya fitur di luar paket distempel `false`, lalu saat admin menambah
+  // fitur itu ke paket (mis. backup_drive untuk Lite), tenant yang snapshotnya
+  // masih lama tetap tertahan karena `choices[key] !== false` membaca false.
+  const result = {}
+  for (const key of FEATURE_KEYS) {
+    if (!allowed.has(key)) continue
+    result[key] = input?.[key] !== false
+  }
+  return result
 }
 
 function generateUnlockCode() {

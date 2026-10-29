@@ -124,8 +124,10 @@ test('paket: migrasi MENGHORMATI penyesuaian manual dan tetap mengisi fitur yang
 
 test('paket: normalizeFeatureSelection tidak pernah menambah hak di luar paket', () => {
   const hasil = subscription.normalizeFeatureSelection({ cashless: true, ekantin: true, jurnal: true }, 'lite')
-  assert.strictEqual(hasil.cashless, false, 'lite tidak boleh dapat cashless walau diminta')
-  assert.strictEqual(hasil.ekantin, false)
+  // Fitur di luar paket dihapus (bukan distempel false) supaya snapshot lama
+  // tidak menimpa hak saat paket ditambah fitur baru.
+  assert.strictEqual(hasil.cashless, undefined, 'lite tidak boleh dapat cashless walau diminta')
+  assert.strictEqual(hasil.ekantin, undefined)
   assert.strictEqual(hasil.jurnal, true, 'fitur dalam paket tetap boleh')
 })
 
