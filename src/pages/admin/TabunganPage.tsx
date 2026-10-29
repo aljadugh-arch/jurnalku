@@ -3,7 +3,7 @@ import { Search, Plus, X, Pencil, Trash2, FileSpreadsheet, Printer } from 'lucid
 import toast from 'react-hot-toast'
 import api from '../../services/api'
 import MonthFilter from '../../components/MonthFilter'
-import PeriodeFilter, { rentangPeriode, labelPeriode, tanggalLokal } from '../../components/PeriodeFilter'
+import PeriodeFilter, { rentangPeriode, labelPeriode } from '../../components/PeriodeFilter'
 import { unduhExcel } from '../../utils/excelExport'
 import { openFinanceReport } from '../../utils/financeReport'
 import { useSettingsStore } from '../../stores/settingsStore'

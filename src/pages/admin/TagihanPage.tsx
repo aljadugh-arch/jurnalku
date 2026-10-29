@@ -1,5 +1,4 @@
 import { useState, useEffect } from 'react'
-import { escapeHtml } from '../../utils/escapeHtml'
 import { Search, X, Pencil, Trash2, QrCode, FileSpreadsheet, Printer } from 'lucide-react'
 import toast from 'react-hot-toast'
 import api from '../../services/api'
@@ -116,12 +115,8 @@ export default function TagihanPage() {
   const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState('')
   const [search, setSearch] = useState('')
-  // Data untuk ekspor: diambil ulang sesuai periode yang dipilih (semua baris,
-  // bukan hanya halaman yang tampil — ekspor wajib lengkap).
-  const [exportRows, setExportRows] = useState<Tagihan[]>([])
   const [showGenerate, setShowGenerate] = useState(false)
   const [rombels, setRombels] = useState<any[]>([])
-  const [jenisTagihan, setJenisTagihan] = useState<any[]>([])
   const [genForm, setGenForm] = useState({ jenis_nama: '', rombel_id: '', siswa_id: '', bulan: '', tahun: '2026', nominal: '' })
   const [editTagihan, setEditTagihan] = useState<Tagihan | null>(null)
   const [editTagihanForm, setEditTagihanForm] = useState({ nominal: 0, keterangan: '' })
@@ -144,12 +139,11 @@ export default function TagihanPage() {
         if (dasarBulan === 'tagihan') params.bulan = bulan
         else params.bulan_bayar = bulan
       }
-      const [res, rombelRes, jenisRes] = await Promise.all([
+      const [res, rombelRes] = await Promise.all([
         api.get('/tagihan', { params }),
-        api.get('/rombel'),
-        api.get('/jenis-tagihan')
+        api.get('/rombel')
       ])
-      setData(res.data); setRombels(rombelRes.data); setJenisTagihan(jenisRes.data)
+      setData(res.data); setRombels(rombelRes.data)
     } catch { toast.error('Gagal memuat tagihan') }
     finally { setLoading(false) }
   }
@@ -162,8 +156,8 @@ export default function TagihanPage() {
     const params: any = {}
     if (p.mode === 'bulan') params.bulan_bayar = p.mulai.slice(0, 7)
     else { params.mulai = p.mulai; params.selesai = p.selesai }
-    try { const res = await api.get('/tagihan', { params }); setExportRows(res.data || []); return res.data || [] }
-    catch { setExportRows([]); return [] }
+    try { const res = await api.get('/tagihan', { params }); return res.data || [] }
+    catch { return [] }
   }
 
   useEffect(() => { fetchData(); fetchExportRows() }, []) // eslint-disable-line react-hooks/exhaustive-deps

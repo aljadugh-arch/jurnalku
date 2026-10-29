@@ -70,7 +70,10 @@ async function login(port) {
   // CAPTCHA guard: ambil tantangan lalu jawab (soal matematika self-hosted).
   const chall = await fetch(`http://127.0.0.1:${port}/api/captcha/challenge`).then(r => r.json())
   assert.ok(chall.token && chall.soal, 'challenge captcha harus ada')
-  const jawaban = String(eval(chall.soal))
+  // Soal captcha berbentuk aritmetika sederhana ("3 + 4"); evaluasi aman karena
+  // hanya boleh memuat angka dan operator + - *.
+  assert.ok(/^[\d\s+\-*]+$/.test(chall.soal), 'soal captcha harus aritmetika sederhana')
+  const jawaban = String(new Function(`return (${chall.soal})`)())
   const r = await fetch(`http://127.0.0.1:${port}/api/auth/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
