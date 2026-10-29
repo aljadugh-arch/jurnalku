@@ -37,11 +37,18 @@ test('akun demo wali murid ditautkan ke siswa, bukan kosong', () => {
 })
 
 // ── 2. LOGIN WALI DENGAN NOMOR WA ─────────────────────────────────────────────
-test('login menerima nomor WhatsApp wali', () => {
+test('login menerima nomor WhatsApp wali (setelah cek guru & siswa)', () => {
   const s = baca('server/index.cjs')
-  assert.ok(/1b\) WALI MURID: login dengan NOMOR WHATSAPP/.test(s))
+  assert.ok(/4\) WALI MURID: login dengan NOMOR WHATSAPP/.test(s))
   assert.ok(/siswa\.no_hp/.test(s) || /COALESCE\(no_hp,''\)/.test(s),
     'nomor wali dibaca dari siswa.no_hp')
+  // Urutan penting: cek guru (NIP) & siswa (NIS) HARUS sebelum cek wali via
+  // nomor, supaya guru/siswa yang nomornya kebetulan sama dengan no_hp wali
+  // siswa tidak salah masuk (terdeteksi) sebagai wali murid.
+  assert.ok(s.indexOf('// 2) Kode guru / NIP') < s.indexOf('// 4) WALI MURID'),
+    'cek guru harus mendahului cek wali via nomor')
+  assert.ok(s.indexOf('// 3) NIS / NISN siswa') < s.indexOf('// 4) WALI MURID'),
+    'cek siswa harus mendahului cek wali via nomor')
 })
 
 test('nomor dinormalisasi 0../62../+62.. agar format apa pun cocok', () => {

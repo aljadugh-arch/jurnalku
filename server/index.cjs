@@ -3588,7 +3588,26 @@ app.post('/api/auth/login', captchaLoginGuard, authLimiter, loginAccountLimiter,
   if (!user && hostPlatform(req)) {
     user = db.prepare("SELECT * FROM users WHERE lower(email) = ? AND role = 'super_admin'").get(identLower)
   }
-  // 1b) WALI MURID: login dengan NOMOR WHATSAPP.
+  // 2) Kode guru / NIP -> cari GTK di tenant, lalu user yang terhubung.
+  if (!user) {
+    const g = db.prepare("SELECT * FROM gtk WHERE tenant_id = ? AND ((kode_guru != '' AND lower(kode_guru) = ?) OR nip = ?)").get(tenantId, identLower, ident)
+    if (g) {
+      user = db.prepare('SELECT * FROM users WHERE gtk_id = ? AND tenant_id = ?').get(g.id, tenantId)
+        || (g.nip ? db.prepare('SELECT * FROM users WHERE nip = ? AND tenant_id = ?').get(g.nip, tenantId) : null)
+        || (g.email ? db.prepare('SELECT * FROM users WHERE lower(email) = ? AND tenant_id = ?').get(String(g.email).toLowerCase(), tenantId) : null)
+    }
+  }
+  // 3) NIS / NISN siswa -> auto-provision user siswa jika belum ada.
+  if (!user) {
+    let siswa = db.prepare("SELECT * FROM siswa WHERE tenant_id = ? AND status = 'aktif' AND (nis = ? OR nisn = ?)").get(tenantId, ident, ident)
+    // JANGAN cari NIS lintas tenant: NIS bisa sama di dua lembaga, dan
+    // memilih yang pertama ditemukan berarti login masuk ke lembaga yang salah.
+    if (siswa) { tenantId = siswa.tenant_id || tenantId; user = ensureStudentUser(siswa, tenantId) }
+  }
+
+  // 4) WALI MURID: login dengan NOMOR WHATSAPP. Setelah guru/NIS —
+  //   jangan salip identitas guru/siswa yang nomornya kebetulan sama dengan
+  //   no_hp wali siswa.
   //
   // Kenapa: wali tidak punya email sekolah dan tidak akan menghafal NIS anak.
   // Nomor WA yang sudah dipakai menerima notifikasi absensi/tagihan adalah
@@ -3652,24 +3671,7 @@ app.post('/api/auth/login', captchaLoginGuard, authLimiter, loginAccountLimiter,
       }
     }
   }
-
-  // 2) Kode guru / NIP -> cari GTK di tenant, lalu user yang terhubung.
-  if (!user) {
-    const g = db.prepare("SELECT * FROM gtk WHERE tenant_id = ? AND ((kode_guru != '' AND lower(kode_guru) = ?) OR nip = ?)").get(tenantId, identLower, ident)
-    if (g) {
-      user = db.prepare('SELECT * FROM users WHERE gtk_id = ? AND tenant_id = ?').get(g.id, tenantId)
-        || (g.nip ? db.prepare('SELECT * FROM users WHERE nip = ? AND tenant_id = ?').get(g.nip, tenantId) : null)
-        || (g.email ? db.prepare('SELECT * FROM users WHERE lower(email) = ? AND tenant_id = ?').get(String(g.email).toLowerCase(), tenantId) : null)
-    }
-  }
-  // 3) NIS / NISN siswa -> auto-provision user siswa jika belum ada.
-  if (!user) {
-    let siswa = db.prepare("SELECT * FROM siswa WHERE tenant_id = ? AND status = 'aktif' AND (nis = ? OR nisn = ?)").get(tenantId, ident, ident)
-    // JANGAN cari NIS lintas tenant: NIS bisa sama di dua lembaga, dan
-    // memilih yang pertama ditemukan berarti login masuk ke lembaga yang salah.
-    if (siswa) { tenantId = siswa.tenant_id || tenantId; user = ensureStudentUser(siswa, tenantId) }
-  }
-  // 4) Fallback users.kode_guru / users.nip / users.nis langsung.
+  // 5) Fallback users.kode_guru / users.nip / users.nis langsung.
   if (!user) user = db.prepare("SELECT * FROM users WHERE tenant_id = ? AND ((kode_guru != '' AND lower(kode_guru) = ?) OR nip = ? OR nis = ?)").get(tenantId, identLower, ident, ident)
   if (!user || !bcrypt.compareSync(password, user.password)) {
     return res.status(401).json({ error: 'Email/kode guru/NIS/NISN atau password salah' })
