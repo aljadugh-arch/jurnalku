@@ -6995,7 +6995,6 @@ app.get('/api/siswa/absensi', authMiddleware, (req, res) => {
   if (!siswaId && req.user.nis) {
     const s = db.prepare('SELECT id FROM siswa WHERE nis=? AND tenant_id=?').get(req.user.nis, req.tenantId)
       || db.prepare('SELECT id FROM siswa WHERE nisn=? AND tenant_id=?').get(req.user.nis, req.tenantId)
-      || db.prepare('SELECT id FROM siswa WHERE nis=?').get(req.user.nis)
     siswaId = s?.id || null
   }
   if (!siswaId) return res.json([])
@@ -9723,7 +9722,7 @@ app.get('/api/penilaian-harian/rekap/:siswa_id', authMiddleware, (req, res) => {
     AVG(p.pengetahuan) as rata_pengetahuan,
     COUNT(*) as jumlah_penilaian
     FROM penilaian_harian p
-    LEFT JOIN mapel m ON p.mapel_id = m.id
+    LEFT JOIN mapel m ON p.mapel_id = m.id AND m.tenant_id = p.tenant_id
     WHERE p.siswa_id = ? AND p.tenant_id=?`
   const params = [req.params.siswa_id, req.tenantId]
   if (semester && tahun) {
@@ -11731,7 +11730,7 @@ app.post('/api/ujian/:paketId/validasi-token', EXAM_ROLES, (req, res) => {
   
   // Mark token as used
   if (!matchedToken.used_by) {
-    db.prepare("UPDATE token_cbt SET used_by = ?, used_at = datetime('now') WHERE id = ?").run(siswaId, matchedToken.id)
+    db.prepare("UPDATE token_cbt SET used_by = ?, used_at = datetime('now') WHERE id = ? AND tenant_id = ?").run(siswaId, matchedToken.id, req.tenantId)
   }
   
   res.json({ ok: true, message: 'Token valid' })
