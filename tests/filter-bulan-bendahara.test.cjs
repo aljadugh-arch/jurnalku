@@ -118,16 +118,27 @@ test('satu komponen pemilih bulan dipakai semua halaman keuangan', () => {
   // toISOString memakai UTC: tanggal 1 pagi WIB terbaca bulan sebelumnya.
   assert.ok(/getFullYear\(\)/.test(komponen), 'bulan berjalan harus dihitung dari waktu lokal, bukan toISOString')
 
+  // Invarian: satu kontrol periode bersama per halaman. Dashboard bendahara
+  // tetap MonthFilter; halaman laporan memakai PeriodeFilter (hari/minggu/bulan)
+  // yang membungkus MonthFilter untuk mode bulan — bukan kontrol inline tiap
+  // halaman. Kedua penanda diterima supaya kontrak tidak rusak saat sebuah
+  // halaman naik kelas dari pemilih bulan ke pemilih periode penuh.
   for (const [file, penanda] of [
-    ['src/pages/admin/BendaharaDashboard.tsx', 'MonthFilter'],
-    ['src/pages/admin/MobileBendaharaDashboard.tsx', 'MonthFilter'],
-    ['src/pages/admin/LaporanKeuanganPage.tsx', 'MonthFilter'],
-    ['src/pages/admin/TabunganPage.tsx', 'MonthFilter'],
-    ['src/pages/admin/TagihanPage.tsx', 'MonthFilter'],
+    ['src/pages/admin/BendaharaDashboard.tsx', ['MonthFilter']],
+    ['src/pages/admin/MobileBendaharaDashboard.tsx', ['MonthFilter']],
+    ['src/pages/admin/LaporanKeuanganPage.tsx', ['PeriodeFilter', 'MonthFilter']],
+    ['src/pages/admin/TabunganPage.tsx', ['PeriodeFilter', 'MonthFilter']],
+    ['src/pages/admin/TagihanPage.tsx', ['PeriodeFilter', 'MonthFilter']],
+    ['src/pages/admin/BukuKasPage.tsx', ['PeriodeFilter', 'MonthFilter']],
   ]) {
     const isi = baca(file)
-    assert.ok(isi.includes(penanda), `${file} harus memakai MonthFilter`)
+    assert.ok(penanda.some(p => isi.includes(p)), `${file} harus memakai ${penanda.join(' atau ')}`)
   }
+
+  // PeriodeFilter wajib memakai MonthFilter di dalamnya untuk mode bulan —
+  // satu sumber pemilih bulan, bukan duplikat.
+  const pf = baca('src/components/PeriodeFilter.tsx')
+  assert.ok(pf.includes('MonthFilter'), 'PeriodeFilter harus membungkus MonthFilter untuk mode bulan')
 })
 
 test('dashboard bendahara mengirim bulan ke API dan menampilkan periode', () => {
