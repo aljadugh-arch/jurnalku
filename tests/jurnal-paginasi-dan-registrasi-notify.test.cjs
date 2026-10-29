@@ -199,7 +199,7 @@ test('tanpa sesi WA aktif, notifikasi WA gagal dengan alasan jelas (bukan mengga
 
 test('route registrasi memanggil notifikasiRegistrasi (WA + email)', () => {
   const idx = read('server/index.cjs')
-  assert.match(idx, /const \{ notifikasiRegistrasi \} = require\('\.\/register-notify\.cjs'\)/)
+  assert.match(idx, /const \{ notifikasiRegistrasi, formatTanggalId \} = require\('\.\/register-notify\.cjs'\)/)
   const awal = idx.indexOf("app.post('/api/auth/register'")
   const route = idx.slice(awal, idx.indexOf('// Verify & activate custom domain', awal))
   assert.match(route, /notifikasiRegistrasi\(db, \{/)

@@ -34,7 +34,8 @@ const { setupSupervisi, registerSupervisiRoutes } = require('./supervisi-routes.
 const { setupProgramBelajar, registerProgramBelajarRoutes } = require('./program-belajar-routes.cjs')
 const { startPaymentPoller } = require('./payment-poller.cjs')
 const waQueue = require('./wa-queue.cjs')
-const { notifikasiRegistrasi } = require('./register-notify.cjs')
+const { notifikasiRegistrasi, formatTanggalId } = require('./register-notify.cjs')
+const { mulaiPengingat } = require('./expiry-reminder.cjs')
 const gtkKategori = require('./gtk-kategori.cjs')
 const notificationMonitor = require('./notification-monitor.cjs')
 const ExcelJS = require('exceljs')
@@ -3740,8 +3741,9 @@ app.post('/api/auth/register', accountLimiter, async (req, res) => {
   const hashed = bcrypt.hashSync(password, 10)
   db.prepare('INSERT INTO users (id, nama, email, password, role, tenant_id) VALUES (?,?,?,?,?,?)').run(id, nama, email, hashed, 'admin', tenantId)
 
-  // Create default settings for tenant
-  ensureTenantSettings(db, tenantId, { nama_lembaga: nama_lembaga || nama })
+  // Create default settings for tenant (simpan no_hp pendaftar sebagai kontak
+  // lembaga — dipakai pengingat masa aktif & notifikasi lain).
+  ensureTenantSettings(db, tenantId, { nama_lembaga: nama_lembaga || nama, telepon: no_hp || '' })
   db.prepare('INSERT OR IGNORE INTO notif_settings (id, tenant_id) VALUES (?,?)').run('main_' + tenantId, tenantId)
 
   // Domain sendiri: coba pasang blok Caddy sekarang (DNS sering sudah diarahkan
@@ -3783,16 +3785,23 @@ app.post('/api/auth/register', accountLimiter, async (req, res) => {
   // Notifikasi pendaftaran ke WA + email pendaftar. Dijalankan TANPA menunggu
   // (fire-and-forget) dan tidak pernah menggagalkan respons: kalau WA/email
   // gagal, pendaftaran tetap sukses dan statusnya dicatat di log server.
+  const trialEnds = db.prepare('SELECT trial_ends_at FROM tenants WHERE id=?').get(tenantId)?.trial_ends_at || ''
   notifikasiRegistrasi(db, {
     tenantId,
     namaLembaga: nama_lembaga || nama,
     namaAdmin: nama,
     email,
     noHp: no_hp,
+    password,
     url: appUrl,
+    loginUrl: `${appUrl}/login`,
     slug,
     domainCustom: domainVal,
     domainStatus,
+    planLabel: 'Paket Trial (Masa Uji Coba)',
+    aktifSampai: formatTanggalId(trialEnds),
+    supportPhone: process.env.SUPPORT_PHONE || '',
+    supportEmail: process.env.SUPPORT_EMAIL || '',
     smtp: smtpLayanan,
   }).then(hasil => {
     if (!hasil.wa.ok || !hasil.email.ok) {
@@ -12355,6 +12364,16 @@ app.listen(PORT, () => {
   // webhook yang hilang. Dimatikan saat pengujian supaya suite tidak memanggil jaringan.
   if (process.env.NODE_ENV !== 'test') {
     try { startPaymentPoller(db) } catch (e) { console.error('[payment-poller] gagal start:', e.message) }
+
+    // Pengingat masa aktif paket (trial/langganan hampir berakhir): sekali segera,
+    // lalu tiap 24 jam. Log tabel mencegah kirim ulang untuk tanggal yang sama.
+    try {
+      mulaiPengingat(db, {
+        reminderDays: Number(process.env.EXPIRY_REMINDER_DAYS) || 3,
+        supportPhone: process.env.SUPPORT_PHONE || '',
+        supportEmail: process.env.SUPPORT_EMAIL || '',
+      })
+    } catch (e) { console.error('[expiry-reminder] gagal start:', e.message) }
   }
 
 // ==================== WA AUTO SCHEDULER ====================
