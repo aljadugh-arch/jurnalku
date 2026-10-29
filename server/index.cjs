@@ -18,6 +18,7 @@ const { execFileSync } = require('child_process')
 const customDomain = require('./custom-domain.cjs')
 const { setupTenantTables, tenantMiddleware, registerTenantRoutes, BASE_DOMAIN, BASE_DOMAINS } = require('./tenant.cjs')
 const { canonicalSettingsId, getTenantSettings, ensureTenantSettings, migrateTenantSettings } = require('./tenant-settings.cjs')
+const { setupPlatformSettings, getPlatformSettings, setPlatformSetting } = require('./platform-settings.cjs')
 const { normalizeHolidayDays } = require('./holiday-rules.cjs')
 const { parseGuruHariRules, guruBolehMengajar } = require('./jadwal-rules.cjs')
 const { intervalTumpangTindih } = require('./jadwal-time-rules.cjs')
@@ -1637,6 +1638,7 @@ setupTenantTables(db)
 ensureTenantSettings(db, 'default')
 setupEkskulMembership(db)
 setupSubscriptionTables(db)
+setupPlatformSettings(db)
 invoiceService.setupInvoiceTables(db)
 setupAiConfigTables(db)
 migrateTenantSettings(db)
@@ -2450,6 +2452,26 @@ app.put('/api/subscription/plans/:plan', SUPER, (req, res) => {
   if (result.error) return res.status(400).json({ error: result.error })
   invalidatePlanMap()
   res.json({ success: true, plan: result.plan, plans: getPlans(db) })
+})
+
+// Pengaturan platform global (mis. hari pengingat masa aktif). Khusus super admin.
+app.get('/api/platform/settings', SUPER, (req, res) => {
+  res.json(getPlatformSettings(db))
+})
+app.put('/api/platform/settings', SUPER, (req, res) => {
+  const body = req.body || {}
+  // Hanya kunci yang dikenal yang boleh diubah.
+  const diubah = {}
+  if (body.reminder_days !== undefined) {
+    const n = Number(body.reminder_days)
+    if (!Number.isInteger(n) || n < 1 || n > 60) {
+      return res.status(400).json({ error: 'Hari pengingat harus bulat 1 - 60' })
+    }
+    diubah.reminder_days = String(n)
+  }
+  if (!Object.keys(diubah).length) return res.status(400).json({ error: 'Tidak ada perubahan yang dikirim' })
+  for (const [k, v] of Object.entries(diubah)) setPlatformSetting(db, k, v)
+  res.json({ success: true, settings: getPlatformSettings(db) })
 })
 
 // Periksa / rapikan override fitur per lembaga agar tidak melampaui paketnya.

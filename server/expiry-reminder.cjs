@@ -13,6 +13,7 @@ const { enqueue } = require('./wa-queue.cjs')
 const { kirimEmail } = require('./mailer.cjs')
 const { getTenantSettings } = require('./tenant-settings.cjs')
 const { formatTanggalId, waLink } = require('./register-notify.cjs')
+const { getReminderDays } = require('./platform-settings.cjs')
 
 /** URL aplikasi tenant: domain sendiri (aktif) atau subdomain slug.base_domain. */
 function urlTenant(t) {
@@ -45,7 +46,7 @@ function pesanWaPengingat(d) {
     `⏳ *Sisa waktu* : tinggal ${d.nHari} hari`,
     '',
     'Perpanjang paket di sini:',
-    `${d.url}/admin/paket-langganan`,
+    `${d.url}/admin/tenants`,
   ]
   if (d.supportPhone || d.supportEmail) {
     baris.push('')
@@ -81,7 +82,7 @@ function htmlEmailPengingat(d) {
         ${row('Sisa waktu', `tinggal ${d.nHari} hari`)}
       </table>
       <p style="margin:0 0 8px;font-size:13px">Perpanjang paket di sini:</p>
-      <p style="margin:0 0 16px"><a href="${esc(`${d.url}/admin/paket-langganan`)}" style="color:#1e40af;font-weight:600">${esc(`${d.url}/admin/paket-langganan`)}</a></p>
+      <p style="margin:0 0 16px"><a href="${esc(`${d.url}/admin/tenants`)}" style="color:#1e40af;font-weight:600">${esc(`${d.url}/admin/tenants`)}</a></p>
       ${bantuan}
       <p style="margin:16px 0 0;padding:12px;background:#f8fafc;border-radius:8px;font-size:12px;color:#64748b">Jika sudah membayar, mohon abaikan pesan ini.</p>
     </div>
@@ -167,7 +168,8 @@ function setupExpiryReminderLog(db) {
  */
 async function jalankanPengingat(db, opts = {}) {
   setupExpiryReminderLog(db)
-  const reminderDays = Number(opts.reminderDays) > 0 ? Number(opts.reminderDays) : 3
+  // Hari pengingat dari DB (dashboard superadmin) > env EXPIRY_REMINDER_DAYS > 3.
+  const reminderDays = getReminderDays(db, Number(opts.reminderDays) > 0 ? Number(opts.reminderDays) : 3)
   const nowMs = Date.now()
   const tenants = db.prepare(`
     SELECT id, nama, slug, base_domain, domain_custom, domain_status, plan,

@@ -82,6 +82,8 @@ export default function TenantManagementPage() {
   const [showPlanEditor, setShowPlanEditor] = useState(false)
   const [planDraft, setPlanDraft] = useState<Record<string, PlanDraft>>({})
   const [savingPlans, setSavingPlans] = useState(false)
+  const [reminderDays, setReminderDays] = useState(3)
+  const [savingReminder, setSavingReminder] = useState(false)
   const menuRef = useRef<HTMLDivElement | null>(null)
 
   const planRow = (name: string) => plans.find(p => p.plan === name)
@@ -108,7 +110,25 @@ export default function TenantManagementPage() {
     return () => document.removeEventListener('mousedown', onClickOutside)
   }, [])
 
-  useEffect(() => { loadTenants(); loadPlans() }, [])
+  useEffect(() => { loadTenants(); loadPlans(); loadPlatformSettings() }, [])
+
+  const loadPlatformSettings = async () => {
+    try {
+      const { data } = await api.get('/platform/settings')
+      const n = Number(data?.reminder_days)
+      if (Number.isInteger(n) && n > 0) setReminderDays(n)
+    } catch { /* pengaturan platform opsional */ }
+  }
+
+  const saveReminderDays = async () => {
+    setSavingReminder(true)
+    try {
+      await api.put('/platform/settings', { reminder_days: reminderDays })
+      toast.success('Pengaturan pengingat masa aktif tersimpan')
+    } catch (e: any) {
+      toast.error(e.response?.data?.error || 'Gagal menyimpan pengaturan')
+    } finally { setSavingReminder(false) }
+  }
 
   const loadPlans = async () => {
     try {
@@ -327,6 +347,25 @@ export default function TenantManagementPage() {
         <div className="bg-white border border-gray-200 rounded-xl p-4">
           <div className="text-sm text-gray-500">Total Siswa</div>
           <div className="text-2xl font-bold text-gray-900 mt-1">{totalSiswa}</div>
+        </div>
+      </div>
+
+      <div className="bg-white border border-gray-200 rounded-xl p-4">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="min-w-0">
+            <div className="text-sm font-semibold text-gray-800">Pengingat Masa Aktif Paket</div>
+            <p className="text-xs text-gray-500 mt-0.5">Kirim notifikasi WA &amp; email ke lembaga saat sisa masa aktif tinggal sekian hari.</p>
+          </div>
+          <div className="flex items-center gap-2">
+            <label className="text-sm text-gray-600">Hari sebelum berakhir:</label>
+            <input type="number" min="1" max="60" value={reminderDays}
+              onChange={e => setReminderDays(Math.max(1, Math.min(60, Number(e.target.value) || 1)))}
+              className="w-20 rounded-lg border border-gray-300 px-3 py-2 text-sm" />
+            <button onClick={saveReminderDays} disabled={savingReminder}
+              className="px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary-dark transition-colors disabled:opacity-50">
+              {savingReminder ? 'Menyimpan...' : 'Simpan'}
+            </button>
+          </div>
         </div>
       </div>
 

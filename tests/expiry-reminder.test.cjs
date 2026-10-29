@@ -64,7 +64,7 @@ test('pesan WA pengingat memuat madrasah, paket, tanggal, sisa hari, dan tautan 
   assert.match(pesan, /Paket Trial \(Masa Uji Coba\)/)
   assert.match(pesan, /30 Oktober 2026/)
   assert.match(pesan, /tinggal 3 hari/)
-  assert.match(pesan, /contoh\.jurnal\.cc\.cd\/admin\/paket-langganan/)
+  assert.match(pesan, /contoh\.jurnal\.cc\.cd\/admin\/tenants/)
   assert.match(pesan, /0859-1807-12924/)
 })
 
@@ -116,4 +116,21 @@ test('tenant nonaktif (aktif=0) dilewati', async () => {
   tambahTenant(db, 'nonaktif', { nama: 'MTs Nonaktif', slug: 'nonaktif', trialEnds: isoDariSekarang(2), aktif: 0 })
   const r = await jalankanPengingat(db)
   assert.equal(r.terkirim, 0)
+})
+
+test('reminder_days dari DB (dashboard superadmin) dipakai scheduler', async () => {
+  const db = dbDasar()
+  db.exec('CREATE TABLE platform_settings (key TEXT PRIMARY KEY, value TEXT NOT NULL)')
+  db.prepare("INSERT INTO platform_settings (key, value) VALUES ('reminder_days','7')").run()
+  // Tenant sisa 5 hari: dilewati saat default 3, tapi dikirimi saat DB = 7.
+  tambahTenant(db, 'lima', { nama: 'MTs Lima', slug: 'lima', trialEnds: isoDariSekarang(5) })
+  const r = await jalankanPengingat(db)
+  assert.equal(r.terkirim, 1, '5 hari masuk jangkauan karena reminder_days=7 dari DB')
+})
+
+test('route pengaturan platform dibatasi super admin + validasi hari', () => {
+  const idx = require('fs').readFileSync(require('path').join(__dirname, '../server/index.cjs'), 'utf8')
+  assert.match(idx, /app\.get\('\/api\/platform\/settings', SUPER/)
+  assert.match(idx, /app\.put\('\/api\/platform\/settings', SUPER/)
+  assert.match(idx, /Hari pengingat harus bulat 1 - 60/)
 })
