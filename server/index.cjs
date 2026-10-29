@@ -7073,7 +7073,10 @@ app.get('/api/siswa/ekskul', authMiddleware, (req, res) => {
 })
 
 // Dynamic student lookup must follow every static /api/siswa/* handler.
-app.get('/api/siswa/:id', authMiddleware, (req, res) => {
+// Pencarian siswa by ID (Data Siswa, kasir QR). Mengembalikan data PII lengkap
+// (alamat, no_hp, nama/pekerjaan ayah-ibu-wali) — jadi WAJIB dibatasi ke staf,
+// BUKAN authMiddleware: sebelumnya siswa/wali bisa enumerasi PII siswa lain.
+app.get('/api/siswa/:id', requireRole('admin', 'super_admin', 'guru', 'wali_kelas', 'operator', 'tata_usaha', 'tu', 'kepala', 'bendahara'), (req, res) => {
   const siswa = db.prepare(`SELECT s.*, r.nama rombel_nama FROM siswa s LEFT JOIN rombel r ON r.id=s.rombel_id AND r.tenant_id=s.tenant_id WHERE s.id=? AND s.tenant_id=?`).get(req.params.id, req.tenantId)
   if (!siswa) return res.status(404).json({ error: 'Siswa tidak ditemukan' })
   res.json(siswa)
