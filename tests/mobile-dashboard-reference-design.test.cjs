@@ -52,11 +52,12 @@ test('blok identitas dashboard dibungkus kartu ber-padding dan rounded', () => {
 
 /* ── Guru dashboard ── */
 
-test('guru dashboard memakai header lembaga dan menampilkan peran GURU', () => {
+test('guru dashboard memakai header lembaga dan menampilkan peran GURU (+ Wali Kelas)', () => {
   const src = read(GURU)
   assert.match(src, /<MobileDashboardHeader/)
   assert.match(src, /GURU/)
-  assert.match(src, /WALI MURID/)
+  // Label "WALI KELAS" (guru yang punya rombel), BUKAN "WALI MURID" (orang tua).
+  assert.match(src, /· WALI KELAS/)
 })
 
 test('guru dashboard menata dua grid utama: Ceklok Kehadiran dan Jadwal Mengajar', () => {

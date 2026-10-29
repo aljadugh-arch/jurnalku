@@ -120,6 +120,7 @@ function roleItems(role?: string, hideStaffCeklok?: boolean): NavItem[] {
 
   return [
     { label: 'Home', path: '/admin', icon: <Home size={iconSize} /> },
+    { label: 'Setting', path: '/admin/settings', icon: <Settings size={iconSize} /> },
     { label: 'Kalender', path: '/admin/kalender-kbm', icon: <Calendar size={iconSize} /> },
     { label: 'Presensi', path: '/admin/absensi-siswa', icon: <UserCheck size={iconSize} /> },
     ...(hideStaffCeklok ? [] : [ceklokStaff]),
@@ -147,7 +148,6 @@ function roleItems(role?: string, hideStaffCeklok?: boolean): NavItem[] {
     { label: 'Notif WA', path: '/admin/notif-settings', icon: <Settings size={iconSize} /> },
     { label: 'WA Gateway', path: '/admin/wa-gateway', icon: <Settings size={iconSize} /> },
     { label: 'Pengguna', path: '/admin/users', icon: <ShieldCheck size={iconSize} /> },
-    { label: 'Setting', path: '/admin/settings', icon: <Settings size={iconSize} /> },
     { label: 'REST API', path: '/admin/developer-api', icon: <Settings size={iconSize} /> },
     { label: 'Backup', path: '/admin/backup-restore', icon: <ShieldCheck size={iconSize} /> },
     { label: 'Website', path: '/', icon: <Home size={iconSize} />, external: '/' },

@@ -22,15 +22,15 @@
   /* --- token inti (light) --- */
   --sk-bg: #fbfaf8;
   --sk-surface: #ffffff;
-  --sk-text: #24262d;
-  --sk-muted: #6f7785;
+  --sk-text: #1f2937;
+  --sk-muted: #6b7280;
   --sk-border: #e7e4df;
   --sk-orange: var(--color-primary, #1e40af);
   --sk-orange-dark: var(--color-primary-dark, #1e3a8a);
   --sk-orange-soft: color-mix(in srgb, var(--color-primary, #1e40af) 8%, #ffffff);
-  --sk-ink: #38404b;
-  --sk-heading: #69574f;
-  --sk-label: #484a51;
+  --sk-ink: #1f2937;
+  --sk-heading: #1f2937;
+  --sk-label: #374151;
 
   /* --- elemen turunan (semua via var, ditimpa di .dark) --- */
   --sk-nav-bg: rgba(255, 255, 255, 0.86);

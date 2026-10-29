@@ -98,8 +98,9 @@ export default function MobileGuruDashboard() {
     } finally { setBusy(false) }
   }
 
-  // Peran: GURU, dan ditambah WALI MURID bila guru ini juga wali kelas.
-  const peran = `GURU${(data.siswa_rombel_count ?? 0) > 0 ? ' · WALI MURID' : ''}`
+  // Peran: GURU, dan ditambah WALI KELAS bila guru ini juga wali kelas (punya
+  // rombel/kelas yang diampu). BUKAN "WALI MURID" — itu orang tua siswa.
+  const peran = `GURU${(data.siswa_rombel_count ?? 0) > 0 ? ' · WALI KELAS' : ''}`
 
   const statusCeklok = (() => {
     const t = ceklok?.today
