@@ -132,9 +132,12 @@ test('landing dan dashboard superadmin memakai sumber yang sama', () => {
     'dashboard superadmin tidak boleh punya daftar label sendiri lagi')
 })
 
-test('landing menampilkan fitur PEMBEDA, bukan daftar sama di semua paket', () => {
-  const lib = baca('src/lib/fiturPaket.ts')
-  assert.ok(/export function fiturPembeda/.test(lib))
+test('landing menampilkan SEMUA fitur paket, bukan hanya selisih antar paket', () => {
   const landing = baca('src/pages/LandingPage.tsx')
-  assert.ok(/fiturPembeda\(paket\)/.test(landing), 'landing harus memakai fiturPembeda')
+  // Fitur yang include harus tampil semua (cocok centang superadmin), bukan
+  // hanya selisih (fiturPembeda) lalu dipotong slice(0,10) — dulu Backup Google
+  // Drive di Lite tidak tampil padahal include.
+  assert.ok(/p\.fitur\.includes\(k\)/.test(landing), 'landing harus menampilkan semua fitur paket')
+  assert.ok(!/fiturPembeda\(paket\)/.test(landing), 'landing tidak boleh memakai fiturPembeda (selisih)')
+  assert.ok(!/\.slice\(0, 10\)/.test(landing), 'landing tidak boleh memotong daftar fitur')
 })

@@ -11,12 +11,21 @@ const colors = [
   'bg-rose-600', 'bg-cyan-600', 'bg-indigo-600',
 ]
 
+// Susunan kelompok mengikuti NAV_GROUPS di jurnalv2 (Rust): Penyiapan → Harian
+// → Akademik → Keuangan → Layanan → Sistem. Hanya SUSUNAN/kelompoknya yang
+// diambil; isi menu tetap milik jurnalku.
+const categoryRules: [string, RegExp][] = [
+  ['Penyiapan', /tahun-ajaran|kalender-kbm|\/mapel|\/gtk|\/rombel|\/siswa|\/mutasi|\/jadwal|\/pengajar|\/substitusi/],
+  ['Harian', /absensi|ceklok|\/jurnal|\/bk|rekap-absensi|\/monitoring$/],
+  ['Akademik', /rapor|rekap-nilai|monitoring-nilai|bank-soal|kisi|paket-ujian|catatan-kepribadian|supervisi|kkm|buku-induk|nilai-ledger/],
+  ['Keuangan', /tagihan|tabungan|buku-kas|laporan|rkas|payroll|payment-gateway|kantin|cashless|kasir|beasiswa/],
+  ['Layanan', /ppdb|administrasi|posting|broadcast|wa-gateway|notif|smtp|perpustakaan|pustaka|\/lms|modul-ajar|program-belajar/],
+]
+
 const categoryFor = (item: FlatMenu) => {
-  if (/Siswa|GTK|Rombongan|Mata Pelajaran|Pengguna|Lembaga|Monitoring/.test(item.label)) return 'Manajemen Data'
-  if (/Jadwal|Pengajar|Jurnal|Rapor|Kepribadian|Supervisi|Kalender|Modul|Tahun Ajaran/.test(item.label)) return 'Akademik & Kelas'
-  if (/Tagihan|Tabungan|Kantin|Topup|Transfer|Kasir|Backup|REST API|Website|Pengaturan/.test(item.label)) return 'Administrasi & Keuangan'
-  if (/Broadcast|WhatsApp|Gateway|Notifikasi/.test(item.label)) return 'Komunikasi'
-  return 'Menu Layanan'
+  const p = item.path || ''
+  for (const [group, re] of categoryRules) if (re.test(p)) return group
+  return 'Sistem'
 }
 
 function MenuLink({ item, index, onClose }: { item: FlatMenu; index: number; onClose: () => void }) {
@@ -39,7 +48,7 @@ export default function MobileMenuSheet({ open, onClose, variant = 'all' }: { op
   const items = variant === 'settings'
     ? allItems.filter(item => /Pengaturan|Tahun Ajaran|Backup|Gateway|Notifikasi|REST API/.test(item.label))
     : allItems
-  const categories = ['Menu Layanan', 'Manajemen Data', 'Akademik & Kelas', 'Administrasi & Keuangan', 'Komunikasi']
+  const categories = ['Penyiapan', 'Harian', 'Akademik', 'Keuangan', 'Layanan', 'Sistem']
 
   return <PortalSheet open={open} onClose={onClose} title={variant === 'settings' ? 'Pengaturan Lembaga' : 'Semua Menu'} description="Seluruh fitur yang tersedia sesuai peran dan paket lembaga">
     {!adminRole ? <p className="py-8 text-center text-sm text-slate-500">Menu ini hanya tersedia untuk pengelola.</p> : (
