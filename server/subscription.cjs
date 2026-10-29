@@ -65,7 +65,7 @@ const FEATURE_PREFIXES = {
   jadwal: ['/api/jadwal', '/api/template-jadwal', '/api/pengajar', '/api/wali-kelas', '/api/kalender-kbm', '/api/guru/jadwal', '/api/siswa/jadwal'],
   absensi: ['/api/absensi', '/api/absensi-siswa', '/api/absensi-guru', '/api/ceklok', '/api/guru/ceklok', '/api/guru/absensi-saya', '/api/ekskul', '/api/jamaah'],
   jurnal: ['/api/jurnal'],
-  penilaian: ['/api/penilaian', '/api/penilaian-harian', '/api/rapor', '/api/catatan-kepribadian', '/api/supervisi', '/api/bk'],
+  penilaian: ['/api/penilaian', '/api/penilaian-harian', '/api/rapor', '/api/buku-induk', '/api/catatan-kepribadian', '/api/supervisi', '/api/bk'],
   keuangan: ['/api/tagihan', '/api/jenis-tagihan', '/api/tabungan', '/api/bendahara', '/api/keuangan', '/api/cashless', '/api/beasiswa'],
   whatsapp: ['/api/broadcast', '/api/wa-', '/api/notif-settings'],
   posting: ['/api/posting'],
@@ -90,7 +90,7 @@ const FEATURE_PREFIXES = {
   // 'monitoring' SEKARANG punya route server sendiri: payroll dan rkas. Tanpa
   // prefix di sini, API keduanya tetap bisa dipanggil paket Lite walau menunya
   // sudah disembunyikan — gerbang menu saja tidak cukup.
-  monitoring: ['/api/payroll', '/api/rkas'],
+  monitoring: ['/api/payroll', '/api/rkas', '/api/admin/monitoring-nilai'],
 }
 
 function addMonthsIso(from, months = 1) {
