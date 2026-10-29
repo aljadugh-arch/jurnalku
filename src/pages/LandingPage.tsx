@@ -10,7 +10,7 @@ import {
   Megaphone, HelpCircle, Newspaper,
 } from 'lucide-react'
 import api from '../services/api'
-import { labelFitur, fiturPembeda, URUTAN_FITUR } from '../lib/fiturPaket'
+import { labelFitur, URUTAN_FITUR } from '../lib/fiturPaket'
 import { useSettingsStore } from '../stores/settingsStore'
 import { useThemeStore } from '../stores/themeStore'
 
@@ -106,11 +106,11 @@ export default function LandingPage() {
 
   const paketBayar = useMemo(() => paket.filter(p => p.harga > 0), [paket])
   const paketTrial = useMemo(() => paket.find(p => p.harga === 0), [paket])
-  const pembeda = useMemo(() => fiturPembeda(paket), [paket])
-  const fiturPaket = (p: Paket) => {
-    const kunci = pembeda[p.plan]?.length ? pembeda[p.plan] : p.fitur
-    return kunci.filter(k => URUTAN_FITUR.includes(k) || true).map(k => labelFitur(k)).slice(0, 10)
-  }
+  // Tampilkan SEMUA fitur paket (bukan hanya selisih antar paket) supaya cocok
+  // dengan centang fitur di dashboard superadmin. Sebelumnya memakai fiturPembeda
+  // (hanya selisih) + slice(0,10), sehingga fitur yang include — mis. Backup
+  // Google Drive di Lite — tidak tampil di landing page.
+  const fiturPaket = (p: Paket) => URUTAN_FITUR.filter(k => p.fitur.includes(k)).map(k => labelFitur(k))
 
   const nav = [
     { label: 'Fitur', href: '#fitur' },
