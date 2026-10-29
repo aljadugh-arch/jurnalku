@@ -1,17 +1,22 @@
 import { useState, useEffect } from 'react'
 import { escapeHtml } from '../../utils/escapeHtml'
-import { Search, X, Pencil, Trash2, QrCode } from 'lucide-react'
+import { Search, X, Pencil, Trash2, QrCode, FileSpreadsheet, Printer } from 'lucide-react'
 import toast from 'react-hot-toast'
 import api from '../../services/api'
 import ResponsiveTable from '../../components/ui/ResponsiveTable'
 import FinanceExcelPanel from '../../components/FinanceExcelPanel'
 import QrisPayModal, { type QrisTarget } from '../../components/QrisPayModal'
 import MonthFilter from '../../components/MonthFilter'
+import PeriodeFilter, { rentangPeriode, labelPeriode, tanggalLokal } from '../../components/PeriodeFilter'
+import { unduhExcel } from '../../utils/excelExport'
+import { openFinanceReport } from '../../utils/financeReport'
+import { useSettingsStore } from '../../stores/settingsStore'
 
 interface Tagihan {
   id: string; siswa_id: string; siswa_nama: string; nis: string
   jenis_nama: string; jenis_tagihan_id: string; bulan: string; tahun: string
   nominal: number; status: string; tanggal_bayar: string; metode_bayar: string; keterangan?: string
+  rombel_id?: string; rombel_nama?: string
 }
 
 interface Siswa { id: string; nama: string; nis: string; rombel_id?: string; rombel_nama?: string }
@@ -111,6 +116,9 @@ export default function TagihanPage() {
   const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState('')
   const [search, setSearch] = useState('')
+  // Data untuk ekspor: diambil ulang sesuai periode yang dipilih (semua baris,
+  // bukan hanya halaman yang tampil — ekspor wajib lengkap).
+  const [exportRows, setExportRows] = useState<Tagihan[]>([])
   const [showGenerate, setShowGenerate] = useState(false)
   const [rombels, setRombels] = useState<any[]>([])
   const [jenisTagihan, setJenisTagihan] = useState<any[]>([])
@@ -123,6 +131,10 @@ export default function TagihanPage() {
   // (tanggal bayar). Tanpa pemisahan ini, laporan kas selalu salah satu.
   const [bulan, setBulan] = useState('')
   const [dasarBulan, setDasarBulan] = useState<'tagihan' | 'bayar'>('tagihan')
+  // Periode ekspor harian/mingguan (rentang tanggal bayar) — terpisah dari
+  // filter bulan supaya filter tabel tidak terganggu.
+  const [periode, setPeriode] = useState(() => rentangPeriode('hari', tanggalLokal(new Date())))
+  const settings = useSettingsStore(s => s.settings)
 
   const fetchData = async () => {
     try {
@@ -142,6 +154,19 @@ export default function TagihanPage() {
     finally { setLoading(false) }
   }
 
+  // Data ekspor mengikuti periode harian/mingguan/bulanan: pembayaran yang
+  // masuk dalam rentang itu (tanggal_bayar), sesuai prinsip "uang masuk
+  // dihitung dari tanggal bayar, bukan bulan tagihan". Mengembalikan baris
+  // langsung (dipakai handler ekspor) DAN menyimpannya ke state.
+  const fetchExportRows = async (p = periode): Promise<Tagihan[]> => {
+    const params: any = {}
+    if (p.mode === 'bulan') params.bulan_bayar = p.mulai.slice(0, 7)
+    else { params.mulai = p.mulai; params.selesai = p.selesai }
+    try { const res = await api.get('/tagihan', { params }); setExportRows(res.data || []); return res.data || [] }
+    catch { setExportRows([]); return [] }
+  }
+
+  useEffect(() => { fetchData(); fetchExportRows() }, []) // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { fetchData() }, [filter, bulan, dasarBulan]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const filtered = data.filter(t =>
@@ -183,6 +208,71 @@ export default function TagihanPage() {
   }
 
   const fmt = (n: number) => 'Rp ' + n.toLocaleString('id-ID')
+
+  const labelPer = labelPeriode(periode)
+
+  const handleExportExcel = async () => {
+    // Ambil ulang supaya selalu segar, lalu unduh semua baris periode.
+    const rows = await fetchExportRows()
+    if (!rows.length) { toast.error('Tidak ada pembayaran pada periode ini'); return }
+    const lunas = rows.filter(t => t.status === 'lunas')
+    const totalLunas = lunas.reduce((s, t) => s + t.nominal, 0)
+    unduhExcel(
+      [{ name: 'Tagihan & Pembayaran', rows, columns: [
+        { header: 'NIS', value: 'nis', width: 12 },
+        { header: 'SISWA', value: 'siswa_nama', width: 28 },
+        { header: 'ROMBEL', value: 'rombel_nama', width: 14 },
+        { header: 'JENIS TAGIHAN', value: 'jenis_nama', width: 20 },
+        { header: 'PERIODE', value: (t: Tagihan) => `${t.bulan || '-'} ${t.tahun}`, width: 16 },
+        { header: 'NOMINAL', value: (t: Tagihan) => Number(t.nominal || 0), width: 14, numFmt: '#,##0' },
+        { header: 'STATUS', value: (t: Tagihan) => t.status === 'lunas' ? 'Lunas' : 'Belum Bayar', width: 12 },
+        { header: 'TGL BAYAR', value: 'tanggal_bayar', width: 12 },
+        { header: 'METODE', value: 'metode_bayar', width: 12 },
+      ] }],
+      {
+        title: 'Laporan Tagihan & Pembayaran',
+        filename: 'Laporan_Tagihan_Pembayaran',
+        subtitle: `Periode: ${labelPer} — ${lunas.length} lunas, total ${fmt(totalLunas)}`,
+        settings: settings as Record<string, unknown>,
+      },
+    )
+    toast.success('Excel tagihan diunduh')
+  }
+
+  const handleExportPdf = async () => {
+    const rows = await fetchExportRows()
+    if (!rows.length) { toast.error('Tidak ada pembayaran pada periode ini'); return }
+    const lunas = rows.filter(t => t.status === 'lunas')
+    const belum = rows.filter(t => t.status !== 'lunas')
+    const totalLunas = lunas.reduce((s, t) => s + t.nominal, 0)
+    const totalBelum = belum.reduce((s, t) => s + t.nominal, 0)
+    const ok = openFinanceReport({
+      title: 'Laporan Tagihan & Pembayaran',
+      periode: labelPer,
+      settings: settings as Record<string, unknown>,
+      landscape: true,
+      columns: ['NO', 'NIS', 'SISWA', 'ROMBEL', 'JENIS TAGIHAN', 'PERIODE', 'NOMINAL', 'STATUS', 'TGL BAYAR', 'METODE'],
+      rows: rows.map((t, i) => [
+        String(i + 1),
+        t.nis || '-',
+        { text: t.siswa_nama || '-', align: 'left' },
+        t.rombel_nama || '-',
+        t.jenis_nama || '-',
+        `${t.bulan || '-'} ${t.tahun}`,
+        fmt(t.nominal),
+        t.status === 'lunas' ? 'LUNAS' : 'BELUM',
+        t.tanggal_bayar || '-',
+        t.metode_bayar || '-',
+      ]),
+      summary: [
+        { label: 'Lunas', value: `${lunas.length} · ${fmt(totalLunas)}` },
+        { label: 'Belum Bayar', value: `${belum.length} · ${fmt(totalBelum)}` },
+        { label: 'Total Tagihan', value: fmt(totalLunas + totalBelum) },
+      ],
+      footnotes: [`Periode pembayaran: ${labelPer}`, 'Dasar: tanggal bayar (uang masuk), bukan bulan tagihan.'],
+    })
+    if (!ok) toast.error('Popup diblokir browser')
+  }
 
   const handleKuitansi = (t: Tagihan) => {
     const w = window.open('', '_blank')
@@ -246,12 +336,22 @@ export default function TagihanPage() {
           <h1 className="text-2xl font-bold text-gray-800 font-display">Tagihan & Pembayaran</h1>
           <p className="text-gray-500 text-sm mt-1">Kelola SPP, daftar ulang, dan tagihan lainnya</p>
         </div>
-        <button onClick={() => setShowGenerate(true)} className="px-4 py-2 bg-primary text-white rounded-lg text-sm hover:bg-primary-dark">
-          Generate Tagihan
-        </button>
+        <div className="flex flex-wrap gap-2">
+          <button onClick={handleExportExcel} className="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-semibold text-gray-700 shadow-sm hover:bg-gray-50"><FileSpreadsheet size={16} className="text-emerald-600" /> Excel</button>
+          <button onClick={handleExportPdf} className="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-semibold text-gray-700 shadow-sm hover:bg-gray-50"><Printer size={16} className="text-rose-600" /> PDF</button>
+          <button onClick={() => setShowGenerate(true)} className="px-4 py-2 bg-primary text-white rounded-lg text-sm hover:bg-primary-dark">
+            Generate Tagihan
+          </button>
+        </div>
       </div>
 
       <FinanceExcelPanel />
+
+      {/* Periode ekspor laporan (harian/mingguan/bulanan) — dasar tanggal bayar. */}
+      <div className="flex flex-wrap items-center gap-3 rounded-xl border border-gray-100 bg-white p-3 shadow-sm">
+        <PeriodeFilter nilai={periode} onUbah={setPeriode} label="Periode laporan" />
+        <span className="text-xs text-gray-400">Laporan dihitung dari tanggal bayar (uang masuk) — {labelPer}</span>
+      </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100">

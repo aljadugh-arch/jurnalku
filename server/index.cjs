@@ -6667,6 +6667,24 @@ function bulanTeks(bulan) {
   return { bulan: NAMA_BULAN_ID[m - 1], tahun: String(y) }
 }
 
+// Rentang tanggal bebas [awal, akhir] untuk laporan harian/mingguan. Nilai
+// yang dikirim selalu YYYY-MM-DD; `akhir` otomatis dikunci ke akhir hari itu.
+// Rentang tidak valid -> null (route mengabaikannya, bukan 400).
+function rentangTanggal(mulai, selesai) {
+  const valid = (v) => {
+    if (typeof v !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(v)) return false
+    // Date.parse menormalkan tanggal mustahil (2026-02-30 -> 2 Maret), jadi
+    // cek kalender nyata dengan membangun ulang string dari komponen.
+    const [y, m, d] = v.split('-').map(Number)
+    const t = new Date(Date.UTC(y, m - 1, d))
+    return t.getUTCFullYear() === y && t.getUTCMonth() === m - 1 && t.getUTCDate() === d
+  }
+  const a = valid(mulai) ? mulai : ''
+  const b = valid(selesai) ? selesai : a
+  if (!a) return null
+  return b < a ? { awal: b, akhir: a } : { awal: a, akhir: b }
+}
+
 app.get('/api/keuangan/laporan', BENDAHARA, (req, res) => {
   const { mulai, selesai } = req.query
   const bulan = normalisasiBulan(req.query.bulan)
@@ -6730,6 +6748,7 @@ app.get('/api/buku-kas', BENDAHARA, (req, res) => {
   // bulan ini" dan laporan kas jadi salah. Karena itu: hitung saldo berjalan
   // atas SEMUA baris, baru saring baris yang ditampilkan.
   const bulan = normalisasiBulan(req.query.bulan)
+  const rentangBebas = bulan ? null : rentangTanggal(req.query.mulai, req.query.selesai)
   const transactions = db.prepare(`SELECT t.id,t.tanggal,t.keterangan AS uraian,t.tipe,t.nominal,t.created_at
     FROM keuangan_transaksi t WHERE t.tenant_id=? AND t.akun_id=?
     ORDER BY t.tanggal ASC,t.created_at ASC,t.id ASC`).all(req.tenantId, akun.id)
@@ -6741,6 +6760,7 @@ app.get('/api/buku-kas', BENDAHARA, (req, res) => {
     const kredit = row.tipe === 'keluar' ? Number(row.nominal) : 0
     saldo += debet - kredit
     if (bulan && !String(row.tanggal || '').startsWith(bulan)) continue
+    if (rentangBebas && (String(row.tanggal || '') < rentangBebas.awal || String(row.tanggal || '') > rentangBebas.akhir)) continue
     rows.push({ ...row, hari: formatter.format(new Date(`${row.tanggal}T12:00:00+07:00`)), debet, kredit, saldo })
   }
   res.json(rows)
@@ -7859,6 +7879,15 @@ app.get('/api/tagihan', BENDAHARA, (req, res) => {
   const rentangBayar = rentangBulan(req.query.bulan_bayar)
   if (rentangBayar) { sql += ' AND t.tanggal_bayar >= ? AND t.tanggal_bayar <= ?'; params.push(rentangBayar.awal, rentangBayar.akhir) }
 
+  // Rentang tanggal bebas (harian/mingguan) untuk laporan pembayaran: filter
+  // berdasarkan kapan uang masuk (tanggal_bayar). Menang atas bulan_bayar bila
+  // keduanya dikirim — rentang bebas lebih spesifik.
+  const rentangTanggalBayar = rentangTanggal(req.query.mulai, req.query.selesai)
+  if (rentangTanggalBayar && !rentangBayar) {
+    sql += ' AND t.tanggal_bayar >= ? AND t.tanggal_bayar <= ?'
+    params.push(rentangTanggalBayar.awal, rentangTanggalBayar.akhir)
+  }
+
   sql += ' ORDER BY r.nama, s.nama, t.created_at DESC'
   res.json(db.prepare(sql).all(...params))
 })
@@ -7930,6 +7959,27 @@ app.get('/api/tabungan', BENDAHARA, (req, res) => {
   const rentang = rentangBulan(req.query.bulan)
   if (rentang) { sql += ' AND tanggal >= ? AND tanggal <= ?'; params.push(rentang.awal, rentang.akhir) }
   sql += ' ORDER BY created_at DESC'
+  res.json(db.prepare(sql).all(...params))
+})
+
+// Laporan tabungan lintas siswa untuk periode harian/mingguan/bulanan
+// (?bulan=YYYY-MM atau ?mulai=&selesai=YYYY-MM-DD). Dipakai ekspor Excel/PDF:
+// semua mutasi periode itu plus nama/NIS/rombel siswa.
+app.get('/api/tabungan/laporan', BENDAHARA, (req, res) => {
+  let sql = `SELECT t.id, t.siswa_id, t.tanggal, t.tipe, t.nominal, t.keterangan, t.created_at,
+    s.nis, s.nama AS siswa_nama, r.nama AS rombel_nama
+    FROM tabungan t
+    LEFT JOIN siswa s ON s.id = t.siswa_id AND s.tenant_id = t.tenant_id
+    LEFT JOIN rombel r ON r.id = s.rombel_id AND r.tenant_id = t.tenant_id
+    WHERE t.tenant_id = ?`
+  const params = [req.tenantId]
+  const rentang = rentangBulan(req.query.bulan)
+  if (rentang) { sql += ' AND t.tanggal >= ? AND t.tanggal <= ?'; params.push(rentang.awal, rentang.akhir) }
+  else {
+    const bebas = rentangTanggal(req.query.mulai, req.query.selesai)
+    if (bebas) { sql += ' AND t.tanggal >= ? AND t.tanggal <= ?'; params.push(bebas.awal, bebas.akhir) }
+  }
+  sql += ' ORDER BY t.tanggal ASC, s.nama ASC'
   res.json(db.prepare(sql).all(...params))
 })
 

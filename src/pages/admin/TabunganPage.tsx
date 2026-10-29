@@ -1,13 +1,18 @@
 import { useState, useEffect } from 'react'
-import { Search, Plus, X, Pencil, Trash2 } from 'lucide-react'
+import { Search, Plus, X, Pencil, Trash2, FileSpreadsheet, Printer } from 'lucide-react'
 import toast from 'react-hot-toast'
 import api from '../../services/api'
 import MonthFilter from '../../components/MonthFilter'
+import PeriodeFilter, { rentangPeriode, labelPeriode, tanggalLokal } from '../../components/PeriodeFilter'
+import { unduhExcel } from '../../utils/excelExport'
+import { openFinanceReport } from '../../utils/financeReport'
+import { useSettingsStore } from '../../stores/settingsStore'
 
 interface SaldoSiswa { id: string; nis: string; nisn?: string; nama: string; saldo: number; rombel_nama?: string }
 interface Mutasi { id: string; tanggal: string; tipe: string; nominal: number; saldo_akhir: number; keterangan: string }
 
 export default function TabunganPage() {
+  const settings = useSettingsStore(s => s.settings)
   const [saldoList, setSaldoList] = useState<SaldoSiswa[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
@@ -22,7 +27,10 @@ export default function TabunganPage() {
   // mutasinya. Ini yang membingungkan sebelumnya: daftar saldo tetap penuh
   // walau riwayat kosong.
   const [bulan, setBulan] = useState('')
+  // Periode laporan untuk ekspor (harian/mingguan/bulanan).
+  const [periode, setPeriode] = useState(() => rentangPeriode('bulan', new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Jakarta' }).slice(0, 7)))
   const [ringkasan, setRingkasan] = useState<any>(null)
+  const [laporan, setLaporan] = useState<any[]>([])
 
   const fetchSaldo = async () => {
     try { const res = await api.get('/tabungan/saldo'); setSaldoList(res.data) }
@@ -35,7 +43,16 @@ export default function TabunganPage() {
     catch { setRingkasan(null) }
   }
 
-  useEffect(() => { fetchSaldo(); fetchRingkasan(bulan) }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  // Mutasi lintas siswa untuk ekspor, mengikuti periode yang dipilih.
+  const fetchLaporan = async (p = periode) => {
+    const params: any = {}
+    if (p.mode === 'bulan') params.bulan = p.mulai.slice(0, 7)
+    else { params.mulai = p.mulai; params.selesai = p.selesai }
+    try { const res = await api.get('/tabungan/laporan', { params }); setLaporan(res.data || []) }
+    catch { setLaporan([]) }
+  }
+
+  useEffect(() => { fetchSaldo(); fetchRingkasan(bulan); fetchLaporan() }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const filtered = saldoList.filter(s =>
     s.nama.toLowerCase().includes(search.toLowerCase()) || (s.nis || '').includes(search) || (s.nisn || '').includes(search)
@@ -54,6 +71,11 @@ export default function TabunganPage() {
     setBulan(b)
     fetchRingkasan(b)
     if (selectedSiswa) handleSelectSiswa(selectedSiswa, b)
+  }
+
+  const gantiPeriode = (p: any) => {
+    setPeriode(p)
+    fetchLaporan(p)
   }
 
   const reload = () => {
@@ -98,6 +120,58 @@ export default function TabunganPage() {
   }
 
   const fmt = (n: number) => 'Rp ' + Number(n||0).toLocaleString('id-ID')
+  const labelPer = labelPeriode(periode)
+
+  const totalsLaporan = laporan.reduce((t, m) => {
+    if (m.tipe === 'setor') t.setor += Number(m.nominal || 0)
+    else t.tarik += Number(m.nominal || 0)
+    return t
+  }, { setor: 0, tarik: 0 })
+
+  const handleExcel = () => {
+    if (!laporan.length) { toast.error('Tidak ada mutasi pada periode ini'); return }
+    unduhExcel(
+      [{ name: 'Laporan Tabungan', rows: laporan, columns: [
+        { header: 'TANGGAL', value: 'tanggal', width: 12 },
+        { header: 'NIS', value: 'nis', width: 12 },
+        { header: 'NAMA', value: 'siswa_nama', width: 28 },
+        { header: 'ROMBEL', value: 'rombel_nama', width: 14 },
+        { header: 'JENIS', value: (m: any) => m.tipe === 'setor' ? 'Setor' : 'Tarik', width: 10 },
+        { header: 'NOMINAL', value: (m: any) => Number(m.nominal || 0), width: 14, numFmt: '#,##0' },
+        { header: 'KETERANGAN', value: 'keterangan', width: 24 },
+      ] }],
+      { title: 'Laporan Tabungan Siswa', filename: 'Laporan_Tabungan', subtitle: `Periode: ${labelPer}`, settings: settings as Record<string, unknown> },
+    )
+    toast.success('Excel laporan tabungan diunduh')
+  }
+
+  const handlePdf = () => {
+    if (!laporan.length) { toast.error('Tidak ada mutasi pada periode ini'); return }
+    const ok = openFinanceReport({
+      title: 'Laporan Tabungan Siswa',
+      periode: labelPer,
+      settings: settings as Record<string, unknown>,
+      columns: ['NO', 'TANGGAL', 'NIS', 'NAMA', 'ROMBEL', 'JENIS', 'NOMINAL', 'KETERANGAN'],
+      rows: laporan.map((m, i) => [
+        String(i + 1),
+        m.tanggal,
+        m.nis || '-',
+        { text: m.siswa_nama || '-', align: 'left' },
+        m.rombel_nama || '-',
+        m.tipe === 'setor' ? 'Setor' : 'Tarik',
+        fmt(m.nominal),
+        { text: m.keterangan || '-', align: 'left' },
+      ]),
+      totals: ['TOTAL', '', '', '', '', `Setor ${fmt(totalsLaporan.setor)} · Tarik ${fmt(totalsLaporan.tarik)}`, '', ''],
+      summary: [
+        { label: 'Total Setoran', value: fmt(totalsLaporan.setor) },
+        { label: 'Total Penarikan', value: fmt(totalsLaporan.tarik) },
+        { label: 'Jumlah Mutasi', value: String(laporan.length) },
+      ],
+      footnotes: [`Periode: ${labelPer}`, 'Saldo siswa adalah posisi terkini, tidak difilter periode.'],
+    })
+    if (!ok) toast.error('Popup diblokir browser')
+  }
 
   return (
     <div className="space-y-6">
@@ -106,9 +180,13 @@ export default function TabunganPage() {
           <h1 className="text-2xl font-bold text-gray-800 font-display">Tabungan Siswa</h1>
           <p className="text-gray-500 text-sm mt-1">Total saldo: {fmt(totalSaldo)}</p>
         </div>
-        <button onClick={() => setShowTrx(true)} className="flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-lg text-sm hover:bg-primary-dark">
-          <Plus size={16} /> Transaksi Baru
-        </button>
+        <div className="flex flex-wrap gap-2">
+          <button onClick={handleExcel} className="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-semibold text-gray-700 shadow-sm hover:bg-gray-50"><FileSpreadsheet size={16} className="text-emerald-600" /> Excel</button>
+          <button onClick={handlePdf} className="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-semibold text-gray-700 shadow-sm hover:bg-gray-50"><Printer size={16} className="text-rose-600" /> PDF</button>
+          <button onClick={() => setShowTrx(true)} className="flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-lg text-sm hover:bg-primary-dark">
+            <Plus size={16} /> Transaksi Baru
+          </button>
+        </div>
       </div>
 
       {/* Ringkasan bulan terpilih. Saldo total tetap ditampilkan karena itu
@@ -121,6 +199,15 @@ export default function TabunganPage() {
             <span className="text-gray-500">Penarikan: <b className="text-rose-600">{fmt(ringkasan?.tarik?.total || 0)}</b> <span className="text-xs text-gray-400">({ringkasan?.tarik?.jumlah || 0})</span></span>
             <span className="text-gray-500">Penabung: <b className="text-gray-700">{ringkasan?.penabung || 0} siswa</b></span>
           </div>
+        </div>
+      </div>
+
+      {/* Periode laporan + tombol ekspor: laporan lintas siswa untuk periode
+          harian/mingguan/bulanan, terpisah dari filter mutasi per siswa. */}
+      <div className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <PeriodeFilter nilai={periode} onUbah={gantiPeriode} label="Periode laporan" />
+          <span className="text-xs text-gray-400">{laporan.length} mutasi pada periode ini</span>
         </div>
       </div>
 

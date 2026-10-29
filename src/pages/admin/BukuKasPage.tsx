@@ -1,14 +1,19 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Pencil, Plus, Save, Trash2, X } from 'lucide-react'
+import { Pencil, Plus, Save, Trash2, X, FileSpreadsheet, Printer } from 'lucide-react'
 import toast from 'react-hot-toast'
 import api from '../../services/api'
 import MonthFilter, { bulanSekarang } from '../../components/MonthFilter'
+import PeriodeFilter, { rentangPeriode, labelPeriode, tanggalLokal } from '../../components/PeriodeFilter'
+import { unduhExcel } from '../../utils/excelExport'
+import { openFinanceReport } from '../../utils/financeReport'
+import { useSettingsStore } from '../../stores/settingsStore'
 
 type Row = { id:string; tanggal:string; hari:string; uraian:string; debet:number; kredit:number; saldo:number }
 const empty = { tanggal: new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Jakarta' }), uraian: '', debet: '', kredit: '' }
 const money = (value:number) => new Intl.NumberFormat('id-ID', { maximumFractionDigits: 0 }).format(Number(value || 0))
 
 export default function BukuKasPage() {
+  const settings = useSettingsStore(s => s.settings)
   const [rows, setRows] = useState<Row[]>([])
   const [form, setForm] = useState(empty)
   const [editing, setEditing] = useState<string | null>(null)
@@ -16,7 +21,14 @@ export default function BukuKasPage() {
   // '' = seluruh periode. Bulan berjalan dipilih lebih dulu karena itu yang
   // paling sering dibuka bendahara; saldo tetap posisi akhir bulan itu.
   const [bulan, setBulan] = useState(bulanSekarang())
-  const load = useCallback(() => api.get('/buku-kas', { params: bulan ? { bulan } : {} }).then(r => setRows(r.data || [])).catch(() => toast.error('Gagal memuat Buku Kas')), [bulan])
+  // Periode laporan: harian / mingguan / bulanan (satu kontrol).
+  const [periode, setPeriode] = useState(() => rentangPeriode('hari', tanggalLokal(new Date())))
+  const load = useCallback(() => {
+    const params: any = {}
+    if (periode.mode === 'bulan') params.bulan = bulan
+    else { params.mulai = periode.mulai; params.selesai = periode.selesai }
+    return api.get('/buku-kas', { params }).then(r => setRows(r.data || [])).catch(() => toast.error('Gagal memuat Buku Kas'))
+  }, [periode, bulan])
   useEffect(() => { void load() }, [load])
   const total = useMemo(() => ({ debet: rows.reduce((n,r)=>n+Number(r.debet||0),0), kredit: rows.reduce((n,r)=>n+Number(r.kredit||0),0), saldo: rows.at(-1)?.saldo || 0 }), [rows])
   const reset = () => { setEditing(null); setForm(empty) }
@@ -32,11 +44,57 @@ export default function BukuKasPage() {
   const edit = (row:Row) => { setEditing(row.id); setForm({ tanggal: row.tanggal, uraian: row.uraian, debet: row.debet ? String(row.debet) : '', kredit: row.kredit ? String(row.kredit) : '' }) }
   const remove = async (id:string) => { if (!window.confirm('Hapus transaksi Buku Kas ini?')) return; try { await api.delete(`/buku-kas/${id}`); toast.success('Transaksi dihapus'); await load() } catch (error:any) { toast.error(error.response?.data?.error || 'Gagal menghapus transaksi') } }
 
+  const labelPer = labelPeriode(periode)
+
+  const handleExcel = () => {
+    if (!rows.length) { toast.error('Tidak ada transaksi pada periode ini'); return }
+    unduhExcel(
+      [{ name: 'Buku Kas', rows, columns: [
+        { header: 'TANGGAL', value: 'tanggal', width: 12 },
+        { header: 'HARI', value: 'hari', width: 12 },
+        { header: 'URAIAN', value: 'uraian', width: 40 },
+        { header: 'DEBET', value: (r: Row) => r.debet || 0, width: 14, numFmt: '#,##0' },
+        { header: 'KREDIT', value: (r: Row) => r.kredit || 0, width: 14, numFmt: '#,##0' },
+        { header: 'SALDO', value: (r: Row) => r.saldo || 0, width: 14, numFmt: '#,##0' },
+      ] }],
+      { title: 'Buku Kas', filename: 'Buku_Kas', subtitle: `Periode: ${labelPer}`, settings: settings as Record<string, unknown> },
+    )
+    toast.success('Excel Buku Kas diunduh')
+  }
+
+  const handlePdf = () => {
+    if (!rows.length) { toast.error('Tidak ada transaksi pada periode ini'); return }
+    const ok = openFinanceReport({
+      title: 'Laporan Buku Kas',
+      periode: labelPer,
+      settings: settings as Record<string, unknown>,
+      columns: ['NO', 'TANGGAL', 'HARI', 'URAIAN', 'DEBET', 'KREDIT', 'SALDO'],
+      rows: rows.map((r, i) => [
+        String(i + 1),
+        r.tanggal,
+        r.hari,
+        { text: r.uraian, align: 'left' },
+        r.debet ? money(r.debet) : '-',
+        r.kredit ? money(r.kredit) : '-',
+        money(r.saldo),
+      ]),
+      totals: ['TOTAL', '', '', '', money(total.debet), money(total.kredit), money(total.saldo)],
+      footnotes: [`Periode: ${labelPer}`, `Saldo akhir adalah posisi kas per ${periode.selesai}.`],
+    })
+    if (!ok) toast.error('Popup diblokir browser')
+  }
+
   return <div className="space-y-5 pb-24 lg:pb-6">
-    <div><h1 className="text-2xl font-bold text-gray-800">Buku Kas</h1><p className="text-sm text-gray-500">Input penerimaan dan pengeluaran kas lembaga.</p></div>
+    <div className="flex flex-wrap items-start justify-between gap-3">
+      <div><h1 className="text-2xl font-bold text-gray-800">Buku Kas</h1><p className="text-sm text-gray-500">Input penerimaan dan pengeluaran kas lembaga.</p></div>
+      <div className="flex gap-2">
+        <button onClick={handleExcel} className="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-semibold text-gray-700 shadow-sm hover:bg-gray-50"><FileSpreadsheet size={16} className="text-emerald-600" /> Excel</button>
+        <button onClick={handlePdf} className="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-semibold text-gray-700 shadow-sm hover:bg-gray-50"><Printer size={16} className="text-rose-600" /> PDF</button>
+      </div>
+    </div>
     <div className="flex flex-wrap items-center justify-between gap-2">
-      <MonthFilter nilai={bulan} onUbah={setBulan} izinkanSemua label="Periode Buku Kas" />
-      <p className="text-xs text-gray-500">Saldo adalah posisi akhir periode, bukan mutasi bulan ini.</p>
+      <PeriodeFilter nilai={periode} onUbah={p => { setPeriode(p); if (p.mode === 'bulan') setBulan(p.mulai.slice(0, 7)) }} label="Periode Buku Kas" />
+      <p className="text-xs text-gray-500">Saldo adalah posisi akhir periode, bukan mutasi periode ini.</p>
     </div>
     <form onSubmit={submit} className="grid gap-3 rounded-2xl border bg-white p-4 shadow-sm sm:grid-cols-2 lg:grid-cols-5">
       <div><label className="text-xs text-gray-500">TGL</label><input required type="date" value={form.tanggal} onChange={e=>setForm({...form,tanggal:e.target.value})} className="mt-1 w-full rounded-lg border px-3 py-2 text-sm"/></div>
