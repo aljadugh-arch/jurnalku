@@ -67,7 +67,10 @@ test('student partial updates preserve omitted fields and validate rombel within
   assert.match(route, /updates\.includes\('rombel_id'\)/)
   assert.match(route, /SELECT id FROM rombel WHERE id[= ]+\? AND tenant_id[= ]+\?/)
   assert.match(route, /UPDATE siswa SET/)
-  assert.match(server, /app\.get\('\/api\/siswa\/:id', authMiddleware/)
+  // GET siswa by ID mengembalikan PII lengkap (alamat/no_hp/nama ortu) — wajib
+  // dibatasi ke staf (requireRole), BUKAN authMiddleware, supaya siswa/wali
+  // tidak bisa enumerasi PII siswa lain (perbaikan IDOR).
+  assert.match(server, /app\.get\('\/api\/siswa\/:id', requireRole\(/)
   // Daftar siswa per rombel dibaca halaman Rombel oleh SELURUH peran manajemen
   // (kepala/bendahara/operator/TU), bukan hanya admin — kepala dulu 403.
   assert.match(server, /app\.get\('\/api\/rombel\/:id\/siswa', ROLE_LIHAT_SISWA_ROMBEL/)
