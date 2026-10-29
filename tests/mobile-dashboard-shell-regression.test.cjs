@@ -19,7 +19,7 @@ test('admin grid 4x2 membuka menu lengkap dari ubin Lainnya dan tombol Semua Men
   assert.doesNotMatch(dashboard, /Semua Menu/)
   assert.match(dashboard, /<MobileMenuSheet open=\{menuOpen\}/)
   assert.match(sheet, /flattenMenu\(menuForRole\(role\)\)/)
-  assert.match(sheet, /Manajemen Data/)
+  assert.match(sheet, /Penyiapan/)
 })
 
 test('header dashboard memegang aksi notifikasi, tema, profil, sandi, dan keluar', () => {

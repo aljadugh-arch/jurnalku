@@ -36,8 +36,8 @@ test('admin home has configurable eight shortcuts, notifications and charts', ()
   assert.match(DASH, /api\.get\('\/admin\/monitoring'\)/)
 })
 
-test('all-menu sheet is categorized', () => {
-  for (const category of ['Menu Layanan', 'Manajemen Data', 'Akademik & Kelas', 'Administrasi & Keuangan']) assert.match(MENUS, new RegExp(category.replace('&', '\\&')))
+test('all-menu sheet is categorized (Penyiapan..Sistem sesuai jurnalv2)', () => {
+  for (const category of ['Penyiapan', 'Harian', 'Akademik', 'Keuangan', 'Layanan', 'Sistem']) assert.match(MENUS, new RegExp(category))
 })
 
 test('settings persists tenant-specific dashboard shortcut choices', () => {

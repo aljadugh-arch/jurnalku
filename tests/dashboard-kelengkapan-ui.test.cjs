@@ -64,9 +64,9 @@ test('menu "Monitoring Data" ada di bawah Dashboard untuk admin dan kepala', () 
   )
 })
 
-test('menu mobile mengelompokkan Monitoring Data ke Manajemen Data', () => {
+test('menu mobile mengelompokkan Monitoring Data ke kelompok Harian', () => {
   const mobile = baca('src/components/MobileMenuSheet.tsx')
-  assert.ok(/Monitoring/.test(mobile), 'kategori menu mobile belum mengenali Monitoring Data')
+  assert.ok(/monitoring/.test(mobile), 'kategori menu mobile belum mengenali path Monitoring Data')
 })
 
 test('route /admin/monitoring terdaftar dan lazy-loaded', () => {
