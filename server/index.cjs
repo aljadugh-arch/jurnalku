@@ -6700,7 +6700,15 @@ app.get('/api/keuangan/laporan', BENDAHARA, (req, res) => {
   }
   const debet = db.prepare(`SELECT COALESCE(SUM(nominal),0) total FROM keuangan_transaksi t ${where} AND tipe='masuk'`).get(...params).total
   const kredit = db.prepare(`SELECT COALESCE(SUM(nominal),0) total FROM keuangan_transaksi t ${where} AND tipe='keluar'`).get(...params).total
-  const saldo_awal = db.prepare('SELECT COALESCE(SUM(saldo_awal),0) total FROM keuangan_akun WHERE tenant_id=?').get(req.tenantId).total
+  // Saldo awal periode = saldo awal akun + semua mutasi SEBELUM periode dimulai.
+  // Tanpa ini laporan harian/mingguan menampilkan saldo awal akun yang konstan,
+  // sehingga "saldo akhir" melenceng dari posisi kas sebenarnya.
+  const saldoAkun = db.prepare('SELECT COALESCE(SUM(saldo_awal),0) total FROM keuangan_akun WHERE tenant_id=?').get(req.tenantId).total
+  const awalPeriode = rentang?.awal || mulai || ''
+  const mutasiSebelum = awalPeriode
+    ? db.prepare(`SELECT COALESCE(SUM(CASE WHEN tipe='masuk' THEN nominal ELSE -nominal END),0) total FROM keuangan_transaksi WHERE tenant_id=? AND tanggal < ?`).get(req.tenantId, awalPeriode).total
+    : 0
+  const saldo_awal = saldoAkun + mutasiSebelum
   const per_kategori = db.prepare(`SELECT k.nama, t.tipe, SUM(t.nominal) total FROM keuangan_transaksi t LEFT JOIN keuangan_kategori k ON k.id=t.kategori_id AND k.tenant_id=t.tenant_id ${where} GROUP BY t.kategori_id, t.tipe ORDER BY t.tipe, k.nama`).all(...params)
   const per_akun = db.prepare(`SELECT a.nama, SUM(CASE WHEN t.tipe='masuk' THEN t.nominal ELSE 0 END) debet, SUM(CASE WHEN t.tipe='keluar' THEN t.nominal ELSE 0 END) kredit FROM keuangan_transaksi t LEFT JOIN keuangan_akun a ON a.id=t.akun_id AND a.tenant_id=t.tenant_id ${where} GROUP BY t.akun_id ORDER BY a.nama`).all(...params)
 
