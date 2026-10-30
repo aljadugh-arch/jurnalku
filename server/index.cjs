@@ -27,6 +27,7 @@ const { detectJadwalConflicts } = require('./jadwal-conflicts.cjs')
 const { importJadwalRows } = require('./jadwal-import.cjs')
 const { setupPortalCashless, registerPortalRoutes, registerKantinRoutes, selectPenilaianStudentId, normalizeStoredImageDataUrl } = require('./portal-cashless.cjs')
 const { setupPaymentGateway, registerPaymentGatewayRoutes } = require('./payment-gateway-routes.cjs')
+const paymentGw = require('./payment-gateway.cjs')
 const { registerRoutes: registerPpdbRoutes, setupPpdbTables } = require('./ppdb.cjs')
 const { registerRoutes: registerPublikRoutes, setupPublikTables } = require('./publik.cjs')
 const { buatLayananSmtp } = require('./smtp-tenant.cjs')
@@ -2252,7 +2253,7 @@ function isSubscriptionBypass(req) {
   // uang yang sudah masuk tidak boleh hilang hanya karena paket kedaluwarsa. Route-nya
   // sendiri tetap wajib lolos HMAC atas byte mentah, jadi ini bukan pintu terbuka.
   if (req.path.startsWith('/api/payment/webhook/')) return true
-  return req.path.startsWith('/api/auth') || req.path === '/api/health' || req.path === '/api/settings' || req.path === '/api/subscription/status' || req.path === '/api/subscription/plans' || req.path === '/api/subscription/unlock' || req.path === '/api/tenant/info' || req.path.startsWith('/api/tenants')
+  return req.path.startsWith('/api/auth') || req.path === '/api/health' || req.path === '/api/settings' || req.path === '/api/public/plans' || req.path === '/api/subscription/status' || req.path === '/api/subscription/plans' || req.path === '/api/subscription/unlock' || req.path === '/api/tenant/info' || req.path.startsWith('/api/tenants')
 }
 
 function enforceTenantAccess(req, res, next) {
@@ -2472,6 +2473,33 @@ app.put('/api/platform/settings', SUPER, (req, res) => {
   if (!Object.keys(diubah).length) return res.status(400).json({ error: 'Tidak ada perubahan yang dikirim' })
   for (const [k, v] of Object.entries(diubah)) setPlatformSetting(db, k, v)
   res.json({ success: true, settings: getPlatformSettings(db) })
+})
+
+// Daftar paket untuk halaman REGISTRASI (publik, tanpa login). Hanya paket aktif yang
+// berbayar — trial otomatis, tidak perlu dipilih sebagai pembayaran.
+app.get('/api/public/plans', (req, res) => {
+  try {
+    const plans = getPlans(db)
+      .filter(p => p.aktif && Number(p.harga) > 0)
+      .map(p => ({ plan: p.plan, label: p.label, harga: p.harga, masa_nilai: p.masa_nilai, masa_satuan: p.masa_satuan }))
+    res.json({ plans })
+  } catch { res.json({ plans: [] }) }
+})
+
+// Status pembayaran langganan setelah registrasi. Intent-nya tercatat atas nama tenant
+// PLATFORM, jadi akses dicek lewat ref_id (lembaga pemilik) — bukan req.tenantId langsung.
+app.get('/api/subscription/payment/:intentId', authMiddleware, async (req, res) => {
+  const row = db.prepare("SELECT * FROM payment_intents WHERE id=? AND ref_type='langganan'").get(req.params.intentId)
+  if (!row || row.ref_id !== req.tenantId) return res.status(404).json({ error: 'Tagihan tidak ditemukan' })
+  if (row.status === 'pending') {
+    try {
+      const klien = paymentGw.klienUntukTenant(db, row.tenant_id)
+      const st = await klien.statusNominal(row.pay_amount)
+      if (st.paid) paymentGw.tandaiLunas(db, { intentId: row.id, sumber: 'manual-cek', waktu: new Date().toISOString() })
+    } catch { /* tetap pending kalau gateway tak bisa dihubungi */ }
+  }
+  const terbaru = db.prepare('SELECT * FROM payment_intents WHERE id=?').get(req.params.intentId)
+  res.json({ intent_id: terbaru.id, status: terbaru.status, paid: terbaru.status === 'paid', expires_at: terbaru.expires_at })
 })
 
 // Periksa / rapikan override fitur per lembaga agar tidak melampaui paketnya.
@@ -3716,7 +3744,7 @@ app.get('/api/auth/me/foto', authMiddleware, (req, res) => {
 })
 
 app.post('/api/auth/register', accountLimiter, async (req, res) => {
-  const { nama_lembaga, nama, email, password, no_hp, domain_type, custom_domain, slug: slugInput, base_domain } = req.body
+  const { nama_lembaga, nama, email, password, no_hp, domain_type, custom_domain, slug: slugInput, base_domain, plan: planPilih } = req.body
   const vErr = vRegister(req.body); if (vErr) return res.status(400).json({ error: vErr })
   const exists = db.prepare('SELECT id FROM users WHERE email = ?').get(email)
   if (exists) return res.status(400).json({ error: 'Email sudah terdaftar' })
@@ -3804,6 +3832,53 @@ app.post('/api/auth/register', accountLimiter, async (req, res) => {
     ? `https://${domainVal}`
     : `https://${slug}.${subdomainBase}`
 
+  // Paket BERBAYAR dipilih saat mendaftar: buat QRIS langganan (dibayar ke akun
+  // merchant PLATFORM) supaya pengguna bisa langsung bayar setelah registrasi.
+  // Tanpa pilihan paket (atau paket trial / paket nonaktif) = jalur trial biasa,
+  // TANPA pembayaran.
+  let pembayaran = null
+  let paketDipilih = null
+  const planDipilih = String(planPilih || '').toLowerCase()
+  if (planDipilih && planDipilih !== 'trial' && PLAN_KEYS.includes(planDipilih)) {
+    const row = db.prepare('SELECT * FROM subscription_plans WHERE plan=?').get(planDipilih)
+    if (row && row.aktif && Number(row.harga) > 0) paketDipilih = row
+  }
+  if (paketDipilih) {
+    try {
+      const cfgPlat = db.prepare('SELECT enabled, api_key_encrypted FROM payment_gateway_config WHERE tenant_id=?').get('default')
+      if (!cfgPlat || cfgPlat.enabled !== 1 || !cfgPlat.api_key_encrypted) {
+        pembayaran = { gagal: 'Gateway pembayaran platform belum aktif. Akun berjalan sebagai trial — hubungi admin untuk aktivasi paket.' }
+      } else {
+        const masaNilai = Number(paketDipilih.masa_nilai) || 1
+        const masaSatuan = paketDipilih.masa_satuan === 'hari' ? 'hari' : 'bulan'
+        const intent = await paymentGw.buatIntent(db, {
+          tenantId: 'default',
+          refType: 'langganan',
+          refId: tenantId,
+          label: `Langganan ${paketDipilih.label} ${masaNilai} ${masaSatuan}`,
+          nominal: Number(paketDipilih.harga),
+          createdBy: id,
+          meta: { plan: planDipilih, masa_nilai: masaNilai, masa_satuan: masaSatuan },
+        })
+        pembayaran = {
+          intent_id: intent.id,
+          qris_code: intent.qris_code,
+          qris_url: intent.qris_url,
+          amount: intent.pay_amount,
+          nominal: intent.nominal,
+          kode_unik: intent.kode_unik,
+          expires_at: intent.expires_at,
+          plan: planDipilih,
+          plan_label: paketDipilih.label,
+          masa: `${masaNilai} ${masaSatuan}`,
+        }
+      }
+    } catch (e) {
+      console.error('[register] gagal membuat tagihan langganan:', e.message)
+      pembayaran = { gagal: 'Gagal membuat QRIS langganan. Akun tetap aktif sebagai trial.' }
+    }
+  }
+
   // Notifikasi pendaftaran ke WA + email pendaftar. Dijalankan TANPA menunggu
   // (fire-and-forget) dan tidak pernah menggagalkan respons: kalau WA/email
   // gagal, pendaftaran tetap sukses dan statusnya dicatat di log server.
@@ -3820,7 +3895,7 @@ app.post('/api/auth/register', accountLimiter, async (req, res) => {
     slug,
     domainCustom: domainVal,
     domainStatus,
-    planLabel: 'Paket Trial (Masa Uji Coba)',
+    planLabel: paketDipilih ? `Paket ${paketDipilih.label} (menunggu pembayaran)` : 'Paket Trial (Masa Uji Coba)',
     aktifSampai: formatTanggalId(trialEnds),
     supportPhone: process.env.SUPPORT_PHONE || '',
     supportEmail: process.env.SUPPORT_EMAIL || '',
@@ -3847,7 +3922,8 @@ app.post('/api/auth/register', accountLimiter, async (req, res) => {
     domain_message: domainPesan,
     url: appUrl,
     token,
-    user: { id, nama, email, role: 'admin' }
+    user: { id, nama, email, role: 'admin' },
+    pembayaran,
   })
 })
 

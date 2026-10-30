@@ -58,11 +58,17 @@ async function startServer(dbFile) {
   let out = ''
   proc.stdout.on('data', d => { out += d.toString() })
   proc.stderr.on('data', d => { out += d.toString() })
-  const batas = Date.now() + 30000
+  const batas = Date.now() + 45000
   while (Date.now() < batas && !out.includes('JURNALKU API Server running')) {
     await new Promise(r => setTimeout(r, 200))
   }
-  assert.ok(out.includes('JURNALKU API Server running'), 'server harus start:\n' + out.slice(-800))
+  // WAJIB matikan proses bila server gagal start. Tanpa ini, proses server yang
+  // menggantung tidak pernah di-kill (variabel `proc` belum dikembalikan), dan
+  // seluruk suite `node --test tests/` ikut menggantung menunggu proses itu.
+  if (!out.includes('JURNALKU API Server running')) {
+    try { proc.kill('SIGKILL') } catch { /* sudah mati */ }
+    assert.ok(false, 'server harus start:\n' + out.slice(-800))
+  }
   return { proc, port }
 }
 

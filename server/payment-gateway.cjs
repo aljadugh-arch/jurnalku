@@ -52,7 +52,7 @@ const KODE_UNIK_MAX = 999
 const TIMEOUT_MS = 15000
 const MASA_BERLAKU_JAM = 24
 
-const REF_TYPES = ['tagihan', 'topup', 'tabungan']
+const REF_TYPES = ['tagihan', 'topup', 'tabungan', 'langganan']
 const STATUS_INTENT = ['pending', 'paid', 'expired', 'canceled']
 
 // ---------------------------------------------------------------------------
@@ -98,6 +98,7 @@ function setupPaymentGatewayTables(db) {
       expires_at TEXT,
       paid_at TEXT,
       raw_webhook_json TEXT,
+      meta_json TEXT,
       settled INTEGER NOT NULL DEFAULT 0,
       settled_at TEXT
     );
@@ -130,6 +131,7 @@ function setupPaymentGatewayTables(db) {
     ['sumber', 'TEXT'],
     ['settled', 'INTEGER NOT NULL DEFAULT 0'],
     ['settled_at', 'TEXT'],
+    ['meta_json', 'TEXT'],
   ]) {
     try {
       const ada = db.prepare('PRAGMA table_info(payment_intents)').all().some(c => c.name === kolom[0])
@@ -356,7 +358,7 @@ function intentRingkas(row) {
   }
 }
 
-const LABEL_REF = { tagihan: 'Tagihan', topup: 'Top-up saldo', tabungan: 'Setoran tabungan' }
+const LABEL_REF = { tagihan: 'Tagihan', topup: 'Top-up saldo', tabungan: 'Setoran tabungan', langganan: 'Langganan' }
 
 /**
  * Pastikan sasaran pembayaran memang ada SEBELUM QR diminta. Kalau tidak, kegagalan baru
@@ -376,6 +378,15 @@ function validasiTarget(db, { tenantId, refType, refId, studentId }) {
     if (!s) throw new Error('Siswa tidak ditemukan atau tidak aktif')
     return { studentId, nominalDefault: 0 }
   }
+  if (refType === 'langganan') {
+    // ref_id = id LEMBAGA yang berlangganan. Intent-nya sendiri milik tenant PLATFORM
+    // (pemilik akun merchant), jadi nominal default tidak diambil dari sini — pemanggil
+    // (registrasi) yang mengisi nominal sesuai harga paket.
+    if (!refId) throw new Error('Lembaga langganan wajib diisi')
+    const t = db.prepare('SELECT id FROM tenants WHERE id=?').get(refId)
+    if (!t) throw new Error('Lembaga tidak ditemukan')
+    return { studentId: '', nominalDefault: 0 }
+  }
   throw new Error(`Jenis pembayaran tidak dikenal: ${refType}`)
 }
 
@@ -385,7 +396,7 @@ function validasiTarget(db, { tenantId, refType, refId, studentId }) {
  * supaya baris pending selalu punya gateway_order_id (kalau gateway gagal, tidak ada
  * baris pending yang menggantung dan menyandera nominal).
  */
-async function buatIntent(db, { tenantId, refType, refId = '', studentId = '', label = '', nominal, createdBy = '', klien = null }) {
+async function buatIntent(db, { tenantId, refType, refId = '', studentId = '', label = '', nominal, createdBy = '', klien = null, meta = null }) {
   if (!REF_TYPES.includes(refType)) throw new Error(`Jenis pembayaran tidak dikenal: ${refType}`)
   const target = validasiTarget(db, { tenantId, refType, refId, studentId })
   // Tagihan: nominal DIAMBIL DARI TAGIHAN, bukan dari kiriman pemanggil. Tanpa ini
@@ -407,11 +418,12 @@ async function buatIntent(db, { tenantId, refType, refId = '', studentId = '', l
   try {
     db.prepare(`INSERT INTO payment_intents
       (id, tenant_id, provider, ref_type, ref_id, student_id, label, nominal, kode_unik, pay_amount,
-       gateway_order_id, qris_code, qris_url, status, created_by, expires_at)
-      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,'pending',?,?)`)
+       gateway_order_id, qris_code, qris_url, status, created_by, expires_at, meta_json)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,'pending',?,?,?)`)
       .run(id, tenantId, PROVIDER, refType, String(refId || ''), String(siswaId || ''),
         String(label || LABEL_REF[refType] || ''), nilai, kodeUnik, bayar,
-        qr.order_id, qr.qris_code, qr.qris_url, String(createdBy || ''), expired)
+        qr.order_id, qr.qris_code, qr.qris_url, String(createdBy || ''), expired,
+        meta ? JSON.stringify(meta) : null)
   } catch (err) {
     // Tabrakan indeks unik (nominal+kode unik sudah dipakai) — coba sekali lagi dengan kode baru.
     if (String(err.message).includes('UNIQUE')) {
@@ -421,11 +433,12 @@ async function buatIntent(db, { tenantId, refType, refId = '', studentId = '', l
       const id2 = crypto.randomUUID()
       db.prepare(`INSERT INTO payment_intents
         (id, tenant_id, provider, ref_type, ref_id, student_id, label, nominal, kode_unik, pay_amount,
-         gateway_order_id, qris_code, qris_url, status, created_by, expires_at)
-        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,'pending',?,?)`)
+         gateway_order_id, qris_code, qris_url, status, created_by, expires_at, meta_json)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,'pending',?,?,?)`)
         .run(id2, tenantId, PROVIDER, refType, String(refId || ''), String(siswaId || ''),
           String(label || LABEL_REF[refType] || ''), nilai, kode2, bayar2,
-          qr2.order_id, qr2.qris_code, qr2.qris_url, String(createdBy || ''), expired)
+          qr2.order_id, qr2.qris_code, qr2.qris_url, String(createdBy || ''), expired,
+          meta ? JSON.stringify(meta) : null)
       return intentRingkas(db.prepare('SELECT * FROM payment_intents WHERE id=?').get(id2))
     }
     throw err
@@ -493,10 +506,36 @@ function applierTabungan(db, intent) {
   return { efek: 'tabungan_setor', student_id: intent.student_id, nominal: intent.nominal, saldo_akhir: saldoBaru }
 }
 
+/**
+ * Langganan platform: pembayaran masuk ke akun merchant platform (tenant_id intent =
+ * tenant platform), lalu paket LEMBAGA (intent.ref_id) diaktifkan. Paket + masa aktif
+ * dibawa di meta_json karena intent tidak punya kolom khusus langganan.
+ */
+function applierLangganan(db, intent) {
+  const meta = intent.meta_json ? JSON.parse(intent.meta_json) : {}
+  const tenantId = intent.ref_id
+  const tenant = db.prepare('SELECT * FROM tenants WHERE id=?').get(tenantId)
+  if (!tenant) throw new Error('Lembaga tidak ditemukan untuk langganan ini')
+  const { PLAN_KEYS, computeExpiry } = require('./subscription.cjs')
+  const plan = String(meta.plan || '').toLowerCase()
+  if (!PLAN_KEYS.includes(plan)) throw new Error('Paket langganan tidak dikenal')
+  const masaNilai = Number(meta.masa_nilai) || 1
+  const masaSatuan = meta.masa_satuan === 'hari' ? 'hari' : 'bulan'
+  const now = new Date()
+  const currentEnd = tenant.subscription_ends_at && new Date(tenant.subscription_ends_at) > now
+    ? tenant.subscription_ends_at
+    : now.toISOString()
+  const endsAt = computeExpiry(currentEnd, masaNilai, masaSatuan)
+  db.prepare('UPDATE tenants SET plan=?, subscription_ends_at=?, trial_ends_at=NULL, expired_at=NULL, aktif=1 WHERE id=?')
+    .run(plan, endsAt, tenantId)
+  return { efek: 'langganan_aktif', tenant_id: tenantId, plan, ends_at: endsAt }
+}
+
 function terapkanIntent(db, intent) {
   if (intent.ref_type === 'tagihan') return applierTagihan(db, intent)
   if (intent.ref_type === 'topup') return applierTopup(db, intent)
   if (intent.ref_type === 'tabungan') return applierTabungan(db, intent)
+  if (intent.ref_type === 'langganan') return applierLangganan(db, intent)
   throw new Error(`Jenis pembayaran tidak dikenal: ${intent.ref_type}`)
 }
 

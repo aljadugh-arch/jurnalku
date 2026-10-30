@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { School, Eye, EyeOff, Globe, Link2, CheckCircle, MessageCircle, Mail, Loader2, PartyPopper, ArrowRight } from 'lucide-react'
+import { School, Eye, EyeOff, Globe, Link2, CheckCircle, MessageCircle, Mail, Loader2, PartyPopper, ArrowRight, QrCode } from 'lucide-react'
 import toast from 'react-hot-toast'
 import api from '../../services/api'
 import { useAuthStore } from '../../stores/authStore'
@@ -55,6 +55,34 @@ export default function RegisterPage() {
   const [showPw, setShowPw] = useState(false)
   const [loading, setLoading] = useState(false)
   const [hasil, setHasil] = useState<HasilRegistrasi | null>(null)
+  // Paket: '' = Trial gratis (tanpa pembayaran). Paket berbayar -> QRIS setelah daftar.
+  const [plans, setPlans] = useState<{ plan: string; label: string; harga: number; masa_nilai: number; masa_satuan: string }[]>([])
+  const [pilihPlan, setPilihPlan] = useState('')
+  const [pembayaran, setPembayaran] = useState<any>(null)
+  const [statusBayar, setStatusBayar] = useState('pending')
+
+  useEffect(() => {
+    api.get('/public/plans')
+      .then(({ data }) => { if (Array.isArray(data?.plans)) setPlans(data.plans) })
+      .catch(() => { /* pemilih paket opsional */ })
+  }, [])
+
+  const cekBayar = async () => {
+    if (!pembayaran?.intent_id) return
+    try {
+      const { data } = await api.get(`/subscription/payment/${pembayaran.intent_id}`)
+      setStatusBayar(data.paid ? 'paid' : String(data.status || 'pending'))
+    } catch { /* biarkan status terakhir */ }
+  }
+
+  // Polling status pembayaran selama layar QRIS terbuka (webhook bisa belum sampai).
+  useEffect(() => {
+    if (!pembayaran?.intent_id) return
+    void cekBayar()
+    const t = setInterval(() => { void cekBayar() }, 5000)
+    return () => clearInterval(t)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pembayaran?.intent_id])
 
   const slugify = (str: string) =>
     str.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
@@ -97,6 +125,8 @@ export default function RegisterPage() {
         password: form.password,
         no_hp: form.no_hp,
       }
+      // Kosong = trial gratis (tanpa pembayaran). Paket berbayar -> server menyiapkan QRIS.
+      if (pilihPlan) payload.plan = pilihPlan
       if (domainMode === 'subdomain') {
         payload.slug = form.slug
         payload.base_domain = pilihBase || SUBDOMAIN_BASE
@@ -119,6 +149,8 @@ export default function RegisterPage() {
         noHp: form.no_hp,
         email: form.email,
       })
+
+      if (res.data.pembayaran) setPembayaran(res.data.pembayaran)
 
       if (res.data.token && res.data.user) {
         login(res.data.user, res.data.token)
@@ -159,6 +191,52 @@ export default function RegisterPage() {
       } catch { /* URL tidak valid — jatuh ke navigasi SPA */ }
     }
     navigate('/admin')
+  }
+
+  // ── Layar pembayaran (paket berbayar dipilih saat mendaftar) ──────────────
+  if (hasil && pembayaran && !pembayaran.gagal && pembayaran.intent_id) {
+    const lunas = statusBayar === 'paid'
+    return (
+      <div className="sk-root flex items-center justify-center p-4">
+        <div className="w-full max-w-lg">
+          <div className="sk-card p-6 text-center sm:p-8">
+            <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl sk-bg-soft">
+              <QrCode size={30} className="sk-txt-accent" />
+            </div>
+            <h1 className="text-xl font-bold sk-txt">{lunas ? 'Pembayaran Berhasil' : 'Selesaikan Pembayaran'}</h1>
+            <p className="mt-1 text-sm sk-txt-muted">
+              {lunas
+                ? <>Paket <strong className="sk-txt">{pembayaran.plan_label}</strong> untuk <strong className="sk-txt">{hasil.namaLembaga}</strong> sudah aktif.</>
+                : <>Akun <strong className="sk-txt">{hasil.namaLembaga}</strong> sudah dibuat. Bayar paket <strong className="sk-txt">{pembayaran.plan_label}</strong> via QRIS.</>}
+            </p>
+
+            {!lunas && (
+              <div className="mt-4 rounded-xl border sk-border-soft p-4 text-left">
+                <p className="text-xs sk-txt-muted">Nominal (sudah termasuk kode unik)</p>
+                <p className="text-2xl font-bold sk-txt">Rp {Number(pembayaran.amount).toLocaleString('id-ID')}</p>
+                {pembayaran.qris_url && (
+                  <img src={pembayaran.qris_url} alt="QRIS" className="mx-auto mt-3 h-56 w-56 object-contain" />
+                )}
+                {pembayaran.qris_code && (
+                  <details className="mt-2">
+                    <summary className="cursor-pointer text-xs sk-txt-muted">Kode QRIS (teks)</summary>
+                    <code className="mt-1 block break-all text-[11px] sk-txt">{pembayaran.qris_code}</code>
+                  </details>
+                )}
+                <p className="mt-2 text-[11px] sk-txt-muted">
+                  Bayar TEPAT sejumlah di atas lewat aplikasi bank/e-wallet (scan QRIS). Status diperiksa otomatis.
+                </p>
+              </div>
+            )}
+
+            <div className="mt-5 flex flex-col gap-3 sm:flex-row">
+              <button onClick={bukaDashboard} className="sk-btn flex-1">Masuk ke Dashboard <ArrowRight size={16} /></button>
+              {!lunas && <button onClick={() => void cekBayar()} className="sk-btn sk-btn--ghost flex-1">Cek Status</button>}
+            </div>
+          </div>
+        </div>
+      </div>
+    )
   }
 
   // ── Layar konfirmasi setelah registrasi berhasil ──────────────────────────
@@ -210,6 +288,12 @@ export default function RegisterPage() {
                 </div>
               </div>
             </div>
+
+            {pembayaran?.gagal && (
+              <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-3 text-left text-xs text-amber-800">
+                {pembayaran.gagal}
+              </div>
+            )}
 
             <div className="mt-6 flex flex-col gap-3 sm:flex-row">
               <button
@@ -423,6 +507,38 @@ export default function RegisterPage() {
                 placeholder="Ulangi password"
                 className="sk-form-input"
               />
+            </div>
+            {/* Pemilih paket. Kosong = Trial gratis (tanpa pembayaran). */}
+            <div className="pt-1">
+              <label className="sk-form-label">Paket</label>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setPilihPlan('')}
+                  className={`min-w-0 rounded-xl border-2 p-3 text-left transition-colors ${pilihPlan === '' ? 'sk-border-accent sk-bg-soft' : 'sk-border-soft hover:border-gray-300'}`}
+                >
+                  <span className={`block text-sm font-semibold ${pilihPlan === '' ? 'sk-txt-accent' : 'sk-txt'}`}>Trial Gratis</span>
+                  <span className="block text-xs sk-txt-muted">30 hari · tanpa pembayaran</span>
+                </button>
+                {plans.map(p => (
+                  <button
+                    key={p.plan}
+                    type="button"
+                    onClick={() => setPilihPlan(p.plan)}
+                    className={`min-w-0 rounded-xl border-2 p-3 text-left transition-colors ${pilihPlan === p.plan ? 'sk-border-accent sk-bg-soft' : 'sk-border-soft hover:border-gray-300'}`}
+                  >
+                    <span className={`block text-sm font-semibold ${pilihPlan === p.plan ? 'sk-txt-accent' : 'sk-txt'}`}>{p.label}</span>
+                    <span className="block text-xs sk-txt-muted">
+                      Rp{Number(p.harga).toLocaleString('id-ID')} / {p.masa_nilai} {p.masa_satuan}
+                    </span>
+                  </button>
+                ))}
+              </div>
+              <p className="mt-1 text-[11px] sk-txt-muted">
+                {pilihPlan
+                  ? 'Setelah mendaftar Anda diarahkan ke pembayaran QRIS untuk paket ini.'
+                  : 'Daftar tanpa memilih paket = trial gratis 30 hari, tanpa pembayaran.'}
+              </p>
             </div>
             <button
               type="submit"

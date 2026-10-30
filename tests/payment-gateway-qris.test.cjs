@@ -530,3 +530,38 @@ test('webhook pembayaran asing dicatat SEKALI walau dikirim ulang', () => {
   prosesWebhook(db, { token: cfg.webhook_token, rawBody: raw, signature: sig })
   assert.equal(db.prepare("SELECT COUNT(*) c FROM payment_intents WHERE sumber='webhook-asing'").get().c, 1)
 })
+
+// ---------------------------------------------------------------------------
+// Langganan platform (registrasi pilih paket -> bayar -> paket aktif)
+// ---------------------------------------------------------------------------
+
+test('langganan: intent lunas mengaktifkan paket & masa aktif lembaga dari meta', async () => {
+  const db = dbUji(); aktifkanGateway(db)
+  db.exec(`CREATE TABLE subscription_plans (plan TEXT PRIMARY KEY, label TEXT, harga INTEGER, masa_nilai INTEGER, masa_satuan TEXT, aktif INTEGER);
+    ALTER TABLE tenants ADD COLUMN plan TEXT;
+    ALTER TABLE tenants ADD COLUMN subscription_ends_at TEXT;
+    ALTER TABLE tenants ADD COLUMN trial_ends_at TEXT;
+    ALTER TABLE tenants ADD COLUMN expired_at TEXT;`)
+  db.prepare("INSERT INTO subscription_plans (plan,label,harga,masa_nilai,masa_satuan,aktif) VALUES ('lite','Lite',50000,1,'bulan',1)").run()
+  db.prepare('INSERT INTO tenants (id, slug, nama) VALUES (?,?,?)').run('baru', 'baru', 'Lembaga Baru')
+
+  const intent = await buatIntent(db, {
+    tenantId: TENANT, refType: 'langganan', refId: 'baru', nominal: 50000,
+    meta: { plan: 'lite', masa_nilai: 1, masa_satuan: 'bulan' }, klien: klienPalsu(),
+  })
+  assert.equal(intent.ref_type, 'langganan')
+  const r = tandaiLunas(db, { intentId: intent.id, sumber: 'webhook' })
+  assert.equal(r.efek.efek, 'langganan_aktif')
+  const t = db.prepare('SELECT plan, subscription_ends_at FROM tenants WHERE id=?').get('baru')
+  assert.equal(t.plan, 'lite')
+  assert.ok(t.subscription_ends_at, 'masa aktif terisi setelah lunas')
+})
+
+test('registrasi: route menerima pilihan paket & mengembalikan data pembayaran', () => {
+  const idx = require('fs').readFileSync(require('path').join(__dirname, '../server/index.cjs'), 'utf8')
+  assert.match(idx, /plan: planPilih \} = req\.body/, 'registrasi membaca field plan')
+  assert.match(idx, /refType: 'langganan'/, 'buat intent langganan saat paket berbayar dipilih')
+  assert.match(idx, /pembayaran,/, 'respons registrasi menyertakan data pembayaran')
+  assert.match(idx, /app\.get\('\/api\/public\/plans'/, 'endpoint publik daftar paket')
+  assert.match(idx, /app\.get\('\/api\/subscription\/payment\/:intentId', authMiddleware/)
+})
