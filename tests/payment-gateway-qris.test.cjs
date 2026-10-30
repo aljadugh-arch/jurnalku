@@ -485,3 +485,48 @@ test('API key disimpan terenkripsi, bukan sebagai teks biasa', () => {
   assert.equal(baris.api_key_encrypted.includes(KUNCI), false)
   assert.match(baris.api_key_encrypted, /^v1:/)
 })
+
+// ---------------------------------------------------------------------------
+// Perbaikan celah: isolasi lintas-tenant, kurang bayar, dedupe webhook asing
+// ---------------------------------------------------------------------------
+
+test('indeks nominal unik GLOBAL: dua LEMBAGA berbeda tidak boleh punya pay_amount sama', () => {
+  const db = dbUji()
+  db.prepare('INSERT INTO tenants (id, slug, nama) VALUES (?,?,?)').run('tenant-2', 'dua', 'Lembaga Dua')
+  const sisip = (id, tenant, bayar) => db.prepare(`INSERT INTO payment_intents
+    (id, tenant_id, ref_type, nominal, kode_unik, pay_amount, status)
+    VALUES (?,?,?,?,?,?,'pending')`).run(id, tenant, 'topup', bayar - 101, '101', bayar)
+  sisip('a', TENANT, 50123)
+  // Lembaga LAIN dengan nominal sama harus tetap ditolak: gateway mencocokkan
+  // pembayaran berdasarkan nominal di akun merchant bersama.
+  assert.throws(() => sisip('b', 'tenant-2', 50123), /UNIQUE/, 'nominal sama di lembaga lain tidak boleh lolos')
+})
+
+test('buatIntent tagihan MENGABAIKAN nominal kiriman (tidak bisa bayar 1 rupiah)', async () => {
+  const db = dbUji(); aktifkanGateway(db); isiTagihan(db, { id: 'tg-7', nominal: 500000 })
+  const intent = await buatIntent(db, { tenantId: TENANT, refType: 'tagihan', refId: 'tg-7', studentId: SISWA, nominal: 1, klien: klienPalsu() })
+  assert.equal(intent.nominal, 500000, 'nominal diambil dari tagihan, bukan kiriman pemanggil')
+})
+
+test('tandaiLunas menolak KURANG BAYAR (jalur order_id tidak lagi buta jumlah)', async () => {
+  const db = dbUji(); aktifkanGateway(db); isiTagihan(db)
+  const intent = await buatIntent(db, { tenantId: TENANT, refType: 'tagihan', refId: 'tg-1', studentId: SISWA, klien: klienPalsu() })
+  assert.throws(
+    () => tandaiLunas(db, { tenantId: TENANT, gatewayOrderId: intent.gateway_order_id, payAmount: 1000 }),
+    /kurang dari yang diminta/,
+  )
+  assert.equal(db.prepare("SELECT status FROM payment_intents WHERE id=?").get(intent.id).status, 'pending', 'intent tetap pending setelah kurang bayar')
+  const ok = tandaiLunas(db, { tenantId: TENANT, gatewayOrderId: intent.gateway_order_id, payAmount: intent.pay_amount })
+  assert.equal(ok.duplikat, false, 'nominal penuh tetap dilunasi')
+})
+
+test('webhook pembayaran asing dicatat SEKALI walau dikirim ulang', () => {
+  const db = dbUji(); aktifkanGateway(db)
+  const cfg = pastikanBarisConfig(db, TENANT)
+  const body = { event: 'transaction.received', transaction: { order_id: 'GP-asing-1', amount: 777, status: 'paid' } }
+  const raw = Buffer.from(JSON.stringify(body))
+  const sig = tandaTangan(raw, KUNCI)
+  prosesWebhook(db, { token: cfg.webhook_token, rawBody: raw, signature: sig })
+  prosesWebhook(db, { token: cfg.webhook_token, rawBody: raw, signature: sig })
+  assert.equal(db.prepare("SELECT COUNT(*) c FROM payment_intents WHERE sumber='webhook-asing'").get().c, 1)
+})

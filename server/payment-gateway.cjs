@@ -103,9 +103,23 @@ function setupPaymentGatewayTables(db) {
     );
   `)
 
-  // Satu nominal terpindai = satu intent. Indeks parsial hanya menjaga baris 'pending',
-  // sehingga riwayat lama tetap boleh berulang.
-  db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_payment_intents_pending_amount ON payment_intents(tenant_id, pay_amount) WHERE status='pending'")
+  // Nominal bayar (nominal + kode unik) WAJIB unik GLOBAL antar-intent pending —
+  // BUKAN per-tenant. Gateway mencocokkan pembayaran berdasarkan NOMINAL di akun
+  // merchant BERSAMA, jadi kalau dua lembaga punya pay_amount sama, satu pembayaran
+  // bisa menandai KEDUANYA lunas (uang lembaga lain "gratis"). Indeks lama memakai
+  // (tenant_id, pay_amount) dan tidak menutup celah itu.
+  db.exec('DROP INDEX IF EXISTS idx_payment_intents_pending_amount')
+  try {
+    db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_payment_intents_pending_amount_global ON payment_intents(pay_amount) WHERE status='pending'")
+  } catch {
+    // Basis data lama bisa sudah punya tabrakan lintas tenant. Pertahankan yang paling
+    // lama (rowid terkecil), kedaluwarsakan sisanya, lalu pasang indeks sekali lagi.
+    db.exec(`UPDATE payment_intents SET status='expired'
+      WHERE status='pending' AND rowid NOT IN (
+        SELECT MIN(rowid) FROM payment_intents WHERE status='pending' GROUP BY pay_amount
+      )`)
+    db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_payment_intents_pending_amount_global ON payment_intents(pay_amount) WHERE status='pending'")
+  }
   db.exec('CREATE INDEX IF NOT EXISTS idx_payment_intents_tenant_status ON payment_intents(tenant_id, status, created_at)')
   db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_payment_intents_order ON payment_intents(tenant_id, gateway_order_id) WHERE gateway_order_id IS NOT NULL')
   db.exec('CREATE INDEX IF NOT EXISTS idx_payment_intents_ref ON payment_intents(tenant_id, ref_type, ref_id)')
@@ -170,10 +184,12 @@ function nominalBayar(nominal, kodeUnik) {
   return normalisasiNominal(nominal) + Number(kodeUnik)
 }
 
-/** Kode unik 3 digit yang belum dipakai intent pending lain di lembaga ini. */
+/** Kode unik 3 digit yang belum dipakai intent pending MANA PUN (lintas tenant). */
 function kodeUnikBaru(db, tenantId, rng = crypto.randomInt) {
+  // Unik GLOBAL, bukan per-tenant: pay_amount dipakai di akun merchant bersama,
+  // jadi kode yang sama di lembaga lain tetap bisa membuat nominal bentrok.
   const dipakai = new Set(
-    db.prepare("SELECT kode_unik FROM payment_intents WHERE tenant_id=? AND status='pending'").all(tenantId).map(r => String(r.kode_unik))
+    db.prepare("SELECT kode_unik FROM payment_intents WHERE status='pending'").all().map(r => String(r.kode_unik))
   )
   const ruang = KODE_UNIK_MAX - KODE_UNIK_MIN + 1
   for (let i = 0; i < 400; i++) {
@@ -372,7 +388,11 @@ function validasiTarget(db, { tenantId, refType, refId, studentId }) {
 async function buatIntent(db, { tenantId, refType, refId = '', studentId = '', label = '', nominal, createdBy = '', klien = null }) {
   if (!REF_TYPES.includes(refType)) throw new Error(`Jenis pembayaran tidak dikenal: ${refType}`)
   const target = validasiTarget(db, { tenantId, refType, refId, studentId })
-  const nilai = normalisasiNominal(nominal || target.nominalDefault)
+  // Tagihan: nominal DIAMBIL DARI TAGIHAN, bukan dari kiriman pemanggil. Tanpa ini
+  // pemanggil (staf ATAU wali lewat portal) bisa meminta QR senilai 1 rupiah untuk
+  // tagihan 500rb, dan applier tetap menandai tagihan itu 'lunas' — bayar sebagian
+  // dianggap lunas penuh. Topup/tabungan tetap pakai nominal pilihan pengguna.
+  const nilai = normalisasiNominal(refType === 'tagihan' ? target.nominalDefault : (nominal || target.nominalDefault))
   const siswaId = target.studentId || studentId
   const cfg = pastikanBarisConfig(db, tenantId)
   if (cfg.enabled !== 1) throw new Error('Payment gateway belum diaktifkan untuk lembaga ini')
@@ -501,8 +521,16 @@ function tandaiLunas(db, { intentId = null, gatewayOrderId = null, tenantId = nu
   }
 
   if (!cari) throw new Error('Intent tidak ditemukan')
+  // Tolak KURANG BAYAR. Jalur pencarian lewat order_id tidak memeriksa jumlah, jadi
+  // tanpa ini webhook yang melaporkan order_id benar dengan nominal kecil tetap
+  // menandai intent lunas.
+  if (payAmount != null && Number(payAmount) > 0 && Number(payAmount) < cari.pay_amount) {
+    throw new Error(`Nominal pembayaran kurang dari yang diminta (${payAmount} < ${cari.pay_amount})`)
+  }
   if (cari.status === 'paid') return { intent: intentRingkas(cari), efek: null, duplikat: true }
 
+  // IMMEDIATE (bukan DEFERRED): transaksi mengambil kunci tulis sejak awal, sehingga
+  // baca-lalu-tulis saldo tabungan tidak bisa membaca nilai basi saat ada proses lain.
   const hasil = db.transaction(() => {
     const berubah = db.prepare(`UPDATE payment_intents
         SET status='paid', paid_at=?, sumber=?, raw_webhook_json=?
@@ -510,7 +538,7 @@ function tandaiLunas(db, { intentId = null, gatewayOrderId = null, tenantId = nu
       .run(waktu || new Date().toISOString(), String(sumber || ''), payload ? JSON.stringify(payload) : null, cari.id)
     if (berubah.changes !== 1) return { efek: null, duplikat: true }
     return { efek: terapkanIntent(db, cari), duplikat: false }
-  })()
+  }).immediate()
 
   const terbaru = intentRingkas(db.prepare('SELECT * FROM payment_intents WHERE id=?').get(cari.id))
   return { intent: terbaru, ...hasil }
@@ -576,12 +604,18 @@ function prosesWebhook(db, { token, rawBody, signature, payload = null }) {
     if (String(err.message).includes('Intent tidak ditemukan')) {
       // Pembayaran masuk untuk nominal yang bukan milik kita (mis. transaksi lain di
       // akun merchant yang sama). Catat sebagai peringatan, jangan gagalkan webhook.
-      db.prepare(`INSERT INTO payment_intents
-        (id, tenant_id, provider, ref_type, ref_id, label, nominal, kode_unik, pay_amount, status, sumber, raw_webhook_json, paid_at)
-        VALUES (?,?,?,?,'',?,?,?,?,'paid','webhook-asing',?,datetime('now'))`)
+      // IDEMPOTEN lewat gateway_order_id (indeks unik tenant_id+gateway_order_id):
+      // webhook yang dikirim ulang tidak menggandakan baris.
+      db.prepare(`INSERT OR IGNORE INTO payment_intents
+        (id, tenant_id, provider, ref_type, ref_id, label, nominal, kode_unik, pay_amount, gateway_order_id, status, sumber, raw_webhook_json, paid_at)
+        VALUES (?,?,?,?,'',?,?,?,?,?,'paid','webhook-asing',?,datetime('now'))`)
         .run(crypto.randomUUID(), cfg.tenant_id, PROVIDER, 'topup', 'Pembayaran tanpa intent (asing)',
-          Math.max(1, jumlah), '000', Math.max(1, jumlah), JSON.stringify(body))
+          Math.max(1, jumlah), '000', Math.max(1, jumlah), orderId, JSON.stringify(body))
       return { tenant_id: cfg.tenant_id, diabaikan: true, alasan: 'intent tidak ditemukan — dicatat sebagai transaksi asing' }
+    }
+    if (String(err.message).includes('kurang dari yang diminta')) {
+      // Kurang bayar: JANGAN lunasi. Biarkan intent tetap pending supaya bisa diperiksa.
+      return { tenant_id: cfg.tenant_id, diabaikan: true, alasan: 'nominal kurang dari yang diminta — tidak dilunasi' }
     }
     throw err
   }
