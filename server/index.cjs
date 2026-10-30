@@ -6332,6 +6332,11 @@ app.post('/api/guru/ceklok', CEKLOK_ACCESS, (req, res) => {
 
 // ==================== JAMAAH / PORTAL / PWA PATCH ====================
 db.exec(`CREATE TABLE IF NOT EXISTS jamaah_sesi (id TEXT PRIMARY KEY, nama TEXT, mulai TEXT, selesai TEXT, minimal_hadir INTEGER DEFAULT 10, tenant_id TEXT DEFAULT 'default', created_at TEXT DEFAULT (datetime('now')))`)
+// Cakupan sesi jamaah: rombel tertentu + daftar siswa tertentu (JSON array id).
+// Kolom kosong = seluruh siswa aktif lembaga (perilaku lama).
+for (const [kolom, def] of [['rombel_id', 'TEXT'], ['siswa_ids', 'TEXT']]) {
+  if (!db.prepare('PRAGMA table_info(jamaah_sesi)').all().some(c => c.name === kolom)) db.exec(`ALTER TABLE jamaah_sesi ADD COLUMN ${kolom} ${def}`)
+}
 for (const [name, definition] of [['pwa_enabled','INTEGER DEFAULT 0'], ['pwa_name','TEXT DEFAULT ""'], ['pwa_icon','TEXT DEFAULT ""'], ['pwa_bg_color','TEXT DEFAULT "#ffffff"'], ['pwa_theme_color','TEXT DEFAULT "#1e40af"'], ['dashboard_quick_menus','TEXT DEFAULT "[]"']]) if (!db.prepare('PRAGMA table_info(settings)').all().some(c => c.name === name)) db.exec(`ALTER TABLE settings ADD COLUMN ${name} ${definition}`)
 
 function linkedStudentIds(req) {
@@ -6614,13 +6619,16 @@ app.get('/api/jamaah/rekap', authMiddleware, (req, res) => {
 // Input status kehadiran harian jamaah per sesi + tanggal, disimpan di absensi_kegiatan
 // (kegiatan_id => jamaah_sesi.id) sehingga masuk rekap kategori "jamaah".
 app.get('/api/jamaah/sesi', authMiddleware, (req, res) => {
-  res.json(db.prepare('SELECT id,nama,mulai,selesai,minimal_hadir FROM jamaah_sesi WHERE tenant_id=? ORDER BY COALESCE(mulai,created_at) DESC').all(req.tenantId))
+  res.json(db.prepare('SELECT id,nama,mulai,selesai,minimal_hadir,rombel_id,siswa_ids FROM jamaah_sesi WHERE tenant_id=? ORDER BY COALESCE(mulai,created_at) DESC').all(req.tenantId))
 })
 app.post('/api/jamaah/sesi-baru', ADMIN, (req, res) => {
-  const { nama, mulai, selesai } = req.body
+  const { nama, mulai, selesai, rombel_id, siswa_ids } = req.body
   if (!nama || !String(nama).trim()) return res.status(400).json({ error: 'Nama sesi wajib diisi' })
   const id = uuidv4()
-  db.prepare('INSERT INTO jamaah_sesi (id,nama,mulai,selesai,minimal_hadir,tenant_id) VALUES (?,?,?,?,?,?)').run(id, String(nama).trim(), mulai || '', selesai || '', 10, req.tenantId)
+  const ids = Array.isArray(siswa_ids) ? siswa_ids.map(String).filter(Boolean) : null
+  db.prepare('INSERT INTO jamaah_sesi (id,nama,mulai,selesai,minimal_hadir,tenant_id,rombel_id,siswa_ids) VALUES (?,?,?,?,?,?,?,?)')
+    .run(id, String(nama).trim(), mulai || '', selesai || '', 10, req.tenantId,
+      rombel_id ? String(rombel_id) : null, ids && ids.length ? JSON.stringify(ids) : null)
   res.json({ id })
 })
 app.get('/api/jamaah/absensi', authMiddleware, (req, res) => {

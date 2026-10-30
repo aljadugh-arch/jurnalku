@@ -27,8 +27,10 @@ export default function AbsensiJamaahPage() {
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
   // Input status harian (hadir/izin/sakit/alpha) per sesi + tanggal.
-  const [sesiList, setSesiList] = useState<{ id: string; nama: string; mulai: string; selesai: string }[]>([])
+  const [sesiList, setSesiList] = useState<{ id: string; nama: string; mulai: string; selesai: string; rombel_id?: string | null; siswa_ids?: string | null }[]>([])
   const [selectedSesi, setSelectedSesi] = useState('')
+  // Siswa yang diikutkan sesi ini. Tidak ada kunci = ikut (default: semua siswa terfilter).
+  const [ikut, setIkut] = useState<Record<string, boolean>>({})
   const [sesiTanggal, setSesiTanggal] = useState(todayWib())
   const [statusAbsensi, setStatusAbsensi] = useState<Record<string, string>>({})
   const [showAddSesi, setShowAddSesi] = useState(false)
@@ -52,6 +54,19 @@ export default function AbsensiJamaahPage() {
 
   useEffect(() => { loadSesi() }, [])
 
+  // Memilih sesi sekaligus menerapkan CAKUPANNYA: filter rombel + siswa yang dicentang.
+  const pilihSesi = (id: string) => {
+    setSelectedSesi(id)
+    const s = sesiList.find(x => x.id === id)
+    if (!s) return
+    setFilterRombel(s.rombel_id || '')
+    try {
+      const ids = s.siswa_ids ? JSON.parse(s.siswa_ids) : null
+      if (Array.isArray(ids) && ids.length) setIkut(Object.fromEntries(siswa.map(x => [x.id, ids.includes(x.id)])))
+      else setIkut({})
+    } catch { setIkut({}) }
+  }
+
   const loadStatusAbsensi = async () => {
     if (!selectedSesi) { setStatusAbsensi({}); return }
     try {
@@ -70,7 +85,10 @@ export default function AbsensiJamaahPage() {
     if (!selectedSesi) { toast.error('Pilih/buat sesi jamaah terlebih dahulu'); return }
     setSaving(true)
     try {
-      const data = siswa.map(s => ({ siswa_id: s.id, status: statusAbsensi[s.id] || 'hadir' }))
+      // HANYA siswa yang lolos filter rombel DAN dicentang — bukan seluruh sekolah.
+      const sasaran = (filterRombel ? siswa.filter(s => s.rombel_id === filterRombel) : siswa).filter(s => ikut[s.id] !== false)
+      if (!sasaran.length) { toast.error('Tidak ada siswa terpilih — pilih rombel atau centang siswa'); return }
+      const data = sasaran.map(s => ({ siswa_id: s.id, status: statusAbsensi[s.id] || 'hadir' }))
       const r = await api.post('/jamaah/absensi', { sesi_id: selectedSesi, tanggal: sesiTanggal, data })
       toast.success(`Absensi jamaah tersimpan: ${r.data.count} siswa`)
     } catch (e: any) {
@@ -81,7 +99,13 @@ export default function AbsensiJamaahPage() {
   const createSesi = async () => {
     if (!newSesiNama.trim()) return
     try {
-      const r = await api.post('/jamaah/sesi-baru', { nama: newSesiNama, mulai: sesiTanggal, selesai: sesiTanggal })
+      // Sesi menyimpan cakupannya (rombel + siswa terpilih) supaya bisa dibuka lagi persis.
+      const sasaran = (filterRombel ? siswa.filter(s => s.rombel_id === filterRombel) : siswa).filter(s => ikut[s.id] !== false)
+      const r = await api.post('/jamaah/sesi-baru', {
+        nama: newSesiNama, mulai: sesiTanggal, selesai: sesiTanggal,
+        rombel_id: filterRombel || null,
+        siswa_ids: sasaran.map(s => s.id),
+      })
       toast.success('Sesi jamaah dibuat')
       setShowAddSesi(false)
       setNewSesiNama('Shalat Jamaah')
@@ -166,7 +190,7 @@ export default function AbsensiJamaahPage() {
       {/* Header */}
       <div className="bg-gradient-to-r from-indigo-600 to-sky-500 text-white rounded-3xl p-5 sm:p-6 shadow-sm">
         <h1 className="text-2xl font-bold">Absensi Jamaah Sholat</h1>
-        <p className="text-indigo-50 text-sm mt-1 max-w-2xl">Input absensi jamaah: status harian (hadir/izin/sakit/alpha) atau rekap jumlah kehadiran. Siswa dinyatakan lolos jika kehadiran ≥ batas minimal.</p>
+        <p className="text-indigo-50 text-sm mt-1 max-w-2xl">Input absensi jamaah: status harian (hadir/izin/sakit/alpha) atau rekap jumlah kehadiran. Sesi bisa dibatasi ke <b>rombel tertentu</b> dan <b>siswa tertentu</b> (centang per siswa). Siswa dinyatakan lolos jika kehadiran ≥ batas minimal.</p>
       </div>
 
       {/* Config Card */}
@@ -176,7 +200,7 @@ export default function AbsensiJamaahPage() {
             <>
               <div className="lg:col-span-2">
                 <label className="block text-xs font-medium text-slate-500 mb-1.5">Sesi Jamaah</label>
-                <select value={selectedSesi} onChange={e => setSelectedSesi(e.target.value)} className="block w-full h-11 px-3 pr-9 rounded-xl border border-slate-200 bg-white text-sm outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100">
+                <select value={selectedSesi} onChange={e => pilihSesi(e.target.value)} className="block w-full h-11 px-3 pr-9 rounded-xl border border-slate-200 bg-white text-sm outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100">
                   {sesiList.length === 0 && <option value="">Belum ada sesi</option>}
                   {sesiList.map(s => <option key={s.id} value={s.id}>{s.nama}{s.mulai ? ` (${s.mulai})` : ''}</option>)}
                 </select>
@@ -247,9 +271,17 @@ export default function AbsensiJamaahPage() {
             </>
           )}
           {tab === 'status' && (
-            <button onClick={saveStatus} disabled={saving || !selectedSesi} className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium btn-success disabled:opacity-50">
-              <Save size={16} /> {saving ? 'Menyimpan...' : 'Simpan Absensi'}
-            </button>
+            <>
+              <button onClick={() => setIkut(Object.fromEntries(siswa.map(s => [s.id, true])))} className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium btn-secondary">
+                Pilih Semua
+              </button>
+              <button onClick={() => setIkut(Object.fromEntries(siswa.map(s => [s.id, false])))} className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium btn-secondary">
+                Kosongkan
+              </button>
+              <button onClick={saveStatus} disabled={saving || !selectedSesi} className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium btn-success disabled:opacity-50">
+                <Save size={16} /> {saving ? 'Menyimpan...' : 'Simpan Absensi'}
+              </button>
+            </>
           )}
         </div>
       </div>
@@ -274,6 +306,7 @@ export default function AbsensiJamaahPage() {
             <table className="table-modern min-w-[760px] border-separate border-spacing-y-2">
               <thead>
                 <tr>
+                  <th style={{ width: 52 }} className="text-center">Ikut</th>
                   <th style={{ width: 56 }} className="text-center">No</th>
                   <th className="pl-4">Nama Siswa</th>
                   <th style={{ width: 70 }} className="text-center">Hadir</th>
@@ -283,9 +316,13 @@ export default function AbsensiJamaahPage() {
                 </tr>
               </thead>
               <tbody>
-                {filtered.length === 0 && <tr><td colSpan={6} className="text-center py-14 text-slate-400">Tidak ada data siswa</td></tr>}
+                {filtered.length === 0 && <tr><td colSpan={7} className="text-center py-14 text-slate-400">Tidak ada data siswa</td></tr>}
                 {filtered.map((s, i) => (
-                  <tr key={s.id}>
+                  <tr key={s.id} className={ikut[s.id] === false ? 'opacity-45' : ''}>
+                    <td className="text-center">
+                      <input type="checkbox" className="h-4 w-4 accent-primary" checked={ikut[s.id] !== false}
+                        onChange={e => setIkut(prev => ({ ...prev, [s.id]: e.target.checked }))} aria-label={`Ikut ${s.nama}`} />
+                    </td>
                     <td className="text-center text-slate-500 font-medium">{i + 1}</td>
                     <td className="pl-4">
                       <div className="font-semibold text-slate-800 leading-tight">{s.nama}</div>
