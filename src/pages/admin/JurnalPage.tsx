@@ -126,22 +126,66 @@ export default function JurnalPage() {
     }
   }
 
+  // Susun ekspor PER ROMBEL: tiap rombel jadi satu lembar/section berisi jurnal
+  // hariannya — beberapa guru & mapel per hari sesuai jadwal. Urut: tanggal -> jam
+  // -> mapel -> guru.
+  const kelompokRombel = (data: any[]) => {
+    const map = new Map<string, any[]>()
+    for (const d of data) {
+      const key = String(d.rombel_nama || 'Tanpa Rombel').trim() || 'Tanpa Rombel'
+      if (!map.has(key)) map.set(key, [])
+      map.get(key)!.push(d)
+    }
+    for (const arr of map.values()) {
+      arr.sort((a, b) =>
+        String(a.tanggal || '').localeCompare(String(b.tanggal || ''))
+        || (Number(a.jam_ke) || 0) - (Number(b.jam_ke) || 0)
+        || String(a.mapel_nama || '').localeCompare(String(b.mapel_nama || ''))
+        || String(a.guru_nama || '').localeCompare(String(b.guru_nama || '')))
+    }
+    return [...map.entries()].sort((a, b) => a[0].localeCompare(b[0]))
+  }
+  // Nama sheet Excel: maks 31 karakter, tanpa \ / ? * [ ] :
+  const namaSheet = (s: string, dipakai: Set<string>) => {
+    const dasar = s.replace(/[\\/?*[\]:]/g, '-').slice(0, 26).trim() || 'Rombel'
+    let n = dasar, i = 2
+    while (dipakai.has(n.toLowerCase())) { n = `${dasar.slice(0, 24)}-${i++}` }
+    dipakai.add(n.toLowerCase())
+    return n
+  }
+
   const exportExcel = async () => {
     const semua = await ambilSemuaUntukEkspor()
-    const rows = semua.map((d, i) => [
-      i + 1, d.tanggal, d.guru_nama || '', d.mapel_nama || '', d.rombel_nama || '',
-      `Jam ${d.jam_ke}`, d.materi || '', d.kegiatan || '', d.catatan || '', d.status
-    ])
-    const ws = XLSX.utils.aoa_to_sheet([
-      ['Jurnal Mengajar - JURNALKU'], [],
-      ['No', 'Tanggal', 'Guru', 'Mapel', 'Rombel', 'Jam Ke', 'Materi', 'Kegiatan', 'Catatan', 'Status'],
-      ...rows
-    ])
-    ws['!cols'] = [{ wch: 4 }, { wch: 12 }, { wch: 20 }, { wch: 15 }, { wch: 10 }, { wch: 8 }, { wch: 25 }, { wch: 25 }, { wch: 20 }, { wch: 10 }]
+    const grup = kelompokRombel(semua)
     const wb = XLSX.utils.book_new()
-    XLSX.utils.book_append_sheet(wb, ws, 'Jurnal')
-    XLSX.writeFile(wb, 'Jurnal_Mengajar.xlsx')
-    toast.success(`Excel diunduh (${semua.length} baris)`)
+    const dipakai = new Set<string>()
+    const judulKolom = ['No', 'Tanggal', 'Jam Ke', 'Mapel', 'Guru', 'Materi', 'Kegiatan', 'Catatan', 'Status']
+    const lebar = [{ wch: 4 }, { wch: 12 }, { wch: 8 }, { wch: 16 }, { wch: 22 }, { wch: 28 }, { wch: 24 }, { wch: 20 }, { wch: 10 }]
+    // Ringkasan di depan: rombel + jumlah entri + jumlah hari.
+    const ringkas = grup.map(([r, arr]) => [r, arr.length, new Set(arr.map(d => d.tanggal)).size])
+    const wsR = XLSX.utils.aoa_to_sheet([
+      ['RINGKASAN JURNAL MENGAJAR'],
+      [`Total entri: ${semua.length} · Jumlah rombel: ${grup.length}`],
+      [],
+      ['Rombel', 'Jumlah Entri', 'Jumlah Hari'],
+      ...ringkas,
+    ])
+    wsR['!cols'] = [{ wch: 26 }, { wch: 14 }, { wch: 12 }]
+    XLSX.utils.book_append_sheet(wb, wsR, 'Ringkasan')
+    for (const [rombel, arr] of grup) {
+      const rows = arr.map((d, i) => [
+        i + 1, d.tanggal, `Jam ${d.jam_ke}`, d.mapel_nama || '', d.guru_nama || '',
+        d.materi || '', d.kegiatan || '', d.catatan || '', d.status
+      ])
+      const ws = XLSX.utils.aoa_to_sheet([
+        ['JURNAL MENGAJAR'], [`Rombel: ${rombel}`], [],
+        judulKolom, ...rows
+      ])
+      ws['!cols'] = lebar
+      XLSX.utils.book_append_sheet(wb, ws, namaSheet(rombel, dipakai))
+    }
+    XLSX.writeFile(wb, 'Jurnal_Mengajar_per_Rombel.xlsx')
+    toast.success(`Excel per rombel diunduh (${semua.length} baris · ${grup.length} rombel)`)
   }
 
   const exportPDF = async () => {
@@ -151,11 +195,15 @@ export default function JurnalPage() {
     const tenant = tenantIdentity(settings)
     const sigSettings = tenantSignatureSettings(settings)
     const logo = tenant.logo ? `<img src="${escapeHtml(tenant.logo)}" alt="Logo" onerror="this.style.display='none'">` : ''
-    const rows = semua.map((d, i) =>
-      `<tr><td>${i+1}</td><td>${escapeHtml(String(d.tanggal||''))}</td><td>${escapeHtml(d.guru_nama||'')}</td><td>${escapeHtml(d.mapel_nama||'')}</td><td>${escapeHtml(d.rombel_nama||'')}</td><td>${escapeHtml(String(d.jam_ke||''))}</td><td class="materi">${escapeHtml(d.materi||'')}</td><td>${escapeHtml(String(d.status||''))}</td></tr>`
-    ).join('')
+    // Tiap rombel jadi satu blok tabel tersendiri (beberapa guru & mapel per hari).
+    const blok = kelompokRombel(semua).map(([rombel, arr]) => {
+      const rows = arr.map((d, i) =>
+        `<tr><td>${i+1}</td><td>${escapeHtml(String(d.tanggal||''))}</td><td>Jam ${escapeHtml(String(d.jam_ke||''))}</td><td>${escapeHtml(d.mapel_nama||'')}</td><td>${escapeHtml(d.guru_nama||'')}</td><td class="materi">${escapeHtml(d.materi||'')}</td><td class="materi">${escapeHtml(d.kegiatan||'')}</td><td>${escapeHtml(String(d.status||''))}</td></tr>`
+      ).join('')
+      return `<div class="blok"><h4>Rombel: ${escapeHtml(rombel)} <span class="kecil">· ${arr.length} entri</span></h4><table><thead><tr><th>No</th><th>Tanggal</th><th>Jam</th><th>Mapel</th><th>Guru</th><th>Materi</th><th>Kegiatan</th><th>Status</th></tr></thead><tbody>${rows}</tbody></table></div>`
+    }).join('')
     const filterInfo = [filter.tanggal ? `Tanggal: ${filter.tanggal}` : '', filter.guru_id ? `Guru: ${gtks.find(g => g.id === filter.guru_id)?.nama || ''}` : '', filter.status ? `Status: ${filter.status}` : ''].filter(Boolean).join(' · ') || 'Semua data'
-    printWindow.document.write(`<!DOCTYPE html><html><head><title>Jurnal Mengajar</title><style>@page{size:landscape;margin:8mm}body{font-family:Arial,sans-serif;padding:14px;font-size:11px}.kop{display:flex;align-items:center;justify-content:center;gap:12px;border-bottom:2px solid #000;padding-bottom:7px;margin-bottom:8px}.kop img{width:58px;height:58px;object-fit:contain}.kop-text{text-align:center}.kop-text h2{margin:0}h3{text-align:center;margin:4px 0}.meta{margin:6px 0;font-size:10px}table{border-collapse:collapse;width:100%}th,td{border:1px solid #999;padding:4px;text-align:center}.materi{text-align:left}th{background:#f3f4f6;font-size:10px}@media print{body{padding:0}}${SIGNATURE_CSS}</style></head><body><div class="kop">${logo}<div class="kop-text"><h2>${escapeHtml(tenant.name)}</h2>${tenant.address ? `<div>${escapeHtml(tenant.address)}</div>` : ''}</div></div><h3>JURNAL KEGIATAN PEMBELAJARAN</h3><div class="meta">${escapeHtml(filterInfo)}</div><table><thead><tr><th>No</th><th>Tanggal</th><th>Guru</th><th>Mapel</th><th>Rombel</th><th>Jam</th><th>Materi</th><th>Status</th></tr></thead><tbody>${rows}</tbody></table>${signatureBlockHtml(sigSettings, { leftTitle: 'Guru Mapel', rightTitle: 'Kepala Madrasah' })}<script>setTimeout(()=>window.print(),500)<\/script></body></html>`)
+    printWindow.document.write(`<!DOCTYPE html><html><head><title>Jurnal Mengajar</title><style>@page{size:landscape;margin:8mm}body{font-family:Arial,sans-serif;padding:14px;font-size:11px}.kop{display:flex;align-items:center;justify-content:center;gap:12px;border-bottom:2px solid #000;padding-bottom:7px;margin-bottom:8px}.kop img{width:58px;height:58px;object-fit:contain}.kop-text{text-align:center}.kop-text h2{margin:0}h3{text-align:center;margin:4px 0}.meta{margin:6px 0;font-size:10px}table{border-collapse:collapse;width:100%}th,td{border:1px solid #999;padding:4px;text-align:center}.materi{text-align:left}th{background:#f3f4f6;font-size:10px}@media print{body{padding:0}}.blok{margin-bottom:14px;break-inside:auto}.blok h4{margin:0 0 4px;font-size:12px;background:#eef2ff;border-left:3px solid #4f46e5;padding:4px 8px;page-break-after:avoid}.blok .kecil{font-weight:normal;color:#64748b;font-size:10px}${SIGNATURE_CSS}</style></head><body><div class="kop">${logo}<div class="kop-text"><h2>${escapeHtml(tenant.name)}</h2>${tenant.address ? `<div>${escapeHtml(tenant.address)}</div>` : ''}</div></div><h3>JURNAL KEGIATAN PEMBELAJARAN (PER ROMBEL)</h3><div class="meta">${escapeHtml(filterInfo)}</div>${blok}${signatureBlockHtml(sigSettings, { leftTitle: 'Guru Mapel', rightTitle: 'Kepala Madrasah' })}<script>setTimeout(()=>window.print(),500)<\/script></body></html>`)
     printWindow.document.close()
   }
 
