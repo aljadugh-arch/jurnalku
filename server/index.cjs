@@ -6622,14 +6622,16 @@ app.get('/api/jamaah/sesi', authMiddleware, (req, res) => {
   res.json(db.prepare('SELECT id,nama,mulai,selesai,minimal_hadir,rombel_id,siswa_ids FROM jamaah_sesi WHERE tenant_id=? ORDER BY COALESCE(mulai,created_at) DESC').all(req.tenantId))
 })
 app.post('/api/jamaah/sesi-baru', ADMIN, (req, res) => {
-  const { nama, mulai, selesai, rombel_id, siswa_ids } = req.body
+  const { nama, mulai, selesai, rombel_id, siswa_ids, minimal_hadir } = req.body
   if (!nama || !String(nama).trim()) return res.status(400).json({ error: 'Nama sesi wajib diisi' })
   const id = uuidv4()
   const ids = Array.isArray(siswa_ids) ? siswa_ids.map(String).filter(Boolean) : null
+  // Batas minimal hadir untuk penilaian lolos/tidak — bisa diatur per sesi.
+  const minimal = Math.min(3650, Math.max(1, Math.round(Number(minimal_hadir) || 10)))
   db.prepare('INSERT INTO jamaah_sesi (id,nama,mulai,selesai,minimal_hadir,tenant_id,rombel_id,siswa_ids) VALUES (?,?,?,?,?,?,?,?)')
-    .run(id, String(nama).trim(), mulai || '', selesai || '', 10, req.tenantId,
+    .run(id, String(nama).trim(), mulai || '', selesai || '', minimal, req.tenantId,
       rombel_id ? String(rombel_id) : null, ids && ids.length ? JSON.stringify(ids) : null)
-  res.json({ id })
+  res.json({ id, minimal_hadir: minimal })
 })
 app.get('/api/jamaah/absensi', authMiddleware, (req, res) => {
   const { sesi_id, tanggal } = req.query

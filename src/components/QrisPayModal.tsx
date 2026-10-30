@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Loader2, CheckCircle2, XCircle, Clock, RefreshCw, QrCode } from 'lucide-react'
+import { QRCodeSVG } from 'qrcode.react'
 import toast from 'react-hot-toast'
 import api from '../services/api'
 
@@ -17,6 +18,7 @@ interface Intent {
   kode_unik: string
   pay_amount: number
   qris_url: string
+  qris_code?: string
   status: string
   expires_at?: string
   paid_at?: string
@@ -174,9 +176,13 @@ export default function QrisPayModal({ target, onClose, onPaid, paths }: {
             ) : (
               <>
                 <div className="bg-white border rounded-xl p-4 text-center">
-                  {intent.qris_url
-                    ? <img src={intent.qris_url} alt="QRIS" className="w-64 h-64 max-w-full object-contain mx-auto" />
-                    : <p className="text-sm text-gray-400 py-12">QR tidak tersedia</p>}
+                  {/* Render QRIS LOKAL dari payload (qris_code) — tidak lagi bergantung
+                      layanan gambar pihak ketiga, dan payload tidak keluar dari browser. */}
+                  {intent.qris_code
+                    ? <QRCodeSVG value={intent.qris_code} size={256} level="M" className="mx-auto h-64 w-64 max-w-full" />
+                    : intent.qris_url
+                      ? <img src={intent.qris_url} alt="QRIS" className="w-64 h-64 max-w-full object-contain mx-auto" />
+                      : <p className="text-sm text-gray-400 py-12">QR tidak tersedia</p>}
                   <p className="text-xs text-gray-400 mt-2">Scan dengan aplikasi apa pun yang mendukung QRIS</p>
                 </div>
 

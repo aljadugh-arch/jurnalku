@@ -40,3 +40,4 @@ test('kolom Rombel tidak lagi diulang di dalam blok (sudah jadi judul)', () => {
   // Excel per rombel memakai judul kolom tanpa 'Rombel'.
   assert.match(page, /const judulKolom = \['No', 'Tanggal', 'Jam Ke', 'Mapel', 'Guru', 'Materi', 'Kegiatan', 'Catatan', 'Status'\]/)
 })
+

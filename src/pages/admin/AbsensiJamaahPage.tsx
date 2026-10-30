@@ -27,7 +27,7 @@ export default function AbsensiJamaahPage() {
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
   // Input status harian (hadir/izin/sakit/alpha) per sesi + tanggal.
-  const [sesiList, setSesiList] = useState<{ id: string; nama: string; mulai: string; selesai: string; rombel_id?: string | null; siswa_ids?: string | null }[]>([])
+  const [sesiList, setSesiList] = useState<{ id: string; nama: string; mulai: string; selesai: string; minimal_hadir?: number; rombel_id?: string | null; siswa_ids?: string | null }[]>([])
   const [selectedSesi, setSelectedSesi] = useState('')
   // Siswa yang diikutkan sesi ini. Tidak ada kunci = ikut (default: semua siswa terfilter).
   const [ikut, setIkut] = useState<Record<string, boolean>>({})
@@ -35,6 +35,7 @@ export default function AbsensiJamaahPage() {
   const [statusAbsensi, setStatusAbsensi] = useState<Record<string, string>>({})
   const [showAddSesi, setShowAddSesi] = useState(false)
   const [newSesiNama, setNewSesiNama] = useState('Shalat Jamaah')
+  const [newSesiMinimal, setNewSesiMinimal] = useState(10)
 
   useEffect(() => {
     setLoading(true)
@@ -60,6 +61,7 @@ export default function AbsensiJamaahPage() {
     const s = sesiList.find(x => x.id === id)
     if (!s) return
     setFilterRombel(s.rombel_id || '')
+    if (s.minimal_hadir) setMinimal(s.minimal_hadir)
     try {
       const ids = s.siswa_ids ? JSON.parse(s.siswa_ids) : null
       if (Array.isArray(ids) && ids.length) setIkut(Object.fromEntries(siswa.map(x => [x.id, ids.includes(x.id)])))
@@ -103,6 +105,7 @@ export default function AbsensiJamaahPage() {
       const sasaran = (filterRombel ? siswa.filter(s => s.rombel_id === filterRombel) : siswa).filter(s => ikut[s.id] !== false)
       const r = await api.post('/jamaah/sesi-baru', {
         nama: newSesiNama, mulai: sesiTanggal, selesai: sesiTanggal,
+        minimal_hadir: newSesiMinimal,
         rombel_id: filterRombel || null,
         siswa_ids: sasaran.map(s => s.id),
       })
@@ -360,6 +363,10 @@ export default function AbsensiJamaahPage() {
               <div>
                 <label className="block text-xs font-medium text-slate-500 mb-1">Tanggal Mulai</label>
                 <input type="date" value={sesiTanggal} onChange={e => setSesiTanggal(e.target.value)} className="w-full h-11 px-3 rounded-xl border border-slate-200 text-sm outline-none focus:border-indigo-400" />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-slate-500 mb-1">Minimal Hadir (batas lolos)</label>
+                <input type="number" min={1} value={newSesiMinimal} onChange={e => setNewSesiMinimal(Math.max(1, Number(e.target.value) || 1))} className="w-full h-11 px-3 rounded-xl border border-slate-200 text-sm outline-none focus:border-indigo-400" />
               </div>
             </div>
             <div className="flex justify-end gap-2 mt-5">

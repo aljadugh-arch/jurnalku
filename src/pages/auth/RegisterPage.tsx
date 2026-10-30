@@ -1,6 +1,7 @@
 import { useState, useMemo, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { School, Eye, EyeOff, Globe, Link2, CheckCircle, MessageCircle, Mail, Loader2, PartyPopper, ArrowRight, QrCode } from 'lucide-react'
+import { QRCodeSVG } from 'qrcode.react'
 import toast from 'react-hot-toast'
 import api from '../../services/api'
 import { useAuthStore } from '../../stores/authStore'
@@ -214,9 +215,11 @@ export default function RegisterPage() {
               <div className="mt-4 rounded-xl border sk-border-soft p-4 text-left">
                 <p className="text-xs sk-txt-muted">Nominal (sudah termasuk kode unik)</p>
                 <p className="text-2xl font-bold sk-txt">Rp {Number(pembayaran.amount).toLocaleString('id-ID')}</p>
-                {pembayaran.qris_url && (
+                {pembayaran.qris_code ? (
+                  <QRCodeSVG value={pembayaran.qris_code} size={224} level="M" className="mx-auto mt-3 h-56 w-56 max-w-full" />
+                ) : pembayaran.qris_url ? (
                   <img src={pembayaran.qris_url} alt="QRIS" className="mx-auto mt-3 h-56 w-56 object-contain" />
-                )}
+                ) : null}
                 {pembayaran.qris_code && (
                   <details className="mt-2">
                     <summary className="cursor-pointer text-xs sk-txt-muted">Kode QRIS (teks)</summary>
