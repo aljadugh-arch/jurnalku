@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import api from '../services/api'
 
-export type FeatureKey = 'master_data'|'jadwal'|'absensi'|'jurnal'|'penilaian'|'keuangan'|'whatsapp'|'posting'|'modul_ajar'|'backup_drive'|'website'|'rest_api'|'cashless'|'ekantin'|'ppdb'|'administrasi'|'perpustakaan'|'ujian'|'program_belajar'|'smtp'|'monitoring'|'foundation'
+export type FeatureKey = 'master_data'|'jadwal'|'absensi'|'jurnal'|'penilaian'|'keuangan'|'whatsapp'|'posting'|'modul_ajar'|'backup_drive'|'website'|'rest_api'|'cashless'|'ekantin'|'ppdb'|'administrasi'|'perpustakaan'|'ujian'|'program_belajar'|'smtp'|'monitoring'|'foundation'|'pesantren'
 export interface PlanInfo { plan: string; label: string; harga: number; masa_nilai: number; masa_satuan: string; aktif: 0|1; urutan: number; fitur?: string[] }
 export interface SubscriptionStateData {
   plan: string

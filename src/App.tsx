@@ -69,6 +69,8 @@ const LmsPage = lazy(() => import('./pages/admin/LmsPage'))
 const SupervisiPage = lazy(() => import('./pages/admin/SupervisiPage'))
 const AdministrasiPage = lazy(() => import('./pages/admin/AdministrasiPage'))
 const ProgramBelajarPage = lazy(() => import('./pages/admin/ProgramBelajarPage'))
+const AsramaPage = lazy(() => import('./pages/admin/AsramaPage'))
+const PerizinanPage = lazy(() => import('./pages/admin/PerizinanPage'))
 const BeasiswaPage = lazy(() => import('./pages/admin/BeasiswaPage'))
 const CashlessPage = lazy(() => import('./pages/admin/CashlessPage'))
 const BackupRestorePage = lazy(() => import('./pages/admin/BackupRestorePage'))
@@ -342,6 +344,12 @@ export default function App() {
           } />
           <Route path="program-belajar" element={
             <ProtectedRoute allowedRoles={['admin', 'super_admin', 'kepala', 'operator', 'tata_usaha']}><ProgramBelajarPage /></ProtectedRoute>
+          } />
+          <Route path="asrama" element={
+            <ProtectedRoute allowedRoles={['admin', 'super_admin', 'kepala', 'operator', 'tata_usaha']}><AsramaPage /></ProtectedRoute>
+          } />
+          <Route path="perizinan" element={
+            <ProtectedRoute allowedRoles={['admin', 'super_admin', 'kepala', 'operator', 'tata_usaha']}><PerizinanPage /></ProtectedRoute>
           } />
           <Route path="beasiswa" element={<BeasiswaPage />} />
           <Route path="cashless" element={<CashlessPage />} />

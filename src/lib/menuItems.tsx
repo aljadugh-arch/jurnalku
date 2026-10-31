@@ -85,6 +85,13 @@ export const adminMenuItems: MenuItem[] = [
   { label: 'Perpustakaan Digital', icon: <BookOpen size={20} />, path: '/admin/perpustakaan' },
   { label: 'Administrasi Surat', icon: <ScrollText size={20} />, path: '/admin/administrasi' },
   { label: 'Program Belajar', icon: <BookOpen size={20} />, path: '/admin/program-belajar' },
+  {
+    label: 'Pesantren', icon: <School size={20} />,
+    children: [
+      { label: 'Asrama & Penempatan', path: '/admin/asrama' },
+      { label: 'Perizinan Pulang', path: '/admin/perizinan' },
+    ]
+  },
   { label: 'Tahun Ajaran', icon: <School size={20} />, path: '/admin/tahun-ajaran' },
   {
     label: 'Keuangan', icon: <DollarSign size={20} />,
@@ -240,6 +247,13 @@ export const kepalaMenuItems: MenuItem[] = [
   { label: 'Supervisi', icon: <ClipboardCheck size={20} />, path: '/admin/supervisi' },
   { label: 'Administrasi Surat', icon: <ScrollText size={20} />, path: '/admin/administrasi' },
   { label: 'Program Belajar', icon: <BookOpen size={20} />, path: '/admin/program-belajar' },
+  {
+    label: 'Pesantren', icon: <School size={20} />,
+    children: [
+      { label: 'Asrama & Penempatan', path: '/admin/asrama' },
+      { label: 'Perizinan Pulang', path: '/admin/perizinan' },
+    ]
+  },
   { label: 'Perpustakaan Digital', icon: <BookOpen size={20} />, path: '/admin/perpustakaan' },
   {
     label: 'Absensi', icon: <UserCheck size={20} />,

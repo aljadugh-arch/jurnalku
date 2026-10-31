@@ -30,6 +30,8 @@ const rules: [FeatureKey, string[]][] = [
   ['smtp', ['/admin/smtp']],
   ['monitoring', ['/admin/monitoring', '/admin/monitoring-nilai', '/admin/nilai-ledger', '/admin/rekap-nilai', '/guru/nilai-ledger', '/admin/payroll', '/admin/rkas']],
   ['foundation', ['/admin/foundation-sync', '/admin/foundations']],
+  // Pesantren/pondok: asrama & kamar, penempatan santri, izin pulang.
+  ['pesantren', ['/admin/asrama', '/admin/perizinan']],
 ]
 
 export function featureForFrontendPath(path: string) {

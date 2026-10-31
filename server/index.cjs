@@ -71,6 +71,7 @@ const { registerRoutes: registerBackupRestoreRoutes, LIMITS: BACKUP_LIMITS } = r
 const { registerRoutes: registerDataAdminRoutes } = require('./data-admin.cjs')
 const { registerFinanceExcelRoutes } = require('./finance-excel.cjs')
 const { FEATURE_KEYS, PLAN_KEYS, addMonthsIso, computeExpiry, accessForTenant, featureForPath, normalizeFeatureSelection, generateUnlockCode, hashUnlockCode, setupSubscriptionTables, getPlans, planFeatureMap, updatePlan } = require('./subscription.cjs')
+const { setupPesantrenTables, registerPesantrenRoutes } = require('./pesantren.cjs')
 const invoiceService = require('./invoice-service.cjs')
 const { setupBackupTables, registerBackupRoutes, startBackupScheduler } = require('./backup-drive.cjs')
 const { DOCUMENT_TYPES, buildPrompt, validateGenerateInput, createTemplateContent, createDocumentDocx, callAi, clean } = require('./ai-documents.cjs')
@@ -1656,6 +1657,8 @@ setupAdministrasi(db)
 setupSupervisi(db)
 // Program belajar + level untuk lembaga nonformal (kursus/bimbel/sanggar).
 setupProgramBelajar(db)
+// Pesantren/pondok: asrama, kamar, penempatan santri, izin pulang.
+setupPesantrenTables(db)
 
 // Sesi kelas lama memiliki FK ke tabel jadwal reguler, sedangkan jadwal ujian
 // memakai tabel terpisah. Rebuild satu kali agar keduanya dapat direferensikan
@@ -12294,6 +12297,7 @@ daftarkanRuteRkas(app, { db, authMiddleware, requireRole })
 
 // Modul LMS (materi ajar + progres belajar)
 daftarkanRuteLms(app, { db, authMiddleware, requireRole, upload, UPLOAD_DIR, fs, path })
+registerPesantrenRoutes(app, { db, requireRole, waGateway })
 
 // ==================== SEO: robots, sitemap, meta per-lembaga ====================
 // Blok <head> di dist/index.html ditandai <!--SEO:START-->…<!--SEO:END--> lalu

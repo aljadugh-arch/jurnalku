@@ -14,12 +14,13 @@ const FEATURE_KEYS = [
   'smtp',           // SMTP/IMAP domain sendiri milik lembaga
   'monitoring',     // Monitoring data & ledger nilai
   'foundation',     // Integrasi se-yayasan (multi-lembaga)
+  'pesantren',      // Asrama/kamar, penempatan santri, izin pulang (pondok/pesantren)
 ]
 
 // Fitur yang BARU ditambahkan ke sistem paket. Dipakai migrasi agar fitur ini
 // bisa ditambahkan ke baris paket yang sudah ada di DB TANPA mencabut
 // penyesuaian manual admin platform.
-const FITUR_BARU = ['ppdb', 'administrasi', 'perpustakaan', 'ujian', 'program_belajar', 'smtp', 'monitoring', 'foundation']
+const FITUR_BARU = ['ppdb', 'administrasi', 'perpustakaan', 'ujian', 'program_belajar', 'smtp', 'monitoring', 'foundation', 'pesantren']
 
 // Fitur per paket. Prinsip: paket lebih tinggi = fitur lebih banyak, dan ada
 // perbedaan NYATA antar tingkat.
@@ -53,7 +54,7 @@ const PLAN_FEATURES = {
   // Lite: inti operasional harian + PPDB + administrasi surat + perpustakaan.
   // TANPA domain sendiri, backup Drive, REST API, SMTP, ujian/CBT, program
   // belajar nonformal, cashless, kantin, monitoring, integrasi yayasan.
-  lite: FEATURE_KEYS.filter(k => !['backup_drive', 'website', 'rest_api', 'smtp', 'ujian', 'program_belajar', 'cashless', 'ekantin', 'monitoring', 'foundation'].includes(k)),
+  lite: FEATURE_KEYS.filter(k => !['backup_drive', 'website', 'rest_api', 'smtp', 'ujian', 'program_belajar', 'cashless', 'ekantin', 'monitoring', 'foundation', 'pesantren'].includes(k)),
   // Pro: semua Lite + domain sendiri, backup Drive, REST API, SMTP, ujian/CBT,
   // program belajar nonformal, monitoring. TANPA cashless, kantin, yayasan.
   pro: FEATURE_KEYS.filter(k => !['cashless', 'ekantin', 'foundation'].includes(k)),
@@ -91,6 +92,7 @@ const FEATURE_PREFIXES = {
   // prefix di sini, API keduanya tetap bisa dipanggil paket Lite walau menunya
   // sudah disembunyikan — gerbang menu saja tidak cukup.
   monitoring: ['/api/payroll', '/api/rkas', '/api/admin/monitoring-nilai'],
+  pesantren: ['/api/asrama', '/api/kamar', '/api/penempatan', '/api/izin-pulang'],
 }
 
 function addMonthsIso(from, months = 1) {
