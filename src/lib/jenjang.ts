@@ -83,6 +83,27 @@ export function isGuruKelasJenjang(jenjang?: string): boolean {
   return ['RA', 'TK', 'MI', 'SD'].includes(canonicalJenjang(jenjang))
 }
 
+/**
+ * Label tipe institusi dari `settings.jenjang` — dipakai untuk teks seperti
+ * "Sistem Informasi Madrasah/Sekolah/Perguruan Tinggi/Lembaga/Pesantren"
+ * supaya tidak hardcoded satu jenis untuk semua lembaga.
+ * Mengembalikan '' bila jenjang kosong/tidak dikenal (pemanggil memakai fallback).
+ */
+export function labelInstitusi(jenjang?: string): string {
+  const u = canonicalJenjang(jenjang).toUpperCase()
+  if (['RA', 'MI', 'MTs', 'MA', 'MAK'].includes(u)) return 'Madrasah'
+  if (['TK', 'SD', 'SMP', 'SMA', 'SMK'].includes(u)) return 'Sekolah'
+  if (u === 'PT') return 'Perguruan Tinggi'
+  if (u === 'NF') return 'Lembaga'
+  const raw = String(jenjang || '').toLowerCase()
+  if (/pesantren/.test(raw)) return 'Pesantren'
+  if (/diniyah|madrasah|ibtidaiyah|tsanawiyah|aliyah/.test(raw)) return 'Madrasah'
+  if (/perguruan|universitas|kampus|politeknik|akademi|sekolah tinggi|institut/.test(raw)) return 'Perguruan Tinggi'
+  if (/sekolah|paud|taman kanak/.test(raw)) return 'Sekolah'
+  if (/kursus|bimbel|diklat|sanggar|lembaga|pelatihan/.test(raw)) return 'Lembaga'
+  return ''
+}
+
 export function jtmMenit(jenjang: string): number {
   return JTM_MENIT[canonicalJenjang(jenjang)] || 45 // fallback MA/umum
 }

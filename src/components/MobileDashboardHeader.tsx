@@ -5,6 +5,7 @@ import { useAuthStore } from '../stores/authStore'
 import { useSettingsStore } from '../stores/settingsStore'
 import { useThemeStore } from '../stores/themeStore'
 import { heroColors } from '../lib/applyTheme'
+import { labelInstitusi } from '../lib/jenjang'
 import NotifBell from './NotifBell'
 import Avatar from './ui/Avatar'
 
@@ -77,7 +78,7 @@ export default function MobileDashboardHeader({ roleOverride, photo }: { roleOve
           </span>
           <div className="min-w-0 flex-1">
             <p className="break-words text-[13px] font-bold leading-tight text-white">{namaLembaga}</p>
-            <p className="text-[11px] leading-tight text-white/75">Sistem Informasi Lembaga</p>
+            <p className="text-[11px] leading-tight text-white/75">Sistem Informasi {labelInstitusi((settings as any).jenjang) || 'Lembaga'}</p>
           </div>
           <NotifBell light />
         </div>

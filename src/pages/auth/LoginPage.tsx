@@ -6,6 +6,7 @@ import { useSettingsStore } from '../../stores/settingsStore'
 import api, { pesanGagalJaringan } from '../../services/api'
 import toast from 'react-hot-toast'
 import { useThemeStore } from '../../stores/themeStore'
+import { labelInstitusi } from '../../lib/jenjang'
 
 const getRedirectPath = (role: string) => {
   if (['admin', 'super_admin', 'kepala', 'bendahara', 'operator', 'tata_usaha', 'tu'].includes(role)) return '/admin'
@@ -206,7 +207,7 @@ export default function LoginPage() {
               Selamat Datang di{' '}
               <span className="block sk-txt-accent">{namaLembaga}</span>
             </h1>
-            <h2 className="mt-2 text-base font-semibold sk-txt-muted">Sistem Informasi Madrasah &amp; Sekolah</h2>
+            <h2 className="mt-2 text-base font-semibold sk-txt-muted">Sistem Informasi {labelInstitusi((settings as any).jenjang) || 'Madrasah &amp; Sekolah'}</h2>
             <p className="mt-3 max-w-lg text-sm leading-relaxed sk-txt-muted">
               Satu platform terpadu untuk seluruh administrasi lembaga — data siswa,
               absensi, jurnal mengajar, penilaian, rapor, keuangan, sampai notifikasi
