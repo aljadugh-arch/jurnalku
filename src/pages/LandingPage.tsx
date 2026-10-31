@@ -58,6 +58,69 @@ const langkah = [
 
 const jenjang = ['RA / TK', 'SD / MI', 'SMP / MTs', 'SMA / MA / SMK', 'Pesantren', 'Kursus & Bimbel', 'Yayasan']
 
+// ============================================================================
+// PINTU SEGMEN — konten landing disesuaikan domain yang dikunjungi.
+//   kemenag   : jurnalmadrasah.web.id  (madrasah + pesantren)
+//   dikdasmen : idjurnal.*             (sekolah + kampus/PT)
+//   umum      : jurnalku.biz.id, jurnal.cc.cd, dsb (kursus/bimbel/swasta/diklat)
+// Selaras dengan SEGMENT_DOOR di server/index.cjs.
+// ============================================================================
+type Segmen = 'kemenag' | 'dikdasmen' | 'umum'
+function segmenDariHost(): Segmen {
+  const h = window.location.hostname.replace(/^www\./, '').toLowerCase()
+  if (h === 'jurnalmadrasah.web.id') return 'kemenag'
+  if (h === 'idjurnal.web.id' || h === 'idjurnal.biz.id' || h === 'idjurnal.my.id') return 'dikdasmen'
+  return 'umum'
+}
+
+const SEGMEN: Record<Segmen, { badge: string; judul: string; accent: string; subtext: string; jenjang: string[]; fitur: { icon: any; judul: string; isi: string; warna: string }[] }> = {
+  kemenag: {
+    badge: 'Untuk Madrasah & Pesantren · Naungan Kemenag',
+    judul: 'Administrasi Madrasah Rapi,',
+    accent: 'Santri & Guru Tenang',
+    subtext: 'Satu platform untuk madrasah dan pesantren: jurnal mengajar, absensi jamaah, rapor PAI, asrama & izin santri, sampai notifikasi WhatsApp ke wali.',
+    jenjang: ['RA', 'MI', 'MTs', 'MA', 'Pesantren', 'Madrasah Diniyah'],
+    fitur: [
+      { icon: BookOpen, judul: 'Jurnal Mengajar', isi: 'Guru mencatat KBM dalam hitungan detik. Rekap otomatis siap untuk supervisi dan akreditasi madrasah.', warna: 'from-violet-500 to-purple-600' },
+      { icon: ScanLine, judul: 'Absensi QR/RFID & Jamaah', isi: 'Tap kartu, pindai QR, dan rekap absensi jamaah sholat. Titip absen jadi mustahil.', warna: 'from-emerald-500 to-teal-600' },
+      { icon: ClipboardCheck, judul: 'Rapor PAI & Madrasah', isi: 'Nilai harian, STS, SAS, sampai rapor madrasah siap cetak dengan rumpun PAI lengkap.', warna: 'from-amber-500 to-orange-600' },
+      { icon: Building2, judul: 'Asrama & Perizinan Santri', isi: 'Kelola asrama, kamar, dan izin pulang santri — keputusan terkirim otomatis ke WhatsApp wali.', warna: 'from-blue-500 to-indigo-600' },
+      { icon: WalletCards, judul: 'Keuangan & QRIS', isi: 'SPP, tagihan, tabungan santri, dan pembayaran QRIS. Laporan masuk tanpa rekap buku kas.', warna: 'from-rose-500 to-pink-600' },
+      { icon: Bell, judul: 'Notifikasi WhatsApp', isi: 'Wali murid menerima kabar kehadiran, nilai, dan izin langsung ke WhatsApp — tanpa pasang aplikasi.', warna: 'from-green-500 to-emerald-600' },
+    ],
+  },
+  dikdasmen: {
+    badge: 'Untuk Sekolah & Perguruan Tinggi · Kemendikdasmen',
+    judul: 'Administrasi Sekolah Rapi,',
+    accent: 'Belajar Lebih Tenang',
+    subtext: 'Satu platform untuk sekolah dan kampus: jurnal mengajar, absensi QR/RFID, rapor, SIAKAD KRS & IPK, sampai notifikasi WhatsApp ke wali.',
+    jenjang: ['SD', 'SMP', 'SMA', 'SMK', 'Kampus / PT'],
+    fitur: [
+      { icon: Users, judul: 'Data Siswa & GTK', isi: 'Ribuan data dalam satu tempat, lengkap dengan impor Excel, kartu pelajar, dan riwayat per kelas.', warna: 'from-blue-500 to-indigo-600' },
+      { icon: ScanLine, judul: 'Absensi QR & RFID', isi: 'Tap kartu, pindai QR, atau kenali wajah. Terikat waktu dan lokasi sehingga titip absen mustahil.', warna: 'from-emerald-500 to-teal-600' },
+      { icon: BookOpen, judul: 'Jurnal Mengajar', isi: 'Guru mencatat KBM dalam hitungan detik. Rekap otomatis untuk supervisi dan akreditasi.', warna: 'from-violet-500 to-purple-600' },
+      { icon: GraduationCap, judul: 'SIAKAD KRS & IPK', isi: 'KRS, KHS, dan IPK untuk perguruan tinggi — tanpa hitung manual, indeks prestasi terhitung otomatis.', warna: 'from-cyan-500 to-blue-600' },
+      { icon: ClipboardCheck, judul: 'Nilai & Rapor', isi: 'Nilai harian, STS, SAS, sampai rapor siap cetak dengan tanda tangan digital.', warna: 'from-amber-500 to-orange-600' },
+      { icon: MonitorPlay, judul: 'Ujian Online (CBT)', isi: 'Bank soal, paket ujian, token, dan penilaian otomatis. Hasil langsung tanpa koreksi manual.', warna: 'from-fuchsia-500 to-purple-600' },
+    ],
+  },
+  umum: {
+    badge: 'Untuk Lembaga Pendidikan & Kursus',
+    judul: 'Administrasi Rapi,',
+    accent: 'Mengajar Tenang',
+    subtext: 'Satu platform untuk kursus, bimbel, diklat, dan sekolah swasta: program belajar, peserta & e-sertifikat, absensi, dan notifikasi WhatsApp.',
+    jenjang: ['Kursus', 'Bimbel', 'Diklat', 'Sanggar', 'Sekolah Swasta', 'Yayasan'],
+    fitur: [
+      { icon: BookOpen, judul: 'Program & Level Belajar', isi: 'Kelola program dan tingkatan (Basic → Advanced) untuk kursus, bimbel, dan sanggar tanpa deploy.', warna: 'from-violet-500 to-purple-600' },
+      { icon: BadgeCheck, judul: 'Peserta & E-Sertifikat', isi: 'Daftar peserta, absensi potong kuota pertemuan, dan sertifikat terbit otomatis saat program selesai.', warna: 'from-amber-500 to-orange-600' },
+      { icon: ScanLine, judul: 'Absensi QR & RFID', isi: 'Tap kartu atau pindai QR untuk presensi siswa — cepat dan tidak bisa dititipkan.', warna: 'from-emerald-500 to-teal-600' },
+      { icon: WalletCards, judul: 'Keuangan & QRIS', isi: 'Tagihan, pembayaran QRIS, dan laporan keuangan masuk langsung tanpa rekap manual.', warna: 'from-rose-500 to-pink-600' },
+      { icon: Bell, judul: 'Notifikasi WhatsApp', isi: 'Kabar kehadiran dan tagihan sampai ke wali/peserta langsung via WhatsApp.', warna: 'from-green-500 to-emerald-600' },
+      { icon: ClipboardCheck, judul: 'Nilai & Rapor', isi: 'Nilai dan rapor siap cetak. Tanpa hitung manual di Excel.', warna: 'from-cyan-500 to-blue-600' },
+    ],
+  },
+}
+
 const faq = [
   { t: 'Apa itu JURNALKU?', j: 'JURNALKU adalah sistem informasi manajemen lembaga pendidikan berbasis web. Satu platform untuk data siswa dan GTK, jadwal, absensi, jurnal mengajar, penilaian, rapor, keuangan, sampai notifikasi WhatsApp ke wali murid.' },
   { t: 'Apakah harus memasang aplikasi atau menyiapkan server?', j: 'Tidak. JURNALKU berjalan di browser — cukup buka alamat lembaga dari HP, tablet, atau laptop. Tidak ada instalasi dan tidak perlu menyiapkan server sendiri.' },
@@ -76,6 +139,8 @@ export default function LandingPage() {
   const { dark, toggle: toggleDark } = useThemeStore()
   const logo = settings.logo || '/logo-jurnalku-256.png'
   const namaLembaga = (settings as any).nama_lembaga || 'JURNALKU'
+  const segmen = segmenDariHost()
+  const copy = SEGMEN[segmen]
 
   const [menuBuka, setMenuBuka] = useState(false)
   const [faqBuka, setFaqBuka] = useState<number | null>(0)
@@ -166,14 +231,13 @@ export default function LandingPage() {
       <main className="flex flex-1 items-center justify-center px-5 py-12 lg:py-16">
         <div className="grid w-full max-w-6xl items-center gap-10 lg:grid-cols-2">
           <section className="min-w-0">
-            <div className="sk-badge"><BadgeCheck size={14} /> Gratis 30 hari · coba gratis sekarang</div>
+            <div className="sk-badge"><BadgeCheck size={14} /> {copy.badge}</div>
             <h1 className="mt-4 text-3xl font-extrabold leading-tight tracking-tight sk-txt sm:text-4xl">
-              Administrasi Rapi,{' '}
-              <span className="sk-txt-accent">Mengajar Tenang</span>
+              {copy.judul}{' '}
+              <span className="sk-txt-accent">{copy.accent}</span>
             </h1>
             <p className="mt-3 max-w-lg text-base leading-relaxed sk-txt-muted">
-              Satu platform untuk seluruh administrasi lembaga. Wali murid dapat kabar lewat
-              WhatsApp, guru berhenti lembur di Excel.
+              {copy.subtext}
             </p>
             <div className="mt-6 flex flex-col gap-3 sm:flex-row">
               <Link to="/register" className="sk-btn">
@@ -269,7 +333,7 @@ export default function LandingPage() {
         <div className="mx-auto max-w-6xl px-4">
           <p className="mb-5 text-center text-sm font-medium sk-txt-muted">Satu platform untuk semua jenjang pendidikan</p>
           <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1">
-            {jenjang.map(j => (
+            {copy.jenjang.map(j => (
               <span key={j} className="px-3 py-1 text-3xl font-bold text-slate-600 opacity-70">{j}</span>
             ))}
           </div>
@@ -284,7 +348,7 @@ export default function LandingPage() {
           <p className="mx-auto max-w-2xl text-base sk-txt-muted">Tidak perlu berlangganan banyak aplikasi berbeda. Setiap modul membaca data yang sama, jadi tidak ada pekerjaan input dua kali.</p>
         </div>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {fiturUtama.map((f, i) => (
+          {copy.fitur.map((f, i) => (
             <div key={i} className="group rounded-2xl border sk-border-soft bg-white p-6 shadow-[0_10px_30px_rgba(58,48,40,0.06)] transition-all hover:-translate-y-0.5 hover:shadow-[0_14px_34px_rgba(58,48,40,0.08)]">
               <div className={`mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br ${f.warna} transition-transform group-hover:scale-110`}>
                 <f.icon size={24} className="text-white" />
