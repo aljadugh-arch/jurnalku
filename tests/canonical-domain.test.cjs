@@ -18,7 +18,7 @@ test('jurnalku.biz.id jadi domain utama di DOMAIN_BAWAAN', () => {
 })
 
 test('canonical platform memakai BASE_DOMAIN, lembaga memakai host sendiri', () => {
-  assert.match(idx, /const canonicalBase = req\.tenantId \? base : `\$\{skemaPermintaan\(req\)\}:\/\/\$\{BASE_DOMAIN \|\| 'jurnalku\.biz\.id'\}`/, 'logika canonical')
+  assert.match(idx, /const canonicalBase = \(req\.tenantId && req\.tenantId !== 'default'\) \? base : `\$\{skemaPermintaan\(req\)\}:\/\/\$\{BASE_DOMAIN \|\| 'jurnalku\.biz\.id'\}`/, 'logika canonical (default = platform)')
   assert.match(idx, /<link rel="canonical" href="\$\{escHtml\(canonicalBase \+ path\)\}" \/>/, 'link canonical')
   assert.match(idx, /<meta property="og:url" content="\$\{escHtml\(canonicalBase \+ path\)\}" \/>/, 'og:url')
 })

@@ -12331,11 +12331,11 @@ function renderIndexSeo(req) {
   const nama = String(s.nama_lembaga || '').trim()
   const host = hostPermintaan(req)
   const base = `${skemaPermintaan(req)}://${host}`
-  // Domain brand utama (canonical) = jurnalku.biz.id. Halaman platform (tanpa
-  // lembaga) diarahkan canonical/og:url-nya ke domain utama supaya jurnal.cc.cd,
-  // idjurnal.*, dan jurnalmadrasah.web.id tidak terindeks sebagai duplikat.
-  // Halaman lembaga tetap memakai host lembaganya sendiri.
-  const canonicalBase = req.tenantId ? base : `${skemaPermintaan(req)}://${BASE_DOMAIN || 'jurnalku.biz.id'}`
+  // Domain brand utama (canonical) = jurnalku.biz.id. Halaman platform (tenant
+  // `default` = bukan lembaga) diarahkan canonical/og:url-nya ke domain utama
+  // supaya jurnal.cc.cd, idjurnal.*, dan jurnalmadrasah.web.id tidak terindeks
+  // sebagai duplikat. Halaman lembaga tetap memakai host lembaganya sendiri.
+  const canonicalBase = (req.tenantId && req.tenantId !== 'default') ? base : `${skemaPermintaan(req)}://${BASE_DOMAIN || 'jurnalku.biz.id'}`
   // Judul & deskripsi PER HALAMAN. Tanpa ini setiap rute (/panduan, /ppdb,
   // /login) menyajikan meta yang sama persis, sehingga Google menganggapnya
   // satu halaman duplikat dan hanya satu URL yang layak diindeks.
