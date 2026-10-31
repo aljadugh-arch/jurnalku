@@ -287,7 +287,7 @@ app.get('/robots.txt', (req, res) => {
   const host = hostPermintaan(req)
   // Platform (bukan lembaga): Sitemap diarahkan ke domain brand utama (canonical)
   // supaya tiap domain platform tidak menunjuk sitemap duplikatnya sendiri.
-  const canonical = `${skemaPermintaan(req)}://${tenantDariHost(host) ? host : (BASE_DOMAIN || 'jurnalku.biz.id')}`
+  const canonical = `${skemaPermintaan(req)}://${tenantDariHost(host) ? host : hostCanonicalPlatform(host)}`
   res.type('text/plain').send(['User-agent: *', 'Allow: /', 'Disallow: /api/', 'Disallow: /admin/', 'Disallow: /guru/', 'Disallow: /siswa/', 'Disallow: /wali/', `Sitemap: ${canonical}/sitemap.xml`, ''].join('\n'))
 })
 // ==================== Halaman PROFIL lembaga (publik, untuk SEO) ====================
@@ -377,7 +377,7 @@ app.get('/sitemap.xml', (req, res) => {
   const tenantId = tenantDariHost(host)
   // Platform (bukan lembaga): URL <loc> diarahkan ke domain brand utama supaya
   // tidak ada sitemap duplikat di tiap domain platform (jurnal.cc.cd, idjurnal.*).
-  const base = `${skemaPermintaan(req)}://${tenantId ? host : (BASE_DOMAIN || 'jurnalku.biz.id')}`
+  const base = `${skemaPermintaan(req)}://${tenantId ? host : hostCanonicalPlatform(host)}`
   // Halaman publik yang benar-benar bisa dirayapi crawler. Halaman yang butuh
   // login (dashboard) TIDAK dimasukkan: crawler hanya akan kena redirect dan
   // itu menurunkan kualitas sinyal di Search Console.
@@ -12323,6 +12323,35 @@ function bacaIndexTemplate() {
   } catch { /* belum dibangun (dev): pakai cache terakhir */ }
   return seoCacheIndex.html
 }
+// Pintu segmen per domain platform. Tiap domain adalah "pintu" untuk satu
+// segmen lembaga, dengan SATU domain primary per segmen sebagai target
+// canonical (alias diarahkan ke primary-nya, bukan ke satu domain global).
+//   kemenag   : jurnalmadrasah.web.id  (madrasah + pesantren)
+//   dikdasmen : idjurnal.web.id        (SD/SMP/SMA/SMK + kampus/PT)
+//   umum      : jurnalku.biz.id        (komersial + nonformal: kursus/bimbel/diklat)
+//   jurnal.cc.cd  = ikut pintu umum (canonical -> jurnalku.biz.id)
+function SEGMENT_DOOR(host) {
+  const h = String(host || '').toLowerCase().trim().replace(/^www\./, '').replace(/\.$/, '')
+  return ({
+    'jurnalmadrasah.web.id': { segmen: 'kemenag', canonical: 'jurnalmadrasah.web.id' },
+    'idjurnal.web.id': { segmen: 'dikdasmen', canonical: 'idjurnal.web.id' },
+    'idjurnal.biz.id': { segmen: 'dikdasmen', canonical: 'idjurnal.web.id' },
+    'idjurnal.my.id': { segmen: 'dikdasmen', canonical: 'idjurnal.web.id' },
+    'jurnalku.biz.id': { segmen: 'umum', canonical: 'jurnalku.biz.id' },
+    'jurnal.cc.cd': { segmen: 'umum', canonical: 'jurnalku.biz.id' },
+  })[h] || null
+}
+// Host canonical untuk halaman platform (bukan lembaga): ikut pintu segmen.
+function hostCanonicalPlatform(host) {
+  return (SEGMENT_DOOR(host)?.canonical) || BASE_DOMAIN || 'jurnalku.biz.id'
+}
+// Deskripsi SEO default per pintu segmen (dipakai halaman platform tanpa lembaga).
+const SEGMEN_DESC = {
+  kemenag: 'JURNALKU — sistem informasi manajemen madrasah & pesantren: jurnal mengajar, absensi QR/RFID, penilaian & rapor PAI, keuangan, dan notifikasi WhatsApp.',
+  dikdasmen: 'JURNALKU — sistem informasi manajemen sekolah & perguruan tinggi: jurnal mengajar, absensi QR/RFID, penilaian, rapor, keuangan, dan notifikasi WhatsApp.',
+  umum: 'JURNALKU — sistem informasi manajemen lembaga pendidikan & kursus: jurnal mengajar, absensi, penilaian, rapor, keuangan, dan notifikasi WhatsApp.',
+}
+
 function renderIndexSeo(req) {
   const html = bacaIndexTemplate()
   if (!html) return null
@@ -12339,7 +12368,7 @@ function renderIndexSeo(req) {
   // `default` = bukan lembaga) diarahkan canonical/og:url-nya ke domain utama
   // supaya jurnal.cc.cd, idjurnal.*, dan jurnalmadrasah.web.id tidak terindeks
   // sebagai duplikat. Halaman lembaga tetap memakai host lembaganya sendiri.
-  const canonicalBase = (req.tenantId && req.tenantId !== 'default') ? base : `${skemaPermintaan(req)}://${BASE_DOMAIN || 'jurnalku.biz.id'}`
+  const canonicalBase = (req.tenantId && req.tenantId !== 'default') ? base : `${skemaPermintaan(req)}://${hostCanonicalPlatform(host)}`
   // Judul & deskripsi PER HALAMAN. Tanpa ini setiap rute (/panduan, /ppdb,
   // /login) menyajikan meta yang sama persis, sehingga Google menganggapnya
   // satu halaman duplikat dan hanya satu URL yang layak diindeks.
@@ -12375,7 +12404,10 @@ function renderIndexSeo(req) {
       : SEO_DESC_DEFAULT,
   }
   const judul = meta.judul
-  const deskripsi = meta.deskripsi
+  let deskripsi = meta.deskripsi
+  // Platform (tanpa lembaga): deskripsi mengikuti pintu segmen domain.
+  const segmenPintu = (req.tenantId && req.tenantId !== 'default') ? null : (SEGMENT_DOOR(host)?.segmen)
+  if (segmenPintu && SEGMEN_DESC[segmenPintu] && !nama) deskripsi = SEGMEN_DESC[segmenPintu]
   const gambar = `${base}/og-image.png`
   const namaAplikasi = String(s.pwa_name || nama || 'JURNALKU')
   const ld = {
