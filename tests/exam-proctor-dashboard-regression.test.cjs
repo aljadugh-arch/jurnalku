@@ -32,7 +32,10 @@ test('RED: schema menyimpan penugasan proktor dan audit aksi secara tenant-scope
 })
 
 test('RED: admin dapat mengelola assignment dan proktor hanya memonitor assignment sendiri', () => {
-  assert.match(server, /app\.get\('\/api\/ujian\/proktor\/assignments', ADMIN/)
+  // GET dipakai proktor untuk membaca penugasan MILIKNYA (di-scope), sekaligus
+  // admin melihat semua — karenanya PROCTOR, bukan ADMIN.
+  assert.match(server, /app\.get\('\/api\/ujian\/proktor\/assignments', PROCTOR/)
+  assert.match(server, /const isProktor = req\.user\.role === 'proktor'/)
   assert.match(server, /app\.put\('\/api\/ujian\/:paketId\/proktor\/assignments', ADMIN/)
   assert.match(server, /app\.get\('\/api\/ujian\/:paketId\/monitor', PROCTOR/)
   assert.match(server, /function canMonitorExam/)
