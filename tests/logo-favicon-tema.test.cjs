@@ -25,9 +25,10 @@ test('favicon disinkronkan dengan tema', () => {
   assert.match(html, /sizes="64x64" href="\/favicon-light\.png"/, 'favicon default terang')
 })
 
-test('toggle tema tidak lagi menimpa teks brand (tombol masuk disembunyikan di mobile)', () => {
+test('toggle tema tidak lagi menimpa teks brand (tombol masuk dibungkus hidden lg:flex)', () => {
   const lp = baca('src/pages/LandingPage.tsx')
-  assert.match(lp, /hidden lg:inline-flex">Masuk</, 'Masuk disembunyikan di mobile')
-  assert.match(lp, /hidden lg:inline-flex">Coba Gratis</, 'Coba Gratis disembunyikan di mobile')
+  // `hidden` langsung di tombol sk-btn tertimpa display dari .sk-btn; solusinya
+  // bungkus tombol dalam div `hidden lg:flex` supaya parent display:none menang.
+  assert.match(lp, /<div className="hidden lg:flex items-center gap-1\.5">/, 'Masuk+Coba Gratis dibungkus hidden lg:flex')
   assert.match(lp, /<span className="whitespace-nowrap">\{namaLembaga\}<\/span>/, 'teks brand nowrap')
 })

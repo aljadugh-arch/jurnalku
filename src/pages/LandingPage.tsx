@@ -207,8 +207,10 @@ export default function LandingPage() {
             <button onClick={toggleDark} className="rounded-full p-2 text-slate-400 transition hover:bg-black/5" aria-label="Ganti mode gelap/terang">
               {dark ? <Sun size={17} className="text-amber-500" /> : <Moon size={17} />}
             </button>
-            <Link to="/login" className="sk-btn sk-btn--ghost !min-h-0 !px-4 !py-2 text-sm hidden lg:inline-flex">Masuk</Link>
-            <Link to="/register" className="sk-btn !min-h-0 !px-4 !py-2 text-sm hidden lg:inline-flex">Coba Gratis</Link>
+            <div className="hidden lg:flex items-center gap-1.5">
+              <Link to="/login" className="sk-btn sk-btn--ghost !min-h-0 !px-4 !py-2 text-sm">Masuk</Link>
+              <Link to="/register" className="sk-btn !min-h-0 !px-4 !py-2 text-sm">Coba Gratis</Link>
+            </div>
             <button onClick={() => setMenuBuka(v => !v)} className="rounded-lg p-2 text-slate-500 hover:bg-black/5 lg:hidden" aria-label="Menu">
               {menuBuka ? <X size={20} /> : <Menu size={20} />}
             </button>
