@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Calendar, CheckCircle, BookOpen, Activity, ChevronRight, Clock, ClipboardCheck, Wallet, Receipt, NotebookPen, Moon, Sun, LogOut } from 'lucide-react'
+import { Calendar, CheckCircle, BookOpen, Activity, ChevronRight, Clock, ClipboardCheck, Wallet, Receipt, NotebookPen, Trophy, Moon, Sun, LogOut } from 'lucide-react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import api from '../../services/api'
 import { Card, StatCard, Badge, Avatar } from '../../components/ui'
@@ -52,11 +52,6 @@ export default function SiswaDashboard() {
     if (!location.hash) return
     setTimeout(() => document.getElementById(location.hash.slice(1))?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 80)
   }, [location.hash])
-
-  const goSection = (id: string) => {
-    history.replaceState(null, '', '#'+id)
-    document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-  }
 
   const totalAbsensi = data.rekap.hadir + data.rekap.sakit + data.rekap.izin + data.rekap.alpha
   const persenHadir = totalAbsensi > 0 ? Math.round((data.rekap.hadir / totalAbsensi) * 100) : 0
@@ -142,32 +137,18 @@ export default function SiswaDashboard() {
       </div>
 
 
-      <div className="lg:hidden grid grid-cols-3 gap-3">
-        {[
-          ['Kehadiran', '#kehadiran', <Activity key="kehadiran" size={18} />],
-          ['Tabungan', '#tabungan', <Wallet key="tabungan" size={18} />],
-          ['Tagihan', '#tagihan', <Receipt key="tagihan" size={18} />],
-          ['Nilai', '#nilai', <BookOpen key="nilai" size={18} />],
-          ['Jadwal', '#jadwal', <Calendar key="jadwal" size={18} />],
-          ['Tugas', '#tugas', <ClipboardCheck key="tugas" size={18} />],
-          ['Catatan', '#catatan', <NotebookPen key="catatan" size={18} />],
-        ].map(([label, hash, icon]: any) => (
-          <button key={label} type="button" onClick={() => goSection(String(hash).slice(1))} className="rounded-2xl bg-white border border-gray-100 p-3 text-center shadow-sm active:scale-95 transition">
-            <span className="mx-auto mb-2 flex h-10 w-10 items-center justify-center rounded-xl bg-primary text-white">{icon}</span>
-            <span className="text-xs font-semibold text-gray-700">{label}</span>
-          </button>
-        ))}
-      </div>
-
+      {/* Pintasan cepat: setiap kartu MEREFERENSIKAN HALAMANNYA, bukan scroll
+          ke seksi di beranda. Halaman jadwal/nilai/tugas/ekskul/dst kini bisa
+          dijangkau dari beranda. */}
       <div className="hidden lg:grid grid-cols-4 xl:grid-cols-8 gap-3">
         {[
           ['Kehadiran', () => navigate('/siswa/absensi'), <Activity key="kehadiran" size={18} />],
-          ['Tabungan', () => goSection('tabungan'), <Wallet key="tabungan" size={18} />],
-          ['Tagihan', () => goSection('tagihan'), <Receipt key="tagihan" size={18} />],
-          ['Nilai', () => goSection('nilai'), <BookOpen key="nilai" size={18} />],
+          ['Tabungan', () => navigate('/siswa/tabungan'), <Wallet key="tabungan" size={18} />],
+          ['Tagihan', () => navigate('/siswa/tagihan'), <Receipt key="tagihan" size={18} />],
+          ['Nilai', () => navigate('/siswa/nilai'), <BookOpen key="nilai" size={18} />],
           ['Jadwal', () => navigate('/siswa/jadwal'), <Calendar key="jadwal" size={18} />],
-          ['Tugas', () => goSection('tugas'), <ClipboardCheck key="tugas" size={18} />],
-          ['Catatan', () => goSection('catatan'), <NotebookPen key="catatan" size={18} />],
+          ['Tugas', () => navigate('/siswa/tugas'), <ClipboardCheck key="tugas" size={18} />],
+          ['Ekskul', () => navigate('/siswa/ekskul'), <Trophy key="ekskul" size={18} />],
           ['Perpus Digital', () => navigate('/siswa/perpustakaan'), <BookOpen key="perpus" size={18} />],
         ].map(([label, onClick, icon]: any) => (
           <button key={label} type="button" onClick={onClick} className="rounded-2xl bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800 p-3 text-center shadow-sm active:scale-95 transition">
