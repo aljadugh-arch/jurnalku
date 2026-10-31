@@ -12360,7 +12360,9 @@ function renderIndexSeo(req) {
   // lembaganya sendiri, bukan judul platform yang sama untuk keenam domain.
   if (!req.tenantId) req.tenantId = tenantDariHost(hostPermintaan(req))
   let s = {}
-  try { if (req.tenantId) s = getTenantSettings(db, req.tenantId, 'nama_lembaga,pwa_name') || {} } catch { s = {} }
+  // Tenant `default` = platform (bukan lembaga): nama_lembaga-nya (bisa berisi
+  // data lama) TIDAK dipakai untuk judul/deskripsi platform — pakai SEO segmen.
+  try { if (req.tenantId && req.tenantId !== 'default') s = getTenantSettings(db, req.tenantId, 'nama_lembaga,pwa_name') || {} } catch { s = {} }
   const nama = String(s.nama_lembaga || '').trim()
   const host = hostPermintaan(req)
   const base = `${skemaPermintaan(req)}://${host}`

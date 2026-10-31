@@ -30,6 +30,7 @@ test('peta pintu segmen terdefinisi lengkap', () => {
 
 test('canonical platform memakai hostCanonicalPlatform, lembaga memakai host sendiri', () => {
   assert.match(idx, /const canonicalBase = \(req\.tenantId && req\.tenantId !== 'default'\) \? base : `\$\{skemaPermintaan\(req\)\}:\/\/\$\{hostCanonicalPlatform\(host\)\}`/, 'logika canonical')
+  assert.match(idx, /if \(req\.tenantId && req\.tenantId !== 'default'\) s = getTenantSettings/, 'nama tenant default tidak dipakai SEO platform')
   assert.match(idx, /function hostCanonicalPlatform\(host\)/, 'helper canonical per segmen')
   assert.match(idx, /<link rel="canonical" href="\$\{escHtml\(canonicalBase \+ path\)\}" \/>/, 'link canonical')
   assert.match(idx, /<meta property="og:url" content="\$\{escHtml\(canonicalBase \+ path\)\}" \/>/, 'og:url')
