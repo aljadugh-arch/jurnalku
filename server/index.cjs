@@ -3479,6 +3479,60 @@ function jaminTenantDemo(cfg) {
   return cfg.id
 }
 
+// Seed data contoh untuk tenant demo PT (demo-kampus): mata kuliah, mahasiswa,
+// KRS, dan nilai — supaya tampilan KRS/KHS/IPK bisa langsung dilihat dari demo
+// tanpa input manual dulu.
+function seedDemoKampus(db) {
+  const tid = 'demo-kampus'
+  // Idempotent: jangan seed ulang bila sudah ada mata kuliah.
+  if (db.prepare('SELECT id FROM mapel WHERE tenant_id=? LIMIT 1').get(tid)) return
+  try {
+    const insMapel = db.prepare('INSERT OR IGNORE INTO mapel (id, kode, nama, kelompok, jam_per_minggu, tenant_id) VALUES (?,?,?,?,?,?)')
+    const matkul = [
+      ['DEMOPT-01', 'Algoritma dan Struktur Data', 3],
+      ['DEMOPT-02', 'Basis Data', 3],
+      ['DEMOPT-03', 'Pemrograman Web', 3],
+      ['DEMOPT-04', 'Jaringan Komputer', 3],
+      ['DEMOPT-05', 'Sistem Operasi', 3],
+      ['DEMOPT-06', 'Matematika Diskrit', 2],
+      ['DEMOPT-07', 'Kewirausahaan', 2],
+    ]
+    const mapelIds = []
+    for (const [kode, nama, sks] of matkul) {
+      const mid = uuidv4()
+      insMapel.run(mid, kode, nama, 'wajib', sks, tid)
+      mapelIds.push([mid, sks])
+    }
+    const rombel = db.prepare('SELECT id FROM rombel WHERE tenant_id=? LIMIT 1').get(tid)
+    const insSiswa = db.prepare('INSERT OR IGNORE INTO siswa (id, nis, nama, jenis_kelamin, rombel_id, status, tenant_id) VALUES (?,?,?,?,?,?,?)')
+    const insKrs = db.prepare('INSERT INTO krs (id, tenant_id, siswa_id, semester, tahun_ajaran) VALUES (?,?,?,?,?)')
+    const insItem = db.prepare('INSERT INTO krs_item (id, tenant_id, krs_id, mapel_id, sks) VALUES (?,?,?,?,?)')
+    const insNilai = db.prepare('INSERT OR IGNORE INTO krs_nilai (id, tenant_id, siswa_id, mapel_id, semester, sks, nilai_angka, nilai_huruf) VALUES (?,?,?,?,?,?,?,?)')
+    const mhs = [
+      ['DEMOPT2026001', 'Ahmad Fauzi', 'L'],
+      ['DEMOPT2026002', 'Siti Nurhaliza', 'P'],
+      ['DEMOPT2026003', 'Budi Santoso', 'L'],
+      ['DEMOPT2026004', 'Dewi Lestari', 'P'],
+    ]
+    // Nilai contoh (0-4); digeser per mahasiswa agar IPK tiap orang berbeda.
+    const nilai = [4.0, 3.75, 3.5, 3.25, 3.0, 3.5, 4.0]
+    mhs.forEach(([nim, nama, jk], idx) => {
+      const sid = uuidv4()
+      insSiswa.run(sid, nim, nama, jk, rombel?.id || null, 'aktif', tid)
+      const krsId = uuidv4()
+      insKrs.run(krsId, tid, sid, 'Ganjil', '2026/2027')
+      mapelIds.forEach(([mid, sks], i) => {
+        insItem.run(uuidv4(), tid, krsId, mid, sks)
+        const na = nilai[(i + idx) % nilai.length]
+        insNilai.run(uuidv4(), tid, sid, mid, 'Ganjil', sks, na, null)
+      })
+    })
+    console.log('[demo-kampus] data contoh SIAKAD PT di-seed')
+  } catch (e) {
+    console.warn('[demo-kampus] gagal seed:', e.message)
+  }
+}
+
 ;(() => {
   // 1. Ubah slug 'default' tenant dari 'demo' ke 'platform' agar tidak konflik
   //    dan agar demo.jurnal.cc.cd tidak resolve ke tenant superadmin.
@@ -3491,6 +3545,8 @@ function jaminTenantDemo(cfg) {
 
   // 2. Pastikan tenant demo tiap segmen ada + nama/jenjang bersih.
   Object.values(DEMO_SEGMEN).forEach(jaminTenantDemo)
+  // 2b. Seed data contoh SIAKAD PT untuk demo kampus.
+  seedDemoKampus(db)
 
   // 3. Perbaiki nama tenant demo lama yang sempat menempel 'Contoh Data' ganda.
   try {
