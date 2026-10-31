@@ -70,6 +70,7 @@ const SupervisiPage = lazy(() => import('./pages/admin/SupervisiPage'))
 const AdministrasiPage = lazy(() => import('./pages/admin/AdministrasiPage'))
 const ProgramBelajarPage = lazy(() => import('./pages/admin/ProgramBelajarPage'))
 const ProgramPesertaPage = lazy(() => import('./pages/admin/ProgramPesertaPage'))
+const SiakadPtPage = lazy(() => import('./pages/admin/SiakadPtPage'))
 const AsramaPage = lazy(() => import('./pages/admin/AsramaPage'))
 const PerizinanPage = lazy(() => import('./pages/admin/PerizinanPage'))
 const BeasiswaPage = lazy(() => import('./pages/admin/BeasiswaPage'))
@@ -348,6 +349,9 @@ export default function App() {
           } />
           <Route path="program-peserta" element={
             <ProtectedRoute allowedRoles={['admin', 'super_admin']}><ProgramPesertaPage /></ProtectedRoute>
+          } />
+          <Route path="siakad-pt" element={
+            <ProtectedRoute allowedRoles={['admin', 'super_admin', 'kepala', 'operator', 'tata_usaha']}><SiakadPtPage /></ProtectedRoute>
           } />
           <Route path="asrama" element={
             <ProtectedRoute allowedRoles={['admin', 'super_admin', 'kepala', 'operator', 'tata_usaha']}><AsramaPage /></ProtectedRoute>

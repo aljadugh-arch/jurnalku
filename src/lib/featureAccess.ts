@@ -11,7 +11,7 @@ const rules: [FeatureKey, string[]][] = [
   ['jadwal', ['/admin/jadwal', '/admin/pengajar', '/admin/wali-kelas', '/admin/kalender-kbm', '/guru/jadwal']],
   ['absensi', ['/admin/absensi', '/admin/absensi-siswa', '/admin/absensi-qr-siswa', '/admin/absensi-guru', '/admin/absensi-ekskul', '/admin/absensi-jamaah', '/admin/absensi-kokurikuler', '/admin/absensi-kegiatan', '/admin/rekap-absensi', '/admin/ceklok', '/admin/ekskul', '/admin/rfid', '/admin/panduan-absensi-alat', '/guru/absensi', '/guru/absensi-siswa', '/guru/absensi-mapel', '/guru/absensi-ekskul', '/siswa/absensi', '/siswa/ekskul']],
   ['jurnal', ['/admin/jurnal', '/guru/jurnal']],
-  ['penilaian', ['/admin/rapor', '/admin/cetak-rapor', '/admin/kkm', '/admin/buku-induk', '/admin/catatan-kepribadian', '/admin/supervisi', '/admin/bk', '/guru/penilaian', '/guru/penilaian-harian', '/guru/penilaian-ekskul', '/guru/catatan', '/guru/catatan-kepribadian', '/guru/rekap-nilai', '/guru/nilai-sts', '/guru/nilai-sas', '/guru/koreksi-jawaban', '/siswa/nilai']],
+  ['penilaian', ['/admin/rapor', '/admin/cetak-rapor', '/admin/kkm', '/admin/buku-induk', '/admin/catatan-kepribadian', '/admin/supervisi', '/admin/bk', '/admin/siakad-pt', '/guru/penilaian', '/guru/penilaian-harian', '/guru/penilaian-ekskul', '/guru/catatan', '/guru/catatan-kepribadian', '/guru/rekap-nilai', '/guru/nilai-sts', '/guru/nilai-sas', '/guru/koreksi-jawaban', '/siswa/nilai']],
   ['keuangan', ['/admin/tagihan', '/admin/tabungan', '/admin/bendahara', '/admin/beasiswa', '/admin/cashless', '/admin/payment-gateway', '/admin/buku-kas', '/admin/laporan-keuangan']],
   ['whatsapp', ['/admin/broadcast', '/admin/wa-gateway', '/admin/notif-settings']],
   ['posting', ['/admin/posting', '/guru/posting', '/siswa/posting']],
@@ -45,12 +45,21 @@ export function jenjangNonformal(jenjang: unknown): boolean {
   return j === 'NF' || j.includes('NONFORMAL') || j.includes('NON-FORMAL') || j.includes('KURSUS') || j.includes('DIKLAT') || j.includes('BIMBEL')
 }
 
+/** Apakah nilai `settings.jenjang` menandakan perguruan tinggi (kampus/politeknik/akademi)? */
+export function jenjangPerguruanTinggi(jenjang: unknown): boolean {
+  const j = String(jenjang ?? '').trim().toUpperCase()
+  if (!j) return false
+  return j === 'PT' || j.includes('PERGURUAN') || j.includes('UNIVERSITAS') || j.includes('KAMPUS') || j.includes('POLITEKNIK') || j.includes('AKADEMI')
+}
+
 export function pathEnabled(path: string, features?: Partial<Record<FeatureKey, boolean>>, jenjang?: unknown) {
   const key = featureForFrontendPath(path)
   if (key && features?.[key] === false) return false
   // Program Belajar HANYA untuk lembaga nonformal — sekolah formal memakai
   // Mata Pelajaran & Rombongan Belajar, jadi menunya tidak ditampilkan.
   if (key === 'program_belajar' && jenjang !== undefined && !jenjangNonformal(jenjang)) return false
+  // SIAKAD (KRS & IPK) HANYA untuk perguruan tinggi.
+  if (path.startsWith('/admin/siakad-pt') && jenjang !== undefined && !jenjangPerguruanTinggi(jenjang)) return false
   return true
 }
 

@@ -64,6 +64,7 @@ export const adminMenuItems: MenuItem[] = [
     ]
   },
   { label: 'Rekap Nilai per Mapel', icon: <ClipboardCheck size={20} />, path: '/admin/rekap-nilai' },
+  { label: 'SIAKAD (KRS & IPK)', icon: <GraduationCap size={20} />, path: '/admin/siakad-pt' },
   { label: 'Monitoring Pengisian Nilai', icon: <Activity size={20} />, path: '/admin/monitoring-nilai' },
   {
     label: 'Ujian & Bank Soal', icon: <FileQuestion size={20} />,
@@ -241,6 +242,7 @@ export const kepalaMenuItems: MenuItem[] = [
     { label: 'Cetak & Ekspor Rapor', path: '/admin/cetak-rapor' },
     { label: 'Buku Induk Siswa', path: '/admin/buku-induk' },
   ] },
+  { label: 'SIAKAD (KRS & IPK)', icon: <GraduationCap size={20} />, path: '/admin/siakad-pt' },
   { label: 'Catatan Kepribadian', icon: <ScrollText size={20} />, path: '/admin/catatan-kepribadian' },
   { label: 'Bimbingan Konseling', icon: <HeartHandshake size={20} />, path: '/admin/bk' },
   { label: 'Rombongan Belajar', icon: <Layers size={20} />, path: '/admin/rombel' },

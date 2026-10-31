@@ -66,7 +66,7 @@ const FEATURE_PREFIXES = {
   jadwal: ['/api/jadwal', '/api/template-jadwal', '/api/pengajar', '/api/wali-kelas', '/api/kalender-kbm', '/api/guru/jadwal', '/api/siswa/jadwal'],
   absensi: ['/api/absensi', '/api/absensi-siswa', '/api/absensi-guru', '/api/ceklok', '/api/guru/ceklok', '/api/guru/absensi-saya', '/api/ekskul', '/api/jamaah'],
   jurnal: ['/api/jurnal'],
-  penilaian: ['/api/penilaian', '/api/penilaian-harian', '/api/rapor', '/api/buku-induk', '/api/catatan-kepribadian', '/api/supervisi', '/api/bk'],
+  penilaian: ['/api/penilaian', '/api/penilaian-harian', '/api/rapor', '/api/buku-induk', '/api/catatan-kepribadian', '/api/supervisi', '/api/bk', '/api/krs'],
   keuangan: ['/api/tagihan', '/api/jenis-tagihan', '/api/tabungan', '/api/bendahara', '/api/keuangan', '/api/cashless', '/api/beasiswa'],
   whatsapp: ['/api/broadcast', '/api/wa-', '/api/notif-settings'],
   posting: ['/api/posting'],
