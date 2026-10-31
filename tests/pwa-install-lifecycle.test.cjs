@@ -35,7 +35,7 @@ test('manifest tertaut statis (untuk PWABuilder) DAN dilempar ke manifest lembag
 })
 
 test('ikon PWA dan favicon memakai format serta ukuran deklarasi yang benar', () => {
-  assert.match(html, /rel="icon" type="image\/png" sizes="64x64" href="\/favicon\.ico"/)
+  assert.match(html, /rel="icon" type="image\/png" sizes="64x64" href="\/favicon-light\.png"/)
   assert.match(html, /rel="icon" type="image\/svg\+xml" href="\/favicon\.svg"/)
   assert.match(html, /rel="apple-touch-icon" sizes="180x180" href="\/apple-touch-icon\.png"/)
   // Kontrak diperbarui untuk Play Store/PWABuilder: 512 wajib ada dan tujuan ikon
