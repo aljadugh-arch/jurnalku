@@ -96,7 +96,7 @@ test('server: robots.txt, sitemap.xml, dan injeksi SEO per-lembaga', () => {
   assert.match(s, /function renderIndexSeo/)
   assert.match(s, /<!--SEO:START-->\[\\s\\S\]\*\?<!--SEO:END-->/, 'server harus mengganti blok SEO')
   assert.match(s, /x-forwarded-proto/,'skema mengikuti proxy')
-  assert.match(s, /Sitemap: \$\{base\}\/sitemap\.xml/)
+  assert.match(s, /Sitemap: \$\{canonical\}\/sitemap\.xml/)
 })
 
 test('server: route push (public-key/subscribe/unsubscribe/status/test) + hook penjadwal', () => {
