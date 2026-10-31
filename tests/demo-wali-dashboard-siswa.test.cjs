@@ -175,12 +175,14 @@ test('tenantMiddleware membaca x-forwarded-host, bukan hanya host', () => {
   assert.ok(/split\(','\)\[0\]/.test(blok), 'harus ambil host pertama bila berantai')
 })
 
-test('base_domain yang dipakai tepat satu lembaga menjadi tenant pemiliknya', () => {
+test('base_domain dipakai tepat satu lembaga hanya untuk domain non-kanonik', () => {
   const t = baca('server/tenant.cjs')
   assert.ok(/base_domain.*AND aktif=1/.test(t),
-    'jurnalmadrasah.web.id hanya milik satu tenant — tanpa cabang ini jatuh ke default')
+    'query base_domain tetap ada (untuk domain custom yang bukan pintu platform)')
   assert.ok(/rows\.length === 1/.test(t),
     'domain yang dipakai banyak tenant (jurnal.cc.cd) TIDAK boleh dianggap milik satu lembaga')
+  assert.ok(/if \(!tenant && !canonicalHost\)/.test(t),
+    'root domain kanonik (jurnalmadrasah.web.id dst) jadi pintu platform, TIDAK diresolusi ke lembaga')
 })
 
 test('tombol demo hanya tampil di host yang benar-benar dilayani server', () => {

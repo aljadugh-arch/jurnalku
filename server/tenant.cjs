@@ -202,12 +202,12 @@ function tenantMiddleware(db) {
     req.isRegisteredTenantHost = Boolean(tenant)
 
     // 2b. Domain platform yang dipakai TEPAT SATU lembaga sebagai base_domain.
-    // `jurnalmadrasah.web.id` bukan domain_custom siapa pun, tetapi hanya
-    // dimiliki satu tenant (MI Sunan Drajat) — tanpa cabang ini seluruh domain
-    // itu jatuh ke `default`, dan login wali di sana selalu gagal.
-    // Domain yang dipakai BANYAK tenant (jurnal.cc.cd) sengaja tidak diikutkan:
-    // tidak ada satu lembaga yang bisa dianggap pemiliknya.
-    if (!tenant) {
+    // Hanya berlaku untuk domain NON-kanonik (custom domain). Domain kanonik
+    // (root jurnalmadrasah.web.id, idjurnal.*, dst) kini jadi pintu PLATFORM —
+    // tidak lagi diresolusi ke satu lembaga, supaya root-nya bisa menjadi
+    // landing pintu segmen. Lembaga diakses lewat subdomain (mis.
+    // misundra.jurnalmadrasah.web.id) via slug.
+    if (!tenant && !canonicalHost) {
       // Defensif: fixture tes memakai db tiruan yang hanya punya .get(), bukan
       // .all(). Tanpa penjagaan ini seluruh middleware melempar TypeError dan
       // semua domain jatuh ke default.
