@@ -165,7 +165,7 @@ export default function AsramaPage() {
               <Plus size={16} /> Tempatkan Santri
             </button>
           </div>
-          <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
+          <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
             <table className="w-full text-sm">
               <thead className="bg-slate-50 text-left text-xs text-slate-500">
                 <tr><th className="px-4 py-2.5 font-medium">Nama</th><th className="px-4 py-2.5 font-medium">NIS/NISN</th><th className="px-4 py-2.5 font-medium">Asrama</th><th className="px-4 py-2.5 font-medium">Kamar</th><th className="px-4 py-2.5 font-medium">Masuk</th><th className="px-4 py-2.5"></th></tr>

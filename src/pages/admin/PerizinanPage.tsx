@@ -79,7 +79,7 @@ export default function PerizinanPage() {
         <button onClick={muat} className="px-3 py-1.5 text-slate-500 hover:text-slate-700"><RefreshCw size={15} /></button>
       </div>
 
-      <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
+      <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
         <table className="w-full text-sm">
           <thead className="bg-slate-50 text-left text-xs text-slate-500">
             <tr><th className="px-4 py-2.5 font-medium">Santri</th><th className="px-4 py-2.5 font-medium">Kamar</th><th className="px-4 py-2.5 font-medium">Pulang</th><th className="px-4 py-2.5 font-medium">Kembali</th><th className="px-4 py-2.5 font-medium">Alasan</th><th className="px-4 py-2.5 font-medium">Status</th><th className="px-4 py-2.5"></th></tr>
