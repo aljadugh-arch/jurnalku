@@ -13,7 +13,7 @@ test('BASE_DOMAINS defaults include both canonical domains', () => {
   delete process.env.BASE_DOMAINS
   delete process.env.BASE_DOMAIN
   const { BASE_DOMAINS, BASE_DOMAIN } = loadTenantModule()
-  assert.equal(BASE_DOMAIN, 'jurnal.cc.cd')
+  assert.equal(BASE_DOMAIN, 'jurnalku.biz.id')
   assert.ok(BASE_DOMAINS.includes('jurnal.cc.cd'))
   assert.ok(BASE_DOMAINS.includes('jurnalmadrasah.web.id'))
 })

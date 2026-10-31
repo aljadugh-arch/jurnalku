@@ -283,8 +283,11 @@ app.get('/posting/:id', (req, res) => {
 })
 
 app.get('/robots.txt', (req, res) => {
-  const base = `${skemaPermintaan(req)}://${hostPermintaan(req)}`
-  res.type('text/plain').send(['User-agent: *', 'Allow: /', 'Disallow: /api/', 'Disallow: /admin/', 'Disallow: /guru/', 'Disallow: /siswa/', 'Disallow: /wali/', `Sitemap: ${base}/sitemap.xml`, ''].join('\n'))
+  const host = hostPermintaan(req)
+  // Platform (bukan lembaga): Sitemap diarahkan ke domain brand utama (canonical)
+  // supaya tiap domain platform tidak menunjuk sitemap duplikatnya sendiri.
+  const canonical = `${skemaPermintaan(req)}://${tenantDariHost(host) ? host : (BASE_DOMAIN || 'jurnalku.biz.id')}`
+  res.type('text/plain').send(['User-agent: *', 'Allow: /', 'Disallow: /api/', 'Disallow: /admin/', 'Disallow: /guru/', 'Disallow: /siswa/', 'Disallow: /wali/', `Sitemap: ${canonical}/sitemap.xml`, ''].join('\n'))
 })
 // ==================== Halaman PROFIL lembaga (publik, untuk SEO) ====================
 // Kenapa ada: sembilan domain menyajikan beranda dengan judul dan isi yang
@@ -369,8 +372,11 @@ ${ekskul.length ? `<h2>Ekstrakurikuler</h2><div>${ekskul.map(e => `<span class="
 app.get('/profil', (req, res) => renderProfilLembaga(req, res))
 
 app.get('/sitemap.xml', (req, res) => {
-  const base = `${skemaPermintaan(req)}://${hostPermintaan(req)}`
-  const tenantId = tenantDariHost(hostPermintaan(req))
+  const host = hostPermintaan(req)
+  const tenantId = tenantDariHost(host)
+  // Platform (bukan lembaga): URL <loc> diarahkan ke domain brand utama supaya
+  // tidak ada sitemap duplikat di tiap domain platform (jurnal.cc.cd, idjurnal.*).
+  const base = `${skemaPermintaan(req)}://${tenantId ? host : (BASE_DOMAIN || 'jurnalku.biz.id')}`
   // Halaman publik yang benar-benar bisa dirayapi crawler. Halaman yang butuh
   // login (dashboard) TIDAK dimasukkan: crawler hanya akan kena redirect dan
   // itu menurunkan kualitas sinyal di Search Console.
@@ -388,7 +394,7 @@ app.get('/sitemap.xml', (req, res) => {
   const punyaLembaga = (() => {
     if (!tenantId) return false
     try {
-      const n = db.prepare('SELECT COUNT(*) n FROM tenants WHERE aktif=1 AND lower(trim(domain_custom, \'.\'))=?').get(hostPermintaan(req))
+      const n = db.prepare('SELECT COUNT(*) n FROM tenants WHERE aktif=1 AND lower(trim(domain_custom, \'.\'))=?').get(host)
       return (n?.n || 0) === 1
     } catch { return false }
   })()
@@ -12323,7 +12329,13 @@ function renderIndexSeo(req) {
   let s = {}
   try { if (req.tenantId) s = getTenantSettings(db, req.tenantId, 'nama_lembaga,pwa_name') || {} } catch { s = {} }
   const nama = String(s.nama_lembaga || '').trim()
-  const base = `${skemaPermintaan(req)}://${hostPermintaan(req)}`
+  const host = hostPermintaan(req)
+  const base = `${skemaPermintaan(req)}://${host}`
+  // Domain brand utama (canonical) = jurnalku.biz.id. Halaman platform (tanpa
+  // lembaga) diarahkan canonical/og:url-nya ke domain utama supaya jurnal.cc.cd,
+  // idjurnal.*, dan jurnalmadrasah.web.id tidak terindeks sebagai duplikat.
+  // Halaman lembaga tetap memakai host lembaganya sendiri.
+  const canonicalBase = req.tenantId ? base : `${skemaPermintaan(req)}://${BASE_DOMAIN || 'jurnalku.biz.id'}`
   // Judul & deskripsi PER HALAMAN. Tanpa ini setiap rute (/panduan, /ppdb,
   // /login) menyajikan meta yang sama persis, sehingga Google menganggapnya
   // satu halaman duplikat dan hanya satu URL yang layak diindeks.
@@ -12365,15 +12377,15 @@ function renderIndexSeo(req) {
   const ld = {
     '@context': 'https://schema.org', '@type': 'SoftwareApplication',
     name: namaAplikasi, applicationCategory: 'BusinessApplication', operatingSystem: 'Web, Android',
-    url: `${base}/`, image: gambar, description: deskripsi,
+    url: `${canonicalBase}/`, image: gambar, description: deskripsi,
     offers: { '@type': 'Offer', price: '0', priceCurrency: 'IDR' },
   }
-  if (nama) { ld.author = { '@type': 'EducationalOrganization', name: nama }; ld.isPartOf = { '@type': 'WebSite', name: 'JURNALKU', url: `${base}/` } }
+  if (nama) { ld.author = { '@type': 'EducationalOrganization', name: nama }; ld.isPartOf = { '@type': 'WebSite', name: 'JURNALKU', url: `${canonicalBase}/` } }
   const blok = [
     `<title>${escHtml(judul)}</title>`,
     `<meta name="description" content="${escHtml(deskripsi)}" />`,
     `<meta name="application-name" content="${escHtml(namaAplikasi)}" />`,
-    `<link rel="canonical" href="${escHtml(base + path)}" />`,
+    `<link rel="canonical" href="${escHtml(canonicalBase + path)}" />`,
     `<meta name="robots" content="index, follow" />`,
     `<meta name="author" content="JURNALKU" />`,
     `<meta name="keywords" content="aplikasi sekolah, sistem informasi madrasah, jurnal mengajar, absensi QR, absensi RFID, rapor digital, e-rapor, manajemen sekolah, jurnalku" />`,
@@ -12381,7 +12393,7 @@ function renderIndexSeo(req) {
     `<meta property="og:site_name" content="${escHtml(namaAplikasi)}" />`,
     `<meta property="og:title" content="${escHtml(judul)}" />`,
     `<meta property="og:description" content="${escHtml(deskripsi)}" />`,
-    `<meta property="og:url" content="${escHtml(base + path)}" />`,
+    `<meta property="og:url" content="${escHtml(canonicalBase + path)}" />`,
     `<meta property="og:image" content="${escHtml(gambar)}" />`,
     `<meta property="og:image:width" content="1200" />`,
     `<meta property="og:image:height" content="630" />`,

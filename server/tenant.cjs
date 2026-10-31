@@ -11,7 +11,7 @@
  * 4. Semua query otomatis filter by tenant_id
  */
 
-const BASE_DOMAIN = process.env.BASE_DOMAIN || 'jurnal.cc.cd'
+const BASE_DOMAIN = process.env.BASE_DOMAIN || 'jurnalku.biz.id'
 const customDomain = require('./custom-domain.cjs')
 const bcrypt = require('bcryptjs')
 // Platform menerima registrasi/subdomain di lebih dari satu domain kanonik yang
@@ -20,9 +20,9 @@ const bcrypt = require('bcryptjs')
 // BASE_DOMAIN tetap dipertahankan untuk backward-compat (link admin@slug.<utama>).
 // Tambahkan domain baru di sini SETELAH DNS wildcard-nya mengarah ke server ini.
 const DOMAIN_BAWAAN = [
+  'jurnalku.biz.id',
   'jurnal.cc.cd',
   'jurnalmadrasah.web.id',
-  'jurnalku.biz.id',
   'idjurnal.my.id',
   'idjurnal.web.id',
   'idjurnal.biz.id',

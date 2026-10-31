@@ -73,8 +73,8 @@ test('SEO: judul & deskripsi berbeda per halaman', () => {
   for (const rute of ["'/panduan'", "'/ppdb'", "'/login'", "'/register'"]) {
     assert.ok(badan.includes(rute), `meta khusus untuk ${rute} harus ada`)
   }
-  // canonical harus mengikuti path, bukan selalu root
-  assert.ok(badan.includes('escHtml(base + path)'), 'canonical & og:url harus memakai path')
+  // canonical harus mengikuti path, bukan selalu root (canonicalBase untuk platform)
+  assert.ok(badan.includes('escHtml(canonicalBase + path)'), 'canonical & og:url harus memakai path')
 })
 
 test('SEO: sitemap memuat posting publik per tenant', () => {
