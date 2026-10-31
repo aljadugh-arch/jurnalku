@@ -92,6 +92,7 @@ export const adminMenuItems: MenuItem[] = [
     children: [
       { label: 'Asrama & Penempatan', path: '/admin/asrama' },
       { label: 'Perizinan Pulang', path: '/admin/perizinan' },
+      { label: "Ta'zir & Kedisiplinan", path: '/admin/tazir' },
     ]
   },
   { label: 'Tahun Ajaran', icon: <School size={20} />, path: '/admin/tahun-ajaran' },
@@ -256,6 +257,7 @@ export const kepalaMenuItems: MenuItem[] = [
     children: [
       { label: 'Asrama & Penempatan', path: '/admin/asrama' },
       { label: 'Perizinan Pulang', path: '/admin/perizinan' },
+      { label: "Ta'zir & Kedisiplinan", path: '/admin/tazir' },
     ]
   },
   { label: 'Perpustakaan Digital', icon: <BookOpen size={20} />, path: '/admin/perpustakaan' },

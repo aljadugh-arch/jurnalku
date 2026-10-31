@@ -54,6 +54,22 @@ function setupPesantrenTables(db) {
     CREATE INDEX IF NOT EXISTS idx_penempatan_siswa ON penempatan_santri(siswa_id);
     CREATE INDEX IF NOT EXISTS idx_izin_tenant ON izin_pulang(tenant_id);
     CREATE INDEX IF NOT EXISTS idx_izin_siswa ON izin_pulang(siswa_id);
+
+    -- Ta'zir: pelanggaran & kedisiplinan santri (pondok/pesantren).
+    CREATE TABLE IF NOT EXISTS tazir (
+      id TEXT PRIMARY KEY,
+      tenant_id TEXT NOT NULL,
+      siswa_id TEXT NOT NULL,
+      jenis_pelanggaran TEXT NOT NULL,
+      keterangan TEXT,
+      tindakan TEXT,
+      tanggal TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'diproses',
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_tazir_tenant ON tazir(tenant_id);
+    CREATE INDEX IF NOT EXISTS idx_tazir_siswa ON tazir(siswa_id);
   `)
 }
 
@@ -241,6 +257,52 @@ function registerPesantrenRoutes(app, { db, requireRole, waGateway }) {
       } catch { /* notif gagal tidak menggagalkan persetujuan */ }
     }
     res.json(db.prepare('SELECT * FROM izin_pulang WHERE id=?').get(req.params.id))
+  })
+
+  // ---------- TA'ZIR (pelanggaran & kedisiplinan santri) ----------
+  app.get('/api/tazir', ADMIN, (req, res) => {
+    const status = req.query.status
+    const base = `SELECT t.*, s.nama, s.nis FROM tazir t JOIN siswa s ON s.id = t.siswa_id WHERE t.tenant_id=?`
+    const rows = status
+      ? db.prepare(base + ' AND t.status=? ORDER BY t.tanggal DESC, t.created_at DESC').all(req.tenantId, status)
+      : db.prepare(base + ' ORDER BY t.tanggal DESC, t.created_at DESC').all(req.tenantId)
+    res.json(rows)
+  })
+
+  app.post('/api/tazir', ADMIN, (req, res) => {
+    const { siswa_id, jenis_pelanggaran, keterangan, tindakan, tanggal } = req.body || {}
+    if (!siswa_id || !jenis_pelanggaran || !tanggal) return res.status(400).json({ error: 'Santri, jenis pelanggaran, dan tanggal wajib diisi' })
+    if (!db.prepare('SELECT id FROM siswa WHERE id=? AND tenant_id=?').get(siswa_id, req.tenantId)) return res.status(400).json({ error: 'Siswa tidak ditemukan' })
+    const id = idBaru()
+    db.prepare('INSERT INTO tazir (id, tenant_id, siswa_id, jenis_pelanggaran, keterangan, tindakan, tanggal) VALUES (?,?,?,?,?,?,?)')
+      .run(id, req.tenantId, siswa_id, String(jenis_pelanggaran).trim(), String(keterangan || '').trim() || null, String(tindakan || '').trim() || null, tanggal)
+    // Kabari wali bila tersedia nomor WA.
+    if (waGateway) {
+      try {
+        const s = db.prepare('SELECT nama, no_hp_wali, no_hp, nama_ortu FROM siswa WHERE id=? AND tenant_id=?').get(siswa_id, req.tenantId)
+        const phone = String((s?.no_hp_wali || s?.no_hp || '')).trim()
+        if (phone && s) {
+          const pesan = `Assalamualaikum ${s.nama_ortu || 'Bapak/Ibu'}, ananda *${s.nama}* tercatat melakukan pelanggaran (*${String(jenis_pelanggaran).trim()}*) pada ${tanggal}.\n\nTindakan: ${String(tindakan || '').trim() || 'menunggu penanganan'}\n\nSilakan hubungi pengasuh/pengurus pondok bila perlu.`
+          waGateway.sendMessage(phone, pesan, req.tenantId).catch(() => {})
+        }
+      } catch { /* notif gagal tidak menggagalkan pencatatan */ }
+    }
+    res.json({ id })
+  })
+
+  app.put('/api/tazir/:id', ADMIN, (req, res) => {
+    const t = db.prepare('SELECT * FROM tazir WHERE id=? AND tenant_id=?').get(req.params.id, req.tenantId)
+    if (!t) return res.status(404).json({ error: 'Data tidak ditemukan' })
+    const status = ['diproses', 'selesai', 'batal'].includes(req.body?.status) ? req.body.status : t.status
+    db.prepare("UPDATE tazir SET status=?, tindakan=COALESCE(?, tindakan), keterangan=COALESCE(?, keterangan), updated_at=datetime('now') WHERE id=? AND tenant_id=?")
+      .run(status, req.body?.tindakan === undefined ? null : (String(req.body.tindakan || '').trim() || null), req.body?.keterangan === undefined ? null : (String(req.body.keterangan || '').trim() || null), req.params.id, req.tenantId)
+    res.json({ success: true })
+  })
+
+  app.delete('/api/tazir/:id', ADMIN, (req, res) => {
+    const info = db.prepare('DELETE FROM tazir WHERE id=? AND tenant_id=?').run(req.params.id, req.tenantId)
+    if (!info.changes) return res.status(404).json({ error: 'Data tidak ditemukan' })
+    res.json({ success: true })
   })
 }
 

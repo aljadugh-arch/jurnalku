@@ -92,7 +92,7 @@ const FEATURE_PREFIXES = {
   // prefix di sini, API keduanya tetap bisa dipanggil paket Lite walau menunya
   // sudah disembunyikan — gerbang menu saja tidak cukup.
   monitoring: ['/api/payroll', '/api/rkas', '/api/admin/monitoring-nilai'],
-  pesantren: ['/api/asrama', '/api/kamar', '/api/penempatan', '/api/izin-pulang'],
+  pesantren: ['/api/asrama', '/api/kamar', '/api/penempatan', '/api/izin-pulang', '/api/tazir'],
 }
 
 function addMonthsIso(from, months = 1) {
