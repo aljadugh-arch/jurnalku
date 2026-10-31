@@ -56,6 +56,40 @@ function setupProgramBelajarTables(db) {
       tenant_id TEXT PRIMARY KEY,
       seeded_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
+
+    -- Peserta (enrollment) siswa -> program/level, dengan kuota pertemuan.
+    -- kuota_pertemuan 0 = tanpa batas. terpakai bertambah tiap absensi hadir.
+    CREATE TABLE IF NOT EXISTS program_peserta (
+      id TEXT PRIMARY KEY,
+      tenant_id TEXT NOT NULL,
+      siswa_id TEXT NOT NULL,
+      program_id TEXT NOT NULL,
+      level_id TEXT,
+      kuota_pertemuan INTEGER NOT NULL DEFAULT 0,
+      terpakai INTEGER NOT NULL DEFAULT 0,
+      status TEXT NOT NULL DEFAULT 'aktif',
+      tanggal_mulai TEXT,
+      tanggal_selesai TEXT,
+      nomor_sertifikat TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_program_peserta_tenant ON program_peserta(tenant_id);
+    CREATE INDEX IF NOT EXISTS idx_program_peserta_siswa ON program_peserta(siswa_id);
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_program_peserta_unik ON program_peserta(tenant_id, siswa_id, program_id);
+
+    -- Absensi pertemuan nonformal. Status 'hadir' memotong kuota peserta.
+    CREATE TABLE IF NOT EXISTS program_absensi (
+      id TEXT PRIMARY KEY,
+      tenant_id TEXT NOT NULL,
+      peserta_id TEXT NOT NULL,
+      tanggal TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'hadir',
+      catatan TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_program_absensi_peserta ON program_absensi(peserta_id);
+    CREATE INDEX IF NOT EXISTS idx_program_absensi_tenant ON program_absensi(tenant_id);
   `)
 }
 

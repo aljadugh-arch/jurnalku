@@ -85,6 +85,7 @@ export const adminMenuItems: MenuItem[] = [
   { label: 'Perpustakaan Digital', icon: <BookOpen size={20} />, path: '/admin/perpustakaan' },
   { label: 'Administrasi Surat', icon: <ScrollText size={20} />, path: '/admin/administrasi' },
   { label: 'Program Belajar', icon: <BookOpen size={20} />, path: '/admin/program-belajar' },
+  { label: 'Peserta & Sertifikat', icon: <BookMarked size={20} />, path: '/admin/program-peserta' },
   {
     label: 'Pesantren', icon: <School size={20} />,
     children: [
@@ -247,6 +248,7 @@ export const kepalaMenuItems: MenuItem[] = [
   { label: 'Supervisi', icon: <ClipboardCheck size={20} />, path: '/admin/supervisi' },
   { label: 'Administrasi Surat', icon: <ScrollText size={20} />, path: '/admin/administrasi' },
   { label: 'Program Belajar', icon: <BookOpen size={20} />, path: '/admin/program-belajar' },
+  { label: 'Peserta & Sertifikat', icon: <BookMarked size={20} />, path: '/admin/program-peserta' },
   {
     label: 'Pesantren', icon: <School size={20} />,
     children: [

@@ -26,7 +26,7 @@ const rules: [FeatureKey, string[]][] = [
   ['administrasi', ['/admin/administrasi']],
   ['perpustakaan', ['/admin/perpustakaan', '/admin/pustaka', '/guru/perpustakaan', '/siswa/perpustakaan']],
   ['ujian', ['/admin/bank-soal', '/admin/kisi-kisi', '/admin/paket-ujian', '/admin/jadwal-ujian', '/guru/bank-soal', '/guru/kisi-kisi', '/guru/paket-ujian', '/siswa/ujian', '/proktor']],
-  ['program_belajar', ['/admin/program-belajar']],
+  ['program_belajar', ['/admin/program-belajar', '/admin/program-peserta']],
   ['smtp', ['/admin/smtp']],
   ['monitoring', ['/admin/monitoring', '/admin/monitoring-nilai', '/admin/nilai-ledger', '/admin/rekap-nilai', '/guru/nilai-ledger', '/admin/payroll', '/admin/rkas']],
   ['foundation', ['/admin/foundation-sync', '/admin/foundations']],

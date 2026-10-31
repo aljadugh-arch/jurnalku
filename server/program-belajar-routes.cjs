@@ -182,6 +182,118 @@ function registerProgramBelajarRoutes(app, db, { requireRole }) {
       res.json({ success: true })
     })
   })
+
+  // ---- Peserta (enrollment + kuota pertemuan) ------------------------------
+
+  const nomorSertifikat = () => `SERT-${new Date().getFullYear()}-${crypto.randomBytes(3).toString('hex').toUpperCase()}`
+
+  app.get('/api/program-peserta', LIHAT, hanyaNonformal, (req, res) => {
+    aman(res, () => {
+      const rows = db.prepare(`
+        SELECT p.*, s.nama, s.nis, s.nisn, pb.nama AS program, pl.nama AS level
+        FROM program_peserta p
+        JOIN siswa s ON s.id = p.siswa_id
+        JOIN program_belajar pb ON pb.id = p.program_id
+        LEFT JOIN program_level pl ON pl.id = p.level_id
+        WHERE p.tenant_id=? ORDER BY p.created_at DESC`).all(req.tenantId)
+      res.json({ success: true, peserta: rows })
+    })
+  })
+
+  app.post('/api/program-peserta', KELOLA, hanyaNonformal, (req, res) => {
+    aman(res, () => {
+      const { siswa_id, program_id, level_id, kuota_pertemuan, tanggal_mulai } = req.body || {}
+      if (!siswa_id || !program_id) throw new Error('Siswa dan program wajib diisi')
+      if (!db.prepare('SELECT id FROM siswa WHERE id=? AND tenant_id=?').get(siswa_id, req.tenantId)) throw new Error('Siswa tidak ditemukan')
+      if (!db.prepare('SELECT id FROM program_belajar WHERE id=? AND tenant_id=?').get(program_id, req.tenantId)) throw new Error('Program tidak ditemukan')
+      const kuota = Math.max(0, Math.round(Number(kuota_pertemuan) || 0))
+      const id = buatId()
+      db.prepare(`INSERT INTO program_peserta (id, tenant_id, siswa_id, program_id, level_id, kuota_pertemuan, tanggal_mulai)
+        VALUES (?,?,?,?,?,?,?)`).run(id, req.tenantId, siswa_id, program_id, level_id || null, kuota, tanggal_mulai || null)
+      res.json({ success: true, id })
+    })
+  })
+
+  app.put('/api/program-peserta/:id', KELOLA, hanyaNonformal, (req, res) => {
+    aman(res, () => {
+      const p = db.prepare('SELECT * FROM program_peserta WHERE id=? AND tenant_id=?').get(req.params.id, req.tenantId)
+      if (!p) throw new Error('Peserta tidak ditemukan')
+      const kuota = req.body.kuota_pertemuan === undefined ? p.kuota_pertemuan : Math.max(0, Math.round(Number(req.body.kuota_pertemuan) || 0))
+      const status = ['aktif', 'selesai', 'berhenti'].includes(req.body.status) ? req.body.status : p.status
+      let nomor = p.nomor_sertifikat
+      if (status === 'selesai' && !nomor) nomor = nomorSertifikat()
+      db.prepare(`UPDATE program_peserta SET kuota_pertemuan=?, status=?, nomor_sertifikat=?, tanggal_selesai=CASE WHEN ?='selesai' THEN COALESCE(tanggal_selesai, date('now')) ELSE tanggal_selesai END, updated_at=datetime('now') WHERE id=? AND tenant_id=?`)
+        .run(kuota, status, nomor, status, req.params.id, req.tenantId)
+      res.json({ success: true, nomor_sertifikat: nomor })
+    })
+  })
+
+  app.delete('/api/program-peserta/:id', KELOLA, hanyaNonformal, (req, res) => {
+    aman(res, () => {
+      const info = db.prepare('DELETE FROM program_peserta WHERE id=? AND tenant_id=?').run(req.params.id, req.tenantId)
+      if (!info.changes) throw new Error('Peserta tidak ditemukan')
+      db.prepare('DELETE FROM program_absensi WHERE peserta_id=?').run(req.params.id)
+      res.json({ success: true })
+    })
+  })
+
+  // ---- Absensi pertemuan (potong kuota) ------------------------------------
+
+  app.get('/api/program-absensi', LIHAT, hanyaNonformal, (req, res) => {
+    aman(res, () => {
+      const pesertaId = req.query.peserta_id
+      const rows = pesertaId
+        ? db.prepare('SELECT * FROM program_absensi WHERE tenant_id=? AND peserta_id=? ORDER BY tanggal DESC').all(req.tenantId, pesertaId)
+        : db.prepare('SELECT * FROM program_absensi WHERE tenant_id=? ORDER BY tanggal DESC').all(req.tenantId)
+      res.json({ success: true, absensi: rows })
+    })
+  })
+
+  app.post('/api/program-absensi', KELOLA, hanyaNonformal, (req, res) => {
+    aman(res, () => {
+      const { peserta_id, tanggal, status, catatan } = req.body || {}
+      const p = db.prepare('SELECT * FROM program_peserta WHERE id=? AND tenant_id=?').get(peserta_id, req.tenantId)
+      if (!p) throw new Error('Peserta tidak ditemukan')
+      if (!tanggal) throw new Error('Tanggal wajib diisi')
+      const st = ['hadir', 'izin', 'sakit', 'alpha'].includes(status) ? status : 'hadir'
+      const id = buatId()
+      const jalankan = db.transaction(() => {
+        db.prepare('INSERT INTO program_absensi (id, tenant_id, peserta_id, tanggal, status, catatan) VALUES (?,?,?,?,?,?)')
+          .run(id, req.tenantId, peserta_id, tanggal, st, String(catatan || '').trim() || null)
+        if (st === 'hadir') {
+          const terpakai = p.terpakai + 1
+          let statusBaru = p.status
+          let nomor = p.nomor_sertifikat
+          let tanggalSelesai = p.tanggal_selesai
+          if (p.kuota_pertemuan > 0 && terpakai >= p.kuota_pertemuan) {
+            statusBaru = 'selesai'
+            tanggalSelesai = tanggalSelesai || new Date().toISOString().slice(0, 10)
+            if (!nomor) nomor = nomorSertifikat()
+          }
+          db.prepare(`UPDATE program_peserta SET terpakai=?, status=?, tanggal_selesai=?, nomor_sertifikat=?, updated_at=datetime('now') WHERE id=?`)
+            .run(terpakai, statusBaru, tanggalSelesai, nomor, peserta_id)
+        }
+      })
+      jalankan()
+      res.json({ success: true, id, peserta: db.prepare('SELECT * FROM program_peserta WHERE id=?').get(peserta_id) })
+    })
+  })
+
+  app.delete('/api/program-absensi/:id', KELOLA, hanyaNonformal, (req, res) => {
+    aman(res, () => {
+      const a = db.prepare('SELECT * FROM program_absensi WHERE id=? AND tenant_id=?').get(req.params.id, req.tenantId)
+      if (!a) throw new Error('Absensi tidak ditemukan')
+      const jalankan = db.transaction(() => {
+        db.prepare('DELETE FROM program_absensi WHERE id=?').run(a.id)
+        if (a.status === 'hadir') {
+          const p = db.prepare('SELECT * FROM program_peserta WHERE id=?').get(a.peserta_id)
+          if (p && p.terpakai > 0) db.prepare("UPDATE program_peserta SET terpakai=terpakai-1, updated_at=datetime('now') WHERE id=?").run(a.peserta_id)
+        }
+      })
+      jalankan()
+      res.json({ success: true })
+    })
+  })
 }
 
 module.exports = { setupProgramBelajar, registerProgramBelajarRoutes }

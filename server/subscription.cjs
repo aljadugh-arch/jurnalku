@@ -83,7 +83,7 @@ const FEATURE_PREFIXES = {
   administrasi: ['/api/administrasi'],
   perpustakaan: ['/api/library', '/api/pustaka'],
   ujian: ['/api/bank-soal', '/api/kisi-kisi', '/api/paket-ujian', '/api/ujian'],
-  program_belajar: ['/api/program-belajar', '/api/program-level'],
+  program_belajar: ['/api/program-belajar', '/api/program-level', '/api/program-peserta', '/api/program-absensi'],
   smtp: ['/api/smtp'],
   // 'foundation' hanya punya halaman FE (tidak ada route /api/foundation) —
   // gerbangnya lewat featureAccess.ts.
