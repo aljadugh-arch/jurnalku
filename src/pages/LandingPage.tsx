@@ -137,7 +137,7 @@ type Paket = { plan: string; label: string; harga: number; masa_nilai: number; m
 export default function LandingPage() {
   const { settings } = useSettingsStore()
   const { dark, toggle: toggleDark } = useThemeStore()
-  const logo = settings.logo || '/logo-jurnalku-256.png'
+  const logo = settings.logo || (dark ? '/favicon-dark.png' : '/favicon-light.png')
   const namaLembaga = (settings as any).nama_lembaga || 'JURNALKU'
   const segmen = segmenDariHost()
   const copy = SEGMEN[segmen]
@@ -192,7 +192,7 @@ export default function LandingPage() {
         <div className="sk-nav-inner">
           <Link to="/" className="sk-nav-brand">
             <img src={logo} alt={`Logo ${namaLembaga}`} />
-            <span>{namaLembaga}</span>
+            <span className="whitespace-nowrap">{namaLembaga}</span>
           </Link>
 
           <div className="sk-nav-menu">
@@ -207,8 +207,8 @@ export default function LandingPage() {
             <button onClick={toggleDark} className="rounded-full p-2 text-slate-400 transition hover:bg-black/5" aria-label="Ganti mode gelap/terang">
               {dark ? <Sun size={17} className="text-amber-500" /> : <Moon size={17} />}
             </button>
-            <Link to="/login" className="sk-btn sk-btn--ghost !min-h-0 !px-4 !py-2 text-sm">Masuk</Link>
-            <Link to="/register" className="sk-btn !min-h-0 !px-4 !py-2 text-sm">Coba Gratis</Link>
+            <Link to="/login" className="sk-btn sk-btn--ghost !min-h-0 !px-4 !py-2 text-sm hidden lg:inline-flex">Masuk</Link>
+            <Link to="/register" className="sk-btn !min-h-0 !px-4 !py-2 text-sm hidden lg:inline-flex">Coba Gratis</Link>
             <button onClick={() => setMenuBuka(v => !v)} className="rounded-lg p-2 text-slate-500 hover:bg-black/5 lg:hidden" aria-label="Menu">
               {menuBuka ? <X size={20} /> : <Menu size={20} />}
             </button>

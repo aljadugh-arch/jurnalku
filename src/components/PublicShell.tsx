@@ -18,7 +18,7 @@ const navLinks = [
 export default function PublicShell({ children, active }: { children: ReactNode; active?: string }) {
   const { settings } = useSettingsStore()
   const { dark, toggle: toggleDark } = useThemeStore()
-  const logo = settings.logo || '/logo-jurnalku-256.png'
+  const logo = settings.logo || (dark ? '/favicon-dark.png' : '/favicon-light.png')
   const namaLembaga = settings.nama_lembaga || 'JURNALKU'
   const [buka, setBuka] = useState(false)
 
@@ -28,7 +28,7 @@ export default function PublicShell({ children, active }: { children: ReactNode;
         <div className="sk-nav-inner">
           <Link to="/" className="sk-nav-brand">
             <img src={logo} alt={`Logo ${namaLembaga}`} />
-            <span>{namaLembaga}</span>
+            <span className="whitespace-nowrap">{namaLembaga}</span>
           </Link>
 
           <div className="sk-nav-menu">

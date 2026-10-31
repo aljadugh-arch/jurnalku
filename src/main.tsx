@@ -26,10 +26,12 @@ async function configurePwa() {
       // (/manifest.json) agar audit PWABuilder tetap menemukan manifest.
       // Hanya ikon/favicon yang di-scope ke lembaga.
       const stamp = Date.now()
+      const gelap = document.documentElement.classList.contains('dark')
+      const faviconTema = gelap ? 'favicon-dark' : 'favicon-light'
       document.querySelectorAll('link[rel="icon"], link[rel="shortcut icon"]')
-        .forEach(el => { el.setAttribute('href', `/favicon.ico?v=${stamp}`) })
+        .forEach(el => { el.setAttribute('href', `/${faviconTema}.png?v=${stamp}`) })
       const appleIcon = document.querySelector('link[rel="apple-touch-icon"]')
-      if (appleIcon) appleIcon.setAttribute('href', `/apple-touch-icon.png?v=${stamp}`)
+      if (appleIcon) appleIcon.setAttribute('href', `/${faviconTema}.png?v=${stamp}`)
       return
     }
 

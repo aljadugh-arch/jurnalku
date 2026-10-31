@@ -14,6 +14,11 @@ interface ThemeState {
 export function setDarkClass(dark: boolean) {
   document.documentElement.classList.toggle('dark', dark)
   document.documentElement.style.colorScheme = dark ? 'dark' : 'light'
+  // Sinkronkan favicon dengan tema (logo terang/gelap terpisah).
+  try {
+    const fav = document.querySelector('link[rel="icon"][sizes="64x64"]') || document.querySelector('link[rel="icon"]')
+    if (fav) fav.setAttribute('href', dark ? '/favicon-dark.png' : '/favicon-light.png')
+  } catch { /* favicon opsional */ }
 }
 
 /** Sinkronkan tema hasil resolusi tanpa membuatnya menjadi pilihan eksplisit. */
