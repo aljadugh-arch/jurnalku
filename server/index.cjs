@@ -4529,11 +4529,28 @@ app.post('/api/siswa/bulk-delete', ADMIN, (req, res) => {
   }
 })
 
+// Kuota siswa/GTK per tenant (freemium default 100 siswa / 20 GTK). max_siswa /
+// max_gtk diset di data tenant; nilai <= 0 = TIDAK dibatasi. Menegakkan kuota
+// paket — sebelumnya max_siswa/max_gtk hanya DISIMPAN, tidak pernah ditegakkan.
+function cekKuotaTenant(db, tenantId, jenis) {
+  const t = db.prepare('SELECT max_siswa, max_gtk FROM tenants WHERE id=?').get(tenantId)
+  if (!t) return { batas: 0, aktif: 0, sisa: Infinity }
+  const batas = jenis === 'gtk' ? Number(t.max_gtk) : Number(t.max_siswa)
+  if (!batas || batas <= 0) return { batas: 0, aktif: 0, sisa: Infinity }
+  const aktif = jenis === 'gtk'
+    ? db.prepare('SELECT COUNT(*) c FROM gtk WHERE tenant_id=?').get(tenantId).c
+    : db.prepare("SELECT COUNT(*) c FROM siswa WHERE tenant_id=? AND COALESCE(status,'aktif')='aktif'").get(tenantId).c
+  return { batas, aktif, sisa: batas - aktif }
+}
+
 app.post('/api/siswa/bulk-import', ADMIN, (req, res) => {
   const students = req.body?.students || []
   if (!Array.isArray(students) || students.length === 0) {
     return res.status(400).json({ error: 'students array wajib (minimal 1 siswa)' })
   }
+  const kuota = cekKuotaTenant(db, req.tenantId, 'siswa')
+  if (kuota.sisa <= 0) return res.status(403).json({ error: `Kuota siswa lembaga ini sudah penuh (${kuota.aktif}/${kuota.batas}). Naikkan paket atau hubungi admin platform.` })
+  if (students.length > kuota.sisa) return res.status(403).json({ error: `Kuota tersisa ${kuota.sisa} siswa, tetapi file memuat ${students.length}. Kurangi baris atau naikkan paket.` })
 
   // Get all rombels untuk mapping
   const allRombels = db.prepare('SELECT id, nama FROM rombel WHERE tenant_id=?').all(req.tenantId)
@@ -4659,6 +4676,8 @@ app.post('/api/siswa', ADMIN, (req, res) => {
     const rombel = db.prepare('SELECT id FROM rombel WHERE id=? AND tenant_id=?').get(rombel_id, req.tenantId)
     if (!rombel) return res.status(400).json({ error: 'Rombel tidak ditemukan pada lembaga ini.' })
   }
+  const kuotaSiswa = cekKuotaTenant(db, req.tenantId, 'siswa')
+  if (kuotaSiswa.sisa <= 0) return res.status(403).json({ error: `Kuota siswa lembaga ini sudah penuh (${kuotaSiswa.aktif}/${kuotaSiswa.batas}). Naikkan paket atau hubungi admin platform.` })
   try {
     db.prepare(`INSERT INTO siswa (
       id, nik, nis, nisn, nama, jenis_kelamin, tempat_lahir, tanggal_lahir, alamat, no_hp, nama_ortu, nama_panggilan, rombel_id, tenant_id,
@@ -4841,6 +4860,8 @@ app.post('/api/gtk', ADMIN, (req, res) => {
   const id = uuidv4()
   const { nik, nip, nuptk, nama, jenis_kelamin, tempat_lahir, tanggal_lahir, alamat, no_hp, email, jabatan, status_kepegawaian, bidang_studi, kode_guru, sertifikasi, nrg } = req.body
   if (nik && !/^\d{16}$/.test(String(nik))) return res.status(400).json({ error: 'NIK harus berupa 16 digit angka.' })
+  const kuotaGtk = cekKuotaTenant(db, req.tenantId, 'gtk')
+  if (kuotaGtk.sisa <= 0) return res.status(403).json({ error: `Kuota GTK lembaga ini sudah penuh (${kuotaGtk.aktif}/${kuotaGtk.batas}). Naikkan paket atau hubungi admin platform.` })
   try {
     db.prepare('INSERT INTO gtk (id, nik, nip, nuptk, nama, jenis_kelamin, tempat_lahir, tanggal_lahir, alamat, no_hp, email, jabatan, status_kepegawaian, bidang_studi, kode_guru, sertifikasi, nrg, tenant_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
       .run(id, nik || null, nip || null, nuptk, nama, jenis_kelamin, tempat_lahir, tanggal_lahir, alamat, no_hp, email,
