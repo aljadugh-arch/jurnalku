@@ -3484,9 +3484,10 @@ function jaminTenantDemo(cfg) {
 // tanpa input manual dulu.
 function seedDemoKampus(db) {
   const tid = 'demo-kampus'
-  // Idempotent: jangan seed ulang bila sudah ada mata kuliah.
-  if (db.prepare('SELECT id FROM mapel WHERE tenant_id=? LIMIT 1').get(tid)) return
+  // Seluruh akses DB dibungkus try/catch: saat boot, tabel (mapel/siswa/krs)
+  // mungkin belum dibuat oleh migrasi, jadi cek keberadaan tabel pun harus aman.
   try {
+    if (db.prepare('SELECT id FROM mapel WHERE tenant_id=? LIMIT 1').get(tid)) return
     const insMapel = db.prepare('INSERT OR IGNORE INTO mapel (id, kode, nama, kelompok, jam_per_minggu, tenant_id) VALUES (?,?,?,?,?,?)')
     const matkul = [
       ['DEMOPT-01', 'Algoritma dan Struktur Data', 3],
