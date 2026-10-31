@@ -46,8 +46,8 @@ test('domain lembaga tidak termasuk host platform', () => {
 })
 
 test('akun demo hanya hidup di tenant demo', () => {
-  // Endpoint demo harus mencari user di DEMO_TENANT_ID saja.
-  assert.ok(/DEMO_TENANT_ID/.test(server))
+  // Endpoint demo harus mencari user di tenant demo segmen (DEMO_SEGMEN) saja.
+  assert.ok(/DEMO_SEGMEN/.test(server))
   const i = server.indexOf("app.post('/api/auth/demo'")
   const blok = server.slice(i, i + 3000)
   assert.ok(/tenant_id=\? AND role=\?/.test(blok), 'pencarian akun demo harus dibatasi tenant')

@@ -12,7 +12,7 @@
 function buatPemeriksaOrigin({ allowedOrigins = [], isProd = true, cariTenantDomain = () => null } = {}) {
   const daftar = (Array.isArray(allowedOrigins) ? allowedOrigins : [])
     .map(s => String(s).trim()).filter(Boolean)
-  const polaSubdomain = /^https:\/\/[a-z0-9][a-z0-9.-]+\.(jurnal\.cc\.cd|jurnalmadrasah\.web\.id|cc\.cd)$/i
+  const polaSubdomain = /^https:\/\/[a-z0-9][a-z0-9.-]+\.(jurnal\.cc\.cd|jurnalmadrasah\.web\.id|jurnalku\.biz\.id|idjurnal\.web\.id|idjurnal\.biz\.id|idjurnal\.my\.id|cc\.cd)$/i
 
   return function periksaOrigin(origin, cb) {
     if (!origin) return cb(null, true) // curl / same-origin / mobile

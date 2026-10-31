@@ -122,7 +122,7 @@ app.use(helmet({
 // CORS: restrict to known origins in production, allow all in dev.
 // Penolakan memakai status 403 (lihat server/cors-origin.cjs) supaya tidak
 // lagi jatuh ke error handler global sebagai 500.
-const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS || 'https://jurnal.cc.cd,https://jurnalmadrasah.web.id')
+const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS || 'https://jurnal.cc.cd,https://jurnalmadrasah.web.id,https://jurnalku.biz.id,https://idjurnal.web.id,https://idjurnal.biz.id,https://idjurnal.my.id')
   .split(',').map(s => s.trim())
 // Resolusi tenant dari HOST untuk permintaan PUBLIK (tanpa login).
 //
@@ -3409,7 +3409,7 @@ function resolveGtkForUser(userId, tenantId) {
 // daftar — di sana tombol demo tidak ditampilkan, supaya pengunjung tidak
 // mengira data contoh adalah data lembaganya.
 const DEMO_HOSTS = new Set(
-  String(process.env.DEMO_HOSTS || 'demo.jurnal.cc.cd,jurnal.cc.cd,www.jurnal.cc.cd,jurnalku.biz.id,www.jurnalku.biz.id,idjurnal.my.id,idjurnal.web.id,idjurnal.biz.id,localhost,127.0.0.1')
+  String(process.env.DEMO_HOSTS || 'demo.jurnal.cc.cd,jurnal.cc.cd,www.jurnal.cc.cd,jurnalmadrasah.web.id,www.jurnalmadrasah.web.id,jurnalku.biz.id,www.jurnalku.biz.id,idjurnal.my.id,idjurnal.web.id,idjurnal.biz.id,localhost,127.0.0.1')
     .split(',').map(h => h.trim().toLowerCase()).filter(Boolean)
 )
 // `jurnalmadrasah.web.id` SENGAJA tidak ada di daftar ini meski namanya
@@ -3442,21 +3442,46 @@ function hostMilikSatuLembaga(host) {
   try {
     const h = String(host || '').toLowerCase().replace(/\.$/, '')
     if (!h || h === 'localhost' || /^\d+\.\d+\.\d+\.\d+$/.test(h)) return false
+    // Hanya domain_custom (alamat RESMI satu lembaga) yang menutup panel demo.
+    // base_domain (mis. jurnalmadrasah.web.id) adalah PINTU SEGMEN platform,
+    // bukan alamat milik satu lembaga — tidak boleh menutup demo di sana.
+    // Subdomain lembaga (slug.<base>) sudah ditolak lebih awal oleh DEMO_HOSTS.
     const custom = db.prepare("SELECT id FROM tenants WHERE lower(trim(domain_custom,'.')) = ? AND aktif = 1").get(h)
-    if (custom) return true
-    const q = db.prepare("SELECT id FROM tenants WHERE lower(trim(base_domain,'.')) = ? AND aktif = 1")
-    const rows = typeof q.all === 'function' ? q.all(h) : []
-    return rows.length === 1 && rows[0].id !== DEMO_TENANT_ID
+    return !!custom
   } catch {
     return false
   }
 }
-// Demo tenant terpisah dari default (superadmin).
-// Cari/buat tenant khusus demo — BUKAN 'default'.
-const DEMO_TENANT_ID = 'demo-tenant'
+// Demo per SEGMEN (pintu domain). Setiap segmen punya tenant demo sendiri
+// dengan jenjang & nama yang sesuai, supaya pengunjung tiap pintu melihat
+// data contoh yang relevan:
+//   kemenag   -> madrasah (MTs)        -> jurnalmadrasah.web.id
+//   dikdasmen -> kampus/PT (KRS & IPK) -> idjurnal.web.id / .biz.id / .my.id
+//   umum      -> kursus/lembaga (NF)   -> jurnalku.biz.id & jurnal.cc.cd
+const DEMO_SEGMEN = {
+  kemenag:   { id: 'demo-kemenag', nama: 'Demo Madrasah', jenjang: 'MTs', base_domain: 'jurnalmadrasah.web.id' },
+  dikdasmen: { id: 'demo-kampus',  nama: 'Demo Kampus',   jenjang: 'PT',  base_domain: 'idjurnal.web.id' },
+  umum:      { id: 'demo-umum',    nama: 'Demo Kursus',   jenjang: 'NF',  base_domain: 'jurnalku.biz.id' },
+}
+
+function jaminTenantDemo(cfg) {
+  const ada = db.prepare('SELECT id FROM tenants WHERE id=?').get(cfg.id)
+  if (!ada) {
+    try {
+      db.prepare('INSERT INTO tenants (id, slug, nama, email, plan, aktif, base_domain) VALUES (?,?,?,?,?,?,?)')
+        .run(cfg.id, cfg.id, cfg.nama, `${cfg.id}@jurnalku.biz.id`, 'premium', 1, cfg.base_domain)
+    } catch {}
+  }
+  try {
+    ensureTenantSettings(db, cfg.id, { nama_lembaga: cfg.nama })
+    db.prepare('UPDATE settings SET nama_lembaga=?, jenjang=? WHERE tenant_id=?').run(cfg.nama, cfg.jenjang, cfg.id)
+  } catch {}
+  return cfg.id
+}
+
 ;(() => {
   // 1. Ubah slug 'default' tenant dari 'demo' ke 'platform' agar tidak konflik
-  //    dan agar demo.jurnal.cc.cd tidak resolve ke tenant superadmin
+  //    dan agar demo.jurnal.cc.cd tidak resolve ke tenant superadmin.
   try {
     const defT = db.prepare("SELECT slug FROM tenants WHERE id='default'").get()
     if (defT && defT.slug === 'demo') {
@@ -3464,22 +3489,23 @@ const DEMO_TENANT_ID = 'demo-tenant'
     }
   } catch {}
 
-  // 2. Buat tenant demo terpisah jika belum ada
-  let dt = db.prepare("SELECT id FROM tenants WHERE id=?").get(DEMO_TENANT_ID)
-  if (!dt) {
-    try {
-      db.prepare("INSERT INTO tenants (id, slug, nama, email, plan, aktif, base_domain) VALUES (?,?,?,?,?,?,?)")
-        .run(DEMO_TENANT_ID, 'demo', 'Demo Jurnal Madrasah', 'demo@jurnalmadrasah.web.id', 'premium', 1, 'jurnal.cc.cd')
-      ensureTenantSettings(db, DEMO_TENANT_ID, { nama_lembaga: 'Demo Jurnal Madrasah' })
-    } catch {}
-  }
+  // 2. Pastikan tenant demo tiap segmen ada + nama/jenjang bersih.
+  Object.values(DEMO_SEGMEN).forEach(jaminTenantDemo)
 
-  // 3. Migrasi: pindahkan user demo dari 'default' ke demo-tenant
+  // 3. Perbaiki nama tenant demo lama yang sempat menempel 'Contoh Data' ganda.
   try {
-    db.prepare("UPDATE users SET tenant_id=? WHERE tenant_id='default' AND email LIKE 'demo-%@jurnalmadrasah.web.id'").run(DEMO_TENANT_ID)
-    db.prepare("UPDATE gtk SET tenant_id=? WHERE tenant_id='default' AND email LIKE 'demo-%@jurnalmadrasah.web.id'").run(DEMO_TENANT_ID)
-    db.prepare("UPDATE siswa SET tenant_id=? WHERE tenant_id='default' AND nis='DEMO001'").run(DEMO_TENANT_ID)
-    db.prepare("UPDATE rombel SET tenant_id=? WHERE tenant_id='default' AND nama='Demo A'").run(DEMO_TENANT_ID)
+    db.prepare("UPDATE settings SET nama_lembaga='Demo Madrasah', jenjang='MTs' WHERE tenant_id='demo-tenant'").run()
+  } catch {}
+
+  // 4. Migrasi user demo lama -> demo-kemenag (email users UNIQUE global, jadi
+  //    demo tiap segmen harus memakai email unik per domain segmen).
+  try {
+    db.prepare("UPDATE users SET tenant_id='demo-kemenag' WHERE tenant_id='default' AND email LIKE 'demo-%@jurnalmadrasah.web.id'").run()
+    db.prepare("UPDATE gtk SET tenant_id='demo-kemenag' WHERE tenant_id='default' AND email LIKE 'demo-%@jurnalmadrasah.web.id'").run()
+    db.prepare("UPDATE users SET tenant_id='demo-kemenag' WHERE tenant_id='demo-tenant'").run()
+    db.prepare("UPDATE gtk SET tenant_id='demo-kemenag' WHERE tenant_id='demo-tenant'").run()
+    db.prepare("UPDATE siswa SET tenant_id='demo-kemenag' WHERE tenant_id='demo-tenant'").run()
+    db.prepare("UPDATE rombel SET tenant_id='demo-kemenag' WHERE tenant_id='demo-tenant'").run()
   } catch {}
 })()
 
@@ -3498,15 +3524,18 @@ app.post('/api/auth/demo', (req, res) => {
   const role = String(req.body?.role || 'admin')
   const allowed = ['admin','kepala','guru','wali_kelas','bendahara','siswa','wali_murid','proktor']
   if (!allowed.includes(role)) return res.status(400).json({ error: 'Role demo tidak tersedia' })
+  // Pilih tenant demo sesuai pintu segmen domain yang dibuka.
+  const segmen = SEGMENT_DOOR(demoHost)?.segmen || 'umum'
+  const cfg = DEMO_SEGMEN[segmen]
   const makeDemo = (wantRole) => {
-    const tenantId = DEMO_TENANT_ID
+    const tenantId = cfg.id
     const actualRole = wantRole === 'wali_kelas' ? 'guru' : wantRole
     let user = db.prepare('SELECT * FROM users WHERE tenant_id=? AND role=? ORDER BY created_at LIMIT 1').get(tenantId, actualRole)
     if (user) return user
     const id = uuidv4()
     const pass = bcrypt.hashSync(uuidv4(), 10)
     const nama = 'Demo ' + actualRole.replace('_',' ')
-    const email = `demo-${actualRole}@jurnalmadrasah.web.id`
+    const email = `demo-${actualRole}@${cfg.base_domain}`
     let gtkId = null, siswaId = null, nis = null
     if (['guru','kepala','bendahara','proktor'].includes(actualRole)) {
       gtkId = uuidv4()
@@ -3541,7 +3570,7 @@ app.post('/api/auth/demo', (req, res) => {
     }
     return db.prepare('SELECT * FROM users WHERE id=?').get(id)
   }
-  const tenantId = DEMO_TENANT_ID
+  const tenantId = cfg.id
   let user = db.prepare('SELECT * FROM users WHERE tenant_id=? AND role=? ORDER BY created_at LIMIT 1').get(tenantId, role)
   if (!user && role === 'wali_kelas') user = db.prepare("SELECT * FROM users WHERE tenant_id=? AND role='guru' ORDER BY created_at LIMIT 1").get(tenantId)
   if (!user) user = makeDemo(role)
@@ -11445,14 +11474,17 @@ function finishExamSession(tenantId, paketId, siswaId) {
   return db.prepare('SELECT * FROM sesi_ujian WHERE id=? AND tenant_id=?').get(sesi.id, tenantId)
 }
 
-app.get('/api/ujian/proktor/assignments', ADMIN, (req, res) => {
+app.get('/api/ujian/proktor/assignments', PROCTOR, (req, res) => {
+  // Proktor hanya melihat penugasan miliknya; admin/super_admin melihat semua.
+  const isProktor = req.user.role === 'proktor'
   const rows = db.prepare(`SELECT a.id, a.paket_id, p.nama AS paket_nama, a.user_id,
       u.nama AS proktor_nama, a.rombel_id, r.nama AS rombel_nama, a.created_at
     FROM ujian_proktor_assignments a
     JOIN paket_ujian p ON p.id=a.paket_id AND p.tenant_id=a.tenant_id
     JOIN users u ON u.id=a.user_id AND u.tenant_id=a.tenant_id AND u.role='proktor'
     JOIN rombel r ON r.id=a.rombel_id AND r.tenant_id=a.tenant_id
-    WHERE a.tenant_id=? ORDER BY p.nama, u.nama, r.nama`).all(req.tenantId)
+    WHERE a.tenant_id=?${isProktor ? ' AND a.user_id=?' : ''} ORDER BY p.nama, u.nama, r.nama`)
+    .all(...(isProktor ? [req.tenantId, req.user.id] : [req.tenantId]))
   res.json(rows)
 })
 

@@ -70,8 +70,8 @@ test('akun demo tampil di jurnal, tapi datanya terisolasi', () => {
   assert.ok(/const DEMO_HOSTS = new Set/.test(srv), 'server tetap membatasi host demo')
   assert.ok(/if \(!DEMO_HOSTS\.has\(demoHost\)\) return res\.status\(404\)/.test(srv),
     'host di luar DEMO_HOSTS harus ditolak 404 — ini pengaman sebenarnya')
-  assert.ok(/const DEMO_TENANT_ID = 'demo-tenant'/.test(srv),
-    'tenant demo harus terpisah dari default/superadmin')
+  assert.ok(/const DEMO_SEGMEN = \{/.test(srv),
+    'tenant demo harus per segmen (terpisah dari default/superadmin)')
 })
 
 // ---------------- (8) QRIS lembaga ----------------

@@ -17,7 +17,8 @@ test('demo auth is restricted to explicit public demo hosts and separate demo te
   assert.match(block, /DEMO_HOSTS/)
   assert.match(block, /req\.headers\.host/)
   assert.match(block, /status\(404\)/)
-  assert.match(block, /DEMO_TENANT_ID/)
+  assert.match(block, /DEMO_SEGMEN/)
+  assert.match(block, /SEGMENT_DOOR\(demoHost\)/)
   assert.doesNotMatch(block, /tenantId = 'default'/)
 })
 
