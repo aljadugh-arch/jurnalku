@@ -7,6 +7,7 @@ import BulkDeleteButton from '../../components/BulkDeleteButton'
 import Modal from '../../components/ui/Modal'
 import { unduhExcel } from '../../utils/excelExport'
 import { useSettingsStore } from '../../stores/settingsStore'
+import { useTerminologi } from '../../lib/terminologi'
 
 interface Mapel { id: string; kode: string; nama: string; kelompok: string; tingkat: string; jam_per_minggu: number }
 
@@ -24,6 +25,7 @@ const kelompokBadge = (kelompok: string) => {
 }
 
 export default function MapelPage() {
+  const t = useTerminologi()
   const settings = useSettingsStore(s => s.settings)
   const [data, setData] = useState<Mapel[]>([])
   const [loading, setLoading] = useState(true)
@@ -102,7 +104,7 @@ export default function MapelPage() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-gray-800 font-display">Mata Pelajaran</h1>
+          <h1 className="text-2xl font-bold text-gray-800 font-display">{t.mapel}</h1>
           <p className="text-gray-500 text-sm mt-1">Kelola data mata pelajaran ({data.length} mapel)</p>
         </div>
         <div className="flex gap-2">

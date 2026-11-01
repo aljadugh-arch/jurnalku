@@ -7,7 +7,8 @@ import SearchInput, { cocokBeberapa } from '../../components/SearchInput'
 import { useAuthStore } from '../../stores/authStore'
 import { useSettingsStore } from '../../stores/settingsStore'
 import { tenantIdentity } from '../../utils/tenantExport'
-import { signatureBlockHtml, SIGNATURE_CSS, tenantSignatureSettings } from '../../utils/pdfSignature'
+import { signatureBlockHtml, SIGNATURE_CSS, tenantSignatureSettings, excelKopRows, excelSignatureRows } from '../../utils/pdfSignature'
+import { useTerminologi } from '../../lib/terminologi'
 import * as XLSX from 'xlsx'
 
 // Satu halaman = 24 kartu. Dulu endpoint mengirim SELURUH riwayat sekaligus
@@ -18,6 +19,7 @@ const PER_HALAMAN = 24
 export default function JurnalPage() {
   const user = useAuthStore(s => s.user)
   const settings = useSettingsStore(s => s.settings)
+  const t = useTerminologi()
   const canReview = ['admin', 'super_admin', 'kepala', 'operator'].includes(user?.role || '')
   const [data, setData] = useState<any[]>([])
   const [total, setTotal] = useState(0)
@@ -177,11 +179,15 @@ export default function JurnalPage() {
         i + 1, d.tanggal, `Jam ${d.jam_ke}`, d.mapel_nama || '', d.guru_nama || '',
         d.materi || '', d.kegiatan || '', d.catatan || '', d.status
       ])
+      const kop = excelKopRows(settings as Record<string, unknown>, 'JURNAL KEGIATAN PEMBELAJARAN', `${t.rombel}: ${rombel}`)
+      const ttd = excelSignatureRows(tenantSignatureSettings(settings), { leftTitle: t.guru, rightTitle: t.kepala })
       const ws = XLSX.utils.aoa_to_sheet([
-        ['JURNAL MENGAJAR'], [`Rombel: ${rombel}`], [],
-        judulKolom, ...rows
+        ...kop,
+        judulKolom, ...rows,
+        ...ttd,
       ])
       ws['!cols'] = lebar
+      ws['!merges'] = [0, 1, 3, 4].map(r => ({ s: { r, c: 0 }, e: { r, c: judulKolom.length - 1 } }))
       XLSX.utils.book_append_sheet(wb, ws, namaSheet(rombel, dipakai))
     }
     XLSX.writeFile(wb, 'Jurnal_Mengajar_per_Rombel.xlsx')
@@ -203,7 +209,7 @@ export default function JurnalPage() {
       return `<div class="blok"><h4>Rombel: ${escapeHtml(rombel)} <span class="kecil">· ${arr.length} entri</span></h4><table><thead><tr><th>No</th><th>Tanggal</th><th>Jam</th><th>Mapel</th><th>Guru</th><th>Materi</th><th>Kegiatan</th><th>Status</th></tr></thead><tbody>${rows}</tbody></table></div>`
     }).join('')
     const filterInfo = [filter.tanggal ? `Tanggal: ${filter.tanggal}` : '', filter.guru_id ? `Guru: ${gtks.find(g => g.id === filter.guru_id)?.nama || ''}` : '', filter.status ? `Status: ${filter.status}` : ''].filter(Boolean).join(' · ') || 'Semua data'
-    printWindow.document.write(`<!DOCTYPE html><html><head><title>Jurnal Mengajar</title><style>@page{size:landscape;margin:8mm}body{font-family:Arial,sans-serif;padding:14px;font-size:11px}.kop{display:flex;align-items:center;justify-content:center;gap:12px;border-bottom:2px solid #000;padding-bottom:7px;margin-bottom:8px}.kop img{width:58px;height:58px;object-fit:contain}.kop-text{text-align:center}.kop-text h2{margin:0}h3{text-align:center;margin:4px 0}.meta{margin:6px 0;font-size:10px}table{border-collapse:collapse;width:100%}th,td{border:1px solid #999;padding:4px;text-align:center}.materi{text-align:left}th{background:#f3f4f6;font-size:10px}@media print{body{padding:0}}.blok{margin-bottom:14px;break-inside:auto}.blok h4{margin:0 0 4px;font-size:12px;background:#eef2ff;border-left:3px solid #4f46e5;padding:4px 8px;page-break-after:avoid}.blok .kecil{font-weight:normal;color:#64748b;font-size:10px}${SIGNATURE_CSS}</style></head><body><div class="kop">${logo}<div class="kop-text"><h2>${escapeHtml(tenant.name)}</h2>${tenant.address ? `<div>${escapeHtml(tenant.address)}</div>` : ''}</div></div><h3>JURNAL KEGIATAN PEMBELAJARAN (PER ROMBEL)</h3><div class="meta">${escapeHtml(filterInfo)}</div>${blok}${signatureBlockHtml(sigSettings, { leftTitle: 'Guru Mapel', rightTitle: 'Kepala Madrasah' })}<script>setTimeout(()=>window.print(),500)<\/script></body></html>`)
+    printWindow.document.write(`<!DOCTYPE html><html><head><title>Jurnal Mengajar</title><style>@page{size:landscape;margin:8mm}body{font-family:Arial,sans-serif;padding:14px;font-size:11px}.kop{display:flex;align-items:center;justify-content:center;gap:12px;border-bottom:2px solid #000;padding-bottom:7px;margin-bottom:8px}.kop img{width:58px;height:58px;object-fit:contain}.kop-text{text-align:center}.kop-text h2{margin:0}h3{text-align:center;margin:4px 0}.meta{margin:6px 0;font-size:10px}table{border-collapse:collapse;width:100%}th,td{border:1px solid #999;padding:4px;text-align:center}.materi{text-align:left}th{background:#f3f4f6;font-size:10px}@media print{body{padding:0}}.blok{margin-bottom:14px;break-inside:auto}.blok h4{margin:0 0 4px;font-size:12px;background:#eef2ff;border-left:3px solid #4f46e5;padding:4px 8px;page-break-after:avoid}.blok .kecil{font-weight:normal;color:#64748b;font-size:10px}${SIGNATURE_CSS}</style></head><body><div class="kop">${logo}<div class="kop-text"><h2>${escapeHtml(tenant.name)}</h2>${tenant.address ? `<div>${escapeHtml(tenant.address)}</div>` : ''}</div></div><h3>JURNAL KEGIATAN PEMBELAJARAN (PER ROMBEL)</h3><div class="meta">${escapeHtml(filterInfo)}</div>${blok}${signatureBlockHtml(sigSettings, { leftTitle: 'Guru Mapel', rightTitle: t.kepala })}<script>setTimeout(()=>window.print(),500)<\/script></body></html>`)
     printWindow.document.close()
   }
 

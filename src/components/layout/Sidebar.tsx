@@ -5,6 +5,7 @@ import { useAuthStore } from '../../stores/authStore'
 import { useSettingsStore } from '../../stores/settingsStore'
 import { useTerminologi, terapkanTerminologi } from '../../lib/terminologi'
 import { labelInstitusi } from '../../lib/jenjang'
+import { defaultLogo } from '../../lib/brandAsset'
 import { X, ChevronDown, ChevronRight, LogOut } from 'lucide-react'
 import { clsx } from 'clsx'
 import { roleLabel } from '../../lib/roles'
@@ -157,7 +158,7 @@ export default function Sidebar() {
         {/* Logo */}
         <div className="flex items-center gap-3 px-4 py-4 border-b border-white/10">
           <div className="w-9 h-9 bg-white rounded-lg flex items-center justify-center overflow-hidden flex-shrink-0">
-            <img src={(settings.logo as string) || '/logo-jurnalku-256.png'} onError={e => { e.currentTarget.src = '/logo-jurnalku-256.png' }} alt="Logo" className="w-full h-full object-contain" />
+            <img src={(settings.logo as string) || defaultLogo(false)} onError={e => { e.currentTarget.src = defaultLogo(false) }} alt="Logo" className="w-full h-full object-contain" />
           </div>
           {isOpen && (
             <div className="min-w-0">

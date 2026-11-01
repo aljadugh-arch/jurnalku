@@ -4,6 +4,7 @@ import PublicShell, { PublicPageHead } from '../components/PublicShell'
 import api from '../services/api'
 import toast from 'react-hot-toast'
 import { useSettingsStore } from '../stores/settingsStore'
+import { defaultLogo } from '../lib/brandAsset'
 
 const kategori = [
   { value: 'login', label: 'Login' },
@@ -89,7 +90,7 @@ export default function HelpdeskPage() {
 
           <aside className="space-y-4">
             <div className="sk-form-card text-center">
-              <img src={settings.logo || '/logo-jurnalku-256.png'} alt="" className="mx-auto h-[68px] w-[68px] object-contain" />
+              <img src={settings.logo || defaultLogo(false)} alt="" className="mx-auto h-[68px] w-[68px] object-contain" />
               <h2 className="mt-3">Helpdesk {namaLembaga}</h2>
               <p className="text-sm sk-txt-muted">Tim pengelola sistem informasi lembaga</p>
               {wa && (

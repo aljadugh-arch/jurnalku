@@ -152,7 +152,7 @@ export default function SiswaUjianPage() {
             if ('Notification' in window && Notification.permission === 'granted') {
               new Notification('Ujian Berlangsung', {
                 body: `${threshold === 300 ? '5 menit' : threshold === 60 ? '1 menit' : '30 detik'} tersisa!`,
-                icon: '/logo-jurnalku-256.png'
+                icon: '/favicon-light.png'
               })
             }
           }

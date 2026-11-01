@@ -7,6 +7,7 @@ import api, { pesanGagalJaringan } from '../../services/api'
 import toast from 'react-hot-toast'
 import { useThemeStore } from '../../stores/themeStore'
 import { labelInstitusi } from '../../lib/jenjang'
+import { defaultLogo } from '../../lib/brandAsset'
 
 const getRedirectPath = (role: string) => {
   if (['admin', 'super_admin', 'kepala', 'bendahara', 'operator', 'tata_usaha', 'tu'].includes(role)) return '/admin'
@@ -52,7 +53,7 @@ export default function LoginPage() {
   }
   useEffect(() => { void muatCaptcha() }, [])
   const { dark, toggle: toggleDark } = useThemeStore()
-  const logo = settings.logo || '/logo-jurnalku-256.png'
+  const logo = settings.logo || defaultLogo(dark)
   const namaLembaga = settings.nama_lembaga || 'JURNALKU'
 
   // PPDB di halaman login: calon siswa bisa membuka formulir pendaftaran

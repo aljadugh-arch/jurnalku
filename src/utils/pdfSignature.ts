@@ -91,3 +91,47 @@ export function tenantSignatureSettings(settings: SignatureSettings) {
     kepala_sekolah: String(settings.kepala_sekolah || ''),
   }
 }
+
+/**
+ * Baris kop untuk ekspor Excel (array-of-arrays). Dipakai bersama sheet per
+ * rombel: nama lembaga, alamat, judul, dan subjudul (mis. rombel/periode).
+ * Pemanggil dapat menggabungkan baris 0..n selebar tabel agar rapi.
+ */
+export function excelKopRows(settings: SignatureSettings, judul: string, subjudul?: string): unknown[][] {
+  const nama = String(settings.nama_lembaga || 'Lembaga')
+  const alamat = String(settings.alamat || '').trim()
+  const rows: unknown[][] = [[nama]]
+  rows.push([alamat || ''])
+  rows.push([])
+  rows.push([judul])
+  if (subjudul) rows.push([subjudul])
+  rows.push([])
+  return rows
+}
+
+/**
+ * Baris tanda tangan untuk ekspor Excel: tempat/tanggal, kolom kiri (guru) dan
+ * kanan (kepala lembaga). Mengembalikan array-of-arrays siap ditempel di bawah
+ * tabel, dengan garis titik-titik bila nama belum diisi.
+ */
+export function excelSignatureRows(settings: SignatureSettings, opts: SignatureOptions = {}): unknown[][] {
+  const kota = String(settings.kota_cetak || '').trim()
+  const tanggal = formatTanggal(opts.date || new Date())
+  const tempatTanggal = kota ? `${kota}, ${tanggal}` : tanggal
+  const kepala = String(settings.kepala_sekolah || '').trim()
+  const leftTitle = opts.leftTitle || 'Guru Mapel'
+  const rightTitle = opts.rightTitle || 'Kepala Lembaga'
+  const leftName = String(opts.leftName || '').trim()
+  const garis = '(................................)'
+  const rows: unknown[][] = []
+  if (opts.showDate !== false) {
+    rows.push([], ['', '', '', '', tempatTanggal], [])
+  } else {
+    rows.push([], [])
+  }
+  rows.push(['Mengetahui,', '', '', '', rightTitle])
+  rows.push([leftTitle, '', '', '', ''])
+  rows.push([], [])
+  rows.push([leftName || garis, '', '', '', kepala || garis])
+  return rows
+}

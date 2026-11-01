@@ -21,10 +21,14 @@ test('FIXED: assertKbmActive() terima ujian dan kegiatan_lain, hanya tolak libur
   assert.notEqual(from, -1, 'assertKbmActive function tidak ditemukan')
   const to = server.indexOf('function', from + 10) // next function after this one
   const fn = to === -1 ? server.slice(from) : server.slice(from, to)
-  assert.match(fn, /assertKbmActive\(req, tanggal\)/)
-  assert.match(fn, /isHolidayDate\(tanggal/)
-  // FIXED: sekarang gunakan IN ('kbm_aktif', 'ujian', 'kegiatan_lain')
-  assert.match(fn, /jenis\s+IN\s*\(\s*'kbm_aktif'\s*,\s*'ujian'\s*,\s*'kegiatan_lain'\s*\)/)
+  // Kini assertKbmActive mendelegasikan ke kbmStatusTanggal (kegiatan menang atas libur).
+  assert.match(fn, /kbmStatusTanggal\(req\.tenantId, tanggal\)/)
+  const helperFrom = server.indexOf('function kbmStatusTanggal')
+  assert.notEqual(helperFrom, -1, 'kbmStatusTanggal tidak ditemukan')
+  const helper = server.slice(helperFrom, server.indexOf('const { dateRange', helperFrom))
+  assert.match(helper, /jenis\s+IN\s*\(\s*'kbm_aktif'\s*,\s*'ujian'\s*,\s*'kegiatan_lain'\s*\)/)
+  assert.match(helper, /kegiatanPadaTanggal\(tenantId, tanggal\)/, 'kegiatan diperhitungkan')
+  assert.match(helper, /\!\!kegiatan \|\|/, 'kegiatan membuat hari aktif walau libur')
 })
 
 test('FIXED: /api/kalender-kbm/status returns aktif=true saat ujian atau kegiatan_lain', () => {
@@ -34,8 +38,9 @@ test('FIXED: /api/kalender-kbm/status returns aktif=true saat ujian atau kegiata
   // (`aktif,` pada objek ringkas). Yang penting nilainya dihitung, bukan
   // bentuk penulisannya.
   assert.match(endpoint, /aktif[:,\s]/)
-  // FIXED: sekarang gunakan IN untuk terima ujian dan kegiatan_lain
-  assert.match(endpoint, /jenis\s+IN\s*\(\s*'kbm_aktif'\s*,\s*'ujian'\s*,\s*'kegiatan_lain'\s*\)/)
+  // Sumber kebenaran tunggal: kbmStatusTanggal (memuat ujian, kegiatan_lain,
+  // kegiatan_khusus/ekskul pada hari libur).
+  assert.match(endpoint, /kbmStatusTanggal\(req\.tenantId, tanggal\)/)
 })
 
 test('attendance guards menggunakan assertKbmActive pada semua write path', () => {

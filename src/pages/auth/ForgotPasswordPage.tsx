@@ -4,10 +4,11 @@ import { ArrowLeft, Mail, CheckCircle } from 'lucide-react'
 import toast from 'react-hot-toast'
 import api from '../../services/api'
 import { useSettingsStore } from '../../stores/settingsStore'
+import { defaultLogo } from '../../lib/brandAsset'
 
 export default function ForgotPasswordPage() {
   const { settings } = useSettingsStore()
-  const logo = settings.logo || '/logo-jurnalku-256.png'
+  const logo = settings.logo || defaultLogo(document.documentElement.classList.contains('dark'))
   const namaLembaga = settings.nama_lembaga || 'JURNALKU'
   const [email, setEmail] = useState('')
   const [loading, setLoading] = useState(false)

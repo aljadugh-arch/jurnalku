@@ -5,6 +5,7 @@ import {
   Landmark, PiggyBank, ReceiptText, Target, UserCheck, WalletCards, TrendingUp, TrendingDown, QrCode,
 } from 'lucide-react'
 import api from '../../services/api'
+import { useTerminologi, terapkanTerminologi } from '../../lib/terminologi'
 import { todayWib } from '../../lib/dateFormat'
 import MobileDashboardHeader from '../../components/MobileDashboardHeader'
 import JadwalSholatCard from '../../components/JadwalSholatCard'
@@ -38,6 +39,7 @@ const quickMenus = [
 ]
 
 export default function MobileBendaharaDashboard({ data, bulan, onUbahBulan }: { data: BendaharaData | null; bulan?: string; onUbahBulan?: (b: string) => void }) {
+  const t = useTerminologi()
   const navigate = useNavigate()
   const [rekapMode, setRekapMode] = useState<'harian' | 'mingguan'>('harian')
   const [rekapTanggal, setRekapTanggal] = useState(() => todayWib())
@@ -145,7 +147,8 @@ export default function MobileBendaharaDashboard({ data, bulan, onUbahBulan }: {
 
         {/* ── QUICK ACTIONS 2x2 ── */}
         <div className="grid grid-cols-2 gap-3">
-          {quickMenus.slice(0, 4).map(a => {
+          {quickMenus.slice(0, 4).map(raw => {
+            const a = { ...raw, label: terapkanTerminologi(raw.label, t) }
             const Icon = a.icon
             return (
               <button
@@ -185,7 +188,8 @@ export default function MobileBendaharaDashboard({ data, bulan, onUbahBulan }: {
         <section className="rounded-3xl bg-white p-4 shadow-sm dark:bg-gray-900">
           <h2 className="mb-3 text-sm font-bold text-slate-900 dark:text-white">Akses Lainnya</h2>
           <div className="grid grid-cols-3 gap-x-3 gap-y-4">
-            {quickMenus.slice(4).map(item => {
+            {quickMenus.slice(4).map(raw => {
+            const item = { ...raw, label: terapkanTerminologi(raw.label, t) }
               const Icon = item.icon
               return <button key={item.label} onClick={() => navigate(item.path)} className="flex min-w-0 flex-col items-center gap-2 rounded-xl py-2 active:bg-slate-50 dark:active:bg-gray-800 active:scale-95 transition">
                 <span className={`flex h-11 w-11 items-center justify-center rounded-xl text-white shadow-sm ${item.tile}`}><Icon size={20} /></span>

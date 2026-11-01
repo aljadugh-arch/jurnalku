@@ -3,8 +3,10 @@ import { Plus, Edit, Trash2, X } from 'lucide-react'
 import SearchInput, { cocokBeberapa } from '../../components/SearchInput'
 import toast from 'react-hot-toast'
 import api from '../../services/api'
+import { useTerminologi } from '../../lib/terminologi'
 
 export default function PengajarPage() {
+  const t = useTerminologi()
   const [data, setData] = useState<any[]>([])
   const [gtkList, setGtkList] = useState<any[]>([])
   const [mapelList, setMapelList] = useState<any[]>([])
@@ -88,7 +90,7 @@ export default function PengajarPage() {
               <tr>
                 <th className="text-left px-4 py-3 font-medium text-gray-600">No</th>
                 <th className="text-left px-4 py-3 font-medium text-gray-600">Guru</th>
-                <th className="text-left px-4 py-3 font-medium text-gray-600">Mata Pelajaran</th>
+                <th className="text-left px-4 py-3 font-medium text-gray-600">{t.mapel}</th>
                 <th className="text-left px-4 py-3 font-medium text-gray-600">Rombel</th>
                 <th className="text-center px-4 py-3 font-medium text-gray-600">Jam/Minggu</th>
                 <th className="text-left px-4 py-3 font-medium text-gray-600">Aksi</th>
@@ -141,7 +143,7 @@ export default function PengajarPage() {
                 </select>
               </div>
               <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1">Mata Pelajaran</label>
+                <label className="block text-xs font-medium text-gray-600 mb-1">{t.mapel}</label>
                 <select value={form.mapel_id} onChange={e => setForm({...form, mapel_id: e.target.value})} className="w-full px-3 py-2 border rounded-lg text-sm">
                   <option value="">-- Pilih Mapel --</option>
                   {mapelList.map(m => <option key={m.id} value={m.id}>{m.nama}</option>)}

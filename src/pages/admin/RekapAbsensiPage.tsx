@@ -8,7 +8,8 @@ import { todayWib, yearWib, addDaysWib } from '../../lib/dateFormat'
 import * as XLSX from 'xlsx'
 import { useSettingsStore } from '../../stores/settingsStore'
 import { tenantExportFilename, tenantIdentity } from '../../utils/tenantExport'
-import { signatureBlockHtml, SIGNATURE_CSS, tenantSignatureSettings } from '../../utils/pdfSignature'
+import { signatureBlockHtml, SIGNATURE_CSS, tenantSignatureSettings, excelSignatureRows } from '../../utils/pdfSignature'
+import { useTerminologi } from '../../lib/terminologi'
 
 function PercentageBadge({ row }: { row: any }) {
   const percentage = row.total > 0 ? Math.round(row.hadir / row.total * 100) : 0
@@ -36,13 +37,14 @@ function groupByRombel(data: any[]) {
 }
 
 function SiswaRecapTable({ data }: { data: any[] }) {
+  const t = useTerminologi()
   return (
     <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead className="bg-gray-50 border-b"><tr>
             <th className="text-left px-4 py-3 font-medium text-gray-600">No</th>
-            <th className="text-left px-4 py-3 font-medium text-gray-600">Nama Siswa</th>
+            <th className="text-left px-4 py-3 font-medium text-gray-600">Nama {t.siswa}</th>
             <th className="text-left px-4 py-3 font-medium text-gray-600">NIS</th>
             <th className="text-left px-4 py-3 font-medium text-gray-600">Rombel</th>
             <th className="text-center px-4 py-3 font-medium text-blue-600">Hadir</th>
@@ -129,6 +131,7 @@ function GtkRecapTable({ data }: { data: any[] }) {
 }
 
 function CategoryRecapTable({ data }: { data: any[] }) {
+  const t = useTerminologi()
   return (
     <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden"><div className="overflow-x-auto"><table className="w-full text-sm">
       <thead className="bg-gray-50 border-b"><tr><th className="text-left px-4 py-3 font-medium text-gray-600">No</th><th className="text-left px-4 py-3 font-medium text-gray-600">Nama</th><th className="text-left px-4 py-3 font-medium text-gray-600">NIS</th><th className="text-left px-4 py-3 font-medium text-gray-600">Rombel</th><th className="text-left px-4 py-3 font-medium text-gray-600">Kegiatan/Mapel</th><th className="text-center px-4 py-3 font-medium text-blue-600">Hadir</th><th className="text-center px-4 py-3 font-medium text-yellow-600">Sakit</th><th className="text-center px-4 py-3 font-medium text-purple-600">Izin</th><th className="text-center px-4 py-3 font-medium text-red-600">Alpha</th><th className="text-center px-4 py-3 font-medium text-gray-600">% Hadir</th></tr></thead>
@@ -155,9 +158,10 @@ function aggregateByMapel(data: any[]) {
 }
 
 function MapelAggregateTable({ data }: { data: any[] }) {
+  const t = useTerminologi()
   return (
     <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden"><div className="overflow-x-auto"><table className="w-full text-sm">
-      <thead className="bg-gray-50 border-b"><tr><th className="text-left px-4 py-3 font-medium text-gray-600">No</th><th className="text-left px-4 py-3 font-medium text-gray-600">Mata Pelajaran</th><th className="text-center px-4 py-3 font-medium text-blue-600">Hadir</th><th className="text-center px-4 py-3 font-medium text-yellow-600">Sakit</th><th className="text-center px-4 py-3 font-medium text-purple-600">Izin</th><th className="text-center px-4 py-3 font-medium text-red-600">Alpha</th><th className="text-center px-4 py-3 font-medium text-gray-600">Total</th><th className="text-center px-4 py-3 font-medium text-gray-600">% Hadir</th></tr></thead>
+      <thead className="bg-gray-50 border-b"><tr><th className="text-left px-4 py-3 font-medium text-gray-600">No</th><th className="text-left px-4 py-3 font-medium text-gray-600">{t.mapel}</th><th className="text-center px-4 py-3 font-medium text-blue-600">Hadir</th><th className="text-center px-4 py-3 font-medium text-yellow-600">Sakit</th><th className="text-center px-4 py-3 font-medium text-purple-600">Izin</th><th className="text-center px-4 py-3 font-medium text-red-600">Alpha</th><th className="text-center px-4 py-3 font-medium text-gray-600">Total</th><th className="text-center px-4 py-3 font-medium text-gray-600">% Hadir</th></tr></thead>
       <tbody className="divide-y divide-gray-100">{data.length === 0 && <tr><td colSpan={8} className="px-4 py-8 text-center text-gray-400">Belum ada data absensi mapel untuk periode ini</td></tr>}{data.map((row: any, i: number) => <tr key={row.kegiatan_nama || i} className="hover:bg-gray-50"><td className="px-4 py-3 text-gray-600">{i + 1}</td><td className="px-4 py-3 font-medium text-gray-800">{row.kegiatan_nama}</td><td className="px-4 py-3 text-center font-medium text-blue-600">{row.hadir}</td><td className="px-4 py-3 text-center font-medium text-yellow-600">{row.sakit}</td><td className="px-4 py-3 text-center font-medium text-purple-600">{row.izin}</td><td className="px-4 py-3 text-center font-medium text-red-600">{row.alpha}</td><td className="px-4 py-3 text-center font-medium text-gray-800">{row.total}</td><td className="px-4 py-3 text-center"><PercentageBadge row={row} /></td></tr>)}</tbody>
     </table></div></div>
   )
@@ -176,6 +180,7 @@ function GuruMapelRecapTable({ data }: { data: any[] }) {
 }
 
 export default function RekapAbsensiPage() {
+  const t = useTerminologi()
   const settings = useSettingsStore(s => s.settings)
   const [tab, setTab] = useState<'siswa' | 'gtk'>('siswa')
   const [bulan, setBulan] = useState(() => todayWib().slice(0, 7))
@@ -279,7 +284,7 @@ export default function RekapAbsensiPage() {
     { name: 'Alpha', value: activeSummary.alpha, fill: '#ef4444' },
   ]
 
-  const categoryLabel = { kehadiran: 'Kehadiran Masuk & Pulang', mapel: 'Mata Pelajaran', kokurikuler: 'Kokurikuler', ekskul: 'Ekstrakurikuler', jamaah: 'Jamaah', kegiatan_lain: 'Kegiatan Lain' }[category]
+  const categoryLabel = { kehadiran: 'Kehadiran Masuk & Pulang', mapel: t.mapel, kokurikuler: 'Kokurikuler', ekskul: 'Ekstrakurikuler', jamaah: 'Jamaah', kegiatan_lain: 'Kegiatan Lain' }[category]
   // Suffix tampilan untuk kategori mapel supaya judul ekspor mencerminkan sudut pandang.
   const categoryViewLabel = category === 'mapel'
     ? (mapelView === 'mapel' ? ' per Mapel' : mapelView === 'guru' ? ' per Guru' : '')
@@ -311,7 +316,7 @@ export default function RekapAbsensiPage() {
     if (category === 'kehadiran') {
       // Layout MATRIKS mengikuti export PDF (per-tanggal + total SAKIT/IZIN/ALFA/HADIR).
       const isSiswa = tab === 'siswa'
-      aoa.push(['REKAPITULASI ABSENSI ' + (isSiswa ? 'SISWA' : 'GTK')])
+      aoa.push(['REKAPITULASI ABSENSI ' + (isSiswa ? t.siswa.toUpperCase() : t.guru.toUpperCase())])
       aoa.push([tenant.name])
       if (tenant.address) aoa.push([tenant.address])
       aoa.push(['Periode: ' + periodeText])
@@ -331,12 +336,13 @@ export default function RekapAbsensiPage() {
       }
       if (isSiswa) {
         for (const group of groupByRombel(data)) {
-          aoa.push(['', group.rombel + ` (${group.items.length} siswa)`])
+          aoa.push(['', group.rombel + ` (${group.items.length} ${t.siswa.toLowerCase()})`])
           group.items.forEach((d, i) => pushRow(d, i))
         }
       } else {
         data.forEach((d: any, i: number) => pushRow(d, i))
       }
+      aoa.push(...excelSignatureRows(sigSettings, sigOpts))
       const ws = XLSX.utils.aoa_to_sheet(aoa)
       // Merge baris judul selebar tabel.
       const totalCols = header.length
@@ -371,10 +377,11 @@ export default function RekapAbsensiPage() {
       data.forEach((d: any, i: number) => aoa.push(rows(d, i)))
     } else {
       for (const group of groupByRombel(data)) {
-        aoa.push(['', group.rombel + ` (${group.items.length} siswa)`])
+        aoa.push(['', group.rombel + ` (${group.items.length} ${t.siswa.toLowerCase()})`])
         group.items.forEach((d, i) => aoa.push(rows(d, i)))
       }
     }
+    aoa.push(...excelSignatureRows(sigSettings, sigOpts))
     const ws = XLSX.utils.aoa_to_sheet(aoa)
     ws['!cols'] = header.map(() => ({ wch: 15 }))
     const wb = XLSX.utils.book_new()
@@ -455,7 +462,7 @@ export default function RekapAbsensiPage() {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-gray-800 font-display">Rekapitulasi Absensi</h1>
-          <p className="text-gray-500 text-sm mt-1">Rekap kehadiran siswa, GTK, mapel, kegiatan, ekstrakurikuler, dan jamaah</p>
+          <p className="text-gray-500 text-sm mt-1">Rekap kehadiran {t.siswa.toLowerCase()}, {t.guru.toLowerCase()}, {t.mapel.toLowerCase()}, kegiatan, ekstrakurikuler, dan jamaah</p>
           <select value={category} onChange={e => setCategory(e.target.value as typeof category)} className="mt-3 w-full sm:w-auto max-w-full min-w-0 px-3 py-2 border rounded-lg text-sm">
             <option value="kehadiran">Kehadiran Masuk & Pulang</option>
             <option value="mapel">Absensi Mapel</option>
@@ -480,7 +487,7 @@ export default function RekapAbsensiPage() {
         <div className="flex w-full sm:w-auto min-w-0 bg-gray-100 rounded-lg p-1">
           {category === 'kehadiran' && <>
             <button onClick={() => setTab('siswa')} className={`flex flex-1 sm:flex-none items-center justify-center gap-1 whitespace-nowrap px-4 py-1.5 rounded-md text-sm font-medium transition ${tab === 'siswa' ? 'bg-white shadow text-primary' : 'text-gray-600'}`}>
-              <GraduationCap size={16} /> Siswa
+              <GraduationCap size={16} /> {t.siswa}
             </button>
             <button onClick={() => setTab('gtk')} className={`flex flex-1 sm:flex-none items-center justify-center gap-1 whitespace-nowrap px-4 py-1.5 rounded-md text-sm font-medium transition ${tab === 'gtk' ? 'bg-white shadow text-primary' : 'text-gray-600'}`}>
               <Users size={16} /> GTK

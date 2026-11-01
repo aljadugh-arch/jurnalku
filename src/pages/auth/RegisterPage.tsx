@@ -8,6 +8,7 @@ import { useAuthStore } from '../../stores/authStore'
 import { useSettingsStore } from '../../stores/settingsStore'
 import { TIPE_INSTITUSI_OPTIONS } from '../../lib/terminologi'
 import { JENJANG_OPTIONS } from '../../lib/jenjang'
+import { defaultLogo } from '../../lib/brandAsset'
 
 type DomainMode = 'subdomain' | 'custom'
 
@@ -331,7 +332,7 @@ export default function RegisterPage() {
         <div className="text-center mb-6">
           <div className="inline-flex items-center gap-2 mb-2">
             <div className="flex h-11 w-11 items-center justify-center rounded-xl sk-card overflow-hidden">
-              <img src={useSettingsStore.getState().settings.logo || '/logo-jurnalku-256.png'} alt="Logo" className="h-full w-full object-contain" />
+              <img src={useSettingsStore.getState().settings.logo || defaultLogo(false)} alt="Logo" className="h-full w-full object-contain" />
             </div>
             <h1 className="text-2xl font-bold sk-txt">JURNALKU</h1>
           </div>
