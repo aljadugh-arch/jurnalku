@@ -4,6 +4,7 @@ import { useSidebarStore } from '../../stores/sidebarStore'
 import { useAuthStore } from '../../stores/authStore'
 import { useSettingsStore } from '../../stores/settingsStore'
 import { useTerminologi, terapkanTerminologi } from '../../lib/terminologi'
+import { labelInstitusi } from '../../lib/jenjang'
 import { X, ChevronDown, ChevronRight, LogOut } from 'lucide-react'
 import { clsx } from 'clsx'
 import { roleLabel } from '../../lib/roles'
@@ -161,7 +162,7 @@ export default function Sidebar() {
           {isOpen && (
             <div className="min-w-0">
               <p className="font-bold text-sm truncate text-white">{settings.nama_lembaga || 'Madrasah Digital'}</p>
-              <p className="text-xs text-white/60">SIMS/M</p>
+              <p className="text-xs text-white/60">Sistem Informasi {labelInstitusi(settings.jenjang as string) || 'Lembaga'}</p>
             </div>
           )}
           <button onClick={close} className="ml-auto lg:hidden text-white/60 hover:text-white">

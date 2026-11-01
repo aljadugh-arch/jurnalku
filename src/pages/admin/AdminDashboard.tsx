@@ -10,6 +10,7 @@ import { PageHeader, Card, StatCard, Badge } from '../../components/ui'
 import { Link } from 'react-router-dom'
 import MobileMenuGrid from '../../components/MobileMenuGrid'
 import MobileAdminDashboard from './MobileAdminDashboard'
+import { useTerminologi } from '../../lib/terminologi'
 
 const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899']
 
@@ -28,6 +29,7 @@ const ATTENDANCE_STATUSES = [
 ] as const
 
 export default function AdminDashboard() {
+  const t = useTerminologi()
   const [stats, setStats] = useState<any>(null)
   const [classMonitor, setClassMonitor] = useState<any>({ sessions: [], summary: { aktif: 0, selesai: 0, terlambat: 0, total: 0 } })
   const [monitoring, setMonitoring] = useState<any>(null)
@@ -62,10 +64,10 @@ export default function AdminDashboard() {
   if (!stats) return <div className="text-center py-20 text-gray-400">Gagal memuat data</div>
 
   const statCards = [
-    { label: 'Total Siswa', value: stats.total_siswa, icon: <GraduationCap size={20} />, gradient: 'from-blue-500 to-indigo-600', sub: `${stats.siswa_aktif} aktif`, path: '/admin/siswa' },
-    { label: 'Total GTK', value: stats.total_gtk, icon: <Users size={20} />, gradient: 'from-green-500 to-emerald-600', sub: `${stats.gtk_aktif} aktif`, path: '/admin/gtk' },
-    { label: 'Rombel', value: stats.total_rombel, icon: <Layers size={20} />, gradient: 'from-purple-500 to-violet-600', sub: '', path: '/admin/rombel' },
-    { label: 'Mata Pelajaran', value: stats.total_mapel, icon: <BookOpen size={20} />, gradient: 'from-orange-500 to-amber-600', sub: '', path: '/admin/mapel' },
+    { label: `Total ${t.siswa}`, value: stats.total_siswa, icon: <GraduationCap size={20} />, gradient: 'from-blue-500 to-indigo-600', sub: `${stats.siswa_aktif} aktif`, path: '/admin/siswa' },
+    { label: `Total ${t.guru}`, value: stats.total_gtk, icon: <Users size={20} />, gradient: 'from-green-500 to-emerald-600', sub: `${stats.gtk_aktif} aktif`, path: '/admin/gtk' },
+    { label: t.rombel, value: stats.total_rombel, icon: <Layers size={20} />, gradient: 'from-purple-500 to-violet-600', sub: '', path: '/admin/rombel' },
+    { label: t.mapel, value: stats.total_mapel, icon: <BookOpen size={20} />, gradient: 'from-orange-500 to-amber-600', sub: '', path: '/admin/mapel' },
     { label: 'Jurnal Hari Ini', value: stats.jurnal_hari_ini, icon: <ClipboardList size={20} />, gradient: 'from-cyan-500 to-sky-600', sub: '', path: '/admin/jurnal' },
     { label: 'Tagihan Belum Bayar', value: stats.tagihan?.belum_bayar || 0, icon: <DollarSign size={20} />, gradient: 'from-rose-500 to-red-600', sub: `${stats.tagihan?.lunas || 0} lunas`, path: '/admin/tagihan' },
   ]
