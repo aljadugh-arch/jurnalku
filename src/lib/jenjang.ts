@@ -91,7 +91,7 @@ export function isGuruKelasJenjang(jenjang?: string): boolean {
  */
 export function labelInstitusi(jenjang?: string): string {
   const u = canonicalJenjang(jenjang).toUpperCase()
-  if (['RA', 'MI', 'MTs', 'MA', 'MAK'].includes(u)) return 'Madrasah'
+  if (['RA', 'MI', 'MTS', 'MA', 'MAK'].includes(u)) return 'Madrasah'
   if (['TK', 'SD', 'SMP', 'SMA', 'SMK'].includes(u)) return 'Sekolah'
   if (u === 'PT') return 'Perguruan Tinggi'
   if (u === 'NF') return 'Lembaga'

@@ -10,10 +10,12 @@ const path = require('node:path')
 const baca = (p) => fs.readFileSync(path.join(__dirname, '..', p), 'utf8')
 
 test('terminologi.ts menyediakan peta sebutan + derive dari jenjang', () => {
-  const src = baca('src/lib/terminologi.ts')
+  const src = baca('src/lib/terminologi-peta.ts')
+  const hook = baca('src/lib/terminologi.ts')
   assert.match(src, /deriveTipeInstitusi/, 'harus ada deriveTipeInstitusi')
   assert.match(src, /terminologiUntuk/, 'harus ada terminologiUntuk')
-  assert.match(src, /useTerminologi/, 'harus ada useTerminologi hook')
+  assert.match(hook, /useTerminologi/, 'harus ada useTerminologi hook')
+  assert.match(hook, /export \* from '\.\/terminologi-peta'/, 'hook me-re-export peta')
   assert.match(src, /perguruan_tinggi: \{/, 'peta perguruan_tinggi harus ada')
   assert.match(src, /siswa: 'Mahasiswa'/, 'PT: siswa -> Mahasiswa')
   assert.match(src, /guru: 'Dosen'/, 'PT: guru -> Dosen')
@@ -28,7 +30,7 @@ test('terminologi.ts menyediakan peta sebutan + derive dari jenjang', () => {
 })
 
 test('deriveTipeInstitusi memetakan jenjang ke tipe', () => {
-  const src = baca('src/lib/terminologi.ts')
+  const src = baca('src/lib/terminologi-peta.ts')
   assert.match(src, /j === 'PT' .* return 'perguruan_tinggi'/, 'PT -> perguruan_tinggi')
   assert.match(src, /pesantren\|pondok/.test(src) ? /return 'pesantren'/ : /return 'pesantren'/, 'pesantren -> pesantren')
   assert.match(src, /return 'madrasah'/, 'MI/MTs/MA -> madrasah')
