@@ -57,7 +57,7 @@ export default function Sidebar() {
     { name: 'DASHBOARD', labels: ['Dashboard', 'Portal Operator', 'Monitoring Data', 'Posting'] },
     { name: 'MASTER DATA', labels: ['Data Siswa', 'PPDB', 'Data GTK', 'Mata Pelajaran', 'Rombongan Belajar', 'Tahun Ajaran', 'Manajemen Lembaga', 'Manajemen Yayasan', 'Integrasi Se-Yayasan', 'Kartu RFID', 'Alumni & Mutasi', 'Sirkulasi Perpustakaan', 'Substitusi Guru', 'Payroll & JTM', 'RKAS & BOS', 'Materi Ajar'] },
     { name: 'AKADEMIK', labels: ['Kalender KBM', 'Jadwal Pelajaran', 'Kelola Jadwal', 'Jadwal Ujian', 'Pengajar', 'Wali Kelas', 'Absensi', 'Ceklok & Rekap', 'Absensi Saya', 'Jurnal Mengajar', 'Supervisi', 'Program Belajar', 'Erkam'] },
-    { name: 'PENILAIAN & EVALUASI', labels: ['Ujian & Bank Soal', 'Bank Soal', 'Kisi-kisi Soal', 'Paket Ujian', 'Ledger Nilai', 'Rekap Nilai per Mapel', 'Rapor', 'Monitoring Pengisian Nilai', 'Catatan Kepribadian', 'Penilaian'] },
+    { name: 'PENILAIAN & EVALUASI', labels: ['Ujian & Bank Soal', 'Bank Soal', 'Kisi-kisi Soal', 'Paket Ujian', 'Ledger Nilai', 'Rekap Nilai per Mapel', 'Rapor', 'Monitoring Pengisian Nilai', 'Catatan Kepribadian', 'Penilaian', 'SIAKAD (KRS & IPK)'] },
     { name: 'ADMINISTRASI', labels: ['Administrasi Surat'] },
     { name: 'LAYANAN', labels: ['Perpustakaan Digital', 'Generator AI Guru', 'Beasiswa', 'Bimbingan Konseling'] },
     { name: 'KEUANGAN & OPERASIONAL', labels: ['Keuangan', 'E-Kantin & Cashless', 'Buku Kas', 'Bendahara', 'E-Kantin'] },
