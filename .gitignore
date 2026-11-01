@@ -33,3 +33,6 @@ backup/
 
 # Artefak perekaman panduan (frame + video sementara, lokal saja)
 tmp/
+
+# skrip verifikasi lokal (puppeteer, unduh berkas) — tidak untuk produksi
+scripts/verif/
