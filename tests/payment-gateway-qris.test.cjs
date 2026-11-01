@@ -559,7 +559,7 @@ test('langganan: intent lunas mengaktifkan paket & masa aktif lembaga dari meta'
 
 test('registrasi: route menerima pilihan paket & mengembalikan data pembayaran', () => {
   const idx = require('fs').readFileSync(require('path').join(__dirname, '../server/index.cjs'), 'utf8')
-  assert.match(idx, /plan: planPilih \} = req\.body/, 'registrasi membaca field plan')
+  assert.match(idx, /plan: planPilih, jenjang, tipe_institusi \} = req\.body/, 'registrasi membaca field plan')
   assert.match(idx, /refType: 'langganan'/, 'buat intent langganan saat paket berbayar dipilih')
   assert.match(idx, /pembayaran,/, 'respons registrasi menyertakan data pembayaran')
   assert.match(idx, /app\.get\('\/api\/public\/plans'/, 'endpoint publik daftar paket')
