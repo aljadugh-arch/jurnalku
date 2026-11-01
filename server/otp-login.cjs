@@ -1,4 +1,5 @@
-// Login wali murid dengan OTP yang dikirim ke WhatsApp.
+// Login lewat OTP WhatsApp: wali murid (nomor di data siswa) dan staf
+// (nomor di data GTK).
 //
 // Kenapa ada: sandi bawaan wali adalah 6 digit terakhir nomor WA — angka yang
 // bisa ditebak siapa pun yang tahu nomornya. OTP memindahkan pembuktian ke
@@ -62,6 +63,8 @@ function setupOtpTables(db) {
   );
   CREATE INDEX IF NOT EXISTS idx_otp_phone ON otp_login(tenant_id, phone, created_at DESC);
   `)
+  // target_type: 'wali' (default) atau 'gtk'. Migrasi aman untuk DB lama.
+  try { db.exec("ALTER TABLE otp_login ADD COLUMN target_type TEXT NOT NULL DEFAULT 'wali'") } catch {}
 }
 
 function bersihkanKedaluwarsa(db) {
@@ -86,6 +89,18 @@ function daftarSiswaDenganNomor(db, tenantId, nomor) {
     WHERE tenant_id=? AND COALESCE(status,'aktif')='aktif'
       AND ${kolom62} IN (${tanda})
       AND ${nomorLayakKirim(kolom62)}`)
+    .all(tenantId, ...varian)
+}
+
+function daftarGtkDenganNomor(db, tenantId, nomor) {
+  const varian = new Set([nomor])
+  if (nomor.startsWith('62')) varian.add('0' + nomor.slice(2))
+  const kolom = `REPLACE(REPLACE(REPLACE(REPLACE(COALESCE(no_hp,''),' ',''),'-',''),'+',''),'.','')`
+  const kolom62 = `CASE WHEN ${kolom} LIKE '0%' THEN '62' || SUBSTR(${kolom},2) ELSE ${kolom} END`
+  const tanda = [...varian].map(() => '?').join(',')
+  return db.prepare(`SELECT id,nama,no_hp,jabatan FROM gtk
+    WHERE tenant_id=? AND COALESCE(status,'aktif')='aktif'
+      AND ${kolom62} IN (${tanda}) AND ${nomorLayakKirim(kolom62)}`)
     .all(tenantId, ...varian)
 }
 
@@ -125,24 +140,34 @@ function daftarkanRouteOtp(app, ctx) {
       return res.status(429).json({ error: 'Terlalu banyak permintaan kode. Coba lagi dalam satu jam.' })
     }
 
-    const anak = daftarSiswaDenganNomor(db, tenantId, nomor)
+    let anak = daftarSiswaDenganNomor(db, tenantId, nomor)
+    let targetType = 'wali'
+    if (anak.length === 0) {
+      // Bukan wali? Coba staf (GTK). Guru/kepala/bendahara bisa masuk lewat OTP
+      // tanpa sandi bawaan yang lemah.
+      const staf = daftarGtkDenganNomor(db, tenantId, nomor)
+      if (staf.length) { anak = staf; targetType = 'gtk' }
+    }
     if (!anak.length) {
       // Balasan tetap generik (jangan bocorkan pendaftaran), TETAPI dicatat di
       // log server. Tanpa jejak ini, admin hanya melihat "kode tidak datang"
       // tanpa cara mengetahui bahwa nomornya memang tidak terdaftar di
       // lembaga tempat ia mencoba masuk.
       console.warn(`[otp] DITOLAK tenant=${tenantId} nomor=${nomor.slice(0, 4)}****${nomor.slice(-2)} alasan=tidak terdaftar`)
+      try { require('./auth-security.cjs').catatAudit(db, { tenantId, identifier: nomor, metode: 'otp', hasil: 'gagal', alasan: 'tidak_terdaftar', req }) } catch {}
       return res.json(balasan)
     }
 
     const kode = String(crypto.randomInt(0, 1000000)).padStart(6, '0')
     const garam = crypto.randomBytes(12).toString('hex')
     const id = crypto.randomUUID()
-    db.prepare(`INSERT INTO otp_login(id,tenant_id,phone,kode_hash,garam,expires_at)
-      VALUES(?,?,?,?,?,datetime('now',?))`).run(id, tenantId, nomor, hashKode(kode, garam), garam, `+${MASA_BERLAKU_MENIT} minutes`)
+    db.prepare(`INSERT INTO otp_login(id,tenant_id,phone,kode_hash,garam,expires_at,target_type)
+      VALUES(?,?,?,?,?,datetime('now',?),?)`).run(id, tenantId, nomor, hashKode(kode, garam), garam, `+${MASA_BERLAKU_MENIT} minutes`, targetType)
 
     const nama = anak[0].nama || ''
-    const pesan = `*JURNALKU* — Kode masuk Portal Wali\n\nKode Anda: *${kode}*\n\nBerlaku ${MASA_BERLAKU_MENIT} menit untuk ${nama}${anak.length > 1 ? ` dan ${anak.length - 1} anak lainnya` : ''}.\nJangan berikan kode ini kepada siapa pun, termasuk yang mengaku pihak sekolah.`
+    const pesan = targetType === 'gtk'
+      ? `*JURNALKU* — Kode masuk\n\nKode Anda: *${kode}*\n\nBerlaku ${MASA_BERLAKU_MENIT} menit.\nJangan berikan kode ini kepada siapa pun, termasuk yang mengaku pihak sekolah.`
+      : `*JURNALKU* — Kode masuk Portal Wali\n\nKode Anda: *${kode}*\n\nBerlaku ${MASA_BERLAKU_MENIT} menit untuk ${nama}${anak.length > 1 ? ` dan ${anak.length - 1} anak lainnya` : ''}.\nJangan berikan kode ini kepada siapa pun, termasuk yang mengaku pihak sekolah.`
 
     try {
       const hasil = waQueue.enqueue(db, {
@@ -158,6 +183,7 @@ function daftarkanRouteOtp(app, ctx) {
       console.error('[otp] gagal mengantre WA:', e.message)
     }
 
+    try { require('./auth-security.cjs').catatAudit(db, { tenantId, identifier: nomor, metode: 'otp', hasil: 'sukses', alasan: 'terkirim_' + targetType, req }) } catch {}
     res.json(balasan)
   })
 
@@ -182,12 +208,32 @@ function daftarkanRouteOtp(app, ctx) {
 
     if (!samakan(hashKode(kode, row.garam), row.kode_hash)) {
       db.prepare('UPDATE otp_login SET attempts=attempts+1 WHERE id=?').run(row.id)
+      try { require('./auth-security.cjs').catatAudit(db, { tenantId, identifier: nomor, metode: 'otp', hasil: 'gagal', alasan: 'kode_salah', req }) } catch {}
       const sisa = MAKS_PERCOBAAN - (row.attempts + 1)
       return res.status(400).json({ error: `Kode salah.${sisa > 0 ? ` Sisa ${sisa} percobaan.` : ''}` })
     }
 
     // Kode benar: matikan agar tidak bisa dipakai dua kali.
     db.prepare('UPDATE otp_login SET used=1 WHERE id=?').run(row.id)
+
+    if (row.target_type === 'gtk') {
+      const staf = daftarGtkDenganNomor(db, tenantId, nomor)
+      if (!staf.length) return res.status(403).json({ error: 'Nomor tidak lagi terdaftar pada data staf.' })
+      const g = staf[0]
+      let user = db.prepare('SELECT * FROM users WHERE tenant_id=? AND gtk_id=?').get(tenantId, g.id)
+      if (!user) {
+        const id = crypto.randomUUID()
+        const sandi = bcrypt.hashSync(crypto.randomBytes(24).toString('hex'), 10)
+        db.prepare('INSERT INTO users (id,nama,email,password,role,tenant_id,gtk_id,must_change_password) VALUES (?,?,?,?,?,?,?,0)')
+          .run(id, g.nama, `gtk-${g.id}@gtk.jurnalku`, sandi, 'guru', tenantId, g.id)
+        user = db.prepare('SELECT * FROM users WHERE id=?').get(id)
+      }
+      const token = jwt.sign({
+        id: user.id, role: user.role, nama: user.nama, email: user.email, tenant_id: user.tenant_id,
+        gtk_id: user.gtk_id || null, siswa_id: null, nis: null, can_teach: !!user.can_teach,
+      }, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN })
+      return res.json({ token, user: { id: user.id, nama: user.nama, email: user.email, role: user.role, gtk_id: user.gtk_id } })
+    }
 
     const anak = daftarSiswaDenganNomor(db, tenantId, nomor)
     if (!anak.length) return res.status(403).json({ error: 'Nomor tidak lagi terdaftar pada siswa aktif.' })

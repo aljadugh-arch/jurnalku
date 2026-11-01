@@ -87,13 +87,18 @@ export default function LoginPage() {
     return () => { window.clearTimeout(t); window.removeEventListener('online', onOnline) }
   }, [loading])
   // Login wali tanpa sandi: kode 6 digit dikirim ke WhatsApp nomor terdaftar.
-  const [mode, setMode] = useState<'sandi' | 'otp'>('sandi')
+  const [mode, setMode] = useState<'sandi' | 'otp' | 'tautan'>('sandi')
+  const [mfaChallenge, setMfaChallenge] = useState('')
+  const [tanpaSandi, setTanpaSandi] = useState(false)
+  const [magicToken, setMagicToken] = useState('')
+  const [magicInfo, setMagicInfo] = useState<{ email: string; nama: string } | null>(null)
   const [otpTerkirim, setOtpTerkirim] = useState(false)
   const [kode, setKode] = useState('')
   const [info, setInfo] = useState('')
   const demoRef = useRef<HTMLDivElement>(null)
   const navigate = useNavigate()
-  const { loginWithCredentials, loginDemo, mintaOtp, loginDenganOtp, isAuthenticated, user, authReady } = useAuthStore()
+  const { loginWithCredentials, loginDemo, mintaOtp, loginDenganOtp, isAuthenticated, user, authReady,
+    verifikasiDuaFaktor, masukDenganTotp, mintaTautanMasuk, pakaiTautanMasuk } = useAuthStore()
 
   // Panel demo HANYA ditampilkan kalau SERVER membenarkan host ini (satu aturan
   // server, tidak bisa berbeda antara tampilan dan route). Default false.
@@ -156,6 +161,71 @@ export default function LoginPage() {
     } finally { setLoading(false) }
   }
 
+  // Tautan verifikasi: hanya DIBACA di sini. Token baru dihanguskan saat
+  // pengguna menekan tombol — supaya pemindai tautan (WhatsApp/email) tidak
+  // memakai token lebih dulu.
+  useEffect(() => {
+    const t = new URLSearchParams(window.location.search).get('magic')
+    if (!t) return
+    setMagicToken(t)
+    api.get('/auth/magic/peek', { params: { token: t }, timeout: 15000 })
+      .then(r => setMagicInfo(r.data))
+      .catch(() => setError('Tautan tidak valid atau sudah kedaluwarsa. Minta tautan baru.'))
+  }, [])
+
+  const handle2fa = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setError(''); setLoading(true)
+    try {
+      await verifikasiDuaFaktor(mfaChallenge, kode.trim())
+      const u = useAuthStore.getState().user
+      navigate(getRedirectPath(u?.role || 'siswa'))
+    } catch (err: any) {
+      setError(err?.response?.data?.error || pesanGagalJaringan(err))
+    } finally { setLoading(false) }
+  }
+
+  const handleMintaTautan = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setError(''); setInfo(''); setLoading(true)
+    try {
+      const r = await mintaTautanMasuk(email.trim())
+      setInfo(r.pesan)
+    } catch (err: any) {
+      setError(err?.response?.data?.error || pesanGagalJaringan(err))
+    } finally { setLoading(false) }
+  }
+
+  const handlePakaiTautan = async () => {
+    setError(''); setLoading(true)
+    try {
+      const hasil = await pakaiTautanMasuk(magicToken)
+      if (hasil?.mfa_required) {
+        setMagicToken('')
+        setMfaChallenge(hasil.challenge_token)
+        setKode('')
+        setInfo('Tautan benar. Masukkan kode authenticator untuk menyelesaikan masuk.')
+        return
+      }
+      const u = useAuthStore.getState().user
+      navigate(getRedirectPath(u?.role || 'siswa'))
+    } catch (err: any) {
+      setError(err?.response?.data?.error || pesanGagalJaringan(err))
+    } finally { setLoading(false) }
+  }
+
+  const handleTotpLogin = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setError(''); setLoading(true)
+    try {
+      await masukDenganTotp(email.trim(), kode.replace(/\D/g, ''))
+      const u = useAuthStore.getState().user
+      navigate(getRedirectPath(u?.role || 'siswa'))
+    } catch (err: any) {
+      setError(err?.response?.data?.error || pesanGagalJaringan(err))
+    } finally { setLoading(false) }
+  }
+
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
     setError('')
@@ -165,7 +235,13 @@ export default function LoginPage() {
     }
     setLoading(true)
     try {
-      await loginWithCredentials(email, password, captcha.token, captchaJawaban.trim())
+      const hasil = await loginWithCredentials(email, password, captcha.token, captchaJawaban.trim())
+      if (hasil?.mfa_required) {
+        setMfaChallenge(hasil.challenge_token)
+        setKode('')
+        setInfo('Masukkan kode 6 digit dari aplikasi authenticator.')
+        return
+      }
       const user = useAuthStore.getState().user
       navigate(getRedirectPath(user?.role || 'siswa'))
     } catch (err: any) {
@@ -253,9 +329,9 @@ export default function LoginPage() {
                 </div>
               )}
 
-              {/* Pilihan cara masuk: sandi atau OTP (wali murid). */}
-              <div className="mb-4 grid grid-cols-2 gap-1 rounded-xl sk-bg-subtle p-1">
-                {([['sandi', 'Username / NIS'], ['otp', 'Nomor WA (OTP)']] as const).map(([id, label]) => (
+              {/* Pilihan cara masuk: sandi, OTP WhatsApp, atau tautan email. */}
+              <div className="mb-4 grid grid-cols-3 gap-1 rounded-xl sk-bg-subtle p-1">
+                {([['sandi', 'Sandi'], ['otp', 'OTP WA'], ['tautan', 'Tautan Email']] as const).map(([id, label]) => (
                   <button
                     key={id}
                     type="button"
@@ -275,7 +351,66 @@ export default function LoginPage() {
                 </div>
               )}
 
-              {mode === 'otp' ? (
+              {magicToken ? (
+                <div className="space-y-3.5">
+                  <p className="text-sm sk-txt-muted">Anda membuka tautan masuk untuk:</p>
+                  <p className="rounded-xl sk-bg-subtle px-4 py-3 text-sm font-semibold sk-txt">
+                    {magicInfo ? `${magicInfo.nama} · ${magicInfo.email}` : 'memeriksa tautan...'}
+                  </p>
+                  <button type="button" onClick={() => void handlePakaiTautan()} disabled={loading || !magicInfo} className="sk-btn w-full">
+                    {loading ? 'Memproses...' : 'Masuk sekarang'}
+                  </button>
+                  <button type="button" onClick={() => { setMagicToken(''); window.history.replaceState({}, '', window.location.pathname) }} className="w-full text-center text-[11px] font-semibold sk-txt-accent hover:underline">
+                    Batal, masuk dengan cara lain
+                  </button>
+                </div>
+              ) : mfaChallenge ? (
+                <form onSubmit={handle2fa} className="space-y-3.5">
+                  <div className="sk-field">
+                    <label htmlFor="mfa-code">Kode Authenticator</label>
+                    <div className="sk-input-wrap">
+                      <input
+                        id="mfa-code"
+                        type="text"
+                        inputMode="numeric"
+                        autoComplete="one-time-code"
+                        maxLength={9}
+                        value={kode}
+                        onChange={(e) => setKode(e.target.value.toUpperCase().replace(/[^0-9A-Z-]/g, '').slice(0, 9))}
+                        placeholder="000000"
+                        style={{ textAlign: 'center', fontWeight: 700, letterSpacing: '0.35em' }}
+                      />
+                    </div>
+                    <p className="mt-1 text-[11px] sk-txt-muted">Bisa juga pakai kode pemulihan (format XXXX-XXXX).</p>
+                  </div>
+                  <button type="submit" disabled={loading || kode.replace(/[^0-9A-Z]/g, '').length < 6} className="sk-btn w-full">
+                    {loading ? 'Memeriksa...' : 'Verifikasi & Masuk'}
+                  </button>
+                  <button type="button" onClick={() => { setMfaChallenge(''); setKode(''); setInfo('') }} className="w-full text-center text-[11px] font-semibold sk-txt-accent hover:underline">
+                    Kembali
+                  </button>
+                </form>
+              ) : mode === 'tautan' ? (
+                <form onSubmit={handleMintaTautan} className="space-y-3.5">
+                  <div className="sk-field">
+                    <label htmlFor="magic-email">Email Akun</label>
+                    <div className="sk-input-wrap">
+                      <input
+                        id="magic-email"
+                        type="email"
+                        autoComplete="email"
+                        value={email}
+                        onChange={(e) => setEmail(e.target.value)}
+                        placeholder="nama@lembaga.sch.id"
+                      />
+                    </div>
+                  </div>
+                  <button type="submit" disabled={loading || !email.includes('@')} className="sk-btn w-full">
+                    {loading ? 'Mengirim...' : 'Kirim Tautan Masuk'}
+                  </button>
+                  <p className="text-[11px] sk-txt-muted">Tautan berlaku 10 menit dan hanya bisa dipakai sekali. Periksa juga folder Spam.</p>
+                </form>
+              ) : mode === 'otp' ? (
                 <form onSubmit={handleVerifikasiOtp} className="space-y-3.5">
                   <div className="sk-field">
                     <label htmlFor="otp-phone">Nomor WhatsApp</label>
@@ -326,6 +461,37 @@ export default function LoginPage() {
                       Kirim ulang kode
                     </button>
                   )}
+                </form>
+              ) : tanpaSandi ? (
+                <form onSubmit={handleTotpLogin} className="space-y-3.5">
+                  <div className="sk-field">
+                    <label htmlFor="totp-ident">Username / Email / NIS</label>
+                    <div className="sk-input-wrap">
+                      <input id="totp-ident" type="text" autoCapitalize="none" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Username" />
+                    </div>
+                  </div>
+                  <div className="sk-field">
+                    <label htmlFor="totp-code">Kode Authenticator</label>
+                    <div className="sk-input-wrap">
+                      <input
+                        id="totp-code"
+                        type="text"
+                        inputMode="numeric"
+                        autoComplete="one-time-code"
+                        maxLength={6}
+                        value={kode}
+                        onChange={(e) => setKode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                        placeholder="000000"
+                        style={{ textAlign: 'center', fontWeight: 700, letterSpacing: '0.4em' }}
+                      />
+                    </div>
+                  </div>
+                  <button type="submit" disabled={loading || kode.length !== 6} className="sk-btn w-full">
+                    {loading ? 'Memeriksa...' : 'Masuk Tanpa Sandi'}
+                  </button>
+                  <button type="button" onClick={() => { setTanpaSandi(false); setKode('') }} className="w-full text-center text-[11px] font-semibold sk-txt-accent hover:underline">
+                    Kembali ke sandi
+                  </button>
                 </form>
               ) : (
                 <form onSubmit={handleLogin} className="space-y-3.5">
@@ -397,6 +563,16 @@ export default function LoginPage() {
 
                   <button type="submit" disabled={loading} className="sk-btn w-full">
                     {loading ? 'Memproses...' : (<>Masuk Sekarang <ArrowRight size={16} /></>)}
+                  </button>
+
+                  {/* Jalur tanpa sandi: hanya untuk akun yang sudah mengaktifkan
+                      authenticator. Bukan pengganti 2FA — ini alternatif masuk. */}
+                  <button
+                    type="button"
+                    onClick={() => { setTanpaSandi(true); setKode(''); setError(''); setInfo('') }}
+                    className="w-full text-center text-[11px] font-semibold sk-txt-accent hover:underline"
+                  >
+                    Punya authenticator? Masuk tanpa sandi
                   </button>
                 </form>
               )}

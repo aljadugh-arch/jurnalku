@@ -12,7 +12,11 @@ interface AuthState {
   authReady: boolean
   authError: string | null
   login: (user: User, token: string) => void
-  loginWithCredentials: (email: string, password: string, captchaToken?: string, captchaJawaban?: string) => Promise<void>
+  loginWithCredentials: (email: string, password: string, captchaToken?: string, captchaJawaban?: string) => Promise<any>
+  verifikasiDuaFaktor: (challengeToken: string, code: string) => Promise<void>
+  masukDenganTotp: (identifier: string, code: string) => Promise<void>
+  mintaTautanMasuk: (email: string) => Promise<{ ok: boolean; pesan: string }>
+  pakaiTautanMasuk: (token: string) => Promise<any>
   mintaOtp: (phone: string) => Promise<{ ok: boolean; pesan: string }>
   loginDenganOtp: (phone: string, code: string) => Promise<void>
   masukLembaga: (tenantId: string) => Promise<void>
@@ -81,6 +85,9 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       await new Promise(r => setTimeout(r, 1200))
       res = await api.post('/auth/login', payload, { timeout: 20000 })
     }
+    // 2FA aktif: server belum menerbitkan sesi, hanya tantangan. Jangan simpan
+    // token apa pun — pengguna harus menyelesaikan langkah kedua.
+    if (res.data?.mfa_required) return res.data
     localStorage.setItem('jurnalku_token', res.data.token)
     sessionStorage.removeItem('jurnalku_token')
     set({ user: res.data.user, token: res.data.token, isAuthenticated: true, authReady: true })
@@ -89,6 +96,35 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     // karena menunggu /api/settings selesai di koneksi lemah. Diambil di
     // belakang layar dengan batas waktu pendek; bila gagal, tampilan memakai
     // nilai bawaan dan tidak menghalangi masuk.
+    void useSettingsStore.getState().loadSettings().catch(() => {})
+    return res.data
+  },
+  // Langkah kedua: kode authenticator atau kode pemulihan.
+  verifikasiDuaFaktor: async (challengeToken, code) => {
+    const res = await api.post('/auth/2fa/verify', { challenge_token: challengeToken, code }, { timeout: 20000 })
+    localStorage.setItem('jurnalku_token', res.data.token)
+    sessionStorage.removeItem('jurnalku_token')
+    set({ user: res.data.user, token: res.data.token, isAuthenticated: true, authReady: true })
+    void useSettingsStore.getState().loadSettings().catch(() => {})
+  },
+  // Tanpa sandi: username/email/NIS + kode authenticator.
+  masukDenganTotp: async (identifier, code) => {
+    const res = await api.post('/auth/totp-login', { identifier, code }, { timeout: 20000 })
+    localStorage.setItem('jurnalku_token', res.data.token)
+    sessionStorage.removeItem('jurnalku_token')
+    set({ user: res.data.user, token: res.data.token, isAuthenticated: true, authReady: true })
+    void useSettingsStore.getState().loadSettings().catch(() => {})
+  },
+  mintaTautanMasuk: async (email) => {
+    const res = await api.post('/auth/magic/request', { email }, { timeout: 20000 })
+    return { ok: Boolean(res.data?.ok), pesan: String(res.data?.pesan || 'Tautan dikirim.') }
+  },
+  pakaiTautanMasuk: async (token) => {
+    const res = await api.post('/auth/magic/consume', { token }, { timeout: 20000 })
+    if (res.data?.mfa_required) return res.data
+    localStorage.setItem('jurnalku_token', res.data.token)
+    sessionStorage.removeItem('jurnalku_token')
+    set({ user: res.data.user, token: res.data.token, isAuthenticated: true, authReady: true })
     void useSettingsStore.getState().loadSettings().catch(() => {})
   },
   // Wali murid: kode 6 digit dikirim ke WhatsApp nomor yang terdaftar.

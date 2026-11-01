@@ -79,7 +79,7 @@ test('halaman login menyediakan tab OTP untuk wali', () => {
   // pemilik produk. Yang harus tetap ada adalah JALANNYA: tab OTP dan tombol
   // kirim kode — bukan paragraf penjelasan.
   const s = baca('src/pages/auth/LoginPage.tsx')
-  assert.ok(/Nomor WA \(OTP\)/.test(s), 'tab OTP harus ada')
+  assert.ok(/OTP WA/.test(s), 'tab OTP harus ada')
   assert.ok(/Kirim Kode ke WhatsApp/.test(s), 'tombol kirim kode harus ada')
   assert.ok(/Nomor WhatsApp/.test(s), 'kolom nomor harus ada')
 })

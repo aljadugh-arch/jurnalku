@@ -32,10 +32,13 @@ async function boot() {
   return { proc, port }
 }
 
+// Tanggal lokal, bukan toISOString(): di WIB dini hari, toISOString() mundur
+// satu hari sehingga "Minggu" bisa jatuh ke Sabtu dan tes gagal palsu.
+const fmtLokal = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 const hariMinggu = (() => {
   const d = new Date()
   d.setDate(d.getDate() + ((7 - d.getDay()) % 7 || 7)) // Minggu berikutnya
-  return d.toISOString().slice(0, 10)
+  return fmtLokal(d)
 })()
 
 test('hari libur tanpa kegiatan non-aktif; dengan kegiatan jadi aktif', async (t) => {
@@ -65,7 +68,7 @@ test('hari libur tanpa kegiatan non-aktif; dengan kegiatan jadi aktif', async (t
   assert.equal(put.status, 200, 'setelan tersimpan')
 
   // 3. Hari kerja (Senin) aktif otomatis
-  const senin = (() => { const d = new Date(hariMinggu); d.setDate(d.getDate() + 1); return d.toISOString().slice(0, 10) })()
+  const senin = (() => { const d = new Date(hariMinggu + 'T00:00:00'); d.setDate(d.getDate() + 1); return fmtLokal(d) })()
   const stSenin = await fetch(`${base}/api/kalender-kbm/status?tanggal=${senin}`, { headers: auth }).then(r => r.json())
   assert.equal(stSenin.libur, false)
   assert.equal(stSenin.aktif, true, 'hari kerja aktif otomatis')

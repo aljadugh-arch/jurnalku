@@ -3823,9 +3823,18 @@ app.post('/api/auth/login', captchaLoginGuard, authLimiter, loginAccountLimiter,
   }
   // 5) Fallback users.kode_guru / users.nip / users.nis langsung.
   if (!user) user = db.prepare("SELECT * FROM users WHERE tenant_id = ? AND ((kode_guru != '' AND lower(kode_guru) = ?) OR nip = ? OR nis = ?)").get(tenantId, identLower, ident, ident)
+  const keamanan = require('./auth-security.cjs')
   if (!user || !bcrypt.compareSync(password, user.password)) {
+    keamanan.catatAudit(db, { tenantId, identifier: ident, metode: 'sandi', hasil: 'gagal', alasan: 'kredensial_salah', req })
     return res.status(401).json({ error: 'Email/kode guru/NIS/NISN atau password salah' })
   }
+  // 2FA: kalau aktif dan kode belum disertakan, terbitkan tantangan (tanpa sesi).
+  const mfa = keamanan.perluVerifikasi(db, user, req.body?.totp_code)
+  if (mfa) {
+    keamanan.catatAudit(db, { tenantId, userId: user.id, identifier: ident, metode: 'sandi', hasil: 'perlu_2fa', req })
+    return res.status(200).json(mfa)
+  }
+  keamanan.catatAudit(db, { tenantId, userId: user.id, identifier: ident, metode: 'sandi', hasil: 'sukses', req })
   const token = jwt.sign({ id: user.id, role: user.role, nama: user.nama, email: user.email, tenant_id: user.tenant_id, gtk_id: user.gtk_id || null, siswa_id: user.siswa_id || null, nis: user.nis || null, can_teach: !!user.can_teach }, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN })
   res.json({ token, user: { id: user.id, nama: user.nama, email: user.email, role: user.role, nip: user.nip, nis: user.nis, siswa_id: user.siswa_id, gtk_id: user.gtk_id, avatar: user.avatar, can_teach: !!user.can_teach } })
 })
@@ -12406,6 +12415,13 @@ app.post('/api/broadcast/quick', ADMIN, async (req, res) => {
 
 // Multi-tenant management routes
 registerTenantRoutes(app, db, authMiddleware, uuidv4, requireRole('super_admin'))
+
+// Keamanan akun: audit login, 2FA TOTP, tautan email, login tanpa sandi.
+require('./auth-security.cjs').daftarkanRouteKeamanan(app, {
+  db, jwt, JWT_SECRET, JWT_EXPIRES_IN, authLimiter, authMiddleware,
+  kirimEmail: require('./mailer.cjs').kirimEmail,
+  tenantDariHost, hostPermintaan,
+})
 
 // Login wali lewat OTP WhatsApp (lihat server/otp-login.cjs).
 require('./otp-login.cjs').daftarkanRouteOtp(app, {
