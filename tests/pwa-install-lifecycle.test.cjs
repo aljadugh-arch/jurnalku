@@ -61,7 +61,8 @@ test('landing page menjaga keterbacaan label jenjang pada section social proof',
   // Bagian jenjang kini berbentuk kartu: label tebal + keterangan singkat,
   // bukan deretan kata besar yang pudar.
   assert.ok(landing.includes('JENJANG_META'), 'metadata jenjang (warna + keterangan)')
-  assert.ok(landing.includes('text-sm font-bold sk-txt">{j}</p>'), 'label jenjang tebal')
+  assert.ok(landing.includes('text-sm font-bold sk-txt'), 'label jenjang tebal')
+  assert.ok(landing.includes('{j}'), 'nama jenjang dirender')
   assert.ok(landing.includes('{m.ket}'), 'keterangan jenjang tampil')
   assert.ok(!landing.includes('opacity-70'), 'tidak ada label pudar')
 })

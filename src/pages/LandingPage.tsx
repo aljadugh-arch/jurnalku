@@ -90,6 +90,12 @@ const JENJANG_META: Record<string, { ket: string; warna: string }> = {
   Pesantren: { ket: 'Boarding & asrama', warna: 'from-teal-400 to-emerald-600' },
   'Madrasah Diniyah': { ket: 'Keagamaan', warna: 'from-indigo-400 to-violet-600' },
   'Kursus / Bimbel': { ket: 'Keterampilan', warna: 'from-fuchsia-400 to-pink-500' },
+  Kursus: { ket: 'Keterampilan', warna: 'from-fuchsia-400 to-pink-500' },
+  Bimbel: { ket: 'Bimbingan belajar', warna: 'from-orange-400 to-rose-500' },
+  Diklat: { ket: 'Pelatihan kerja', warna: 'from-lime-400 to-emerald-500' },
+  Sanggar: { ket: 'Seni & budaya', warna: 'from-purple-400 to-indigo-500' },
+  'Sekolah Swasta': { ket: 'Swasta', warna: 'from-blue-400 to-cyan-500' },
+  Yayasan: { ket: 'Naungan yayasan', warna: 'from-slate-400 to-slate-600' },
 }
 
 const SEGMEN: Record<Segmen, { badge: string; judul: string; accent: string; subtext: string; jenjang: string[]; fitur: { icon: any; judul: string; isi: string; warna: string }[] }> = {
@@ -369,11 +375,11 @@ export default function LandingPage() {
                   style={{ animationDelay: `${i * 40}ms` }}
                 >
                   <div className={`absolute inset-x-0 top-0 h-1 bg-gradient-to-r ${m.warna}`} />
-                  <div className={`mb-2 flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br ${m.warna} text-[11px] font-bold text-white opacity-90 transition-transform group-hover:scale-110`}>
-                    {j.replace(/[^A-Z]/g, '').slice(0, 2) || '•'}
-                  </div>
-                  <p className="text-sm font-bold sk-txt">{j}</p>
-                  <p className="mt-0.5 text-[11px] sk-txt-muted">{m.ket}</p>
+                  <p className="flex items-center gap-1.5 text-sm font-bold sk-txt">
+                    <span className={`inline-block h-2 w-2 shrink-0 rounded-full bg-gradient-to-br ${m.warna}`} />
+                    {j}
+                  </p>
+                  <p className="mt-1 text-[11px] sk-txt-muted">{m.ket}</p>
                 </div>
               )
             })}
