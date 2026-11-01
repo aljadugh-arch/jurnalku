@@ -142,7 +142,7 @@ export default function TabunganPage() {
         { header: 'NOMINAL', value: (m: any) => Number(m.nominal || 0), width: 14, numFmt: '#,##0' },
         { header: 'KETERANGAN', value: 'keterangan', width: 24 },
       ] }],
-      { title: 'Laporan Tabungan Siswa', filename: 'Laporan_Tabungan', subtitle: `Periode: ${labelPer}`, settings: settings as Record<string, unknown> },
+      { title: `Laporan Tabungan ${t.siswa}`, filename: 'Laporan_Tabungan', subtitle: `Periode: ${labelPer}`, settings: settings as Record<string, unknown> },
     )
     toast.success('Excel laporan tabungan diunduh')
   }
@@ -150,7 +150,7 @@ export default function TabunganPage() {
   const handlePdf = () => {
     if (!laporan.length) { toast.error('Tidak ada mutasi pada periode ini'); return }
     const ok = openFinanceReport({
-      title: 'Laporan Tabungan Siswa',
+      title: `Laporan Tabungan ${t.siswa}`,
       periode: labelPer,
       settings: settings as Record<string, unknown>,
       columns: ['NO', 'TANGGAL', 'NIS', 'NAMA', 'ROMBEL', 'JENIS', 'NOMINAL', 'KETERANGAN'],
