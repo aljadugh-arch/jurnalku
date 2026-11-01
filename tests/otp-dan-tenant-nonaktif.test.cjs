@@ -72,7 +72,7 @@ test('OTP: route terdaftar di server', () => {
 
 test('OTP: login page menyediakan pilihan masuk lewat WA', () => {
   const ui = baca('src/pages/auth/LoginPage.tsx')
-  assert.ok(ui.includes('Nomor WA (OTP)'), 'harus ada tab OTP')
+  assert.ok(ui.includes('OTP WA'), 'harus ada tab OTP')
   assert.ok(ui.includes('Kirim Kode ke WhatsApp'), 'harus ada tombol kirim kode')
   assert.ok(ui.includes('handleVerifikasiOtp'), 'harus ada alur verifikasi')
 })
