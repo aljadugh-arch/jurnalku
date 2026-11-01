@@ -62,7 +62,7 @@ test('RekapAbsensi: PDF menyertakan blok TTD (kedua layout)', () => {
 })
 
 test('Jurnal: PDF menyertakan kop + blok TTD guru mapel & kepala', () => {
-  assert.match(jurnal, /signatureBlockHtml\(sigSettings, \{ leftTitle: 'Guru Mapel', rightTitle: 'Kepala Madrasah' \}\)/, 'blok TTD jurnal')
+  assert.match(jurnal, /signatureBlockHtml\(sigSettings, \{ leftTitle: 'Guru Mapel', rightTitle: t\.kepala \}\)/, 'blok TTD jurnal (jabatan kepala mengikuti tipe institusi)')
   assert.match(jurnal, /JURNAL KEGIATAN PEMBELAJARAN/, 'judul dokumen')
   assert.match(jurnal, /tenantIdentity\(settings\)/, 'kop memakai identitas tenant')
 })

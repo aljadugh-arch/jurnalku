@@ -12,7 +12,7 @@ const server = read('server/index.cjs')
 test('branding tenant dimuat sebelum login dari endpoint settings publik', () => {
   assert.match(app, /if \(!isAuthenticated\) useSettingsStore\.setState\(\{ settings: \{\} \}\)/)
   assert.match(app, /void loadSettings\(\)/)
-  assert.match(login, /const logo = settings\.logo \|\| '\/logo-jurnalku-256\.png'/)
+  assert.match(login, /const logo = settings\.logo \|\| defaultLogo\(dark\)/, 'logo default = favicon default')
   assert.match(server, /app\.get\('\/api\/settings', \(req, res\) => \{[\s\S]*?req\.tenantId/)
 })
 

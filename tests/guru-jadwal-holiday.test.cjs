@@ -32,5 +32,7 @@ test('teacher class-session entry is rejected on holidays', () => {
   const idx = server.indexOf("app.post('/api/guru/sesi-kelas/masuk'")
   assert.ok(idx > -1)
   const block = server.slice(idx, idx + 2500)
-  assert.match(block, /tenantIsHoliday/, 'sesi-kelas masuk must block holidays')
+  // Libur tetap memblokir, KECUALI ada kegiatan (ekskul/ujian/kegiatan sekolah).
+  assert.match(block, /kbmStatusTanggal\(req\.tenantId, today\)/, 'sesi-kelas memakai status KBM')
+  assert.match(block, /libur && !statusSesi\.kegiatan/, 'libur memblokir bila tanpa kegiatan')
 })
