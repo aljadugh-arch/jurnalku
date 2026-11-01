@@ -3460,9 +3460,9 @@ function hostMilikSatuLembaga(host) {
 //   dikdasmen -> kampus/PT (KRS & IPK) -> idjurnal.web.id / .biz.id / .my.id
 //   umum      -> kursus/lembaga (NF)   -> jurnalku.biz.id & jurnal.cc.cd
 const DEMO_SEGMEN = {
-  kemenag:   { id: 'demo-kemenag', nama: 'Demo Madrasah', jenjang: 'MTs', base_domain: 'jurnalmadrasah.web.id' },
-  dikdasmen: { id: 'demo-kampus',  nama: 'Demo Kampus',   jenjang: 'PT',  base_domain: 'idjurnal.web.id' },
-  umum:      { id: 'demo-umum',    nama: 'Demo Kursus',   jenjang: 'NF',  base_domain: 'jurnalku.biz.id' },
+  kemenag:   { id: 'demo-kemenag', nama: 'Demo Madrasah', jenjang: 'MTs', tipe: 'madrasah',          base_domain: 'jurnalmadrasah.web.id' },
+  dikdasmen: { id: 'demo-kampus',  nama: 'Demo Kampus',   jenjang: 'PT',  tipe: 'perguruan_tinggi',  base_domain: 'idjurnal.web.id' },
+  umum:      { id: 'demo-umum',    nama: 'Demo Kursus',   jenjang: 'NF',  tipe: 'kursus',            base_domain: 'jurnalku.biz.id' },
 }
 
 function jaminTenantDemo(cfg) {
@@ -3474,8 +3474,8 @@ function jaminTenantDemo(cfg) {
     } catch {}
   }
   try {
-    ensureTenantSettings(db, cfg.id, { nama_lembaga: cfg.nama })
-    db.prepare('UPDATE settings SET nama_lembaga=?, jenjang=? WHERE tenant_id=?').run(cfg.nama, cfg.jenjang, cfg.id)
+    ensureTenantSettings(db, cfg.id, { nama_lembaga: cfg.nama, jenjang: cfg.jenjang, tipe_institusi: cfg.tipe })
+    db.prepare('UPDATE settings SET nama_lembaga=?, jenjang=?, tipe_institusi=? WHERE tenant_id=?').run(cfg.nama, cfg.jenjang, cfg.tipe, cfg.id)
   } catch {}
   return cfg.id
 }
