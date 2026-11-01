@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { Plus, Trash2, X, ClipboardCheck, Upload } from 'lucide-react'
 import toast from 'react-hot-toast'
 import api from '../../services/api'
+import { useTerminologi } from '../../lib/terminologi'
 import { PageHeader, Card, Button, Badge } from '../../components/ui'
 import ImportExcel from '../../components/ImportExcel'
 
@@ -15,6 +16,7 @@ const SEMUA_HARI = ['senin', 'selasa', 'rabu', 'kamis', 'jumat', 'sabtu', 'mingg
 const inputCls = 'w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-primary/20 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100'
 
 export default function JadwalUjianPage() {
+  const t = useTerminologi()
   const [templates, setTemplates] = useState<any[]>([])
   const [selectedTemplate, setSelectedTemplate] = useState('')
   const [rombels, setRombels] = useState<any[]>([])
@@ -122,7 +124,7 @@ export default function JadwalUjianPage() {
                 </select>
               </div>
               <div className="min-w-[180px] flex-1">
-                <label className="mb-1 block text-xs font-medium text-gray-500 dark:text-gray-400">Rombel</label>
+                <label className="mb-1 block text-xs font-medium text-gray-500 dark:text-gray-400">{t.rombel}</label>
                 <select className={inputCls} value={selectedRombel} onChange={e => setSelectedRombel(e.target.value)}>
                   {rombels.map(r => <option key={r.id} value={r.id}>{r.nama}</option>)}
                 </select>

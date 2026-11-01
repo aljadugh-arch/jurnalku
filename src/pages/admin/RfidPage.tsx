@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import api from '../../services/api'
+import { useTerminologi } from '../../lib/terminologi'
 import toast from 'react-hot-toast'
 import { CreditCard, Search, Save, Trash2 } from 'lucide-react'
 
@@ -8,6 +9,7 @@ interface RfidSiswa { id: string; nis: string; nisn?: string; nama: string; romb
 // Pemetaan UID kartu RFID <-> siswa. Reader USB/Bluetooth (mode keyboard)
 // mengirim UID; absensi tap memakai UID ini untuk mengenali siswa.
 export default function RfidPage() {
+  const t = useTerminologi()
   const [siswa, setSiswa] = useState<RfidSiswa[]>([])
   const [rombelList, setRombelList] = useState<any[]>([])
   const [search, setSearch] = useState('')
@@ -75,7 +77,7 @@ export default function RfidPage() {
               <tr className="bg-gray-100 text-left text-xs uppercase text-gray-600">
                 <th className="px-3 py-2">NIS</th>
                 <th className="px-3 py-2">Nama</th>
-                <th className="px-3 py-2">Rombel</th>
+                <th className="px-3 py-2">{t.rombel}</th>
                 <th className="px-3 py-2">UID Kartu</th>
                 <th className="px-3 py-2 text-right">Aksi</th>
               </tr>

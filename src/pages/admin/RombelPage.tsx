@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from 'react'
 import { Plus, Trash2, X, Users, Pencil, Search, ArrowRightLeft, ChevronRight, MapPin, LocateFixed } from 'lucide-react'
 import toast from 'react-hot-toast'
 import api from '../../services/api'
+import { useTerminologi } from '../../lib/terminologi'
 import { createPortal } from 'react-dom'
 import Modal from '../../components/ui/Modal'
 
@@ -17,6 +18,7 @@ interface Siswa {
 }
 
 export default function RombelPage() {
+  const t = useTerminologi()
   const [data, setData] = useState<Rombel[]>([])
   const [gtk, setGtk] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
@@ -179,7 +181,7 @@ export default function RombelPage() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-gray-800 font-display">Rombongan Belajar</h1>
+          <h1 className="text-2xl font-bold text-gray-800 font-display">{t.rombel}</h1>
           <p className="text-gray-500 text-sm mt-1">{data.length} rombel terdaftar</p>
         </div>
         <button onClick={openCreate} className="flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-lg text-sm hover:bg-primary-dark">

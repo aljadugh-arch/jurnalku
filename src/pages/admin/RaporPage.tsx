@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { formatTanggalLahir } from '../../lib/tanggalLahir'
 import api from '../../services/api'
+import { useTerminologi } from '../../lib/terminologi'
 import { FileText, Printer, Save, Zap, FileSpreadsheet, Link2, Download, BookMarked } from 'lucide-react'
 import FoundationTenantPicker from '../../components/FoundationTenantPicker'
 import { QRCodeSVG } from 'qrcode.react'
@@ -24,6 +25,7 @@ const CETAK_MENU: Array<{ bagian: BagianCetak; label: string; deskripsi: string 
 ]
 
 export default function RaporPage() {
+  const t = useTerminologi()
   const [rombelList, setRombelList] = useState<any[]>([])
   const [siswaList, setSiswaList] = useState<any[]>([])
   const [rapor, setRapor] = useState<any[]>([])
@@ -628,7 +630,7 @@ export default function RaporPage() {
         {tampilNilai && <section className="report-page bg-white rounded-xl shadow-sm border p-6 sm:p-8 print:p-0">
           <ReportHeader settings={settings} title={`HASIL BELAJAR ${jenisLabel}`} compact />
           <div className="grid grid-cols-2 text-sm gap-x-8 gap-y-1 my-4"><p>Nama: <strong>{siswa?.nama}</strong></p><p>Kelas: <strong>{siswa?.rombel_nama || rombel?.nama}</strong></p><p>NIS/NISN: <strong>{[siswa?.nis, siswa?.nisn].filter(Boolean).join(' / ')}</strong></p><p>Semester: <strong className="capitalize">{semester}</strong></p></div>
-          <table className="w-full text-xs border-collapse"><thead><tr className="bg-gray-100"><Th>No</Th><Th align="left">Mata Pelajaran</Th><Th>Harian</Th><Th>STS</Th>{jenis === 'rapor_sas' && <Th>SAS</Th>}<Th>Akhir</Th><Th>Predikat</Th><Th align="left">Deskripsi</Th></tr></thead><tbody>{rapor.map((r, i) => <tr key={r.id}><Td>{i + 1}</Td><Td align="left" bold>{r.mapel_nama}</Td><Td>{r.nilai_harian ?? 0}</Td><Td>{r.nilai_sts ?? 0}</Td>{jenis === 'rapor_sas' && <Td>{r.nilai_sas ?? 0}</Td>}<Td bold>{r.nilai_akhir}</Td><Td bold>{r.predikat}</Td><Td align="left">{r.deskripsi || descriptionFor(r)}</Td></tr>)}</tbody><tfoot><tr className="bg-gray-50"><Td colSpan={jenis === 'rapor_sas' ? 5 : 4} align="right" bold>Rata-rata</Td><Td bold>{rataAkhir}</Td><Td colSpan={2} /></tr></tfoot></table>
+          <table className="w-full text-xs border-collapse"><thead><tr className="bg-gray-100"><Th>No</Th><Th align="left">{t.mapel}</Th><Th>Harian</Th><Th>STS</Th>{jenis === 'rapor_sas' && <Th>SAS</Th>}<Th>Akhir</Th><Th>Predikat</Th><Th align="left">Deskripsi</Th></tr></thead><tbody>{rapor.map((r, i) => <tr key={r.id}><Td>{i + 1}</Td><Td align="left" bold>{r.mapel_nama}</Td><Td>{r.nilai_harian ?? 0}</Td><Td>{r.nilai_sts ?? 0}</Td>{jenis === 'rapor_sas' && <Td>{r.nilai_sas ?? 0}</Td>}<Td bold>{r.nilai_akhir}</Td><Td bold>{r.predikat}</Td><Td align="left">{r.deskripsi || descriptionFor(r)}</Td></tr>)}</tbody><tfoot><tr className="bg-gray-50"><Td colSpan={jenis === 'rapor_sas' ? 5 : 4} align="right" bold>Rata-rata</Td><Td bold>{rataAkhir}</Td><Td colSpan={2} /></tr></tfoot></table>
           <p className="text-[10px] text-gray-500 mt-2">{formulaLabel}</p>
 
           <div className="grid md:grid-cols-2 gap-4 mt-5 text-xs">

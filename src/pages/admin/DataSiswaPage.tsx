@@ -688,7 +688,7 @@ export default function DataSiswaPage() {
                   </select>
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">Rombel</label>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">{t.rombel}</label>
                   <select value={form.rombel_id} onChange={(e) => setForm({...form, rombel_id: e.target.value})} className="w-full px-3 py-2 border rounded-lg text-sm">
                     <option value="">-- Pilih --</option>
                     {rombels.map((r) => <option key={r.id} value={r.id}>{r.nama}</option>)}

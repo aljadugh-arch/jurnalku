@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { Plus, X, Clock, FileText, Send, PenLine, Upload, Eraser, Loader2 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import api from '../../services/api'
+import { useTerminologi } from '../../lib/terminologi'
 import { todayWib } from '../../lib/dateFormat'
 import { useSearchParams } from 'react-router-dom'
 
@@ -14,6 +15,7 @@ function loadJurnalDraft() {
 function clearJurnalDraft() { try { localStorage.removeItem(JURNAL_DRAFT_KEY) } catch {} }
 
 export default function GuruJurnalPage() {
+  const t = useTerminologi()
   const [searchParams, setSearchParams] = useSearchParams()
   const [data, setData] = useState<any[]>([])
   const [showForm, setShowForm] = useState(false)
@@ -268,7 +270,7 @@ export default function GuruJurnalPage() {
                 </div>
               </div>
               <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1">Mata Pelajaran</label>
+                <label className="block text-xs font-medium text-gray-600 mb-1">{t.mapel}</label>
                 <select value={form.mapel_id} onChange={e => setForm({...form, mapel_id: e.target.value})} className="w-full px-3 py-2 border rounded-lg text-sm">
                   <option value="">-- Pilih --</option>
                   {mapels.map(m => <option key={m.id} value={m.id}>{m.nama}</option>)}

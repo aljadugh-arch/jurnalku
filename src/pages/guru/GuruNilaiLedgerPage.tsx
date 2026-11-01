@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import api from '../../services/api'
+import { useTerminologi } from '../../lib/terminologi'
 import { Download, Filter } from 'lucide-react'
 
 type NilaiRow = {
@@ -16,6 +17,7 @@ type NilaiRow = {
 }
 
 export default function GuruNilaiLedgerPage() {
+  const t = useTerminologi()
   const [rombelList, setRombelList] = useState<any[]>([])
   const [ledger, setLedger] = useState<NilaiRow[]>([])
   const [selectedRombel, setSelectedRombel] = useState('')
@@ -171,7 +173,7 @@ export default function GuruNilaiLedgerPage() {
                 <tr>
                   <th className="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-300">No</th>
                   <th className="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-300">NIS</th>
-                  <th className="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-300">Nama Siswa</th>
+                  <th className="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-300">Nama {t.siswa}</th>
                   <th className="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-300">Mapel</th>
                   <th className="px-4 py-3 text-center font-medium text-gray-600 dark:text-gray-300">Nilai Harian</th>
                   <th className="px-4 py-3 text-center font-medium text-gray-600 dark:text-gray-300">Nilai STS</th>

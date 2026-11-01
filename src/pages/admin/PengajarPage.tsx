@@ -91,7 +91,7 @@ export default function PengajarPage() {
                 <th className="text-left px-4 py-3 font-medium text-gray-600">No</th>
                 <th className="text-left px-4 py-3 font-medium text-gray-600">Guru</th>
                 <th className="text-left px-4 py-3 font-medium text-gray-600">{t.mapel}</th>
-                <th className="text-left px-4 py-3 font-medium text-gray-600">Rombel</th>
+                <th className="text-left px-4 py-3 font-medium text-gray-600">{t.rombel}</th>
                 <th className="text-center px-4 py-3 font-medium text-gray-600">Jam/Minggu</th>
                 <th className="text-left px-4 py-3 font-medium text-gray-600">Aksi</th>
               </tr>
@@ -150,7 +150,7 @@ export default function PengajarPage() {
                 </select>
               </div>
               <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1">Rombel</label>
+                <label className="block text-xs font-medium text-gray-600 mb-1">{t.rombel}</label>
                 <select value={form.rombel_id} onChange={e => setForm({...form, rombel_id: e.target.value})} className="w-full px-3 py-2 border rounded-lg text-sm">
                   <option value="">-- Pilih Rombel --</option>
                   {rombelList.map(r => <option key={r.id} value={r.id}>{r.nama}</option>)}

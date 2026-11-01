@@ -266,7 +266,7 @@ export default function AdminDashboard() {
           <div className="space-y-3">
             <div>
               <div className="flex justify-between text-sm mb-1">
-                <span className="text-gray-600">Siswa</span>
+                <span className="text-gray-600">{t.siswa}</span>
                 <span className="font-medium">{stats.absensi_siswa.hadir}/{stats.absensi_siswa.total} ({absensiSiswaPersen}%)</span>
               </div>
               <div className="w-full bg-gray-200 rounded-full h-2.5">

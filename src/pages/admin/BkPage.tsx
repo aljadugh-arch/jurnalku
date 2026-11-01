@@ -239,7 +239,7 @@ export default function BkPage() {
                 <thead className="bg-gray-50 text-left text-xs uppercase text-gray-500 dark:bg-gray-800 dark:text-gray-400">
                   <tr>
                     <th className="px-4 py-3">{t.siswa}</th>
-                    <th className="px-4 py-3">Rombel</th>
+                    <th className="px-4 py-3">{t.rombel}</th>
                     <th className="px-4 py-3 text-right">Poin</th>
                     <th className="px-4 py-3">Status</th>
                     <th className="px-4 py-3">Sesi terakhir</th>

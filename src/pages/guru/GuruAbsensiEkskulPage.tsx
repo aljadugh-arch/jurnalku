@@ -1,10 +1,12 @@
 import { useEffect, useState } from 'react'
 import { CheckCircle, Clock, Save, XCircle } from 'lucide-react'
 import api from '../../services/api'
+import { useTerminologi } from '../../lib/terminologi'
 import toast from 'react-hot-toast'
 import { todayWib } from '../../lib/dateFormat'
 
 export default function GuruAbsensiEkskulPage() {
+  const t = useTerminologi()
   const [ekskulList, setEkskulList] = useState<any[]>([])
   const [selectedEkskul, setSelectedEkskul] = useState('')
   const [peminatanList, setPeminatanList] = useState<any[]>([])
@@ -89,7 +91,7 @@ export default function GuruAbsensiEkskulPage() {
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
-            <thead className="bg-gray-50 border-b"><tr><th className="text-left px-4 py-3">No</th><th className="text-left px-4 py-3">NIS</th><th className="text-left px-4 py-3">Nama</th><th className="text-left px-4 py-3">Rombel</th><th className="text-center px-4 py-3">Hadir</th><th className="text-center px-4 py-3">Izin</th><th className="text-center px-4 py-3">Sakit</th><th className="text-center px-4 py-3">Alpa</th></tr></thead>
+            <thead className="bg-gray-50 border-b"><tr><th className="text-left px-4 py-3">No</th><th className="text-left px-4 py-3">NIS</th><th className="text-left px-4 py-3">Nama</th><th className="text-left px-4 py-3">{t.rombel}</th><th className="text-center px-4 py-3">Hadir</th><th className="text-center px-4 py-3">Izin</th><th className="text-center px-4 py-3">Sakit</th><th className="text-center px-4 py-3">Alpa</th></tr></thead>
             <tbody className="divide-y divide-gray-100">
               {loading && <tr><td colSpan={8} className="px-4 py-8 text-center text-gray-400">Memuat...</td></tr>}
               {!loading && (mode === 'ekskul' ? selectedEkskul : selectedPeminatan) && siswaList.length === 0 && <tr><td colSpan={8} className="px-4 py-8 text-center text-gray-400">Belum ada peserta yang ditetapkan admin untuk kegiatan ini.</td></tr>}

@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import api from '../../services/api'
+import { useTerminologi } from '../../lib/terminologi'
 import { Download, Filter, FileText } from 'lucide-react'
 import { useAuthStore } from '../../stores/authStore'
 
@@ -23,6 +24,7 @@ type NilaiRow = {
 }
 
 export default function GuruRekapNilaiPage() {
+  const t = useTerminologi()
   const role = useAuthStore(s => s.user?.role)
   const isAdmin = role === 'admin' || role === 'super_admin'
 
@@ -195,7 +197,7 @@ export default function GuruRekapNilaiPage() {
                 <tr>
                   <th className="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-300">No</th>
                   <th className="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-300">NIS</th>
-                  <th className="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-300">Nama Siswa</th>
+                  <th className="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-300">Nama {t.siswa}</th>
                   {(jenis === 'harian' || jenis === 'semua') && <th className="px-4 py-3 text-center font-medium text-gray-600 dark:text-gray-300">Nilai Harian</th>}
                   {(jenis === 'sts' || jenis === 'semua') && <th className="px-4 py-3 text-center font-medium text-gray-600 dark:text-gray-300">Nilai STS</th>}
                   {(jenis === 'sas' || jenis === 'semua') && <th className="px-4 py-3 text-center font-medium text-gray-600 dark:text-gray-300">Nilai SAS</th>}

@@ -5,6 +5,7 @@ import {
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import api from '../../services/api'
+import { useTerminologi } from '../../lib/terminologi'
 
 // ============================================================================
 // Penugasan Digital (LMS) — sisi guru.
@@ -62,6 +63,7 @@ const fmtWaktu = (s?: string | null) => {
 }
 
 export default function GuruTugasPage() {
+  const t = useTerminologi()
   const [tugas, setTugas] = useState<Tugas[]>([])
   const [scope, setScope] = useState<{ mapel: any[]; rombel: any[] }>({ mapel: [], rombel: [] })
   const [memuat, setMemuat] = useState(true)
@@ -289,7 +291,7 @@ export default function GuruTugasPage() {
                 <table className="w-full min-w-[640px] text-sm">
                   <thead className="bg-gray-50 text-left text-xs uppercase text-gray-500 dark:bg-gray-800 dark:text-gray-400">
                     <tr>
-                      <th className="px-3 py-2">Siswa</th>
+                      <th className="px-3 py-2">{t.siswa}</th>
                       <th className="px-3 py-2">Status</th>
                       <th className="px-3 py-2">Waktu</th>
                       <th className="px-3 py-2 text-center">Nilai</th>

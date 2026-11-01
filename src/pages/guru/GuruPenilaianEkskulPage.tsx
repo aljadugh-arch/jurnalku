@@ -1,10 +1,12 @@
 import { useEffect, useState } from 'react'
 import { Save } from 'lucide-react'
 import api from '../../services/api'
+import { useTerminologi } from '../../lib/terminologi'
 import toast from 'react-hot-toast'
 import { todayWib } from '../../lib/dateFormat'
 
 export default function GuruPenilaianEkskulPage() {
+  const t = useTerminologi()
   const [ekskulList, setEkskulList] = useState<any[]>([])
   const [selectedEkskul, setSelectedEkskul] = useState('')
   const [tanggal, setTanggal] = useState(todayWib())
@@ -77,7 +79,7 @@ export default function GuruPenilaianEkskulPage() {
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
-            <thead className="bg-gray-50 border-b"><tr><th className="text-left px-4 py-3">No</th><th className="text-left px-4 py-3">NIS</th><th className="text-left px-4 py-3">Nama</th><th className="text-left px-4 py-3">Rombel</th><th className="text-center px-4 py-3 w-24">Nilai</th><th className="text-left px-4 py-3">Catatan</th></tr></thead>
+            <thead className="bg-gray-50 border-b"><tr><th className="text-left px-4 py-3">No</th><th className="text-left px-4 py-3">NIS</th><th className="text-left px-4 py-3">Nama</th><th className="text-left px-4 py-3">{t.rombel}</th><th className="text-center px-4 py-3 w-24">Nilai</th><th className="text-left px-4 py-3">Catatan</th></tr></thead>
             <tbody className="divide-y divide-gray-100">
               {loading && <tr><td colSpan={6} className="px-4 py-8 text-center text-gray-400">Memuat...</td></tr>}
               {!loading && selectedEkskul && siswaList.length === 0 && <tr><td colSpan={6} className="px-4 py-8 text-center text-gray-400">Belum ada peserta yang ditetapkan admin untuk ekskul ini.</td></tr>}

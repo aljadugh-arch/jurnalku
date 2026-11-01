@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import api from '../../services/api'
+import { useTerminologi } from '../../lib/terminologi'
 import { Printer, Download, FileText, Search } from 'lucide-react'
 
 interface RaporRosterProps {
@@ -15,6 +16,7 @@ interface RaporRosterProps {
 // pola rapor.mtsplussd7.cc.cd. Memakai endpoint rapor yang sudah ada
 // (/api/rapor/export/pdf per siswa, /api/rapor/export/pdf-bulk batch).
 export default function RaporRoster({ tahunAjaran, semester, jenis, raporFormat, rombelList }: RaporRosterProps) {
+  const t = useTerminologi()
   const [siswa, setSiswa] = useState<any[]>([])
   const [filterRombel, setFilterRombel] = useState('')
   const [filterJk, setFilterJk] = useState('')
@@ -136,7 +138,7 @@ export default function RaporRoster({ tahunAjaran, semester, jenis, raporFormat,
               <th className="px-3 py-2">NIS / NISN</th>
               <th className="px-3 py-2">Nama</th>
               <th className="px-3 py-2">L/P</th>
-              <th className="px-3 py-2">Rombel</th>
+              <th className="px-3 py-2">{t.rombel}</th>
               <th className="px-3 py-2 text-right">Aksi</th>
             </tr>
           </thead>

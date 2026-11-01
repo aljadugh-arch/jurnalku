@@ -2,9 +2,11 @@ import { useEffect, useState } from 'react'
 import { CheckCircle, Clock, Save, XCircle } from 'lucide-react'
 import toast from 'react-hot-toast'
 import api from '../../services/api'
+import { useTerminologi } from '../../lib/terminologi'
 import { todayWib } from '../../lib/dateFormat'
 
 export default function AbsensiEkskulPage() {
+  const t = useTerminologi()
   const [ekskulList, setEkskulList] = useState<any[]>([])
   const [selectedEkskul, setSelectedEkskul] = useState('')
   const [tanggal, setTanggal] = useState(todayWib())
@@ -77,7 +79,7 @@ export default function AbsensiEkskulPage() {
               <th className="text-left px-4 py-3 font-medium text-gray-600">No</th>
               <th className="text-left px-4 py-3 font-medium text-gray-600">NIS</th>
               <th className="text-left px-4 py-3 font-medium text-gray-600">Nama</th>
-              <th className="text-left px-4 py-3 font-medium text-gray-600">Rombel</th>
+              <th className="text-left px-4 py-3 font-medium text-gray-600">{t.rombel}</th>
               <th className="text-center px-4 py-3 font-medium text-gray-600">Hadir</th>
               <th className="text-center px-4 py-3 font-medium text-gray-600">Izin</th>
               <th className="text-center px-4 py-3 font-medium text-gray-600">Sakit</th>

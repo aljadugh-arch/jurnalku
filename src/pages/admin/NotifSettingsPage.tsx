@@ -3,10 +3,12 @@ import { Link } from 'react-router-dom'
 import { Bell, BellRing, MessageSquare, Save, Loader2, AlertTriangle, Volume2, Square, Clock, Smartphone } from 'lucide-react'
 import toast from 'react-hot-toast'
 import api from '../../services/api'
+import { useTerminologi } from '../../lib/terminologi'
 import Toggle from '../../components/ui/Toggle'
 import { statusPush, aktifkanPush, matikanPush, kirimUjiLewatServer, type StatusPush } from '../../lib/pushNotif'
 
 export default function NotifSettingsPage() {
+  const t = useTerminologi()
   const [settings, setSettings] = useState({
     absensi_siswa_ke_wali: false,
     guru_belum_ceklok: false,
@@ -681,7 +683,7 @@ export default function NotifSettingsPage() {
       <div className="bg-white rounded-xl p-4 sm:p-6 shadow-sm border border-gray-100 space-y-4">
         <h3 className="font-semibold text-gray-800">Whitelist Notifikasi WA</h3>
         <p className="break-words text-xs text-gray-500">Nomor/target di daftar ini dikecualikan dari antrean WA.</p>
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-2"><select value={whiteForm.target_type} onChange={e=>setWhiteForm({...whiteForm,target_type:e.target.value})} className="px-3 py-2 border rounded-lg text-sm"><option value="phone">Nomor</option><option value="siswa">Siswa</option><option value="gtk">GTK</option></select><input value={whiteForm.phone} onChange={e=>setWhiteForm({...whiteForm,phone:e.target.value})} placeholder="Nomor WA" className="px-3 py-2 border rounded-lg text-sm" /><input value={whiteForm.target_id} onChange={e=>setWhiteForm({...whiteForm,target_id:e.target.value})} placeholder="ID target opsional" className="px-3 py-2 border rounded-lg text-sm" /><button onClick={addWhitelist} className="px-4 py-2 bg-gray-800 text-white rounded-lg text-sm">Tambah</button></div>
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-2"><select value={whiteForm.target_type} onChange={e=>setWhiteForm({...whiteForm,target_type:e.target.value})} className="px-3 py-2 border rounded-lg text-sm"><option value="phone">Nomor</option><option value="siswa">{t.siswa}</option><option value="gtk">GTK</option></select><input value={whiteForm.phone} onChange={e=>setWhiteForm({...whiteForm,phone:e.target.value})} placeholder="Nomor WA" className="px-3 py-2 border rounded-lg text-sm" /><input value={whiteForm.target_id} onChange={e=>setWhiteForm({...whiteForm,target_id:e.target.value})} placeholder="ID target opsional" className="px-3 py-2 border rounded-lg text-sm" /><button onClick={addWhitelist} className="px-4 py-2 bg-gray-800 text-white rounded-lg text-sm">Tambah</button></div>
         <div className="divide-y">{whitelist.map(w=><div key={w.id} className="py-2 flex justify-between text-sm"><span>{w.target_type} {w.phone || w.target_id} {w.reason ? '· '+w.reason : ''}</span><button onClick={()=>delWhitelist(w.id)} className="text-red-600">Hapus</button></div>)}</div>
       </div>
 

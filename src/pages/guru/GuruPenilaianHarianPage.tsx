@@ -1,10 +1,12 @@
 import { useState, useEffect, useRef } from 'react'
 import api from '../../services/api'
+import { useTerminologi } from '../../lib/terminologi'
 import { verifySavedCount, verifyGradeRows } from '../../lib/gradeVerification'
 import { todayWib } from '../../lib/dateFormat'
 import { BookOpen, Save, Users } from 'lucide-react'
 
 export default function GuruPenilaianHarianPage() {
+  const t = useTerminologi()
   const [rombelList, setRombelList] = useState<any[]>([])
   const [jadwalList, setJadwalList] = useState<any[]>([])
   const [contextSiswa, setContextSiswa] = useState<any[]>([])
@@ -235,7 +237,7 @@ export default function GuruPenilaianHarianPage() {
                 <tr>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">No</th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">NIS</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Nama Siswa</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Nama {t.siswa}</th>
                   <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase w-24">Sikap<br/>(0-100)</th>
                   <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase w-24">Keaktifan<br/>(0-100)</th>
                   <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase w-24">Pengetahuan<br/>(0-100)</th>

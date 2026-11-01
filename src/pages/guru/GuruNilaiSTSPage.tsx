@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import api from '../../services/api'
+import { useTerminologi } from '../../lib/terminologi'
 import { verifySavedCount, verifyGradeRows } from '../../lib/gradeVerification'
 import { ScrollText, Save, Users, GraduationCap } from 'lucide-react'
 import ImportNilaiAsesmenExcel from '../../components/ImportNilaiAsesmenExcel'
@@ -14,6 +15,7 @@ const TAHUN_AJARAN_DEFAULT = (() => {
 })()
 
 export default function GuruNilaiSTSPage() {
+  const t = useTerminologi()
   const [mapelList, setMapelList] = useState<Opt[]>([])
   const [rombelList, setRombelList] = useState<Opt[]>([])
   const [selectedMapel, setSelectedMapel] = useState('')
@@ -128,7 +130,7 @@ export default function GuruNilaiSTSPage() {
       <div className="bg-white dark:bg-gray-900 rounded-xl shadow-sm border border-gray-100 dark:border-gray-800 p-4 sm:p-6">
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Mata Pelajaran</label>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{t.mapel}</label>
             <select disabled={saving || importing} value={selectedMapel} onChange={e => setSelectedMapel(e.target.value)}
               className="w-full px-3 py-2 border border-gray-300 dark:border-gray-700 dark:bg-gray-800 dark:text-white rounded-lg focus:ring-2 focus:ring-primary/20 focus:border-primary">
               <option value="">Pilih Mapel</option>
@@ -192,7 +194,7 @@ export default function GuruNilaiSTSPage() {
                 <tr>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">No</th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">NIS</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Nama Siswa</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Nama {t.siswa}</th>
                   <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase w-40">
                     Nilai STS<br/><span className="font-normal normal-case">(Asesmen Ujian, 0–100)</span>
                   </th>

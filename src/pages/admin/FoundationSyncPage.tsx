@@ -168,7 +168,7 @@ export default function FoundationSyncPage() {
                             <th className="text-left px-3 py-2 font-medium text-gray-600 w-10"><input type="checkbox" checked={filtered.length > 0 && selected.size === filtered.length} onChange={toggleAll} /></th>
                             <th className="text-left px-3 py-2 font-medium text-gray-600">Nama</th>
                             <th className="text-left px-3 py-2 font-medium text-gray-600">NIS / NISN</th>
-                            <th className="text-left px-3 py-2 font-medium text-gray-600">Rombel</th>
+                            <th className="text-left px-3 py-2 font-medium text-gray-600">{t.rombel}</th>
                           </tr></thead>
                           <tbody className="divide-y divide-gray-100">
                             {filtered.map(s => (

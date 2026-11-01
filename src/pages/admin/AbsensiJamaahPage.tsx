@@ -2,6 +2,7 @@
 import { Download, FileSpreadsheet, GraduationCap, Save, RefreshCw, List, Edit3, CheckCircle, XCircle, Clock, Plus } from 'lucide-react'
 import toast from 'react-hot-toast'
 import api from '../../services/api'
+import { useTerminologi } from '../../lib/terminologi'
 import { todayWib } from '../../lib/dateFormat'
 import * as XLSX from 'xlsx'
 import { useSettingsStore } from '../../stores/settingsStore'
@@ -13,6 +14,7 @@ interface Rombel { id: string; nama: string }
 interface RekapRow { id: string; nama: string; nis: string; rombel_nama: string; periode: string; jumlah_hadir: number; minimal_hadir: number; hasil: string }
 
 export default function AbsensiJamaahPage() {
+  const t = useTerminologi()
   const settings = useSettingsStore(s => s.settings)
   const tenant = tenantIdentity(settings)
   const [siswa, setSiswa] = useState<Siswa[]>([])
@@ -311,7 +313,7 @@ export default function AbsensiJamaahPage() {
                 <tr>
                   <th style={{ width: 52 }} className="text-center">Ikut</th>
                   <th style={{ width: 56 }} className="text-center">No</th>
-                  <th className="pl-4">Nama Siswa</th>
+                  <th className="pl-4">Nama {t.siswa}</th>
                   <th style={{ width: 70 }} className="text-center">Hadir</th>
                   <th style={{ width: 70 }} className="text-center">Izin</th>
                   <th style={{ width: 70 }} className="text-center">Sakit</th>
@@ -392,7 +394,7 @@ export default function AbsensiJamaahPage() {
               <thead>
                 <tr>
                   <th style={{width: 56}} className="text-center">No</th>
-                  <th className="pl-4">Nama Siswa</th>
+                  <th className="pl-4">Nama {t.siswa}</th>
                   <th style={{width: 120}} className="text-center">Hadir</th>
                   <th style={{width: 140}} className="text-center">Keterangan</th>
                 </tr>
@@ -448,7 +450,7 @@ export default function AbsensiJamaahPage() {
               <thead>
                 <tr>
                   <th style={{width: 56}} className="text-center">No</th>
-                  <th className="pl-4">Nama Siswa</th>
+                  <th className="pl-4">Nama {t.siswa}</th>
                   <th className="text-center">Periode</th>
                   <th className="text-center" style={{width: 70}}>Hadir</th>
                   <th className="text-center" style={{width: 60}}>Min</th>

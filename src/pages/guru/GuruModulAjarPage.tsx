@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { BookOpen, Download, FileText, Loader2, Sparkles, Settings2, ScanText } from 'lucide-react'
 import toast from 'react-hot-toast'
 import api from '../../services/api'
+import { useTerminologi } from '../../lib/terminologi'
 import AiSettingsCard from '../../components/AiSettingsCard'
 import { handleOcrFile } from '../../lib/ocr'
 
@@ -36,6 +37,7 @@ const initialForm = {
 }
 
 export default function GuruModulAjarPage() {
+  const t = useTerminologi()
   const [form, setForm] = useState(initialForm)
   const [loading, setLoading] = useState(false)
   const [exporting, setExporting] = useState(false)
@@ -148,7 +150,7 @@ export default function GuruModulAjarPage() {
         <section className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900 sm:p-6">
           <h2 className="mb-5 flex items-center gap-2 font-semibold text-gray-800 dark:text-slate-100"><BookOpen size={18} className="text-primary" /> Informasi {selected.label}</h2>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <label><span className={labelClass}>Mata Pelajaran</span><input className={inputClass} value={form.subject} onChange={e => setForm({ ...form, subject: e.target.value })} placeholder="Contoh: Matematika" /></label>
+            <label><span className={labelClass}>{t.mapel}</span><input className={inputClass} value={form.subject} onChange={e => setForm({ ...form, subject: e.target.value })} placeholder="Contoh: Matematika" /></label>
             <label><span className={labelClass}>{modulAjar ? 'Pilih Fase / Kelas' : 'Kelas / Fase'}</span>{modulAjar ? <select className={inputClass} value={form.grade} onChange={e => setForm({ ...form, grade: e.target.value })}><option value="">Pilih Jenjang</option>{phaseOptions.map(option => <option key={option}>{option}</option>)}</select> : <input className={inputClass} value={form.grade} onChange={e => setForm({ ...form, grade: e.target.value })} placeholder="Contoh: Kelas VIII / Fase D" />}</label>
             <label className="sm:col-span-2"><span className={labelClass}>Materi / Topik</span><textarea className={inputClass} rows={3} value={form.topic} onChange={e => setForm({ ...form, topic: e.target.value })} placeholder="Tuliskan ruang lingkup materi dengan jelas" />
               <div className="mt-2 flex items-center gap-2">

@@ -3,6 +3,7 @@ import { escapeHtml } from '../../utils/escapeHtml'
 import { Plus, Trash2, AlertTriangle, X, Download, FileSpreadsheet, Pencil, Settings2, Wand2, CalendarDays, Clock } from 'lucide-react'
 import toast from 'react-hot-toast'
 import api from '../../services/api'
+import { useTerminologi } from '../../lib/terminologi'
 import * as XLSX from 'xlsx'
 import { generateJamPelajaran, jtmMenit, isGuruKelasJenjang as isGuruKelasJenjangCode } from '../../lib/jenjang'
 import { pilihGuru, pilihMapel } from '../../lib/jadwalSelection'
@@ -24,6 +25,7 @@ const KEGIATAN_KHUSUS_DEFAULT = [
 ]
 
 export default function JadwalPage() {
+  const t = useTerminologi()
   const [jadwal, setJadwal] = useState<Jadwal[]>([])
   const [rombels, setRombels] = useState<any[]>([])
   const [mapels, setMapels] = useState<any[]>([])
@@ -758,7 +760,7 @@ export default function JadwalPage() {
                 <div className="flex gap-4">
                   <label className="flex items-center gap-2 cursor-pointer">
                     <input type="radio" name="jenis" value="mapel" checked={form.jenis_kegiatan === 'mapel'} onChange={e => setForm({...form, jenis_kegiatan: e.target.value, nama_kegiatan: '', mapel_id: ''})} className="w-4 h-4" />
-                    <span className="text-sm">Mata Pelajaran</span>
+                    <span className="text-sm">{t.mapel}</span>
                   </label>
                   <label className="flex items-center gap-2 cursor-pointer">
                     <input type="radio" name="jenis" value="istirahat" checked={form.jenis_kegiatan === 'istirahat'} onChange={e => setForm({...form, jenis_kegiatan: e.target.value, mapel_id: '', nama_kegiatan: 'Istirahat Sholat Dhuha'})} className="w-4 h-4" />
@@ -772,7 +774,7 @@ export default function JadwalPage() {
               </div>
               {form.jenis_kegiatan === 'mapel' ? (
                 <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">Mata Pelajaran</label>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">{t.mapel}</label>
                   <select value={form.mapel_id} onChange={e => onMapelChange(e.target.value)} className="w-full px-3 py-2 border rounded-lg text-sm">
                     <option value="">-- Pilih --</option>
                     {mapelGuruDiRombel.length > 0 && (

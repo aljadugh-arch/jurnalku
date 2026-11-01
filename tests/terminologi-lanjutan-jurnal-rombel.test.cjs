@@ -38,3 +38,22 @@ test('ekspor jurnal memakai filter rombel (per kelas)', () => {
   assert.match(jurnal, /<\option value="">\{t\.rombel\} — semua<\/option>/, 'opsi "semua rombel" berlabel terminologi')
   assert.match(jurnal, /Jurnal_Mengajar_\$\{String\(namaRombel\)/, 'nama berkas menyertakan rombel')
 })
+
+test('tidak ada label Siswa/Mata Pelajaran/Rombel yang tertinggal (kecuali prosa penjelas)', () => {
+  const { execSync } = require('node:child_process')
+  const grep = (pola) => {
+    try {
+      return execSync(`grep -rn ${JSON.stringify(pola)} src/pages --include=*.tsx || true`, { cwd: path.join(__dirname, '..'), encoding: 'utf8' })
+        .split('\n').filter(Boolean)
+    } catch { return [] }
+  }
+  const siswa = [...grep('>Siswa<'), ...grep('Nama Siswa'), ...grep('>Siswa</th>'), ...grep('>Siswa</label>')]
+  assert.deepEqual(siswa, [], 'label "Siswa" masih keras:\n' + siswa.join('\n'))
+
+  const rombel = [...grep('>Rombel</th>'), ...grep('>Rombel</label>'), ...grep('>Rombongan Belajar<')]
+  assert.deepEqual(rombel, [], 'label Rombel masih keras:\n' + rombel.join('\n'))
+
+  const mapel = [...grep('>Mata Pelajaran<'), ...grep('>Mata Pelajaran</th>'), ...grep('>Mata Pelajaran</label>')]
+    .filter(l => !l.includes('ProgramBelajarPage.tsx'))
+  assert.deepEqual(mapel, [], 'label "Mata Pelajaran" masih keras:\n' + mapel.join('\n'))
+})

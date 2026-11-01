@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import api from '../../services/api'
+import { useTerminologi } from '../../lib/terminologi'
 import { Save, RotateCcw, Info } from 'lucide-react'
 
 type MapelKkm = {
@@ -17,6 +18,7 @@ type KkmData = {
 }
 
 export default function AdminKkmPage() {
+  const t = useTerminologi()
   const [data, setData] = useState<KkmData | null>(null)
   const [loading, setLoading] = useState(true)
   const [msg, setMsg] = useState('')
@@ -91,7 +93,7 @@ export default function AdminKkmPage() {
             <table className="w-full text-sm">
               <thead className="bg-gray-50 dark:bg-gray-800">
                 <tr>
-                  <th className="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-300">Mata Pelajaran</th>
+                  <th className="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-300">{t.mapel}</th>
                   <th className="px-4 py-3 text-center font-medium text-gray-600 dark:text-gray-300 w-32">
                     KKM Umum
                     <div className="text-[11px] font-normal text-gray-400">semua tingkat</div>
