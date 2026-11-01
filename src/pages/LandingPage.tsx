@@ -73,6 +73,25 @@ function segmenDariHost(): Segmen {
   return 'umum'
 }
 
+
+// Deskripsi singkat + warna gradien per jenjang. Dipakai pada bagian "jenjang"
+// supaya tampilannya bukan deretan kata besar yang monoton.
+const JENJANG_META: Record<string, { ket: string; warna: string }> = {
+  RA: { ket: 'Usia dini', warna: 'from-amber-400 to-orange-500' },
+  TK: { ket: 'Usia dini', warna: 'from-amber-400 to-orange-500' },
+  MI: { ket: 'Sekolah dasar', warna: 'from-emerald-400 to-teal-500' },
+  SD: { ket: 'Sekolah dasar', warna: 'from-emerald-400 to-teal-500' },
+  MTs: { ket: 'Menengah pertama', warna: 'from-sky-400 to-blue-500' },
+  SMP: { ket: 'Menengah pertama', warna: 'from-sky-400 to-blue-500' },
+  MA: { ket: 'Menengah atas', warna: 'from-violet-400 to-purple-500' },
+  SMA: { ket: 'Menengah atas', warna: 'from-violet-400 to-purple-500' },
+  SMK: { ket: 'Kejuruan', warna: 'from-rose-400 to-pink-500' },
+  'Kampus / PT': { ket: 'Perguruan tinggi', warna: 'from-cyan-400 to-blue-600' },
+  Pesantren: { ket: 'Boarding & asrama', warna: 'from-teal-400 to-emerald-600' },
+  'Madrasah Diniyah': { ket: 'Keagamaan', warna: 'from-indigo-400 to-violet-600' },
+  'Kursus / Bimbel': { ket: 'Keterampilan', warna: 'from-fuchsia-400 to-pink-500' },
+}
+
 const SEGMEN: Record<Segmen, { badge: string; judul: string; accent: string; subtext: string; jenjang: string[]; fitur: { icon: any; judul: string; isi: string; warna: string }[] }> = {
   kemenag: {
     badge: 'Untuk Madrasah & Pesantren · Naungan Kemenag',
@@ -331,13 +350,33 @@ export default function LandingPage() {
       </section>
 
       {/* ================= JENJANG ================= */}
-      <section className="border-y sk-border-soft bg-white py-10">
+      <section className="border-y sk-border-soft bg-white py-14">
         <div className="mx-auto max-w-6xl px-4">
-          <p className="mb-5 text-center text-sm font-medium sk-txt-muted">Satu platform untuk semua jenjang pendidikan</p>
-          <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1">
-            {copy.jenjang.map(j => (
-              <span key={j} className="px-3 py-1 text-3xl font-bold text-slate-600 opacity-70">{j}</span>
-            ))}
+          <div className="mb-8 text-center">
+            <span className="text-sm font-bold uppercase tracking-wider sk-txt-accent">Jenjang</span>
+            <h2 className="mt-1 text-2xl font-bold sk-txt sm:text-3xl">Satu platform untuk setiap jenjang</h2>
+            <p className="mx-auto mt-2 max-w-2xl text-sm sk-txt-muted">
+              Sebutan, menu, dan laporan menyesuaikan sendiri — siswa, santri, mahasiswa, atau peserta. Tanpa aplikasi terpisah.
+            </p>
+          </div>
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+            {copy.jenjang.map((j, i) => {
+              const m = JENJANG_META[j] || { ket: 'Lembaga', warna: 'from-slate-400 to-slate-500' }
+              return (
+                <div
+                  key={j}
+                  className="group relative overflow-hidden rounded-xl border sk-border-soft bg-white p-4 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[0_12px_28px_rgba(58,48,40,0.10)]"
+                  style={{ animationDelay: `${i * 40}ms` }}
+                >
+                  <div className={`absolute inset-x-0 top-0 h-1 bg-gradient-to-r ${m.warna}`} />
+                  <div className={`mb-2 flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br ${m.warna} text-[11px] font-bold text-white opacity-90 transition-transform group-hover:scale-110`}>
+                    {j.replace(/[^A-Z]/g, '').slice(0, 2) || '•'}
+                  </div>
+                  <p className="text-sm font-bold sk-txt">{j}</p>
+                  <p className="mt-0.5 text-[11px] sk-txt-muted">{m.ket}</p>
+                </div>
+              )
+            })}
           </div>
         </div>
       </section>

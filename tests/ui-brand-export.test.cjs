@@ -49,3 +49,11 @@ test('rekap absensi (termasuk mapel) memuat tanda tangan di Excel', () => {
   assert.match(rekap, /mapel: t\.mapel/, 'kategori mapel mengikuti terminologi')
   assert.match(rekap, /REKAPITULASI ABSENSI ' \+ \(isSiswa \? t\.siswa/, 'judul memakai sebutan tipe')
 })
+
+test('bagian jenjang landing bukan deretan kata monoton', () => {
+  const landing = baca('src/pages/LandingPage.tsx')
+  assert.match(landing, /JENJANG_META/, 'ada metadata jenjang (deskripsi + warna)')
+  assert.match(landing, /Satu platform untuk setiap jenjang/, 'judul bagian baru')
+  assert.match(landing, /grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6/, 'kartu jenjang responsif')
+  assert.doesNotMatch(landing, /text-3xl font-bold text-slate-600 opacity-70/, 'gaya teks besar monoton sudah dihapus')
+})
