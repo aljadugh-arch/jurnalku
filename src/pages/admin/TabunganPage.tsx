@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { Search, Plus, X, Pencil, Trash2, FileSpreadsheet, Printer } from 'lucide-react'
 import toast from 'react-hot-toast'
 import api from '../../services/api'
+import { useTerminologi } from '../../lib/terminologi'
 import MonthFilter from '../../components/MonthFilter'
 import PeriodeFilter, { rentangPeriode, labelPeriode } from '../../components/PeriodeFilter'
 import { unduhExcel } from '../../utils/excelExport'
@@ -12,6 +13,7 @@ interface SaldoSiswa { id: string; nis: string; nisn?: string; nama: string; sal
 interface Mutasi { id: string; tanggal: string; tipe: string; nominal: number; saldo_akhir: number; keterangan: string }
 
 export default function TabunganPage() {
+  const t = useTerminologi()
   const settings = useSettingsStore(s => s.settings)
   const [saldoList, setSaldoList] = useState<SaldoSiswa[]>([])
   const [loading, setLoading] = useState(true)
@@ -301,7 +303,7 @@ export default function TabunganPage() {
             </div>
             <div className="space-y-3">
               <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1">Siswa</label>
+                <label className="block text-xs font-medium text-gray-600 mb-1">{t.siswa}</label>
                 <select value={trxForm.siswa_id} onChange={e => setTrxForm({...trxForm, siswa_id: e.target.value})} className="w-full px-3 py-2 border rounded-lg text-sm">
                   <option value="">-- Pilih Siswa --</option>
                   {saldoList.map(s => <option key={s.id} value={s.id}>{s.nama} ({s.nis})</option>)}

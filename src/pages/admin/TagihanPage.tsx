@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { Search, X, Pencil, Trash2, QrCode, FileSpreadsheet, Printer } from 'lucide-react'
 import toast from 'react-hot-toast'
 import api from '../../services/api'
+import { useTerminologi } from '../../lib/terminologi'
 import ResponsiveTable from '../../components/ui/ResponsiveTable'
 import FinanceExcelPanel from '../../components/FinanceExcelPanel'
 import QrisPayModal, { type QrisTarget } from '../../components/QrisPayModal'
@@ -111,6 +112,7 @@ function SearchSiswa({ value, onChange, placeholder = 'Cari nama atau NIS...' }:
 }
 
 export default function TagihanPage() {
+  const term = useTerminologi()
   const [data, setData] = useState<Tagihan[]>([])
   const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState('')
@@ -286,7 +288,7 @@ export default function TagihanPage() {
         <div class="hdr"><h1>KUITANSI PEMBAYARAN</h1><p>JURNALKU — Sistem Manajemen Sekolah</p></div>
         <div class="row"><span class="lbl">No. Kuitansi</span><span class="val">KWT-${t.id.substring(0,8).toUpperCase()}</span></div>
         <div class="row"><span class="lbl">Tanggal Bayar</span><span class="val">${t.tanggal_bayar || '-'}</span></div>
-        <div class="row"><span class="lbl">Siswa</span><span class="val">${t.siswa_nama}</span></div>
+        <div class="row"><span class="lbl">${term.siswa}</span><span class="val">${t.siswa_nama}</span></div>
         <div class="row"><span class="lbl">NIS</span><span class="val">${t.nis}</span></div>
         <div class="row"><span class="lbl">Jenis Tagihan</span><span class="val">${t.jenis_nama}</span></div>
         <div class="row"><span class="lbl">Periode</span><span class="val">${t.bulan || ''} ${t.tahun}</span></div>

@@ -413,7 +413,7 @@ export default function SettingsPage() {
               <input type="checkbox" checked={form.kbm_auto_aktif} onChange={e => setForm({...form, kbm_auto_aktif: e.target.checked})} className="w-4 h-4" />
               Anggap KBM aktif setiap hari non-libur (tanpa perlu isi Kalender KBM per tanggal)
             </label>
-            <p className="text-xs text-gray-400 mt-1">Cocok untuk lembaga yang hari efektifnya = semua hari kecuali hari libur yang dicentang di atas (mis. hanya Ahad/Minggu).</p>
+            <p className="text-xs text-gray-400 mt-1">Cocok untuk lembaga yang hari efektifnya = semua hari kecuali hari libur yang dicentang di atas (mis. hanya Ahad/Minggu). Hari libur tetap nonaktif, kecuali ada kegiatan (ekskul/ujian/kegiatan sekolah) pada tanggal tersebut.</p>
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-600 mb-1">Alamat</label>

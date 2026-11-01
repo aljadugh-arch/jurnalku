@@ -5,6 +5,7 @@ import {
   Users, CalendarDays, Lock, Eye, ChevronDown, X,
 } from 'lucide-react'
 import api from '../../services/api'
+import { useTerminologi } from '../../lib/terminologi'
 import SearchInput, { cocokBeberapa } from '../../components/SearchInput'
 
 // ============================================================================
@@ -74,6 +75,7 @@ const LABEL_KASUS: Record<string, string> = {
 const hariIni = () => new Date().toISOString().slice(0, 10)
 
 export default function BkPage() {
+  const t = useTerminologi()
   const [tab, setTab] = useState<Tab>('peringatan')
   const [ringkasan, setRingkasan] = useState<Ringkasan[]>([])
   const [ambang, setAmbang] = useState<any>({})
@@ -236,7 +238,7 @@ export default function BkPage() {
               <table className="w-full min-w-[640px] text-sm">
                 <thead className="bg-gray-50 text-left text-xs uppercase text-gray-500 dark:bg-gray-800 dark:text-gray-400">
                   <tr>
-                    <th className="px-4 py-3">Siswa</th>
+                    <th className="px-4 py-3">{t.siswa}</th>
                     <th className="px-4 py-3">Rombel</th>
                     <th className="px-4 py-3 text-right">Poin</th>
                     <th className="px-4 py-3">Status</th>
