@@ -9,6 +9,7 @@ import Modal from '../../components/ui/Modal'
 import { thumbUrl } from '../../lib/thumbUrl'
 import { unduhExcel } from '../../utils/excelExport'
 import { useSettingsStore } from '../../stores/settingsStore'
+import { useTerminologi } from '../../lib/terminologi'
 import { QRCodeCanvas } from 'qrcode.react'
 import QRCode from 'qrcode'
 
@@ -88,6 +89,7 @@ const downloadStudentQrPng = async (siswa: Siswa) => {
 
 export default function DataSiswaPage() {
   const settings = useSettingsStore(s => s.settings)
+  const t = useTerminologi()
   const [data, setData] = useState<Siswa[]>([])
   const [search, setSearch] = useState('')
   const [loading, setLoading] = useState(true)
@@ -392,8 +394,8 @@ export default function DataSiswaPage() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-gray-800 font-display">Data Siswa</h1>
-          <p className="text-gray-500 text-sm mt-1">Kelola data peserta didik ({data.length} siswa)</p>
+          <h1 className="text-2xl font-bold text-gray-800 font-display">{t.dataSiswa}</h1>
+          <p className="text-gray-500 text-sm mt-1">Kelola data {t.siswa.toLowerCase()} ({data.length} {t.siswa.toLowerCase()})</p>
         </div>
         <div className="flex gap-2 flex-wrap">
           {isLocalTenant && <button onClick={() => setShowImport(true)} className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg text-sm hover:bg-green-700">

@@ -73,6 +73,7 @@ import { clearLocalTheme } from '../../stores/themeStore'
 import { useSettingsStore } from '../../stores/settingsStore'
 import { useAuthStore } from '../../stores/authStore'
 import { isGuruKelasJenjang, JENJANG_OPTIONS } from '../../lib/jenjang'
+import { TIPE_INSTITUSI_OPTIONS } from '../../lib/terminologi'
 import MapPicker from '../../components/MapPicker'
 import JamPulangSiswa from '../../components/JamPulangSiswa'
 import FeatureSettings from '../../components/FeatureSettings'
@@ -95,7 +96,7 @@ export default function SettingsPage() {
     kepala_sekolah: '', npsn: '', nsm: '', kota_cetak: '', yayasan_nama: '',
     kota_sholat: '', lat_sholat: '', lng_sholat: '', tz_sholat: '7',
     theme: 'light', primary_color: '#1e40af', accent_color: '#059669', sidebar_color: '#1e293b',
-    geo_latitude: '', geo_longitude: '', geo_radius: '200', jenjang: '', hari_libur: [] as string[], kbm_auto_aktif: false,
+    geo_latitude: '', geo_longitude: '', geo_radius: '200', jenjang: '', tipe_institusi: '', hari_libur: [] as string[], kbm_auto_aktif: false,
     bg_size: 'cover', bg_position: 'center', bg_repeat: 'no-repeat', bg_blur: 0,
     pwa_enabled: false, pwa_name: '', pwa_theme_color: '#1e40af', pwa_bg_color: '#ffffff',
     dashboard_quick_menus: defaultAdminDashboardShortcutKeys as string[]
@@ -156,7 +157,7 @@ export default function SettingsPage() {
         kepala_sekolah: s.kepala_sekolah || '', npsn: s.npsn || '', nsm: s.nsm || '', kota_cetak: s.kota_cetak || '', yayasan_nama: s.yayasan_nama || '',
         kota_sholat: s.kota_sholat || '', lat_sholat: s.lat_sholat ?? '', lng_sholat: s.lng_sholat ?? '', tz_sholat: String(s.tz_sholat ?? 7),
         theme: s.theme || 'light', primary_color: s.primary_color || '#1e40af', accent_color: s.accent_color || '#059669', sidebar_color: s.sidebar_color || '#1e293b',
-        geo_latitude: s.geo_latitude || '', geo_longitude: s.geo_longitude || '', geo_radius: s.geo_radius || '200', jenjang: s.jenjang || '',
+        geo_latitude: s.geo_latitude || '', geo_longitude: s.geo_longitude || '', geo_radius: s.geo_radius || '200', jenjang: s.jenjang || '', tipe_institusi: s.tipe_institusi || '',
         hari_libur: (() => { try { return JSON.parse(s.hari_libur || '[]') } catch { return [] } })(),
         kbm_auto_aktif: s.kbm_auto_aktif === true || s.kbm_auto_aktif === 1,
         bg_size: s.bg_size || 'cover', bg_position: s.bg_position || 'center',
@@ -377,6 +378,14 @@ export default function SettingsPage() {
               {JENJANG_OPTIONS.map(j => <option key={j.value} value={j.value}>{j.label}</option>)}
             </select>
             <p className="text-xs text-gray-400 mt-1">Menentukan penamaan tingkat/kelas di Rombel (RA=A,B • MI=1-6 • MTs=7-9 • MA=10-12)</p>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-600 mb-1">Tipe Lembaga / Institusi</label>
+            <select value={form.tipe_institusi} onChange={e => setForm({...form, tipe_institusi: e.target.value})} className="w-full px-4 py-2 border rounded-lg text-sm">
+              <option value="">- Otomatis dari jenjang -</option>
+              {TIPE_INSTITUSI_OPTIONS.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
+            </select>
+            <p className="text-xs text-gray-400 mt-1">Menentukan sebutan: mis. "Siswa" → "Mahasiswa"/"Santri"/"Karyawan", "Guru" → "Dosen"/"Ustadz". Kosong = mengikuti jenjang.</p>
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-600 mb-2">Hari Libur</label>

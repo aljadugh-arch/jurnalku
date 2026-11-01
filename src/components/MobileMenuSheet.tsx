@@ -5,6 +5,7 @@ import { useAuthStore } from '../stores/authStore'
 import { useSubscriptionStore } from '../stores/subscriptionStore'
 import { flattenMenu, menuForRole, type FlatMenu } from '../lib/menuItems'
 import { pathEnabled } from '../lib/featureAccess'
+import { useTerminologi, terapkanTerminologi } from '../lib/terminologi'
 
 const colors = [
   'bg-blue-600', 'bg-emerald-600', 'bg-violet-600', 'bg-amber-600',
@@ -29,9 +30,10 @@ const categoryFor = (item: FlatMenu) => {
 }
 
 function MenuLink({ item, index, onClose }: { item: FlatMenu; index: number; onClose: () => void }) {
+  const t = useTerminologi()
   const body = <>
     <span className={`flex h-11 w-11 items-center justify-center rounded-2xl text-white ${colors[index % colors.length]}`}>{item.icon}</span>
-    <span className="mt-1.5 w-full text-[10px] font-medium leading-3 text-slate-600 dark:text-gray-300">{item.label}</span>
+    <span className="mt-1.5 w-full text-[10px] font-medium leading-3 text-slate-600 dark:text-gray-300">{terapkanTerminologi(item.label, t)}</span>
   </>
   const className = 'flex min-w-0 flex-col items-center text-center active:scale-95'
   return item.external

@@ -9,6 +9,7 @@ import Modal from '../../components/ui/Modal'
 import { thumbUrl } from '../../lib/thumbUrl'
 import { unduhExcel } from '../../utils/excelExport'
 import { useSettingsStore } from '../../stores/settingsStore'
+import { useTerminologi } from '../../lib/terminologi'
 
 interface GTK {
   id: string; nik: string; nip: string; nuptk: string; nama: string; jenis_kelamin: string
@@ -73,6 +74,7 @@ function GTKPhoto({ foto, nama, size = 'sm' }: { foto?: string; nama: string; si
 
 export default function DataGTKPage() {
   const settings = useSettingsStore(s => s.settings)
+  const t = useTerminologi()
   const [data, setData] = useState<GTK[]>([])
   const [search, setSearch] = useState('')
   const [loading, setLoading] = useState(true)
@@ -198,8 +200,8 @@ export default function DataGTKPage() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-gray-800 font-display">Data GTK</h1>
-          <p className="text-gray-500 text-sm mt-1">Guru dan Tenaga Kependidikan ({data.length} orang)</p>
+          <h1 className="text-2xl font-bold text-gray-800 font-display">{t.dataGuru}</h1>
+          <p className="text-gray-500 text-sm mt-1">{t.guru} dan Tenaga Kependidikan ({data.length} orang)</p>
         </div>
         <div className="flex gap-2 flex-wrap">
           {isLocalTenant && <button onClick={() => setShowImport(true)} className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg text-sm hover:bg-green-700">

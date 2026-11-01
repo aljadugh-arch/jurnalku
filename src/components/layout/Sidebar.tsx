@@ -3,6 +3,7 @@ import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useSidebarStore } from '../../stores/sidebarStore'
 import { useAuthStore } from '../../stores/authStore'
 import { useSettingsStore } from '../../stores/settingsStore'
+import { useTerminologi, terapkanTerminologi } from '../../lib/terminologi'
 import { X, ChevronDown, ChevronRight, LogOut } from 'lucide-react'
 import { clsx } from 'clsx'
 import { roleLabel } from '../../lib/roles'
@@ -24,6 +25,7 @@ export default function Sidebar() {
   const { isOpen, close } = useSidebarStore()
   const { user, logout } = useAuthStore()
   const settings = useSettingsStore(s => s.settings)
+  const t = useTerminologi()
   const features = useSubscriptionStore(s => s.subscription?.features)
   const location = useLocation()
   const navigate = useNavigate()
@@ -203,7 +205,7 @@ export default function Sidebar() {
                                 )}
                               >
                                 <span className="flex-shrink-0">{item.icon}</span>
-                                <span className="flex-1 text-left">{item.label}</span>
+                                <span className="flex-1 text-left">{terapkanTerminologi(item.label, t)}</span>
                                 {expandedMenus.includes(item.label)
                                   ? <ChevronDown size={16} />
                                   : <ChevronRight size={16} />}
@@ -220,7 +222,7 @@ export default function Sidebar() {
                                         onClick={handleNav}
                                         className="block px-3 py-1.5 rounded-lg text-xs transition-colors text-white/60 hover:text-white hover:bg-white/10"
                                       >
-                                        {child.label} ↗
+                                        {terapkanTerminologi(child.label, t)} ↗
                                       </a>
                                     ) : (
                                       <Link
@@ -234,7 +236,7 @@ export default function Sidebar() {
                                             : 'text-white/60 hover:text-white hover:bg-white/10'
                                         )}
                                       >
-                                        {child.label}
+                                        {terapkanTerminologi(child.label, t)}
                                       </Link>
                                     )
                                   ))}
@@ -253,7 +255,7 @@ export default function Sidebar() {
                               )}
                             >
                               <span className="flex-shrink-0">{item.icon}</span>
-                              <span>{item.label} ↗</span>
+                              <span>{terapkanTerminologi(item.label, t)} ↗</span>
                             </a>
                           ) : (
                             <Link
@@ -267,7 +269,7 @@ export default function Sidebar() {
                               )}
                             >
                               <span className="flex-shrink-0">{item.icon}</span>
-                              <span>{item.label}</span>
+                              <span>{terapkanTerminologi(item.label, t)}</span>
                             </Link>
                           )}
                         </div>
@@ -294,7 +296,7 @@ export default function Sidebar() {
                         <span className="flex-shrink-0">{item.icon}</span>
                         {isOpen && (
                           <>
-                            <span className="flex-1 text-left">{item.label}</span>
+                            <span className="flex-1 text-left">{terapkanTerminologi(item.label, t)}</span>
                             {expandedMenus.includes(item.label)
                               ? <ChevronDown size={16} />
                               : <ChevronRight size={16} />}
@@ -313,7 +315,7 @@ export default function Sidebar() {
                                 onClick={handleNav}
                                 className="block px-3 py-1.5 rounded-lg text-xs transition-colors text-white/60 hover:text-white hover:bg-white/10"
                               >
-                                {child.label} ↗
+                                {terapkanTerminologi(child.label, t)} ↗
                               </a>
                             ) : (
                               <Link
@@ -327,7 +329,7 @@ export default function Sidebar() {
                                     : 'text-white/60 hover:text-white hover:bg-white/10'
                                 )}
                               >
-                                {child.label}
+                                {terapkanTerminologi(child.label, t)}
                               </Link>
                             )
                           ))}
@@ -346,7 +348,7 @@ export default function Sidebar() {
                       )}
                     >
                       <span className="flex-shrink-0">{item.icon}</span>
-                      {isOpen && <span>{item.label} ↗</span>}
+                      {isOpen && <span>{terapkanTerminologi(item.label, t)} ↗</span>}
                     </a>
                   ) : (
                     <Link
@@ -360,7 +362,7 @@ export default function Sidebar() {
                       )}
                     >
                       <span className="flex-shrink-0">{item.icon}</span>
-                      {isOpen && <span>{item.label}</span>}
+                      {isOpen && <span>{terapkanTerminologi(item.label, t)}</span>}
                     </Link>
                   )}
                 </div>

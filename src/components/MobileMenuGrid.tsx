@@ -6,6 +6,7 @@ import PortalSheet from './ui/PortalSheet'
 import { useAuthStore } from '../stores/authStore'
 import { useSubscriptionStore } from '../stores/subscriptionStore'
 import { pathEnabled } from '../lib/featureAccess'
+import { useTerminologi, terapkanTerminologi } from '../lib/terminologi'
 import { flattenMenu, menuForRole, primaryGridForRole, type FlatMenu } from '../lib/menuItems'
 
 const colors = [
@@ -15,13 +16,14 @@ const colors = [
 ]
 
 function MenuLink({ item, index, onClick }: { item: FlatMenu; index: number; onClick?: () => void }) {
+  const t = useTerminologi()
   const content = (
     <>
       <span className={`w-12 h-12 rounded-2xl flex items-center justify-center transition-transform group-active:scale-90 ${colors[index % colors.length]}`}>
         {item.icon}
       </span>
       <span className="mt-2 w-full text-[11px] leading-4 font-medium text-gray-600 dark:text-gray-300 line-clamp-2">
-        {item.label}
+        {terapkanTerminologi(item.label, t)}
       </span>
     </>
   )

@@ -1900,6 +1900,7 @@ for (const col of [
   ['rombel', 'geo_lock', 'INTEGER DEFAULT 0'],
   ['settings', 'background', "TEXT DEFAULT ''"],
   ['settings', 'jenjang', "TEXT DEFAULT ''"],
+  ['settings', 'tipe_institusi', "TEXT DEFAULT ''"],
   ['settings', 'hari_libur', "TEXT DEFAULT '[]'"],
   ['settings', 'kbm_auto_aktif', "INTEGER DEFAULT 0"],
   ['settings', 'bg_size', "TEXT DEFAULT 'cover'"],
@@ -3842,7 +3843,7 @@ app.get('/api/auth/me/foto', authMiddleware, (req, res) => {
 })
 
 app.post('/api/auth/register', accountLimiter, async (req, res) => {
-  const { nama_lembaga, nama, email, password, no_hp, domain_type, custom_domain, slug: slugInput, base_domain, plan: planPilih } = req.body
+  const { nama_lembaga, nama, email, password, no_hp, domain_type, custom_domain, slug: slugInput, base_domain, plan: planPilih, jenjang, tipe_institusi } = req.body
   const vErr = vRegister(req.body); if (vErr) return res.status(400).json({ error: vErr })
   const exists = db.prepare('SELECT id FROM users WHERE email = ?').get(email)
   if (exists) return res.status(400).json({ error: 'Email sudah terdaftar' })
@@ -3891,7 +3892,7 @@ app.post('/api/auth/register', accountLimiter, async (req, res) => {
 
   // Create default settings for tenant (simpan no_hp pendaftar sebagai kontak
   // lembaga — dipakai pengingat masa aktif & notifikasi lain).
-  ensureTenantSettings(db, tenantId, { nama_lembaga: nama_lembaga || nama, telepon: no_hp || '' })
+  ensureTenantSettings(db, tenantId, { nama_lembaga: nama_lembaga || nama, telepon: no_hp || '', jenjang: jenjang || '', tipe_institusi: tipe_institusi || '' })
   db.prepare('INSERT OR IGNORE INTO notif_settings (id, tenant_id) VALUES (?,?)').run('main_' + tenantId, tenantId)
 
   // Domain sendiri: coba pasang blok Caddy sekarang (DNS sering sudah diarahkan
@@ -4371,7 +4372,7 @@ app.get('/api/geocode/search', async (req, res) => {
 })
 
 app.put('/api/settings', ADMIN, (req, res) => {
-  const { nama_lembaga, alamat, telepon, email, theme, primary_color, accent_color, sidebar_color, geo_latitude, geo_longitude, geo_radius, jenjang, hari_libur, kbm_auto_aktif, bg_size, bg_position, bg_repeat, bg_blur, pwa_enabled, pwa_name, pwa_theme_color, pwa_bg_color, dashboard_quick_menus, kepala_sekolah, npsn, nsm, kota_cetak, kota_sholat, lat_sholat, lng_sholat, tz_sholat } = req.body
+  const { nama_lembaga, alamat, telepon, email, theme, primary_color, accent_color, sidebar_color, geo_latitude, geo_longitude, geo_radius, jenjang, tipe_institusi, hari_libur, kbm_auto_aktif, bg_size, bg_position, bg_repeat, bg_blur, pwa_enabled, pwa_name, pwa_theme_color, pwa_bg_color, dashboard_quick_menus, kepala_sekolah, npsn, nsm, kota_cetak, kota_sholat, lat_sholat, lng_sholat, tz_sholat } = req.body
   const id = canonicalSettingsId(req.tenantId)
   const kbm_auto = kbm_auto_aktif ? 1 : 0
   const bg_size_v = bg_size || 'cover'
@@ -4383,10 +4384,10 @@ app.put('/api/settings', ADMIN, (req, res) => {
   const normalizedQuickMenus = [...new Set(dashboard_quick_menus.filter(item => typeof item === 'string' && allowedQuickMenus.has(item)))]
   if (normalizedQuickMenus.length < 1 || normalizedQuickMenus.length > allowedQuickMenus.size) return res.status(400).json({ error: 'Pilih minimal 1 pintasan dashboard yang valid. Anda memilih: ' + normalizedQuickMenus.length })
   const quickMenus = JSON.stringify(normalizedQuickMenus)
-  db.prepare(`INSERT INTO settings (id, tenant_id, nama_lembaga, alamat, telepon, email, theme, primary_color, accent_color, sidebar_color, geo_latitude, geo_longitude, geo_radius, jenjang, hari_libur, kbm_auto_aktif, bg_size, bg_position, bg_repeat, bg_blur, pwa_enabled, pwa_name, pwa_theme_color, pwa_bg_color, dashboard_quick_menus, kepala_sekolah, npsn, nsm, kota_cetak, kota_sholat, lat_sholat, lng_sholat, tz_sholat, updated_at)
-    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,datetime('now'))
-    ON CONFLICT(id) DO UPDATE SET tenant_id=excluded.tenant_id, nama_lembaga=excluded.nama_lembaga, alamat=excluded.alamat, telepon=excluded.telepon, email=excluded.email, theme=excluded.theme, primary_color=excluded.primary_color, accent_color=excluded.accent_color, sidebar_color=excluded.sidebar_color, geo_latitude=excluded.geo_latitude, geo_longitude=excluded.geo_longitude, geo_radius=excluded.geo_radius, jenjang=excluded.jenjang, hari_libur=excluded.hari_libur, kbm_auto_aktif=excluded.kbm_auto_aktif, bg_size=excluded.bg_size, bg_position=excluded.bg_position, bg_repeat=excluded.bg_repeat, bg_blur=excluded.bg_blur, pwa_enabled=excluded.pwa_enabled, pwa_name=excluded.pwa_name, pwa_theme_color=excluded.pwa_theme_color, pwa_bg_color=excluded.pwa_bg_color, dashboard_quick_menus=excluded.dashboard_quick_menus, kepala_sekolah=excluded.kepala_sekolah, npsn=excluded.npsn, nsm=excluded.nsm, kota_cetak=excluded.kota_cetak, kota_sholat=excluded.kota_sholat, lat_sholat=excluded.lat_sholat, lng_sholat=excluded.lng_sholat, tz_sholat=excluded.tz_sholat, updated_at=datetime('now')`)
-    .run(id, req.tenantId, nama_lembaga, alamat, telepon, email, theme, primary_color, accent_color, sidebar_color, geo_latitude || null, geo_longitude || null, geo_radius || 200, jenjang || '', JSON.stringify(hari_libur || []), kbm_auto, bg_size_v, bg_position_v, bg_repeat_v, bg_blur_v, pwa_enabled ? 1 : 0, pwa_name || '', pwa_theme_color || '#1e40af', pwa_bg_color || '#ffffff', quickMenus, kepala_sekolah || '', npsn || '', nsm || '', kota_cetak || '', kota_sholat || '', lat_sholat || null, lng_sholat || null, tz_sholat || 7)
+  db.prepare(`INSERT INTO settings (id, tenant_id, nama_lembaga, alamat, telepon, email, theme, primary_color, accent_color, sidebar_color, geo_latitude, geo_longitude, geo_radius, jenjang, tipe_institusi, hari_libur, kbm_auto_aktif, bg_size, bg_position, bg_repeat, bg_blur, pwa_enabled, pwa_name, pwa_theme_color, pwa_bg_color, dashboard_quick_menus, kepala_sekolah, npsn, nsm, kota_cetak, kota_sholat, lat_sholat, lng_sholat, tz_sholat, updated_at)
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,datetime('now'))
+    ON CONFLICT(id) DO UPDATE SET tenant_id=excluded.tenant_id, nama_lembaga=excluded.nama_lembaga, alamat=excluded.alamat, telepon=excluded.telepon, email=excluded.email, theme=excluded.theme, primary_color=excluded.primary_color, accent_color=excluded.accent_color, sidebar_color=excluded.sidebar_color, geo_latitude=excluded.geo_latitude, geo_longitude=excluded.geo_longitude, geo_radius=excluded.geo_radius, jenjang=excluded.jenjang, tipe_institusi=excluded.tipe_institusi, hari_libur=excluded.hari_libur, kbm_auto_aktif=excluded.kbm_auto_aktif, bg_size=excluded.bg_size, bg_position=excluded.bg_position, bg_repeat=excluded.bg_repeat, bg_blur=excluded.bg_blur, pwa_enabled=excluded.pwa_enabled, pwa_name=excluded.pwa_name, pwa_theme_color=excluded.pwa_theme_color, pwa_bg_color=excluded.pwa_bg_color, dashboard_quick_menus=excluded.dashboard_quick_menus, kepala_sekolah=excluded.kepala_sekolah, npsn=excluded.npsn, nsm=excluded.nsm, kota_cetak=excluded.kota_cetak, kota_sholat=excluded.kota_sholat, lat_sholat=excluded.lat_sholat, lng_sholat=excluded.lng_sholat, tz_sholat=excluded.tz_sholat, updated_at=datetime('now')`)
+    .run(id, req.tenantId, nama_lembaga, alamat, telepon, email, theme, primary_color, accent_color, sidebar_color, geo_latitude || null, geo_longitude || null, geo_radius || 200, jenjang || '', tipe_institusi || '', JSON.stringify(hari_libur || []), kbm_auto, bg_size_v, bg_position_v, bg_repeat_v, bg_blur_v, pwa_enabled ? 1 : 0, pwa_name || '', pwa_theme_color || '#1e40af', pwa_bg_color || '#ffffff', quickMenus, kepala_sekolah || '', npsn || '', nsm || '', kota_cetak || '', kota_sholat || '', lat_sholat || null, lng_sholat || null, tz_sholat || 7)
   res.json({ success: true, dashboard_quick_menus: JSON.parse(quickMenus) })
 })
 
