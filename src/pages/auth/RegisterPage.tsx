@@ -6,6 +6,8 @@ import toast from 'react-hot-toast'
 import api from '../../services/api'
 import { useAuthStore } from '../../stores/authStore'
 import { useSettingsStore } from '../../stores/settingsStore'
+import { TIPE_INSTITUSI_OPTIONS } from '../../lib/terminologi'
+import { JENJANG_OPTIONS } from '../../lib/jenjang'
 
 type DomainMode = 'subdomain' | 'custom'
 
@@ -52,6 +54,8 @@ export default function RegisterPage() {
     password: '',
     password_confirm: '',
     no_hp: '',
+    tipe_institusi: '',
+    jenjang: '',
   })
   const [showPw, setShowPw] = useState(false)
   const [loading, setLoading] = useState(false)
@@ -119,12 +123,14 @@ export default function RegisterPage() {
 
     setLoading(true)
     try {
-      const payload: Record<string, string> = {
+      const payload: Record<string, string | undefined> = {
         nama_lembaga: form.nama_lembaga,
         nama: form.nama,
         email: form.email,
         password: form.password,
         no_hp: form.no_hp,
+        tipe_institusi: form.tipe_institusi || undefined,
+        jenjang: form.jenjang || undefined,
       }
       // Kosong = trial gratis (tanpa pembayaran). Paket berbayar -> server menyiapkan QRIS.
       if (pilihPlan) payload.plan = pilihPlan
@@ -449,6 +455,36 @@ export default function RegisterPage() {
                 placeholder="MI/MTs/MA/SMP/SMA ..."
                 className="sk-form-input"
               />
+            </div>
+            <div>
+              <label className="sk-form-label">Tipe Lembaga</label>
+              <select
+                value={form.tipe_institusi}
+                onChange={e => {
+                  const tipe = e.target.value
+                  const jenjangOtomatis: Record<string, string> = {
+                    madrasah: 'MTs', sekolah: 'SMP', perguruan_tinggi: 'PT',
+                    diklat: 'NF', kursus: 'NF', bimbel: 'NF',
+                  }
+                  setForm(f => ({ ...f, tipe_institusi: tipe, jenjang: f.jenjang || jenjangOtomatis[tipe] || '' }))
+                }}
+                className="sk-form-input"
+              >
+                <option value="">- Pilih tipe lembaga -</option>
+                {TIPE_INSTITUSI_OPTIONS.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
+              </select>
+              <p className="mt-1 text-[11px] sk-txt-muted">Menentukan sebutan: Siswa/Mahasiswa/Santri/Karyawan, Guru/Dosen/Ustadz.</p>
+            </div>
+            <div>
+              <label className="sk-form-label">Jenjang</label>
+              <select
+                value={form.jenjang}
+                onChange={e => setForm({ ...form, jenjang: e.target.value })}
+                className="sk-form-input"
+              >
+                <option value="">- Pilih jenjang -</option>
+                {JENJANG_OPTIONS.map(j => <option key={j.value} value={j.value}>{j.label}</option>)}
+              </select>
             </div>
             <div>
               <label className="sk-form-label">Nama Lengkap <span className="text-red-500">*</span></label>
