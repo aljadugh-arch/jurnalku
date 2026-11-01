@@ -58,7 +58,12 @@ test('PWA memberi jalur manual jika Chrome tidak menyelesaikan prompt native', (
 
 test('landing page menjaga keterbacaan label jenjang pada section social proof', () => {
   const landing = read('src/pages/LandingPage.tsx')
-  assert.match(landing, /text-3xl font-bold text-slate-600/)
+  // Bagian jenjang kini berbentuk kartu: label tebal + keterangan singkat,
+  // bukan deretan kata besar yang pudar.
+  assert.ok(landing.includes('JENJANG_META'), 'metadata jenjang (warna + keterangan)')
+  assert.ok(landing.includes('text-sm font-bold sk-txt">{j}</p>'), 'label jenjang tebal')
+  assert.ok(landing.includes('{m.ket}'), 'keterangan jenjang tampil')
+  assert.ok(!landing.includes('opacity-70'), 'tidak ada label pudar')
 })
 
 test('layout dashboard memberi ruang untuk bottom navigation di mobile dan mencegah overflow horizontal', () => {
