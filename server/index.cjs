@@ -9490,7 +9490,7 @@ async function saveUploadedSignature(file, tenantId) {
 }
 
 app.get('/api/jurnal', requireRole('admin', 'super_admin', 'kepala', 'operator', 'bendahara', 'tata_usaha', 'tu'), (req, res) => {
-  const { tanggal, gtk_id, guru_id, status } = req.query
+  const { tanggal, gtk_id, guru_id, status, rombel_id } = req.query
   // Klausa WHERE dibangun TERPISAH dari SELECT — query punya subquery dengan
   // WHERE di dalamnya, jadi memotong string SQL di 'WHERE' akan salah.
   const where = ['j.tenant_id = ?']
@@ -9498,6 +9498,7 @@ app.get('/api/jurnal', requireRole('admin', 'super_admin', 'kepala', 'operator',
   if (tanggal) { where.push('j.tanggal = ?'); params.push(tanggal) }
   if (gtk_id || guru_id) { where.push('j.guru_id = ?'); params.push(gtk_id || guru_id) }
   if (status) { where.push('j.status = ?'); params.push(status) }
+  if (rombel_id) { where.push('j.rombel_id = ?'); params.push(rombel_id) }
   const whereSql = ' WHERE ' + where.join(' AND ')
 
   const selectSql = `SELECT j.*, COALESCE((

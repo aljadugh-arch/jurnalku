@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { Plus, X, Search, Award } from 'lucide-react'
 import toast from 'react-hot-toast'
 import api from '../../services/api'
+import { useTerminologi } from '../../lib/terminologi'
 
 interface Beasiswa {
   id: string
@@ -29,6 +30,7 @@ interface Rombel {
 }
 
 export default function BeasiswaPage() {
+  const t = useTerminologi()
   const [data, setData] = useState<Beasiswa[]>([])
   const [siswaList, setSiswaList] = useState<Siswa[]>([])
   const [rombels, setRombels] = useState<Rombel[]>([])
@@ -173,7 +175,7 @@ export default function BeasiswaPage() {
               <table className="w-full text-sm">
                 <thead className="bg-gray-50 border-b">
                   <tr>
-                    <th className="text-left px-4 py-3 font-medium text-gray-600">Siswa</th>
+                    <th className="text-left px-4 py-3 font-medium text-gray-600">{t.siswa}</th>
                     <th className="text-left px-4 py-3 font-medium text-gray-600">Nama Beasiswa</th>
                     <th className="text-left px-4 py-3 font-medium text-gray-600">Nominal</th>
                     <th className="text-left px-4 py-3 font-medium text-gray-600">Periode</th>

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { Plus, Trash2, ClipboardCheck, Award, X, RefreshCw } from 'lucide-react'
 import toast from 'react-hot-toast'
 import api from '../../services/api'
+import { useTerminologi } from '../../lib/terminologi'
 import { todayWib } from '../../lib/dateFormat'
 import { useSettingsStore } from '../../stores/settingsStore'
 import { tenantIdentity } from '../../utils/tenantExport'
@@ -18,6 +19,7 @@ const STATUS_LABEL: Record<string, { label: string; cls: string }> = {
 }
 
 export default function ProgramPesertaPage() {
+  const t = useTerminologi()
   const settings = useSettingsStore(s => s.settings)
   const tenant = tenantIdentity(settings)
   const [peserta, setPeserta] = useState<Peserta[]>([])
@@ -158,7 +160,7 @@ export default function ProgramPesertaPage() {
           <div className="bg-white rounded-2xl p-5 w-full max-w-sm" onClick={e => e.stopPropagation()}>
             <h3 className="font-bold text-lg mb-4">Daftarkan Peserta</h3>
             <div className="space-y-3">
-              <div><label className="block text-xs font-medium text-slate-500 mb-1">Siswa</label>
+              <div><label className="block text-xs font-medium text-slate-500 mb-1">{t.siswa}</label>
                 <select value={formDaftar.siswa_id} onChange={e => setFormDaftar(f => ({ ...f, siswa_id: e.target.value }))} className="w-full h-11 px-3 rounded-xl border border-slate-200 text-sm outline-none focus:border-indigo-400">
                   <option value="">— pilih siswa —</option>
                   {siswa.map(s => <option key={s.id} value={s.id}>{s.nama}{s.nis ? ` (${s.nis})` : ''}</option>)}

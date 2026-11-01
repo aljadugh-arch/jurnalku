@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Building2, Users, ArrowRight, Search, RefreshCw, Wallet, Receipt, CheckCircle2 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import api from '../../services/api'
+import { useTerminologi } from '../../lib/terminologi'
 
 interface FoundationTenant {
   id: string
@@ -24,6 +25,7 @@ interface Siswa {
 }
 
 export default function FoundationSyncPage() {
+  const t = useTerminologi()
   const [tenants, setTenants] = useState<FoundationTenant[]>([])
   const [sourceTenant, setSourceTenant] = useState('')
   const [siswaList, setSiswaList] = useState<Siswa[]>([])
@@ -223,7 +225,7 @@ export default function FoundationSyncPage() {
                     <table className="w-full text-sm">
                       <thead><tr className="bg-gray-50 border-b">
                         <th className="text-left px-3 py-2 font-medium text-gray-600">Lembaga</th>
-                        <th className="text-left px-3 py-2 font-medium text-gray-600">Siswa</th>
+                        <th className="text-left px-3 py-2 font-medium text-gray-600">{t.siswa}</th>
                         <th className="text-left px-3 py-2 font-medium text-gray-600">Jenis</th>
                         <th className="text-left px-3 py-2 font-medium text-gray-600">Periode</th>
                         <th className="text-right px-3 py-2 font-medium text-gray-600">Nominal</th>
@@ -251,7 +253,7 @@ export default function FoundationSyncPage() {
                     <table className="w-full text-sm">
                       <thead><tr className="bg-gray-50 border-b">
                         <th className="text-left px-3 py-2 font-medium text-gray-600">Lembaga</th>
-                        <th className="text-left px-3 py-2 font-medium text-gray-600">Siswa</th>
+                        <th className="text-left px-3 py-2 font-medium text-gray-600">{t.siswa}</th>
                         <th className="text-left px-3 py-2 font-medium text-gray-600">NIS</th>
                         <th className="text-right px-3 py-2 font-medium text-gray-600">Saldo</th>
                       </tr></thead>

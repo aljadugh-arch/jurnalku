@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { Search, RefreshCw, CheckCircle, XCircle, Loader2, FileText, Eye } from 'lucide-react'
 import toast from 'react-hot-toast'
 import api from '../../services/api'
+import { useTerminologi } from '../../lib/terminologi'
 
 interface TopupManual {
   id: string
@@ -37,6 +38,7 @@ const STATUS_COLORS: Record<string, string> = {
 }
 
 export default function CashlessTopupPage() {
+  const t = useTerminologi()
   const [topups, setTopups] = useState<TopupManual[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
@@ -125,7 +127,7 @@ export default function CashlessTopupPage() {
               <thead className="bg-gray-50 border-b border-gray-100">
                 <tr>
                   <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">ID</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Siswa</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">{t.siswa}</th>
                   <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase">Nominal / Transfer</th>
                   <th className="px-4 py-3 text-center text-xs font-semibold text-gray-500 uppercase">Kode</th>
                   <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Bank / Rekening</th>
@@ -213,7 +215,7 @@ export default function CashlessTopupPage() {
             <div className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <p className="text-xs text-gray-500">Siswa</p>
+                  <p className="text-xs text-gray-500">{t.siswa}</p>
                   <p className="font-medium">{selectedTopup.siswa_nama}</p>
                 </div>
                 <div>

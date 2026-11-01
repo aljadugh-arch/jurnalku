@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import api from '../../services/api'
+import { useTerminologi } from '../../lib/terminologi'
 import { CheckCircle2, XCircle, Filter } from 'lucide-react'
 
 type Tugas = {
@@ -47,6 +48,7 @@ function Cell({ filled, total }: { filled: number; total: number }) {
 }
 
 export default function AdminMonitoringNilaiPage() {
+  const t = useTerminologi()
   const [data, setData] = useState<MonitoringData | null>(null)
   const [loading, setLoading] = useState(true)
   const [msg, setMsg] = useState('')
@@ -143,7 +145,7 @@ export default function AdminMonitoringNilaiPage() {
                     <thead className="bg-gray-50 dark:bg-gray-800">
                       <tr>
                         <th className="px-4 py-2 text-left font-medium text-gray-600 dark:text-gray-300">Mapel — Kelas</th>
-                        <th className="px-4 py-2 text-center font-medium text-gray-600 dark:text-gray-300">Siswa</th>
+                        <th className="px-4 py-2 text-center font-medium text-gray-600 dark:text-gray-300">{t.siswa}</th>
                         <th className="px-4 py-2 text-center font-medium text-gray-600 dark:text-gray-300">Harian</th>
                         <th className="px-4 py-2 text-center font-medium text-gray-600 dark:text-gray-300">STS</th>
                         <th className="px-4 py-2 text-center font-medium text-gray-600 dark:text-gray-300">SAS</th>

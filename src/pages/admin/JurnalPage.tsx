@@ -26,8 +26,9 @@ export default function JurnalPage() {
   const [page, setPage] = useState(1)
   const [hasMore, setHasMore] = useState(false)
   const [loading, setLoading] = useState(true)
-  const [filter, setFilter] = useState({ tanggal: '', guru_id: '', status: '' })
+  const [filter, setFilter] = useState({ tanggal: '', guru_id: '', status: '', rombel_id: '' })
   const [gtks, setGtks] = useState<any[]>([])
+  const [rombels, setRombels] = useState<any[]>([])
   const [detail, setDetail] = useState<any>(null)
   const [bulkSaving, setBulkSaving] = useState(false)
   const [jumlahSubmitted, setJumlahSubmitted] = useState(0)
@@ -38,6 +39,7 @@ export default function JurnalPage() {
 
   useEffect(() => {
     api.get('/gtk').then(res => setGtks(res.data)).catch(() => {})
+    api.get('/rombel').then(res => setRombels(res.data || [])).catch(() => {})
   }, [])
 
   const loadData = useCallback(async (halaman = 1) => {
@@ -48,6 +50,7 @@ export default function JurnalPage() {
       if (filter.tanggal) params.tanggal = filter.tanggal
       if (filter.guru_id) params.guru_id = filter.guru_id
       if (filter.status) params.status = filter.status
+      if (filter.rombel_id) params.rombel_id = filter.rombel_id
       const res = await api.get('/jurnal', { params })
       if (seq !== reqSeq.current) return // sudah usang, abaikan
       const rows = Array.isArray(res.data) ? res.data : (res.data.rows || [])
@@ -94,6 +97,7 @@ export default function JurnalPage() {
     if (filter.tanggal) params.tanggal = filter.tanggal
     if (filter.guru_id) params.guru_id = filter.guru_id
     if (filter.status) params.status = filter.status
+    if (filter.rombel_id) params.rombel_id = filter.rombel_id
     const res = await api.get('/jurnal', { params })
     return Array.isArray(res.data) ? res.data : (res.data.rows || [])
   }
@@ -190,7 +194,10 @@ export default function JurnalPage() {
       ws['!merges'] = [0, 1, 3, 4].map(r => ({ s: { r, c: 0 }, e: { r, c: judulKolom.length - 1 } }))
       XLSX.utils.book_append_sheet(wb, ws, namaSheet(rombel, dipakai))
     }
-    XLSX.writeFile(wb, 'Jurnal_Mengajar_per_Rombel.xlsx')
+    const namaRombel = filter.rombel_id
+      ? (rombels.find(r => r.id === filter.rombel_id)?.nama || t.rombel)
+      : 'per Rombel'
+    XLSX.writeFile(wb, `Jurnal_Mengajar_${String(namaRombel).replace(/[^a-zA-Z0-9]+/g, '_')}.xlsx`)
     toast.success(`Excel per rombel diunduh (${semua.length} baris · ${grup.length} rombel)`)
   }
 
@@ -208,7 +215,7 @@ export default function JurnalPage() {
       ).join('')
       return `<div class="blok"><h4>Rombel: ${escapeHtml(rombel)} <span class="kecil">· ${arr.length} entri</span></h4><table><thead><tr><th>No</th><th>Tanggal</th><th>Jam</th><th>Mapel</th><th>Guru</th><th>Materi</th><th>Kegiatan</th><th>Status</th></tr></thead><tbody>${rows}</tbody></table></div>`
     }).join('')
-    const filterInfo = [filter.tanggal ? `Tanggal: ${filter.tanggal}` : '', filter.guru_id ? `Guru: ${gtks.find(g => g.id === filter.guru_id)?.nama || ''}` : '', filter.status ? `Status: ${filter.status}` : ''].filter(Boolean).join(' · ') || 'Semua data'
+    const filterInfo = [filter.tanggal ? `Tanggal: ${filter.tanggal}` : '', filter.guru_id ? `Guru: ${gtks.find(g => g.id === filter.guru_id)?.nama || ''}` : '', filter.status ? `Status: ${filter.status}` : '', filter.rombel_id ? `${t.rombel}: ${rombels.find(r => r.id === filter.rombel_id)?.nama || ''}` : ''].filter(Boolean).join(' · ') || 'Semua data'
     printWindow.document.write(`<!DOCTYPE html><html><head><title>Jurnal Mengajar</title><style>@page{size:landscape;margin:8mm}body{font-family:Arial,sans-serif;padding:14px;font-size:11px}.kop{display:flex;align-items:center;justify-content:center;gap:12px;border-bottom:2px solid #000;padding-bottom:7px;margin-bottom:8px}.kop img{width:58px;height:58px;object-fit:contain}.kop-text{text-align:center}.kop-text h2{margin:0}h3{text-align:center;margin:4px 0}.meta{margin:6px 0;font-size:10px}table{border-collapse:collapse;width:100%}th,td{border:1px solid #999;padding:4px;text-align:center}.materi{text-align:left}th{background:#f3f4f6;font-size:10px}@media print{body{padding:0}}.blok{margin-bottom:14px;break-inside:auto}.blok h4{margin:0 0 4px;font-size:12px;background:#eef2ff;border-left:3px solid #4f46e5;padding:4px 8px;page-break-after:avoid}.blok .kecil{font-weight:normal;color:#64748b;font-size:10px}${SIGNATURE_CSS}</style></head><body><div class="kop">${logo}<div class="kop-text"><h2>${escapeHtml(tenant.name)}</h2>${tenant.address ? `<div>${escapeHtml(tenant.address)}</div>` : ''}</div></div><h3>JURNAL KEGIATAN PEMBELAJARAN (PER ROMBEL)</h3><div class="meta">${escapeHtml(filterInfo)}</div>${blok}${signatureBlockHtml(sigSettings, { leftTitle: 'Guru Mapel', rightTitle: t.kepala })}<script>setTimeout(()=>window.print(),500)<\/script></body></html>`)
     printWindow.document.close()
   }
@@ -231,7 +238,7 @@ export default function JurnalPage() {
       </div>
 
       {/* Filter */}
-      <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100 grid grid-cols-1 sm:grid-cols-3 gap-3">
+      <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
         <input type="date" value={filter.tanggal} onChange={e => setFilter({...filter, tanggal: e.target.value})} className="w-full min-w-0 px-3 py-2 border rounded-lg text-sm" />
         <div className="min-w-0">
           {/* Daftar guru bisa ratusan — cari dulu, baru pilih. */}
@@ -241,6 +248,10 @@ export default function JurnalPage() {
             {gtks.filter(g => cocokBeberapa(cariGuru, g.nama, g.nip)).map(g => <option key={g.id} value={g.id}>{g.nama}</option>)}
           </select>
         </div>
+        <select value={filter.rombel_id} onChange={e => setFilter({...filter, rombel_id: e.target.value})} className="w-full min-w-0 px-3 py-2 border rounded-lg text-sm">
+          <option value="">{t.rombel} — semua</option>
+          {rombels.map(r => <option key={r.id} value={r.id}>{r.nama}</option>)}
+        </select>
         <select value={filter.status} onChange={e => setFilter({...filter, status: e.target.value})} className="w-full min-w-0 px-3 py-2 border rounded-lg text-sm">
           <option value="">Semua Status</option>
           <option value="draft">Draft</option>

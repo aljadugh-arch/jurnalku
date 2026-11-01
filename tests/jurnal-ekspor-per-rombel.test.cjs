@@ -25,7 +25,9 @@ test('pengelompokan per rombel + urutan tanggal/jam/mapel/guru', () => {
 test('Excel: satu lembar per rombel + lembar Ringkasan', () => {
   assert.match(page, /book_append_sheet\(wb, ws, namaSheet\(rombel, dipakai\)\)/, 'sheet per rombel')
   assert.match(page, /book_append_sheet\(wb, wsR, 'Ringkasan'\)/, 'sheet ringkasan')
-  assert.match(page, /Jurnal_Mengajar_per_Rombel\.xlsx/, 'nama berkas per rombel')
+  // Nama berkas kini mengikuti rombel yang difilter (default: per Rombel).
+  assert.match(page, /Jurnal_Mengajar_\$\{String\(namaRombel\)/, 'nama berkas menyertakan rombel')
+  assert.match(page, /'per Rombel'/, 'default nama berkas per rombel')
   assert.match(page, /const namaSheet = /, 'nama sheet disanitasi (maks 31 char)')
 })
 
