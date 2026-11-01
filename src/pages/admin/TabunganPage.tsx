@@ -179,7 +179,7 @@ export default function TabunganPage() {
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-gray-800 font-display">Tabungan Siswa</h1>
+          <h1 className="text-2xl font-bold text-gray-800 font-display">Tabungan {t.siswa}</h1>
           <p className="text-gray-500 text-sm mt-1">Total saldo: {fmt(totalSaldo)}</p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -222,7 +222,7 @@ export default function TabunganPage() {
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-          <div className="px-4 py-3 bg-gray-50 border-b"><h3 className="font-medium text-gray-700">Daftar Saldo Siswa</h3></div>
+          <div className="px-4 py-3 bg-gray-50 border-b"><h3 className="font-medium text-gray-700">Daftar Saldo {t.siswa}</h3></div>
           <div className="divide-y divide-gray-100 max-h-96 overflow-y-auto">
             {loading ? <p className="px-4 py-8 text-center text-gray-400">Memuat...</p> :
             filtered.length === 0 ? <p className="px-4 py-8 text-center text-gray-400">Belum ada data</p> :

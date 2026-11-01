@@ -403,7 +403,7 @@ export default function TagihanPage() {
         ) : (
           <ResponsiveTable<Tagihan>
             columns={[
-              { key: 'siswa', header: 'Siswa', className: 'font-medium text-gray-800', render: (t) => (
+              { key: 'siswa', header: term.siswa, className: 'font-medium text-gray-800', render: (t) => (
                 <><span className="font-medium text-gray-800">{t.siswa_nama}</span><br/><span className="text-xs text-gray-400">{t.nis}</span></>
               ) },
               { key: 'jenis_nama', header: 'Jenis' },
