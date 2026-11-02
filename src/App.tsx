@@ -1,5 +1,5 @@
 import { useEffect, useState, Suspense, lazy, type ReactNode } from 'react'
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { Toaster } from 'react-hot-toast'
 import { useAuthStore } from './stores/authStore'
 import { useSettingsStore } from './stores/settingsStore'
@@ -11,6 +11,7 @@ import ForgotPasswordPage from './pages/auth/ForgotPasswordPage'
 import SubscriptionGate from './components/SubscriptionGate'
 import { useSubscriptionStore } from './stores/subscriptionStore'
 import PwaInstallPrompt from './components/PwaInstallPrompt'
+import ErrorBoundary from './components/ErrorBoundary'
 import api from './services/api'
 import type { User } from './types'
 import { bisaModeGuru } from './lib/teacherMode'
@@ -205,6 +206,13 @@ function RootRoute() {
   return <Navigate to={destination} replace />
 }
 
+// Pagar render di-reset saat rute berubah supaya satu halaman yang gagal tidak
+// mengunci seluruh aplikasi.
+function RouteBoundary({ children }: { children: React.ReactNode }) {
+  const { pathname } = useLocation()
+  return <ErrorBoundary key={pathname}>{children}</ErrorBoundary>
+}
+
 export default function App() {
   const { checkAuth, isAuthenticated, authReady } = useAuthStore()
   const { loadSettings } = useSettingsStore()
@@ -228,6 +236,7 @@ export default function App() {
       <Toaster position="top-right" />
       <PwaInstallPrompt />
       <Suspense fallback={<PageLoader />}>
+      <RouteBoundary>
       <Routes>
         <Route path="/" element={<RootRoute />} />
         <Route path="/login" element={<LoginPage />} />
@@ -487,6 +496,7 @@ export default function App() {
 
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
+      </RouteBoundary>
       </Suspense>
     </BrowserRouter>
   )

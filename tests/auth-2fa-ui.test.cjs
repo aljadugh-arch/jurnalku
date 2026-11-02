@@ -49,3 +49,13 @@ test('LoginPage: tidak ada hook setelah early return (React #300)', () => {
   // Hook yang dipakai wajib berada sebelum return.
   assert.ok(baris.slice(0, batas).some(l => l.includes('useEffect(() => {')), 'useEffect magic ada sebelum return')
 })
+
+test('aplikasi punya pagar render (ErrorBoundary) dengan tombol muat ulang', () => {
+  const app = baca('src/App.tsx')
+  const batas = baca('src/components/ErrorBoundary.tsx')
+  assert.ok(app.includes('RouteBoundary'), 'Routes dibungkus pagar')
+  assert.ok(app.includes('<ErrorBoundary key={pathname}>'), 'pagar di-reset per rute')
+  assert.ok(batas.includes('getDerivedStateFromError'), 'menangkap error render')
+  assert.ok(batas.includes('window.location.reload()'), 'menyediakan jalan keluar')
+  assert.ok(batas.includes('Halaman gagal ditampilkan'), 'pesan jelas, bukan layar mati')
+})
