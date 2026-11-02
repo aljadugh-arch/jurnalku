@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { Building2, CheckCircle2, XCircle, Users, GraduationCap, UserCheck, CreditCard, Gift, Crown, AlertTriangle, CalendarDays, Moon, Sun, LogOut, User, Lock, ChevronDown, Megaphone } from 'lucide-react'
+import { ShieldCheck, Building2, CheckCircle2, XCircle, Users, GraduationCap, UserCheck, CreditCard, Gift, Crown, AlertTriangle, CalendarDays, Moon, Sun, LogOut, User, Lock, ChevronDown, Megaphone } from 'lucide-react'
 import api from '../../services/api'
 import { useAuthStore } from '../../stores/authStore'
 import { useThemeStore } from '../../stores/themeStore'
@@ -33,12 +33,39 @@ export default function SuperadminDashboard() {
   const { dark, toggle: toggleDark } = useThemeStore()
   const navigate = useNavigate()
   const [showDropdown, setShowDropdown] = useState(false)
+  // Kebijakan 2FA lunak: peringatan di dashboard pengguna berperan tertentu.
+  // Bawaan mati supaya tidak muncul sebelum sosialisasi.
+  const [kebijakan2fa, setKebijakan2fa] = useState<{ aktif: boolean; roles: string[] }>({ aktif: false, roles: [] })
+  const [peranTersedia, setPeranTersedia] = useState<string[]>([])
+  const [menyimpanKebijakan, setMenyimpanKebijakan] = useState(false)
 
   const handleLogout = () => { logout(); navigate('/login') }
 
   useEffect(() => {
     api.get('/tenants').then(res => { setTenants(res.data); setLoading(false) }).catch(() => setLoading(false))
   }, [])
+
+  useEffect(() => {
+    api.get('/auth/2fa/policy').then(r => {
+      setKebijakan2fa({ aktif: r.data?.aktif === true, roles: Array.isArray(r.data?.roles) ? r.data.roles : [] })
+      setPeranTersedia(Array.isArray(r.data?.peran_tersedia) ? r.data.peran_tersedia : [])
+    }).catch(() => {})
+  }, [])
+
+  const simpanKebijakan2fa = async () => {
+    setMenyimpanKebijakan(true)
+    try {
+      const r = await api.post('/superadmin/2fa/policy', kebijakan2fa)
+      setKebijakan2fa({ aktif: r.data.aktif, roles: r.data.roles })
+      alert(r.data.aktif ? 'Peringatan 2FA diaktifkan.' : 'Peringatan 2FA dimatikan.')
+    } catch (e: any) {
+      alert(e.response?.data?.error || 'Gagal menyimpan kebijakan 2FA')
+    } finally { setMenyimpanKebijakan(false) }
+  }
+
+  const togglePeran = (r: string) => {
+    setKebijakan2fa(k => ({ ...k, roles: k.roles.includes(r) ? k.roles.filter(x => x !== r) : [...k.roles, r] }))
+  }
 
   const today = new Date().toLocaleDateString('id-ID', { timeZone: 'Asia/Jakarta', weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
 
@@ -136,6 +163,56 @@ export default function SuperadminDashboard() {
 
       {/* Menu layanan mobile/tablet: di bawah stat cards */}
       <MobileMenuGrid />
+
+      {/* Kebijakan 2FA (lunak) — bawaan mati, dinyalakan setelah sosialisasi */}
+      <div className="bg-white border border-gray-200 rounded-xl p-4 sm:p-5 space-y-3">
+        <div className="flex items-start gap-2.5">
+          <div className={`rounded-lg p-2 ${kebijakan2fa.aktif ? 'bg-emerald-50 text-emerald-600' : 'bg-gray-100 text-gray-500'}`}>
+            <ShieldCheck size={18} />
+          </div>
+          <div className="min-w-0 flex-1">
+            <h3 className="text-sm font-semibold text-gray-800">Peringatan 2FA (lunak)</h3>
+            <p className="text-xs text-gray-500">
+              Menampilkan banner di dashboard pengguna yang belum mengaktifkan authenticator. Tidak memaksa —
+              pengguna tetap bisa bekerja. Matikan selama masa sosialisasi.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setKebijakan2fa(k => ({ ...k, aktif: !k.aktif }))}
+            aria-pressed={kebijakan2fa.aktif}
+            className={`relative h-6 w-11 shrink-0 rounded-full transition ${kebijakan2fa.aktif ? 'bg-emerald-500' : 'bg-gray-300'}`}
+            title={kebijakan2fa.aktif ? 'Matikan peringatan' : 'Nyalakan peringatan'}
+          >
+            <span className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-all ${kebijakan2fa.aktif ? 'left-[22px]' : 'left-0.5'}`} />
+          </button>
+        </div>
+
+        <div className="flex flex-wrap gap-1.5">
+          {peranTersedia.map(r => (
+            <button
+              key={r}
+              type="button"
+              onClick={() => togglePeran(r)}
+              className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold ${kebijakan2fa.roles.includes(r) ? 'border-primary bg-primary/5 text-primary' : 'border-gray-200 text-gray-500'}`}
+            >
+              {r.replace(/_/g, ' ')}
+            </button>
+          ))}
+        </div>
+
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={simpanKebijakan2fa}
+            disabled={menyimpanKebijakan || (kebijakan2fa.aktif && kebijakan2fa.roles.length === 0)}
+            className="rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-white hover:opacity-90 disabled:opacity-50"
+          >
+            {menyimpanKebijakan ? 'Menyimpan...' : 'Simpan kebijakan'}
+          </button>
+          <span className="text-[11px] text-gray-400">{kebijakan2fa.aktif ? 'Aktif' : 'Nonaktif (bawaan)'}</span>
+        </div>
+      </div>
 
       {/* Ringkasan Invoice / Langganan per lembaga */}
       <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">

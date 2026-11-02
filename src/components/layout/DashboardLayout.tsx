@@ -3,6 +3,7 @@ import Sidebar from './Sidebar'
 import Header from './Header'
 import BottomNavigation from './BottomNavigation'
 import AdzanNotifier from '../AdzanNotifier'
+import TwoFactorBanner from '../TwoFactorBanner'
 import { useSidebarStore } from '../../stores/sidebarStore'
 import { useAuthStore } from '../../stores/authStore'
 import { isReadOnly } from '../../lib/roles'
@@ -71,6 +72,7 @@ export default function DashboardLayout() {
           </div>
         )}
         <main className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden p-4 pb-24 sm:p-6 lg:pb-6">
+          <TwoFactorBanner />
           <Outlet />
         </main>
         <BottomNavigation />

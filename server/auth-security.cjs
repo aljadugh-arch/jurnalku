@@ -11,6 +11,7 @@
 
 const crypto = require('crypto')
 const bcrypt = require('bcryptjs')
+const { getPlatformSettings, setPlatformSetting } = require('./platform-settings.cjs')
 
 const MASA_TAUTAN_MENIT = 10
 const MASA_CHALLENGE_MENIT = 5
@@ -204,6 +205,24 @@ function pakaiChallenge(db, row) {
   db.prepare('UPDATE auth_challenge SET used=1 WHERE id=?').run(row.id)
 }
 
+// ------------------------------------------------- kebijakan 2FA platform
+// Peringatan LUNAK: tidak memaksa, hanya memberi tahu pengguna berperan tertentu
+// yang belum mengaktifkan authenticator. Dimatikan secara bawaan supaya tidak
+// muncul sebelum sosialisasi; superadmin menyalakannya dari dashboard.
+const PERAN_KEBIJAKAN = ['super_admin', 'admin', 'kepala', 'bendahara', 'operator', 'tata_usaha', 'guru', 'wali_kelas', 'proktor']
+
+function bacaKebijakan2fa(db) {
+  try {
+    const mentah = getPlatformSettings(db).twofa_policy
+    if (!mentah) return { aktif: false, roles: [] }
+    const p = JSON.parse(mentah)
+    return {
+      aktif: p?.aktif === true,
+      roles: Array.isArray(p?.roles) ? p.roles.filter(r => PERAN_KEBIJAKAN.includes(r)) : [],
+    }
+  } catch { return { aktif: false, roles: [] } }
+}
+
 // ---------------------------------------------------------------- status 2FA
 
 function statusTotp(db, userId) {
@@ -265,6 +284,30 @@ function daftarkanRouteKeamanan(app, ctx) {
     if (req.tenantId) return req.tenantId
     try { return ctx.tenantDariHost(ctx.hostPermintaan(req)) || 'default' } catch { return 'default' }
   }
+
+  // ---- kebijakan peringatan 2FA (dibaca semua pengguna, diubah superadmin)
+  app.get('/api/auth/2fa/policy', authMiddleware, (req, res) => {
+    const k = bacaKebijakan2fa(db)
+    const st = statusTotp(db, req.user.id)
+    res.json({
+      ...k,
+      sudah_aktif: st.aktif,
+      berlaku_untuk_saya: k.aktif && k.roles.includes(String(req.user.role || '')),
+      peran_tersedia: PERAN_KEBIJAKAN,
+    })
+  })
+
+  app.post('/api/superadmin/2fa/policy', authMiddleware, (req, res) => {
+    if (req.user.role !== 'super_admin') return res.status(403).json({ error: 'Hanya super admin.' })
+    const aktif = req.body?.aktif === true
+    const roles = Array.isArray(req.body?.roles)
+      ? [...new Set(req.body.roles.map(String).filter(r => PERAN_KEBIJAKAN.includes(r)))]
+      : []
+    if (aktif && roles.length === 0) return res.status(400).json({ error: 'Pilih minimal satu peran yang diperingatkan.' })
+    setPlatformSetting(db, 'twofa_policy', JSON.stringify({ aktif, roles }))
+    catatAudit(db, { tenantId: req.tenantId, userId: req.user.id, metode: '2fa_policy', hasil: 'sukses', alasan: aktif ? 'aktif' : 'nonaktif', req })
+    res.json({ ok: true, aktif, roles })
+  })
 
   // ---- status 2FA akun sendiri
   app.get('/api/auth/2fa/status', authMiddleware, (req, res) => {
