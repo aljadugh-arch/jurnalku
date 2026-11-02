@@ -132,6 +132,7 @@ const ProfilePage = lazy(() => import('./pages/ProfilePage'))
 const PanduanPage = lazy(() => import('./pages/PanduanPage'))
 const ErkamPage = lazy(() => import('./pages/admin/ErkamPage'))
 const SuperadminDashboard = lazy(() => import('./pages/admin/SuperadminDashboard'))
+const PlatformBroadcastPage = lazy(() => import('./pages/admin/PlatformBroadcastPage'))
 const InvoicePage = lazy(() => import('./pages/admin/InvoicePage'))
 const KantinMenuPage = lazy(() => import('./pages/admin/KantinMenuPage'))
 const KantinOrdersPage = lazy(() => import('./pages/admin/KantinOrdersPage'))
@@ -406,6 +407,9 @@ export default function App() {
           <Route path="paket-ujian" element={<PaketUjianPage />} />
           <Route path="superadmin" element={
             <ProtectedRoute allowedRoles={['super_admin']}><SuperadminDashboard /></ProtectedRoute>
+          } />
+          <Route path="broadcast-platform" element={
+            <ProtectedRoute allowedRoles={['super_admin']}><PlatformBroadcastPage /></ProtectedRoute>
           } />
           <Route path="invoice" element={
             <ProtectedRoute allowedRoles={['super_admin']}><InvoicePage /></ProtectedRoute>

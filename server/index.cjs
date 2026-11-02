@@ -12423,6 +12423,9 @@ require('./auth-security.cjs').daftarkanRouteKeamanan(app, {
   tenantDariHost, hostPermintaan,
 })
 
+// Pengumuman platform: superadmin mengirim pesan WA ke seluruh pengguna lembaga.
+require('./superadmin-broadcast.cjs').daftarkanRouteBroadcast(app, { db, authMiddleware })
+
 // Login wali lewat OTP WhatsApp (lihat server/otp-login.cjs).
 require('./otp-login.cjs').daftarkanRouteOtp(app, {
   db, waQueue, jwt, JWT_SECRET, JWT_EXPIRES_IN, authLimiter,

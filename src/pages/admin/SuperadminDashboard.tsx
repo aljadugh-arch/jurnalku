@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { Building2, CheckCircle2, XCircle, Users, GraduationCap, UserCheck, CreditCard, Gift, Crown, AlertTriangle, CalendarDays, Moon, Sun, LogOut, User, Lock, ChevronDown } from 'lucide-react'
+import { Building2, CheckCircle2, XCircle, Users, GraduationCap, UserCheck, CreditCard, Gift, Crown, AlertTriangle, CalendarDays, Moon, Sun, LogOut, User, Lock, ChevronDown, Megaphone } from 'lucide-react'
 import api from '../../services/api'
 import { useAuthStore } from '../../stores/authStore'
 import { useThemeStore } from '../../stores/themeStore'
@@ -120,9 +120,14 @@ export default function SuperadminDashboard() {
         </div>
       </div>
 
-      <div>
-        <h1 className="text-xl md:text-2xl font-extrabold text-gray-900">Dashboard Superadmin 👑</h1>
-        <p className="text-sm text-gray-500 mt-0.5 flex items-center gap-1.5"><CalendarDays size={14} /> {today}</p>
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <div>
+          <h1 className="text-xl md:text-2xl font-extrabold text-gray-900">Dashboard Superadmin 👑</h1>
+          <p className="text-sm text-gray-500 mt-0.5 flex items-center gap-1.5"><CalendarDays size={14} /> {today}</p>
+        </div>
+        <Link to="/admin/broadcast-platform" className="inline-flex items-center gap-2 rounded-lg bg-primary px-3 py-2 text-xs font-semibold text-white hover:opacity-90">
+          <Megaphone size={15} /> Pengumuman
+        </Link>
       </div>
 
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5">
