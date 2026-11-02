@@ -1898,6 +1898,10 @@ for (const col of [
   ['rombel', 'geo_longitude', 'REAL'],
   ['rombel', 'geo_radius', 'INTEGER DEFAULT 50'],
   ['rombel', 'geo_lock', 'INTEGER DEFAULT 0'],
+  // Bukti kehadiran kelas: akurasi GPS yang dilaporkan + hasil pindai QR ruang.
+  ['sesi_kelas_guru', 'geo_accuracy', 'REAL'],
+  ['sesi_kelas_guru', 'qr_verified', 'INTEGER DEFAULT 0'],
+  ['sesi_kelas_guru', 'qr_at', 'TEXT'],
   ['settings', 'background', "TEXT DEFAULT ''"],
   ['settings', 'jenjang', "TEXT DEFAULT ''"],
   ['settings', 'tipe_institusi', "TEXT DEFAULT ''"],
@@ -5856,9 +5860,21 @@ app.post('/api/guru/sesi-kelas/masuk', TEACHER, (req, res) => {
       gtk.id, today, req.tenantId
     )
   if (!jadwal) return res.status(403).json({ error: 'Jadwal bukan jadwal mengajar Anda hari ini' })
+  // Jalur QR ruang: kalau guru memindai QR kelas yang sah (tanda tangan cocok,
+  // tanggal hari ini, rombel sama), GPS tidak diwajibkan — QR justru bukti yang
+  // lebih spesifik daripada radius. GPS tetap dicatat bila tersedia.
+  let qrOk = false
+  if (req.body?.qr_payload) {
+    const cekQr = require('./class-qr.cjs').verifikasiPayload(req.body.qr_payload, { tenantId: req.tenantId, tanggal: today, secret: JWT_SECRET })
+    if (!cekQr.ok) return res.status(400).json({ error: cekQr.error })
+    if (String(cekQr.rombel_id) !== String(jadwal.rombel_id)) return res.status(400).json({ error: 'QR ini milik ruang kelas lain.' })
+    qrOk = true
+  }
   // Lock geolokasi: bila rombel/kelas mengaktifkan geo_lock (atau sekolah punya
   // geofence), guru hanya bisa "Masuk Kelas" dari dalam area. Ditolak bila di luar.
-  const geoCheck = validateClassGeo(db, req.tenantId, jadwal.rombel_id, req.body?.latitude, req.body?.longitude, req.body?.accuracy)
+  const geoCheck = qrOk
+    ? { ok: true, scope: 'qr' }
+    : validateClassGeo(db, req.tenantId, jadwal.rombel_id, req.body?.latitude, req.body?.longitude, req.body?.accuracy)
   if (!geoCheck.ok) return res.status(geoCheck.status || 400).json({ error: geoCheck.error, geo: { distance: geoCheck.distance, radius: geoCheck.radius } })
   if (jadwal.sesi_status === 'selesai') return res.status(409).json({ error: 'Kelas ini sudah diselesaikan hari ini', status: 'selesai' })
   const active = currentTeacherClassSession(req.tenantId, gtk.id, today)
@@ -5874,15 +5890,20 @@ app.post('/api/guru/sesi-kelas/masuk', TEACHER, (req, res) => {
   const graceMinutes = 10
   const menitTerlambat = Math.max(0, nowMinutes - startMinutes - graceMinutes)
   const id = uuidv4()
-  db.prepare(`INSERT INTO sesi_kelas_guru (id,jadwal_id,guru_id,mapel_id,rombel_id,tanggal,waktu_masuk,waktu_selesai,status,menit_terlambat,tenant_id,updated_at,jadwal_source,geo_distance,geo_scope)
-    VALUES (?,?,?,?,?,?,?,?,?,?,?,datetime('now'),?,?,?)
+  const akurasi = Number(req.body?.accuracy)
+  db.prepare(`INSERT INTO sesi_kelas_guru (id,jadwal_id,guru_id,mapel_id,rombel_id,tanggal,waktu_masuk,waktu_selesai,status,menit_terlambat,tenant_id,updated_at,jadwal_source,geo_distance,geo_scope,geo_accuracy,qr_verified,qr_at)
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,datetime('now'),?,?,?,?,?,?)
     ON CONFLICT(tenant_id,jadwal_id,tanggal) DO UPDATE SET
       guru_id=excluded.guru_id,mapel_id=excluded.mapel_id,rombel_id=excluded.rombel_id,
       waktu_masuk=excluded.waktu_masuk,waktu_selesai=NULL,status='aktif',
       menit_terlambat=excluded.menit_terlambat,jadwal_source=excluded.jadwal_source,
-      geo_distance=excluded.geo_distance,geo_scope=excluded.geo_scope,updated_at=datetime('now')`)
+      geo_distance=excluded.geo_distance,geo_scope=excluded.geo_scope,
+      geo_accuracy=excluded.geo_accuracy,qr_verified=excluded.qr_verified,qr_at=excluded.qr_at,
+      updated_at=datetime('now')`)
     .run(id, jadwal.id, gtk.id, jadwal.mapel_id, jadwal.rombel_id, today, now, null, 'aktif', menitTerlambat, req.tenantId, jadwal.jadwal_source,
-      geoCheck.distance != null ? geoCheck.distance : null, geoCheck.scope || null)
+      geoCheck.distance != null ? geoCheck.distance : null, geoCheck.scope || null,
+      Number.isFinite(akurasi) && akurasi > 0 ? akurasi : null,
+      qrOk ? 1 : 0, qrOk ? now : null)
   try { notificationMonitor.logActivity(db, { tenantId: req.tenantId, eventType: 'class_session_started', actorId: gtk.id, entityId: id, metadata: { jadwal_id: jadwal.id, rombel_id: jadwal.rombel_id } }) } catch {}
   res.json(currentTeacherClassSession(req.tenantId, gtk.id, today))
 })
@@ -6280,7 +6301,7 @@ app.get('/api/monitoring/guru-di-kelas', authMiddleware, (req, res) => {
 
   // Sesi "Masuk Kelas" (bukti guru benar-benar menekan tombol di kelas).
   const sesi = new Map(db.prepare(`SELECT id, jadwal_id, waktu_masuk, waktu_selesai, status,
-      menit_terlambat, geo_scope, geo_distance
+      menit_terlambat, geo_scope, geo_distance, geo_accuracy, qr_verified, qr_at
     FROM sesi_kelas_guru WHERE tenant_id=? AND tanggal=? AND guru_id IN (${tanda})`)
     .all(req.tenantId, tanggal, ...ids).map(r => [r.jadwal_id, r]))
 
@@ -6308,6 +6329,9 @@ app.get('/api/monitoring/guru-di-kelas', authMiddleware, (req, res) => {
           menit_terlambat: sesiSlot.menit_terlambat || 0,
           geo_scope: sesiSlot.geo_scope || '',
           jarak_meter: sesiSlot.geo_distance != null ? Math.round(Number(sesiSlot.geo_distance)) : null,
+          akurasi_meter: sesiSlot.geo_accuracy != null ? Math.round(Number(sesiSlot.geo_accuracy)) : null,
+          qr_verified: Number(sesiSlot.qr_verified) === 1,
+          qr_at: sesiSlot.qr_at || null,
         } : null,
         jurnal_terisi: jurnal.has(`${g.id}|${j.mapel_id || ''}|${j.rombel_id || ''}`),
       }
@@ -12516,6 +12540,11 @@ require('./auth-security.cjs').daftarkanRouteKeamanan(app, {
   db, jwt, JWT_SECRET, JWT_EXPIRES_IN, authLimiter, authMiddleware,
   kirimEmail: require('./mailer.cjs').kirimEmail,
   tenantDariHost, hostPermintaan,
+})
+
+// QR ruang kelas: bukti kehadiran di ruangan (pelengkap/cadangan GPS).
+require('./class-qr.cjs').daftarkanRouteQrKelas(app, {
+  db, authMiddleware, TEACHER, JWT_SECRET, todayJakarta, timeJakarta, resolveGtkForUser,
 })
 
 // Pengumuman platform: superadmin mengirim pesan WA ke seluruh pengguna lembaga.

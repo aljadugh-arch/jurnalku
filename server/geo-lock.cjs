@@ -27,6 +27,12 @@ function haversineMeters(lat1, lng1, lat2, lng2) {
 // meloloskan apa pun), jadi keamanan penegakan radius tetap terjaga.
 const AKURASI_MAKS = 200
 
+// Untuk pembuktian "di ruang kelas" penegakan harus lebih ketat: akurasi di
+// atas 100 m tidak cukup untuk membedakan ruang, dan bonus toleransi dibatasi
+// 60 m supaya radius 50 m tidak diam-diam menjadi 250 m.
+const AKURASI_KELAS_MAKS = 100
+const TOLERANSI_KELAS_MAKS = 60
+
 // Toleransi akurasi: GPS perangkat melaporkan sendiri tingkat ketelitiannya
 // (coords.accuracy). Jarak ukur tidak pernah lebih tepat dari itu. Tanpa
 // toleransi, radius 10 m mustahil dipenuhi karena HP biasa meleset 10-30 m
@@ -85,7 +91,15 @@ function validateClassGeo(db, tenantId, rombelId, latitude, longitude, accuracy)
     if (!adaKoordinat) return { ok: false, status: 400, error: 'Lokasi tidak terbaca — izinkan akses lokasi lalu coba lagi.' }
     const d = haversineMeters(lat, lng, Number(rombel.geo_latitude), Number(rombel.geo_longitude))
     const radius = Math.max(RADIUS_MIN, Number(rombel.geo_radius || 50))
-    const tol = toleransiAkurasi(accuracy)
+    const acc = Number(accuracy)
+    if (Number.isFinite(acc) && acc > AKURASI_KELAS_MAKS) {
+      return {
+        ok: false, status: 400,
+        error: `Akurasi GPS ±${Math.round(acc)} m terlalu kasar untuk membuktikan Anda di ruang kelas. Coba di dekat jendela, atau pindai QR ruang kelas.`,
+        distance: Math.round(d), radius, accuracy: Math.round(acc),
+      }
+    }
+    const tol = Number.isFinite(acc) && acc > 0 ? Math.min(acc, TOLERANSI_KELAS_MAKS) : 0
     if (d > radius + tol) {
       return {
         ok: false, status: 400,
@@ -117,4 +131,7 @@ function validateClassGeo(db, tenantId, rombelId, latitude, longitude, accuracy)
   return { ok: true, scope: 'none' }
 }
 
-module.exports = { haversineMeters, validateClassGeo, toleransiAkurasi, AKURASI_MAKS, RADIUS_MIN }
+module.exports = {
+  haversineMeters, validateClassGeo, toleransiAkurasi,
+  AKURASI_MAKS, RADIUS_MIN, AKURASI_KELAS_MAKS, TOLERANSI_KELAS_MAKS,
+}

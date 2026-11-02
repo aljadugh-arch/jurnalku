@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
-  BookOpen, Calendar, ChevronRight, DoorOpen, Fingerprint, LogIn, Users,
+  BookOpen, Calendar, ChevronRight, DoorOpen, Fingerprint, LogIn, Users, QrCode,
 } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import toast from 'react-hot-toast'
@@ -8,6 +8,7 @@ import api from '../../services/api'
 import { getCurrentPosition } from '../../lib/geo'
 import MobileDashboardHeader from '../../components/MobileDashboardHeader'
 import JadwalSholatCard from '../../components/JadwalSholatCard'
+import ScanQrKelasModal from '../../components/ScanQrKelasModal'
 
 /* ─── helpers ─── */
 function nowMinutes() {
@@ -42,6 +43,7 @@ export default function MobileGuruDashboard() {
   })
   const [ceklok, setCeklok] = useState<any>(null)
   const [busy, setBusy] = useState(false)
+  const [qrOpen, setQrOpen] = useState(false)
   const navigate = useNavigate()
 
   const load = useCallback(
@@ -67,6 +69,17 @@ export default function MobileGuruDashboard() {
     const r = data.rekap_jurnal || {}
     return (r.draft ?? 0) + (r.submitted ?? 0)
   }, [data.rekap_jurnal])
+
+  const scanMasuk = async (payload: string) => {
+    try {
+      const r = await api.post('/guru/sesi-kelas/qr', { payload })
+      toast.success(`Masuk kelas via QR ${r.data?.sesi?.rombel_nama || ''}`.trim())
+      setQrOpen(false)
+      await load()
+    } catch (err: any) {
+      toast.error(err.response?.data?.error || 'QR tidak dapat diproses')
+    }
+  }
 
   const enterClass = async (jadwal: any) => {
     if (!jadwal?.id) return toast.error('Tidak ada jadwal mengajar hari ini')
@@ -224,6 +237,17 @@ export default function MobileGuruDashboard() {
                           <LogIn size={12} /> MASUK KELAS
                         </button>
                       )}
+                      {!isDone && (
+                        <button
+                          type="button"
+                          onClick={() => setQrOpen(true)}
+                          disabled={busy}
+                          title="Scan QR ruang kelas"
+                          className="inline-flex items-center justify-center rounded-full border border-emerald-300 p-1.5 text-emerald-700 dark:border-emerald-800 dark:text-emerald-400"
+                        >
+                          <QrCode size={12} />
+                        </button>
+                      )}
                     </div>
                   </div>
                 )
@@ -235,6 +259,7 @@ export default function MobileGuruDashboard() {
         {/* ── JADWAL SHOLAT (komponen bersama, sama dgn admin & bendahara) ── */}
         <JadwalSholatCard />
       </div>
+      <ScanQrKelasModal open={qrOpen} onClose={() => setQrOpen(false)} onHasil={scanMasuk} />
     </div>
   )
 }

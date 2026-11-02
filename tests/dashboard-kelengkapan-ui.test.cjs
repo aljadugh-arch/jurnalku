@@ -59,8 +59,8 @@ test('menu "Monitoring Data" ada di bawah Dashboard untuk admin dan kepala', () 
 
   // Grup sidebar admin: masuk grup DASHBOARD supaya tidak jatuh ke "LAINNYA".
   assert.ok(
-    sisi.includes("labels: ['Dashboard', 'Portal Operator', 'Monitoring Data', 'Guru di Kelas', 'Posting']"),
-    'Portal Operator / Monitoring Data / Guru di Kelas belum masuk grup DASHBOARD'
+    sisi.includes("labels: ['Dashboard', 'Portal Operator', 'Monitoring Data', 'Guru di Kelas', 'QR Ruang Kelas', 'Posting']"),
+    'Portal Operator / Monitoring Data / Guru di Kelas / QR Ruang Kelas belum masuk grup DASHBOARD'
   )
 })
 

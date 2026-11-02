@@ -73,3 +73,20 @@ test('tanpa geofence sama sekali -> lolos (scope none)', () => {
   assert.equal(r.ok, true)
   assert.equal(r.scope, 'none')
 })
+
+test('akurasi GPS buruk ditolak untuk lock ruang kelas (>100 m)', () => {
+  const db = fixture()
+  const r = validateClassGeo(db, 't1', 'rA', -6.8998, 112.1, 180)
+  assert.equal(r.ok, false)
+  assert.match(r.error, /akurasi GPS/i)
+})
+
+test('toleransi akurasi ruang dibatasi 60 m (radius 50 -> efektif maks 110 m)', () => {
+  const db = fixture()
+  // ~90 m: lolos hanya bila toleransi 60 m dipakai.
+  const r90 = validateClassGeo(db, 't1', 'rA', -6.8992, 112.1, 90)
+  assert.equal(r90.ok, true, '90 m masih lolos dengan toleransi maksimum')
+  // ~150 m: harus ditolak walau akurasi dilaporkan besar.
+  const r150 = validateClassGeo(db, 't1', 'rA', -6.8986, 112.1, 90)
+  assert.equal(r150.ok, false, '150 m tidak boleh lolos')
+})

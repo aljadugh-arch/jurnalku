@@ -11,7 +11,11 @@ type Slot = {
   ruangan: string | null
   status: 'berlangsung' | 'selesai' | 'akan_datang'
   terkonfirmasi: boolean
-  sesi: { waktu_masuk: string; waktu_selesai: string | null; status: string; menit_terlambat: number; geo_scope: string; jarak_meter: number | null } | null
+  sesi: {
+    waktu_masuk: string; waktu_selesai: string | null; status: string; menit_terlambat: number;
+    geo_scope: string; jarak_meter: number | null; akurasi_meter: number | null;
+    qr_verified: boolean; qr_at: string | null;
+  } | null
   jurnal_terisi: boolean
 }
 
@@ -144,8 +148,10 @@ export default function GuruDiKelasPage() {
                   {g.sedang_mengajar.terkonfirmasi && g.sedang_mengajar.sesi && (
                     <span className="rounded bg-white/70 px-1.5 py-0.5 font-semibold">
                       Masuk {String(g.sedang_mengajar.sesi.waktu_masuk).slice(0, 5)}
-                      {g.sedang_mengajar.sesi.geo_scope ? ` · ${g.sedang_mengajar.sesi.geo_scope}` : ''}
-                      {g.sedang_mengajar.sesi.jarak_meter != null ? ` · ${g.sedang_mengajar.sesi.jarak_meter} m` : ''}
+                      {g.sedang_mengajar.sesi.qr_verified ? ' · QR ruang ✓' : ''}
+                      {!g.sedang_mengajar.sesi.qr_verified && g.sedang_mengajar.sesi.geo_scope ? ` · ${g.sedang_mengajar.sesi.geo_scope}` : ''}
+                      {!g.sedang_mengajar.sesi.qr_verified && g.sedang_mengajar.sesi.jarak_meter != null ? ` · ${g.sedang_mengajar.sesi.jarak_meter} m` : ''}
+                      {!g.sedang_mengajar.sesi.qr_verified && g.sedang_mengajar.sesi.akurasi_meter != null ? ` (±${g.sedang_mengajar.sesi.akurasi_meter} m)` : ''}
                     </span>
                   )}
                 </p>
@@ -170,7 +176,9 @@ export default function GuruDiKelasPage() {
                     </span>
                     <span className={`shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-semibold ${statusKelas(s.status)}`}>{labelKelas(s.status)}</span>
                     <span className={`shrink-0 text-[10px] font-semibold ${s.terkonfirmasi ? 'text-emerald-600' : 'text-amber-600'}`}>
-                      {s.terkonfirmasi ? `✓ masuk ${String(s.sesi?.waktu_masuk || '').slice(0, 5)}` : 'belum masuk kelas'}
+                      {s.terkonfirmasi
+                        ? `${s.sesi?.qr_verified ? '✓ QR' : '✓ masuk'} ${String(s.sesi?.waktu_masuk || '').slice(0, 5)}`
+                        : 'belum masuk kelas'}
                     </span>
                     {s.status !== 'akan_datang' && (
                       <span className={`shrink-0 text-[10px] font-medium ${s.jurnal_terisi ? 'text-emerald-600' : 'text-amber-600'}`}>
@@ -186,7 +194,8 @@ export default function GuruDiKelasPage() {
       </div>
 
       <p className="px-1 text-[11px] leading-5 text-gray-400">
-        "Terkonfirmasi" berarti guru sudah menekan tombol Masuk Kelas untuk jam itu (tercatat jam masuk, dan jarak/geofence bila sekolah mengaktifkannya).
+        "Terkonfirmasi" berarti guru sudah menekan tombol Masuk Kelas untuk jam itu. Bukti bisa berupa pindai QR ruang (paling kuat)
+        atau GPS (jarak + akurasi yang dilaporkan perangkat).
         Tanpa konfirmasi, status hanya perkiraan dari jam jadwal. Kehadiran diambil dari ceklok guru pada tanggal tersebut.
       </p>
     </div>

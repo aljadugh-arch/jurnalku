@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Calendar, ClipboardCheck, ClipboardList, BookOpen, QrCode, MapPin, Users, PenLine, ChevronRight, Clock, DoorOpen, ScrollText, UserCheck } from 'lucide-react'
+import ScanQrKelasModal from '../../components/ScanQrKelasModal'
 import { useNavigate, useLocation } from 'react-router-dom'
 import api from '../../services/api'
 import { getCurrentPosition } from '../../lib/geo'
@@ -40,6 +41,7 @@ export default function GuruDashboard() {
   const [data, setData] = useState<any>({ jadwal_hari_ini: [], sesi_kelas_aktif: null, rekap_jurnal: { draft: 0, submitted: 0, approved: 0, total: 0 }, rombel_count: 0, gtk: null, tugas: [] })
   const [tugasForm, setTugasForm] = useState({ judul: '', deskripsi: '', deadline: '', rombel_id: '', mapel_id: '' })
   const [classBusy, setClassBusy] = useState(false)
+  const [qrOpen, setQrOpen] = useState(false)
   const navigate = useNavigate()
   const location = useLocation()
 
@@ -79,6 +81,17 @@ export default function GuruDashboard() {
     } catch (err: any) {
       toast.error(err.response?.data?.error || 'Gagal mencatat masuk kelas')
     } finally { setClassBusy(false) }
+  }
+
+  const scanMasuk = async (payload: string) => {
+    try {
+      const r = await api.post('/guru/sesi-kelas/qr', { payload })
+      toast.success(`Masuk kelas via QR ${r.data?.sesi?.rombel_nama || ''}`.trim())
+      setQrOpen(false)
+      await loadDashboard()
+    } catch (err: any) {
+      toast.error(err.response?.data?.error || 'QR tidak dapat diproses')
+    }
   }
 
   const finishClass = async () => {
@@ -153,6 +166,9 @@ export default function GuruDashboard() {
         <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-center">
           <p className="font-bold text-emerald-800">Masuk Kelas</p>
           <p className="text-xs text-emerald-700">Pilih tombol Masuk pada jadwal kelas yang benar di bawah.</p>
+          <button onClick={() => setQrOpen(true)} className="mt-2 inline-flex items-center gap-2 rounded-lg border border-emerald-300 bg-white px-3 py-1.5 text-xs font-semibold text-emerald-700 hover:bg-emerald-50">
+            <QrCode size={14} /> Scan QR Ruang
+          </button>
         </div>
       )}
 
@@ -327,6 +343,7 @@ export default function GuruDashboard() {
       </div>
     </div>
     </div>
+      <ScanQrKelasModal open={qrOpen} onClose={() => setQrOpen(false)} onHasil={scanMasuk} />
     </>
   )
 }
