@@ -122,6 +122,18 @@ export default function LoginPage() {
     return () => window.cancelAnimationFrame(frame)
   }, [])
 
+  // Tautan verifikasi: hanya DIBACA di sini. Token baru dihanguskan saat
+  // pengguna menekan tombol — supaya pemindai tautan (WhatsApp/email) tidak
+  // memakai token lebih dulu.
+  useEffect(() => {
+    const t = new URLSearchParams(window.location.search).get('magic')
+    if (!t) return
+    setMagicToken(t)
+    api.get('/auth/magic/peek', { params: { token: t }, timeout: 15000 })
+      .then(r => setMagicInfo(r.data))
+      .catch(() => setError('Tautan tidak valid atau sudah kedaluwarsa. Minta tautan baru.'))
+  }, [])
+
   if (authReady && isAuthenticated && user) {
     return <Navigate to={getRedirectPath(user.role)} replace />
   }
@@ -160,18 +172,6 @@ export default function LoginPage() {
       setError(err?.response?.data?.error || pesanGagalJaringan(err))
     } finally { setLoading(false) }
   }
-
-  // Tautan verifikasi: hanya DIBACA di sini. Token baru dihanguskan saat
-  // pengguna menekan tombol — supaya pemindai tautan (WhatsApp/email) tidak
-  // memakai token lebih dulu.
-  useEffect(() => {
-    const t = new URLSearchParams(window.location.search).get('magic')
-    if (!t) return
-    setMagicToken(t)
-    api.get('/auth/magic/peek', { params: { token: t }, timeout: 15000 })
-      .then(r => setMagicInfo(r.data))
-      .catch(() => setError('Tautan tidak valid atau sudah kedaluwarsa. Minta tautan baru.'))
-  }, [])
 
   const handle2fa = async (e: React.FormEvent) => {
     e.preventDefault()

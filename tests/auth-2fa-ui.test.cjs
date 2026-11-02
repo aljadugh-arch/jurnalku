@@ -36,3 +36,16 @@ test('kartu install PWA tidak menutupi form login', () => {
   }
   assert.ok(s.includes('if (RUTE_TANPA_PROMPT.test(pathname)) return null'), 'berhenti sebelum render')
 })
+
+test('LoginPage: tidak ada hook setelah early return (React #300)', () => {
+  const s = baca('src/pages/auth/LoginPage.tsx')
+  const baris = s.split('\n')
+  const batas = baris.findIndex(l => l.includes('if (authReady && isAuthenticated'))
+  assert.ok(batas > 0, 'early return ditemukan')
+  const pelanggaran = baris
+    .map((l, i) => ({ l, i }))
+    .filter(({ l, i }) => i > batas && /^\s*(use[A-Z]\w*|useEffect|useState|useMemo|useRef|useCallback)\s*\(/.test(l))
+  assert.deepEqual(pelanggaran.map(p => p.i + 1), [], 'hook setelah return akan memicu React error #300')
+  // Hook yang dipakai wajib berada sebelum return.
+  assert.ok(baris.slice(0, batas).some(l => l.includes('useEffect(() => {')), 'useEffect magic ada sebelum return')
+})
