@@ -6239,6 +6239,81 @@ app.post('/api/siswa/tugas/:id/kumpul', authMiddleware, tugasUpload.single('file
   res.json({ success: true, id, terlambat: !!terlambat })
 })
 
+// ==================== GURU DI KELAS (PENCARIAN) ====================
+// Menjawab pertanyaan "guru X sekarang ada di kelas mana?" tanpa membuka
+// jadwal satu per satu: cari nama -> tampilkan slot hari ini, status berjalan,
+// kehadiran (ceklok), dan apakah jurnal untuk slot itu sudah diisi.
+const HARI_NAMA = ['minggu', 'senin', 'selasa', 'rabu', 'kamis', 'jumat', 'sabtu']
+const ROLE_BOLEH_CARI_GURU = ['super_admin', 'admin', 'kepala', 'operator', 'tata_usaha', 'tu']
+
+app.get('/api/monitoring/guru-di-kelas', authMiddleware, (req, res) => {
+  if (!ROLE_BOLEH_CARI_GURU.includes(req.user.role)) {
+    return res.status(403).json({ error: 'Tidak berwenang melihat jadwal guru.' })
+  }
+  const q = String(req.query.q || '').trim()
+  const tanggalMinta = String(req.query.tanggal || '')
+  const tanggal = /^\d{4}-\d{2}-\d{2}$/.test(tanggalMinta) ? tanggalMinta : todayJakarta()
+  // Hari dihitung dari tanggal kalender (UTC siang) agar tidak bergeser zona waktu.
+  const hari = HARI_NAMA[new Date(tanggal + 'T12:00:00Z').getUTCDay()]
+  const sekarang = new Date().toLocaleTimeString('en-GB', { timeZone: 'Asia/Jakarta', hour12: false }).slice(0, 5)
+  const menit = (hm) => { const [h, m] = String(hm || '00:00').split(':').map(Number); return h * 60 + (m || 0) }
+  const kini = menit(sekarang)
+
+  const pola = q ? `%${q}%` : '%'
+  const guru = db.prepare(`SELECT id, nama, nip, foto FROM gtk
+    WHERE tenant_id=? AND COALESCE(status,'aktif')='aktif' AND nama LIKE ?
+    ORDER BY nama LIMIT 20`).all(req.tenantId, pola)
+  if (!guru.length) return res.json({ tanggal, hari, jam_sekarang: sekarang, hasil: [] })
+
+  const ids = guru.map(g => g.id)
+  const tanda = ids.map(() => '?').join(',')
+  const jadwal = db.prepare(`SELECT j.id, j.gtk_id, j.mapel_id, j.rombel_id, j.jam_mulai, j.jam_selesai, j.ruangan,
+      m.nama AS mapel, r.nama AS rombel
+    FROM jadwal j
+    LEFT JOIN mapel m ON m.id = j.mapel_id
+    LEFT JOIN rombel r ON r.id = j.rombel_id
+    WHERE j.tenant_id=? AND j.hari=? AND j.gtk_id IN (${tanda})
+    ORDER BY j.jam_mulai`).all(req.tenantId, hari, ...ids)
+
+  const hadir = new Map(db.prepare(`SELECT gtk_id, waktu_masuk, waktu_pulang, status FROM absensi_guru
+    WHERE tenant_id=? AND tanggal=? AND gtk_id IN (${tanda})`).all(req.tenantId, tanggal, ...ids).map(r => [r.gtk_id, r]))
+
+  // Jurnal yang sudah diisi pada tanggal itu (dipakai untuk menandai slot).
+  const jurnal = new Set(db.prepare(`SELECT guru_id, mapel_id, rombel_id FROM jurnal_mengajar
+    WHERE tenant_id=? AND tanggal=? AND guru_id IN (${tanda})`).all(req.tenantId, tanggal, ...ids)
+    .map(r => `${r.guru_id}|${r.mapel_id || ''}|${r.rombel_id || ''}`))
+
+  const hasil = guru.map(g => {
+    const slots = jadwal.filter(j => j.gtk_id === g.id).map(j => {
+      const mulai = menit(j.jam_mulai)
+      const selesai = menit(j.jam_selesai)
+      const status = kini >= mulai && kini < selesai ? 'berlangsung' : kini >= selesai ? 'selesai' : 'akan_datang'
+      return {
+        ...j,
+        status,
+        jurnal_terisi: jurnal.has(`${g.id}|${j.mapel_id || ''}|${j.rombel_id || ''}`),
+      }
+    })
+    // jurnal butuh mapel_id asli; ambil ulang dari baris jadwal
+    return {
+      gtk_id: g.id,
+      nama: g.nama,
+      nip: g.nip || '',
+      foto: g.foto || '',
+      kehadiran: hadir.get(g.id) ? {
+        status: hadir.get(g.id).status || 'hadir',
+        jam_masuk: hadir.get(g.id).waktu_masuk || null,
+        jam_pulang: hadir.get(g.id).waktu_pulang || null,
+      } : { status: 'belum_ceklok', jam_masuk: null, jam_pulang: null },
+      sedang_mengajar: slots.find(s => s.status === 'berlangsung') || null,
+      berikutnya: slots.find(s => s.status === 'akan_datang') || null,
+      jumlah_jam: slots.length,
+      jadwal: slots,
+    }
+  })
+  res.json({ tanggal, hari, jam_sekarang: sekarang, hasil })
+})
+
 // ==================== GURU ABSENSI (CEKLOK) ====================
 app.get('/api/ceklok/admin', CEKLOK_ACCESS, (req, res) => {
   const tanggal = String(req.query.tanggal || todayJakarta()).trim()

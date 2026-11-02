@@ -133,6 +133,7 @@ const PanduanPage = lazy(() => import('./pages/PanduanPage'))
 const ErkamPage = lazy(() => import('./pages/admin/ErkamPage'))
 const SuperadminDashboard = lazy(() => import('./pages/admin/SuperadminDashboard'))
 const PlatformBroadcastPage = lazy(() => import('./pages/admin/PlatformBroadcastPage'))
+const GuruDiKelasPage = lazy(() => import('./pages/admin/GuruDiKelasPage'))
 const InvoicePage = lazy(() => import('./pages/admin/InvoicePage'))
 const KantinMenuPage = lazy(() => import('./pages/admin/KantinMenuPage'))
 const KantinOrdersPage = lazy(() => import('./pages/admin/KantinOrdersPage'))
@@ -263,6 +264,7 @@ export default function App() {
         }>
           <Route index element={<AdminIndexRoute />} />
           <Route path="monitoring" element={<MonitoringDataPage />} />
+          <Route path="guru-di-kelas" element={<GuruDiKelasPage />} />
           <Route path="siswa" element={<DataSiswaPage />} />
           <Route path="gtk" element={<DataGTKPage />} />
           <Route path="mapel" element={<MapelPage />} />

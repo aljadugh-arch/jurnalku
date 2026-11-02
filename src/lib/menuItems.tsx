@@ -21,6 +21,7 @@ export const adminMenuItems: MenuItem[] = [
   { label: 'Portal Operator', icon: <LayoutGrid size={20} />, path: '/admin/portal-operator' },
   { label: 'Monitoring Data', icon: <Activity size={20} />, path: '/admin/monitoring' },
   { label: 'Posting', icon: <FileText size={20} />, path: '/admin/posting' },
+  { label: 'Guru di Kelas', icon: <MapPin size={20} />, path: '/admin/guru-di-kelas' },
   { label: 'Data Siswa', icon: <GraduationCap size={20} />, path: '/admin/siswa' },
   { label: 'PPDB', icon: <ClipboardList size={20} />, path: '/admin/ppdb' },
   { label: 'Data GTK', icon: <Users size={20} />, path: '/admin/gtk' },
