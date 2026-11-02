@@ -52,12 +52,14 @@ test('cari guru: kelas berlangsung, kehadiran, dan status jurnal', async (t) => 
   db.prepare("INSERT INTO gtk(id,tenant_id,nama,jenis_kelamin,status) VALUES(?,?,?,?,'aktif')").run(gtkId, tenantId, 'Siti Rahmawati', 'P')
   db.prepare("INSERT INTO mapel(id,tenant_id,nama,kode) VALUES(?,?,?,?)").run(mapelId, tenantId, 'Matematika', 'MTK')
   db.prepare("INSERT INTO rombel(id,tenant_id,nama,tingkat,tahun_ajaran) VALUES(?,?,?,?,?)").run(rombelId, tenantId, 'VII-A', '7', '2026/2027')
-  db.prepare(`INSERT INTO jadwal(id,tenant_id,gtk_id,mapel_id,rombel_id,hari,jam_mulai,jam_selesai,ruangan)
-    VALUES(?,?,?,?,?,?,?,?,?)`).run(crypto.randomUUID(), tenantId, gtkId, mapelId, rombelId, namaHari, '00:00', '23:59', 'R-1')
   db.prepare(`INSERT INTO absensi_guru(id,gtk_id,tanggal,waktu_masuk,status,tenant_id)
     VALUES(?,?,?,?,?,?)`).run(crypto.randomUUID(), gtkId, hariIni, '06:45', 'hadir', tenantId)
   db.prepare(`INSERT INTO jurnal_mengajar(id,guru_id,mapel_id,rombel_id,tanggal,jam_ke,materi,status,tenant_id)
     VALUES(?,?,?,?,?,?,?,?,?)`).run(crypto.randomUUID(), gtkId, mapelId, rombelId, hariIni, '1', 'Pecahan', 'submitted', tenantId)
+
+  const jadwalId = crypto.randomUUID()
+  db.prepare(`INSERT INTO jadwal(id,tenant_id,gtk_id,mapel_id,rombel_id,hari,jam_mulai,jam_selesai,ruangan)
+    VALUES(?,?,?,?,?,?,?,?,?)`).run(jadwalId, tenantId, gtkId, mapelId, rombelId, namaHari, '00:00', '23:59', 'R-1')
 
   const auth = { Authorization: `Bearer ${reg.token}` }
   const r = await fetch(base + '/api/monitoring/guru-di-kelas?q=Siti', { headers: auth }).then(x => x.json())
@@ -69,8 +71,18 @@ test('cari guru: kelas berlangsung, kehadiran, dan status jurnal', async (t) => 
   assert.equal(g.sedang_mengajar.mapel, 'Matematika')
   assert.equal(g.sedang_mengajar.status, 'berlangsung')
   assert.equal(g.sedang_mengajar.jurnal_terisi, true, 'jurnal hari ini terdeteksi')
+  assert.equal(g.sedang_mengajar.terkonfirmasi, false, 'belum ada tombol Masuk Kelas -> belum terkonfirmasi')
   assert.equal(g.kehadiran.status, 'hadir')
   assert.equal(g.kehadiran.jam_masuk, '06:45')
+
+  // Setelah guru menekan Masuk Kelas, slot menjadi terkonfirmasi.
+  db.prepare(`INSERT INTO sesi_kelas_guru(id,jadwal_id,guru_id,mapel_id,rombel_id,tanggal,waktu_masuk,status,menit_terlambat,tenant_id,geo_scope,geo_distance)
+    VALUES(?,?,?,?,?,?,?,?,?,?,?,?)`).run(crypto.randomUUID(), jadwalId, gtkId, mapelId, rombelId, hariIni, '07:35', 'aktif', 0, tenantId, 'sekolah', 12.4)
+  const r2 = await fetch(base + '/api/monitoring/guru-di-kelas?q=Siti', { headers: auth }).then(x => x.json())
+  const g2 = r2.hasil[0]
+  assert.equal(g2.sedang_mengajar.terkonfirmasi, true, 'sesi aktif menandai terkonfirmasi')
+  assert.equal(g2.sedang_mengajar.sesi.waktu_masuk, '07:35')
+  assert.equal(g2.sedang_mengajar.sesi.jarak_meter, 12)
 
   // Nama yang tidak ada -> hasil kosong, bukan error.
   const kosong = await fetch(base + '/api/monitoring/guru-di-kelas?q=TidakAda', { headers: auth }).then(x => x.json())

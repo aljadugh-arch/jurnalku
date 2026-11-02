@@ -10,6 +10,8 @@ type Slot = {
   rombel: string | null
   ruangan: string | null
   status: 'berlangsung' | 'selesai' | 'akan_datang'
+  terkonfirmasi: boolean
+  sesi: { waktu_masuk: string; waktu_selesai: string | null; status: string; menit_terlambat: number; geo_scope: string; jarak_meter: number | null } | null
   jurnal_terisi: boolean
 }
 
@@ -126,17 +128,26 @@ export default function GuruDiKelasPage() {
             </div>
 
             {g.sedang_mengajar ? (
-              <div className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2">
-                <p className="text-[11px] font-bold uppercase tracking-wide text-emerald-700">Sedang di kelas</p>
-                <p className="mt-0.5 text-sm font-semibold text-emerald-900">
+              <div className={`mt-3 rounded-lg border px-3 py-2 ${g.sedang_mengajar.terkonfirmasi ? 'border-emerald-200 bg-emerald-50' : 'border-amber-200 bg-amber-50'}`}>
+                <p className={`text-[11px] font-bold uppercase tracking-wide ${g.sedang_mengajar.terkonfirmasi ? 'text-emerald-700' : 'text-amber-700'}`}>
+                  {g.sedang_mengajar.terkonfirmasi ? 'Sedang di kelas · terkonfirmasi' : 'Menurut jadwal · belum konfirmasi masuk kelas'}
+                </p>
+                <p className={`mt-0.5 text-sm font-semibold ${g.sedang_mengajar.terkonfirmasi ? 'text-emerald-900' : 'text-amber-900'}`}>
                   {g.sedang_mengajar.rombel || 'Tanpa rombel'} · {g.sedang_mengajar.mapel || 'Kegiatan'}
                 </p>
-                <p className="mt-0.5 flex flex-wrap items-center gap-2 text-xs text-emerald-800">
+                <p className={`mt-0.5 flex flex-wrap items-center gap-2 text-xs ${g.sedang_mengajar.terkonfirmasi ? 'text-emerald-800' : 'text-amber-800'}`}>
                   <span className="inline-flex items-center gap-1"><Clock size={12} /> {g.sedang_mengajar.jam_mulai}–{g.sedang_mengajar.jam_selesai}</span>
                   {g.sedang_mengajar.ruangan && <span className="inline-flex items-center gap-1"><MapPin size={12} /> {g.sedang_mengajar.ruangan}</span>}
                   <span className={g.sedang_mengajar.jurnal_terisi ? 'text-emerald-700' : 'text-amber-700'}>
                     {g.sedang_mengajar.jurnal_terisi ? 'Jurnal sudah diisi' : 'Jurnal belum diisi'}
                   </span>
+                  {g.sedang_mengajar.terkonfirmasi && g.sedang_mengajar.sesi && (
+                    <span className="rounded bg-white/70 px-1.5 py-0.5 font-semibold">
+                      Masuk {String(g.sedang_mengajar.sesi.waktu_masuk).slice(0, 5)}
+                      {g.sedang_mengajar.sesi.geo_scope ? ` · ${g.sedang_mengajar.sesi.geo_scope}` : ''}
+                      {g.sedang_mengajar.sesi.jarak_meter != null ? ` · ${g.sedang_mengajar.sesi.jarak_meter} m` : ''}
+                    </span>
+                  )}
                 </p>
               </div>
             ) : g.berikutnya ? (
@@ -158,6 +169,9 @@ export default function GuruDiKelasPage() {
                       {s.rombel || '—'} · {s.mapel || 'Kegiatan'}
                     </span>
                     <span className={`shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-semibold ${statusKelas(s.status)}`}>{labelKelas(s.status)}</span>
+                    <span className={`shrink-0 text-[10px] font-semibold ${s.terkonfirmasi ? 'text-emerald-600' : 'text-amber-600'}`}>
+                      {s.terkonfirmasi ? `✓ masuk ${String(s.sesi?.waktu_masuk || '').slice(0, 5)}` : 'belum masuk kelas'}
+                    </span>
                     {s.status !== 'akan_datang' && (
                       <span className={`shrink-0 text-[10px] font-medium ${s.jurnal_terisi ? 'text-emerald-600' : 'text-amber-600'}`}>
                         {s.jurnal_terisi ? '✓ jurnal' : 'jurnal belum'}
@@ -172,7 +186,8 @@ export default function GuruDiKelasPage() {
       </div>
 
       <p className="px-1 text-[11px] leading-5 text-gray-400">
-        Status "Sedang di kelas" dihitung dari jam jadwal dan waktu WIB saat ini. Kehadiran diambil dari ceklok guru pada tanggal tersebut.
+        "Terkonfirmasi" berarti guru sudah menekan tombol Masuk Kelas untuk jam itu (tercatat jam masuk, dan jarak/geofence bila sekolah mengaktifkannya).
+        Tanpa konfirmasi, status hanya perkiraan dari jam jadwal. Kehadiran diambil dari ceklok guru pada tanggal tersebut.
       </p>
     </div>
   )

@@ -6278,6 +6278,12 @@ app.get('/api/monitoring/guru-di-kelas', authMiddleware, (req, res) => {
   const hadir = new Map(db.prepare(`SELECT gtk_id, waktu_masuk, waktu_pulang, status FROM absensi_guru
     WHERE tenant_id=? AND tanggal=? AND gtk_id IN (${tanda})`).all(req.tenantId, tanggal, ...ids).map(r => [r.gtk_id, r]))
 
+  // Sesi "Masuk Kelas" (bukti guru benar-benar menekan tombol di kelas).
+  const sesi = new Map(db.prepare(`SELECT id, jadwal_id, waktu_masuk, waktu_selesai, status,
+      menit_terlambat, geo_scope, geo_distance
+    FROM sesi_kelas_guru WHERE tenant_id=? AND tanggal=? AND guru_id IN (${tanda})`)
+    .all(req.tenantId, tanggal, ...ids).map(r => [r.jadwal_id, r]))
+
   // Jurnal yang sudah diisi pada tanggal itu (dipakai untuk menandai slot).
   const jurnal = new Set(db.prepare(`SELECT guru_id, mapel_id, rombel_id FROM jurnal_mengajar
     WHERE tenant_id=? AND tanggal=? AND guru_id IN (${tanda})`).all(req.tenantId, tanggal, ...ids)
@@ -6288,9 +6294,21 @@ app.get('/api/monitoring/guru-di-kelas', authMiddleware, (req, res) => {
       const mulai = menit(j.jam_mulai)
       const selesai = menit(j.jam_selesai)
       const status = kini >= mulai && kini < selesai ? 'berlangsung' : kini >= selesai ? 'selesai' : 'akan_datang'
+      const sesiSlot = sesi.get(j.id) || null
       return {
         ...j,
         status,
+        // terkonfirmasi = guru sudah menekan "Masuk Kelas" untuk slot ini.
+        terkonfirmasi: !!sesiSlot && !!sesiSlot.waktu_masuk,
+        sesi: sesiSlot ? {
+          id: sesiSlot.id,
+          waktu_masuk: sesiSlot.waktu_masuk,
+          waktu_selesai: sesiSlot.waktu_selesai,
+          status: sesiSlot.status,
+          menit_terlambat: sesiSlot.menit_terlambat || 0,
+          geo_scope: sesiSlot.geo_scope || '',
+          jarak_meter: sesiSlot.geo_distance != null ? Math.round(Number(sesiSlot.geo_distance)) : null,
+        } : null,
         jurnal_terisi: jurnal.has(`${g.id}|${j.mapel_id || ''}|${j.rombel_id || ''}`),
       }
     })
@@ -6305,7 +6323,9 @@ app.get('/api/monitoring/guru-di-kelas', authMiddleware, (req, res) => {
         jam_masuk: hadir.get(g.id).waktu_masuk || null,
         jam_pulang: hadir.get(g.id).waktu_pulang || null,
       } : { status: 'belum_ceklok', jam_masuk: null, jam_pulang: null },
-      sedang_mengajar: slots.find(s => s.status === 'berlangsung') || null,
+      // Sesi aktif adalah bukti terkuat; kalau ada, itulah kelas yang diampu.
+      sedang_mengajar: slots.find(s => s.sesi && s.sesi.status === 'aktif')
+        || slots.find(s => s.status === 'berlangsung') || null,
       berikutnya: slots.find(s => s.status === 'akan_datang') || null,
       jumlah_jam: slots.length,
       jadwal: slots,
