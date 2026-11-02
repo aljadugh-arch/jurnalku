@@ -26,3 +26,13 @@ test('profil menyediakan aktivasi 2FA + kode pemulihan', () => {
   assert.ok(s.includes('recovery_codes'), 'kode pemulihan ditampilkan sekali')
   assert.ok(s.includes('Simpan kode pemulihan'), 'peringatan menyimpan kode')
 })
+
+test('kartu install PWA tidak menutupi form login', () => {
+  const s = baca('src/components/PwaInstallPrompt.tsx')
+  assert.ok(s.includes('useLocation'), 'memakai pathname')
+  assert.ok(s.includes('RUTE_TANPA_PROMPT'), 'punya daftar rute tanpa prompt')
+  for (const r of ['login', 'register', 'forgot-password']) {
+    assert.ok(s.includes(r), `rute ${r} dikecualikan`)
+  }
+  assert.ok(s.includes('if (RUTE_TANPA_PROMPT.test(pathname)) return null'), 'berhenti sebelum render')
+})

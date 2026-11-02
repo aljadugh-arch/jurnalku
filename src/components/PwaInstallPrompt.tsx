@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { useLocation } from 'react-router-dom'
 import { Download, Loader2, Share2, X } from 'lucide-react'
 import { useSettingsStore } from '../stores/settingsStore'
 
@@ -17,7 +18,14 @@ function isStandalone() {
   return window.matchMedia('(display-mode: standalone)').matches || navigator.standalone === true
 }
 
+// Kartu ini `position: fixed` dan menempel di bawah layar. Di halaman masuk ia
+// pernah menutupi tombol "Masuk Sekarang" (terbukti: elementFromPoint di tengah
+// tombol mengembalikan kartu install), sehingga tap terasa tidak direspons.
+// Karena itu kartu tidak pernah dirender di halaman autentikasi.
+const RUTE_TANPA_PROMPT = /^\/(login|register|forgot-password|reset-password|verifikasi|ppdb)/
+
 export default function PwaInstallPrompt() {
+  const { pathname } = useLocation()
   const enabled = useSettingsStore(s => s.settings.pwa_enabled === true || s.settings.pwa_enabled === 1)
   const appName = String(useSettingsStore(s => s.settings.pwa_name || s.settings.nama_lembaga || 'JURNALKU'))
   const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null)
@@ -69,6 +77,7 @@ export default function PwaInstallPrompt() {
   // Yang tetap dihormati: kalau PWA lembaga memang dinonaktifkan secara sadar
   // (pwa_enabled === false DAN pwa_name kosong), tombol hanya muncul saat
   // browser benar-benar menawarkan pemasangan (deferredPrompt tersedia).
+  if (RUTE_TANPA_PROMPT.test(pathname)) return null
   const bolehTampil = installed || dismissed ? false : Boolean(deferredPrompt) || isIos
   if (!bolehTampil) return null
   void enabled
