@@ -18,6 +18,13 @@ const log=pino({level:process.env.LOG_LEVEL||'info'}); const sockets=new Map(); 
 // `connect()` selalu return lebih awal dan status tertahan di 'connecting'
 // selamanya — inilah gejala "connect device hanya connecting saja".
 const socketSejak=new Map()
+// Penjaga agar connect() tidak pernah berjalan dobel untuk tenant yang sama.
+// Tanpa ini, tick 2 detik dan timer reconnect 10 detik bisa membuat dua socket
+// dengan kredensial identik; server WhatsApp menandai yang lama "replaced" dan
+// keduanya saling menendang tanpa henti (konflik tiap ~3 detik).
+const menyambung=new Set()
+// Hitungan gagal berturut-turut untuk backoff. Direset setiap koneksi terbuka.
+const gagalBerturut=new Map()
 const BATAS_HANDSHAKE_MS=Number(process.env.WA_HANDSHAKE_TIMEOUT_MS||45000)
 const {createVersionResolver,forEachTenantSettled}=workerUtils; const resolveVersion=createVersionResolver(fetchLatestBaileysVersion)
 const nowWib=()=>({date:new Date().toLocaleDateString('en-CA',{timeZone:'Asia/Jakarta'}),time:new Date().toLocaleTimeString('en-GB',{timeZone:'Asia/Jakarta',hour:'2-digit',minute:'2-digit',hour12:false})})
@@ -42,6 +49,11 @@ function session(tenantId,status,extra={}){
   db.prepare(`INSERT INTO wa_sessions(tenant_id,status,qr,last_error,phone,updated_at) VALUES(?,?,?,?,?,datetime('now')) ON CONFLICT(tenant_id) DO UPDATE SET status=excluded.status,qr=CASE WHEN excluded.status='qr' THEN excluded.qr WHEN excluded.status='connected' THEN NULL ELSE wa_sessions.qr END,last_error=excluded.last_error,phone=COALESCE(excluded.phone,wa_sessions.phone),updated_at=datetime('now')`).run(tenantId,status,extra.qr||null,extra.error||null,extra.phone||null)
 }
 async function connect(tenantId){
+  if(menyambung.has(tenantId))return
+  menyambung.add(tenantId)
+  try{ return await connectInti(tenantId) } finally { menyambung.delete(tenantId) }
+}
+async function connectInti(tenantId){
   // Socket lama yang sudah login = sehat, jangan diganggu.
   const lamaSock=sockets.get(tenantId)
   if(lamaSock?.user) return
@@ -112,11 +124,21 @@ async function connect(tenantId){
   })
   sock.ev.on('connection.update',({connection,lastDisconnect,qr})=>{
     if(qr)session(tenantId,'qr',{qr}) // QR stored for admin endpoint; never logged
-    if(connection==='open'){retryAfter.delete(tenantId);session(tenantId,'connected',{phone:sock.user?.id?.split(':')[0]})}
+    if(connection==='open'){gagalBerturut.delete(tenantId);retryAfter.delete(tenantId);session(tenantId,'connected',{phone:sock.user?.id?.split(':')[0]})}
     if(connection==='close'){
+      // Socket lama HARUS ditutup. Kalau dibiarkan hidup, ia menyambung sendiri
+      // dengan kredensial yang sama dan server menandai koneksi baru "replaced" —
+      // loop konflik yang tidak pernah selesai.
+      try{ sock.end(undefined) }catch{}
       sockets.delete(tenantId); socketSejak.delete(tenantId); const code=lastDisconnect?.error?.output?.statusCode
-      if(code===DisconnectReason.loggedOut||stopping.delete(tenantId))session(tenantId,'disconnected')
-      else {retryAfter.set(tenantId,Date.now()+10000);session(tenantId,'reconnecting',{error:String(lastDisconnect?.error?.message||'connection closed').slice(0,500)}); setTimeout(()=>connect(tenantId).catch(e=>log.error({tenantId,err:e.message},'reconnect')),10000)}
+      if(code===DisconnectReason.loggedOut||stopping.delete(tenantId)){gagalBerturut.delete(tenantId);session(tenantId,'disconnected')}
+      else {
+        const n=(gagalBerturut.get(tenantId)||0)+1; gagalBerturut.set(tenantId,n)
+        const jeda=Math.min(10000*Math.pow(2,Math.min(n-1,5)),300000)
+        retryAfter.set(tenantId,Date.now()+jeda)
+        session(tenantId,'reconnecting',{error:String(lastDisconnect?.error?.message||'connection closed').slice(0,500)})
+        setTimeout(()=>connect(tenantId).catch(e=>log.error({tenantId,err:e.message},'reconnect')),jeda)
+      }
     }
   })
 }
