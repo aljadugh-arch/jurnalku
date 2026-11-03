@@ -402,6 +402,18 @@ ${tahunAktif ? `<h2>Tahun Ajaran Aktif</h2><p>${escHtml(tahunAktif)}</p>` : ''}
 }
 app.get('/profil', (req, res) => renderProfilLembaga(req, res))
 
+// Kirim URL ke IndexNow tanpa menunggu hasil (dipakai hook posting).
+// Kegagalan jaringan tidak boleh menggagalkan penyimpanan posting.
+function indexNowKirim(basis, urls) {
+  const daftar = [...new Set((urls || []).filter(u => typeof u === 'string' && u.startsWith(basis)))].slice(0, 10000)
+  if (!daftar.length) return
+  fetch('https://api.indexnow.org/indexnow', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json; charset=utf-8' },
+    body: JSON.stringify({ host: new URL(basis).host, key: INDEXNOW_KEY, keyLocation: `${basis}/${INDEXNOW_KEY}.txt`, urlList: daftar }),
+  }).catch(() => {})
+}
+
 // Kunci IndexNow — disajikan di akar setiap host yang dilayani aplikasi ini.
 const INDEXNOW_KEY = process.env.INDEXNOW_KEY || 'adc9a32340e681107188ff4d34c812c7'
 app.get(`/${INDEXNOW_KEY}.txt`, (req, res) => {
@@ -10009,6 +10021,8 @@ app.post('/api/posting', STAFF, (req, res) => {
   const id = uuidv4()
   db.prepare(`INSERT INTO posting (id, tenant_id, author_user_id, konten, judul, isi, kategori, penulis_id, penulis_nama, media, activity_type, location_lat, location_lng, location_name, poll_data, tags) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
     .run(id, req.tenantId, req.user.id, safeKonten, judul.trim(), isi.trim(), kategori || 'berita', req.user.id, req.user.nama || req.user.username || '', JSON.stringify(safeMedia), activity_type || '', location_lat || null, location_lng || null, location_name || '', JSON.stringify(poll_data || []), JSON.stringify(tags || []))
+  // Berita baru = konten unik baru; beri tahu mesin pencari pendukung IndexNow.
+  try { indexNowKirim(`${skemaPermintaan(req)}://${hostPermintaan(req)}`, [`${skemaPermintaan(req)}://${hostPermintaan(req)}/posting/${id}`]) } catch { /* jangan ganggu simpan */ }
   res.json({ id })
 })
 
