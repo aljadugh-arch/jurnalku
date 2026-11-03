@@ -103,6 +103,10 @@ if (IS_PROD && !JWT_SECRET) {
 // Sesi login normal bertahan lintas penutupan aplikasi. JWT_SECRET production
 // tetap wajib stabil di environment; menggantinya memang akan mencabut sesi lama.
 const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '30d'
+
+// IndexNow: protokol terbuka Bing/Yandex/Seznam. Kunci bersifat publik (memang
+// harus bisa diunduh mesin pencari di /<kunci>.txt). Google TIDAK memakai
+// IndexNow; untuk Google tetap lewat Search Console / sitemap.
 const todayJakarta = () => new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Jakarta' })
 const timeJakarta = () => new Date().toLocaleTimeString('en-GB', { timeZone: 'Asia/Jakarta', hour: '2-digit', minute: '2-digit', hour12: false })
 
@@ -397,6 +401,40 @@ ${tahunAktif ? `<h2>Tahun Ajaran Aktif</h2><p>${escHtml(tahunAktif)}</p>` : ''}
   res.type('html').send(html)
 }
 app.get('/profil', (req, res) => renderProfilLembaga(req, res))
+
+// Kunci IndexNow — disajikan di akar setiap host yang dilayani aplikasi ini.
+const INDEXNOW_KEY = process.env.INDEXNOW_KEY || 'adc9a32340e681107188ff4d34c812c7'
+app.get(`/${INDEXNOW_KEY}.txt`, (req, res) => {
+  res.type('text/plain').send(INDEXNOW_KEY)
+})
+
+// Kirim URL ke IndexNow (Bing, Yandex, Seznam, Naver). Tanpa akun, tanpa OAuth.
+// Body: { urlList?: string[], semua?: boolean } — `semua` mengambil isi sitemap.
+app.post('/api/seo/indexnow', async (req, res) => {
+  if (req.user?.role !== 'super_admin') return res.status(403).json({ error: 'Hanya super admin.' })
+  const host = hostPermintaan(req)
+  const basis = `${skemaPermintaan(req)}://${host}`
+  let urlList = Array.isArray(req.body?.urlList) ? req.body.urlList.map(String).filter(u => /^https?:\/\//.test(u)) : []
+  if (req.body?.semua !== false) {
+    try {
+      const xml = await fetch(`${basis}/sitemap.xml`, { headers: { 'User-Agent': 'JURNALKU-IndexNow' } }).then(r => r.text())
+      const dariSitemap = [...xml.matchAll(/<loc>([^<]+)<\/loc>/g)].map(m => m[1])
+      urlList = [...new Set([...urlList, ...dariSitemap])]
+    } catch { /* pakai urlList apa adanya */ }
+  }
+  urlList = urlList.filter(u => u.startsWith(basis)).slice(0, 10000)
+  if (!urlList.length) return res.status(400).json({ error: 'Tidak ada URL untuk dikirim.' })
+  try {
+    const r = await fetch('https://api.indexnow.org/indexnow', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json; charset=utf-8' },
+      body: JSON.stringify({ host, key: INDEXNOW_KEY, keyLocation: `${basis}/${INDEXNOW_KEY}.txt`, urlList }),
+    })
+    res.json({ ok: r.ok, status: r.status, terkirim: urlList.length, contoh: urlList.slice(0, 3) })
+  } catch (e) {
+    res.status(502).json({ error: 'Gagal menghubungi IndexNow: ' + e.message })
+  }
+})
 
 app.get('/sitemap.xml', (req, res) => {
   const host = hostPermintaan(req)
