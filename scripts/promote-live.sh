@@ -117,6 +117,12 @@ if [[ -d "$STG/public" ]]; then
   echo "aset brand dipromosikan ke LIVE: $(ls -1 "$STG/public" | wc -l) berkas"
 fi
 pm2 restart "$PM2_APP" --update-env
+# Worker WA berjalan sebagai proses PM2 terpisah. Tanpa restart di sini, perubahan
+# server/wa-worker.mjs hanya mendarat di disk dan proses lama tetap memakai kode
+# lama — patch terlihat "tidak berefek" sampai seseorang me-restart manual.
+if pm2 describe jurnalku-wa >/dev/null 2>&1; then
+  pm2 restart jurnalku-wa --update-env >/dev/null 2>&1 || true
+fi
 # Dua domain diperiksa dengan pola yang SAMA. Sebelumnya domain utama punya 10
 # percobaan sedangkan jurnalmadrasah.web.id hanya sekali — pada cold start
 # setelah `pm2 restart`, Caddy sempat membalas 502 dan pemeriksaan kedua gagal
