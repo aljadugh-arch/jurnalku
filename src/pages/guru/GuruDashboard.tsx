@@ -42,6 +42,7 @@ export default function GuruDashboard() {
   const [tugasForm, setTugasForm] = useState({ judul: '', deskripsi: '', deadline: '', rombel_id: '', mapel_id: '' })
   const [classBusy, setClassBusy] = useState(false)
   const [qrOpen, setQrOpen] = useState(false)
+  const [qrJadwal, setQrJadwal] = useState<any>(null)
   const navigate = useNavigate()
   const location = useLocation()
 
@@ -82,6 +83,8 @@ export default function GuruDashboard() {
       toast.error(err.response?.data?.error || 'Gagal mencatat masuk kelas')
     } finally { setClassBusy(false) }
   }
+
+  const bukaScan = (jadwal: any) => { setQrJadwal(jadwal); setQrOpen(true) }
 
   const scanMasuk = async (payload: string) => {
     try {
@@ -166,7 +169,7 @@ export default function GuruDashboard() {
         <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-center">
           <p className="font-bold text-emerald-800">Masuk Kelas</p>
           <p className="text-xs text-emerald-700">Pilih tombol Masuk pada jadwal kelas yang benar di bawah.</p>
-          <button onClick={() => setQrOpen(true)} className="mt-2 inline-flex items-center gap-2 rounded-lg border border-emerald-300 bg-white px-3 py-1.5 text-xs font-semibold text-emerald-700 hover:bg-emerald-50">
+          <button onClick={() => bukaScan(null)} className="mt-2 inline-flex items-center gap-2 rounded-lg border border-emerald-300 bg-white px-3 py-1.5 text-xs font-semibold text-emerald-700 hover:bg-emerald-50">
             <QrCode size={14} /> Scan QR Ruang
           </button>
         </div>
@@ -276,8 +279,8 @@ export default function GuruDashboard() {
                   <span
                     role="button"
                     tabIndex={0}
-                    onClick={event => { event.stopPropagation(); enterClass(j) }}
-                    onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); event.stopPropagation(); enterClass(j) } }}
+                    onClick={event => { event.stopPropagation(); bukaScan(j) }}
+                    onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); event.stopPropagation(); bukaScan(j) } }}
                     className="shrink-0 rounded-lg bg-emerald-600 px-2.5 py-1.5 text-xs font-bold text-white"
                   >Masuk</span>
                 ) : null}
@@ -343,7 +346,12 @@ export default function GuruDashboard() {
       </div>
     </div>
     </div>
-      <ScanQrKelasModal open={qrOpen} onClose={() => setQrOpen(false)} onHasil={scanMasuk} />
+      <ScanQrKelasModal
+        open={qrOpen}
+        onClose={() => setQrOpen(false)}
+        onHasil={scanMasuk}
+        onFallback={async () => { const j = qrJadwal; setQrOpen(false); if (j) await enterClass(j) }}
+      />
     </>
   )
 }

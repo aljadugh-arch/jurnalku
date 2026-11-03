@@ -431,6 +431,9 @@ function daftarkanRouteKeamanan(app, ctx) {
     const tenantId = tenantDari(req)
     const ident = String(req.body?.email || req.body?.identifier || '').trim().toLowerCase()
     const balasan = { ok: true, pesan: 'Jika akun terdaftar, tautan masuk sudah dikirim ke email.' }
+    if (!require('./login-methods.cjs').metodeAktif(db, tenantId, 'tautan')) {
+      return res.status(403).json({ error: 'Login lewat tautan email sedang dinonaktifkan oleh admin lembaga.', code: 'METODE_NONAKTIF' })
+    }
     if (!ident) return res.json(balasan)
 
     const user = db.prepare('SELECT * FROM users WHERE lower(email)=? AND tenant_id=?').get(ident, tenantId)

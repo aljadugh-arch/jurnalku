@@ -44,6 +44,7 @@ export default function MobileGuruDashboard() {
   const [ceklok, setCeklok] = useState<any>(null)
   const [busy, setBusy] = useState(false)
   const [qrOpen, setQrOpen] = useState(false)
+  const [qrJadwal, setQrJadwal] = useState<any>(null)
   const navigate = useNavigate()
 
   const load = useCallback(
@@ -69,6 +70,8 @@ export default function MobileGuruDashboard() {
     const r = data.rekap_jurnal || {}
     return (r.draft ?? 0) + (r.submitted ?? 0)
   }, [data.rekap_jurnal])
+
+  const bukaScan = (jadwal: any) => { setQrJadwal(jadwal); setQrOpen(true) }
 
   const scanMasuk = async (payload: string) => {
     try {
@@ -230,24 +233,14 @@ export default function MobileGuruDashboard() {
                       ) : (
                         <button
                           type="button"
-                          onClick={() => enterClass(j)}
+                          onClick={() => bukaScan(j)}
                           disabled={busy}
                           className="inline-flex items-center gap-1 whitespace-nowrap rounded-full bg-emerald-600 px-2.5 py-1.5 text-[10px] font-bold text-white active:scale-95 transition disabled:opacity-60"
                         >
                           <LogIn size={12} /> MASUK KELAS
                         </button>
                       )}
-                      {!isDone && (
-                        <button
-                          type="button"
-                          onClick={() => setQrOpen(true)}
-                          disabled={busy}
-                          title="Scan QR ruang kelas"
-                          className="inline-flex items-center justify-center rounded-full border border-emerald-300 p-1.5 text-emerald-700 dark:border-emerald-800 dark:text-emerald-400"
-                        >
-                          <QrCode size={12} />
-                        </button>
-                      )}
+
                     </div>
                   </div>
                 )
@@ -259,7 +252,12 @@ export default function MobileGuruDashboard() {
         {/* ── JADWAL SHOLAT (komponen bersama, sama dgn admin & bendahara) ── */}
         <JadwalSholatCard />
       </div>
-      <ScanQrKelasModal open={qrOpen} onClose={() => setQrOpen(false)} onHasil={scanMasuk} />
+      <ScanQrKelasModal
+        open={qrOpen}
+        onClose={() => setQrOpen(false)}
+        onHasil={scanMasuk}
+        onFallback={async () => { const j = qrJadwal; setQrOpen(false); if (j) await enterClass(j) }}
+      />
     </div>
   )
 }

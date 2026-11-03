@@ -4,10 +4,13 @@ import { X, Camera } from 'lucide-react'
 
 // Pemindai QR ruang kelas. Dipakai guru sebagai jalur cadangan saat GPS tidak
 // terbaca / akurasinya buruk: QR membuktikan ruangan secara langsung.
-export default function ScanQrKelasModal({ open, onClose, onHasil }: {
+export default function ScanQrKelasModal({ open, onClose, onHasil, onFallback, fallbackLabel }: {
   open: boolean
   onClose: () => void
   onHasil: (payload: string) => Promise<void> | void
+  // Jalur cadangan (mis. GPS) bila kamera/QR tidak bisa dipakai.
+  onFallback?: () => Promise<void> | void
+  fallbackLabel?: string
 }) {
   const [galat, setGalat] = useState('')
   const [memproses, setMemproses] = useState(false)
@@ -71,6 +74,15 @@ export default function ScanQrKelasModal({ open, onClose, onHasil }: {
           <p className="mt-2 text-center text-[11px] leading-4 text-gray-400">
             Arahkan kamera ke QR di pintu ruang kelas. Jangan lupa izinkan akses kamera.
           </p>
+          {onFallback && (
+            <button
+              type="button"
+              onClick={() => { void onFallback() }}
+              className="mt-2 w-full rounded-lg border px-3 py-2 text-xs font-semibold text-gray-600 hover:bg-gray-50"
+            >
+              {fallbackLabel || 'Kamera bermasalah? Masuk dengan lokasi (GPS)'}
+            </button>
+          )}
         </div>
       </div>
     </div>

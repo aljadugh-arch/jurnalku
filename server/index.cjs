@@ -1907,6 +1907,8 @@ for (const col of [
   ['settings', 'tipe_institusi', "TEXT DEFAULT ''"],
   ['settings', 'hari_libur', "TEXT DEFAULT '[]'"],
   ['settings', 'kbm_auto_aktif', "INTEGER DEFAULT 0"],
+  // Metode login yang ditampilkan di halaman masuk (JSON array).
+  ['settings', 'metode_login', "TEXT DEFAULT '[\"sandi\"]'"],
   ['settings', 'bg_size', "TEXT DEFAULT 'cover'"],
   ['settings', 'bg_position', "TEXT DEFAULT 'center'"],
   ['settings', 'bg_repeat', "TEXT DEFAULT 'no-repeat'"],
@@ -12541,6 +12543,9 @@ require('./auth-security.cjs').daftarkanRouteKeamanan(app, {
   kirimEmail: require('./mailer.cjs').kirimEmail,
   tenantDariHost, hostPermintaan,
 })
+
+// Metode login per lembaga (sandi / OTP WA / tautan email).
+require('./login-methods.cjs').daftarkanRouteMetodeLogin(app, { db, authMiddleware })
 
 // QR ruang kelas: bukti kehadiran di ruangan (pelengkap/cadangan GPS).
 require('./class-qr.cjs').daftarkanRouteQrKelas(app, {

@@ -196,6 +196,26 @@ export default function SettingsPage() {
     }).catch(() => {})
   }, [])
 
+  // Metode login yang tampil di halaman masuk (disimpan terpisah dari form utama
+  // supaya bisa diubah tanpa menyentuh pengaturan lain).
+  const [metodeLogin, setMetodeLogin] = useState<string[]>(['sandi'])
+  const [menyimpanMetode, setMenyimpanMetode] = useState(false)
+  useEffect(() => {
+    api.get('/settings/metode-login').then(r => {
+      if (Array.isArray(r.data?.metode)) setMetodeLogin(r.data.metode)
+    }).catch(() => {})
+  }, [])
+  const simpanMetodeLogin = async () => {
+    if (metodeLogin.length === 0) { toast.error('Pilih minimal satu metode login'); return }
+    setMenyimpanMetode(true)
+    try {
+      const r = await api.put('/settings/metode-login', { metode: metodeLogin })
+      setMetodeLogin(r.data.metode)
+      toast.success('Metode login disimpan')
+    } catch (e: any) { toast.error(e.response?.data?.error || 'Gagal menyimpan metode login') }
+    finally { setMenyimpanMetode(false) }
+  }
+
   const handleSaveLibrary = async () => {
     setSavingLibrary(true)
     try {
@@ -414,6 +434,38 @@ export default function SettingsPage() {
               Anggap KBM aktif setiap hari non-libur (tanpa perlu isi Kalender KBM per tanggal)
             </label>
             <p className="text-xs text-gray-400 mt-1">Cocok untuk lembaga yang hari efektifnya = semua hari kecuali hari libur yang dicentang di atas (mis. hanya Ahad/Minggu). Hari libur tetap nonaktif, kecuali ada kegiatan (ekskul/ujian/kegiatan sekolah) pada tanggal tersebut.</p>
+          </div>
+          <div className="rounded-xl border border-gray-200 p-3 sm:p-4">
+            <p className="text-sm font-semibold text-gray-700">Metode Login</p>
+            <p className="mt-0.5 text-xs text-gray-400">
+              Pilih cara masuk yang ditampilkan di halaman login. Bila hanya satu yang dicentang, halaman login
+              langsung menampilkan formulir itu tanpa tab pilihan.
+            </p>
+            <div className="mt-2 space-y-1.5">
+              {[
+                ['sandi', 'Username / NIS / NIP + password akun'],
+                ['otp', 'Nomor WhatsApp + kode OTP'],
+                ['tautan', 'Tautan masuk lewat email'],
+              ].map(([id, label]) => (
+                <label key={id} className="flex items-start gap-2 text-sm text-gray-700">
+                  <input
+                    type="checkbox"
+                    className="mt-0.5 h-4 w-4"
+                    checked={metodeLogin.includes(id)}
+                    onChange={e => setMetodeLogin(m => e.target.checked ? [...new Set([...m, id])] : m.filter(x => x !== id))}
+                  />
+                  <span>{label}</span>
+                </label>
+              ))}
+            </div>
+            <button
+              type="button"
+              onClick={simpanMetodeLogin}
+              disabled={menyimpanMetode}
+              className="mt-3 rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-white hover:opacity-90 disabled:opacity-50"
+            >
+              {menyimpanMetode ? 'Menyimpan...' : 'Simpan metode login'}
+            </button>
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-600 mb-1">Alamat</label>

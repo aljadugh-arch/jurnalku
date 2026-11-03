@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, Navigate, Link } from 'react-router-dom'
 import { Eye, EyeOff, ArrowRight, Moon, Sun, ClipboardList, GraduationCap, MonitorPlay, BookOpen, MessageCircle, RefreshCw } from 'lucide-react'
 import { useAuthStore } from '../../stores/authStore'
@@ -87,6 +87,16 @@ export default function LoginPage() {
     return () => { window.clearTimeout(t); window.removeEventListener('online', onOnline) }
   }, [loading])
   // Login wali tanpa sandi: kode 6 digit dikirim ke WhatsApp nomor terdaftar.
+  // Metode login mengikuti pengaturan admin lembaga (settings.metode_login).
+  // Bila hanya satu yang aktif, tab pilihan tidak ditampilkan sama sekali.
+  const metodeAktif = useMemo<Array<'sandi' | 'otp' | 'tautan'>>(() => {
+    const mentah: any = (settings as any)?.metode_login
+    let arr: any[] = []
+    try { arr = Array.isArray(mentah) ? mentah : JSON.parse(String(mentah || '[]')) } catch { arr = [] }
+    const urut = (['sandi', 'otp', 'tautan'] as const).filter(m => arr.includes(m))
+    return urut.length ? [...urut] : ['sandi']
+  }, [settings])
+
   const [mode, setMode] = useState<'sandi' | 'otp' | 'tautan'>('sandi')
   const [mfaChallenge, setMfaChallenge] = useState('')
   const [tanpaSandi, setTanpaSandi] = useState(false)
@@ -133,6 +143,11 @@ export default function LoginPage() {
       .then(r => setMagicInfo(r.data))
       .catch(() => setError('Tautan tidak valid atau sudah kedaluwarsa. Minta tautan baru.'))
   }, [])
+
+  // Jika admin mematikan metode yang sedang dipilih, pindah ke yang tersedia.
+  useEffect(() => {
+    if (!metodeAktif.includes(mode)) setMode(metodeAktif[0])
+  }, [metodeAktif, mode])
 
   if (authReady && isAuthenticated && user) {
     return <Navigate to={getRedirectPath(user.role)} replace />
@@ -329,21 +344,26 @@ export default function LoginPage() {
                 </div>
               )}
 
-              {/* Pilihan cara masuk: sandi, OTP WhatsApp, atau tautan email. */}
-              <div className="mb-4 grid grid-cols-3 gap-1 rounded-xl sk-bg-subtle p-1">
-                {([['sandi', 'Sandi'], ['otp', 'OTP WA'], ['tautan', 'Tautan Email']] as const).map(([id, label]) => (
-                  <button
-                    key={id}
-                    type="button"
-                    onClick={() => { setMode(id); setError(''); setInfo(''); setOtpTerkirim(false); setKode('') }}
-                    className={`rounded-lg py-2 text-xs font-semibold transition ${
-                      mode === id ? 'bg-white sk-txt-accent shadow-sm' : 'text-slate-500 hover:text-slate-700'
-                    }`}
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
+              {/* Pilihan cara masuk — hanya muncul bila admin mengaktifkan lebih dari satu. */}
+              {metodeAktif.length > 1 && (
+                <div className={`mb-4 grid gap-1 rounded-xl sk-bg-subtle p-1`} style={{ gridTemplateColumns: `repeat(${metodeAktif.length}, minmax(0,1fr))` }}>
+                  {metodeAktif.map(id => {
+                    const label = id === 'sandi' ? 'Sandi' : id === 'otp' ? 'OTP WA' : 'Tautan Email'
+                    return (
+                      <button
+                        key={id}
+                        type="button"
+                        onClick={() => { setMode(id); setError(''); setInfo(''); setOtpTerkirim(false); setKode('') }}
+                        className={`rounded-lg py-2 text-xs font-semibold transition ${
+                          mode === id ? 'bg-white sk-txt-accent shadow-sm' : 'text-slate-500 hover:text-slate-700'
+                        }`}
+                      >
+                        {label}
+                      </button>
+                    )
+                  })}
+                </div>
+              )}
 
               {info && (
                 <div className="mb-4 rounded-xl border border-sky-100 bg-sky-50 px-4 py-3 text-xs font-medium text-sky-700">

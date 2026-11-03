@@ -114,6 +114,11 @@ function daftarkanRouteOtp(app, ctx) {
     const nomor = normalNomor(req.body?.phone ?? req.body?.email)
     const balasan = { ok: true, pesan: 'Jika nomor terdaftar, kode akan dikirim ke WhatsApp dalam beberapa saat.' }
 
+    // Metode OTP bisa dimatikan admin; jangan kirim kode yang tidak akan dipakai.
+    if (!require('./login-methods.cjs').metodeAktif(db, tenantId, 'otp')) {
+      return res.status(403).json({ error: 'Login OTP WhatsApp sedang dinonaktifkan oleh admin lembaga.', code: 'METODE_NONAKTIF' })
+    }
+
     if (!nomor) return res.json(balasan)
 
     // Lembaga nonaktif tidak boleh mengirim OTP.

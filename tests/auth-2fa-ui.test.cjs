@@ -5,9 +5,12 @@ const fs = require('node:fs')
 const path = require('node:path')
 const baca = (f) => fs.readFileSync(path.join(__dirname, '..', f), 'utf8')
 
-test('login punya tiga cara masuk: sandi, OTP WA, tautan email', () => {
+test('login menampilkan metode sesuai pengaturan admin (bisa satu saja)', () => {
   const s = baca('src/pages/auth/LoginPage.tsx')
-  assert.ok(s.includes("['sandi', 'Sandi']") && s.includes("['otp', 'OTP WA']") && s.includes("['tautan', 'Tautan Email']"))
+  // Label tetap tersedia, tetapi daftar tab dibangun dari settings.metode_login.
+  assert.ok(s.includes("'OTP WA'") && s.includes("'Tautan Email'") && s.includes("'Sandi'"))
+  assert.ok(s.includes('metode_login'), 'membaca pengaturan lembaga')
+  assert.ok(s.includes('metodeAktif.length > 1'), 'tab disembunyikan bila hanya satu metode')
   assert.ok(s.includes('/auth/magic/peek'), 'tautan dibaca dulu tanpa menghanguskan token')
   assert.ok(s.includes('mfa_required'), 'login menangani tantangan 2FA')
 })
