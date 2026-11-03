@@ -2476,7 +2476,7 @@ const SUPER = requireRole('super_admin')
 
 // Kirim URL ke IndexNow (Bing, Yandex, Seznam, Naver). Tanpa akun, tanpa OAuth.
 // Body: { urlList?: string[], semua?: boolean } — `semua` mengambil isi sitemap.
-app.post('/api/seo/indexnow', async (req, res) => {
+app.post('/api/seo/indexnow', authMiddleware, async (req, res) => {
   if (req.user?.role !== 'super_admin') return res.status(403).json({ error: 'Hanya super admin.' })
   const host = hostPermintaan(req)
   const basis = `${skemaPermintaan(req)}://${host}`
