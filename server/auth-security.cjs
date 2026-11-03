@@ -463,6 +463,9 @@ function daftarkanRouteKeamanan(app, ctx) {
 
   // Halaman konfirmasi membaca info tanpa menghanguskan token (aman dari pemindai).
   app.get('/api/auth/magic/peek', ctx.authLimiter, (req, res) => {
+    if (!require('./login-methods.cjs').metodeAktif(db, tenantDari(req), 'tautan')) {
+      return res.status(403).json({ error: 'Login lewat tautan email sedang dinonaktifkan oleh admin lembaga.', code: 'METODE_NONAKTIF' })
+    }
     const row = ambilChallenge(db, String(req.query.token || ''), 'magic')
     if (!row) return res.status(400).json({ error: 'Tautan tidak valid atau sudah kedaluwarsa.' })
     const user = db.prepare('SELECT nama, email FROM users WHERE id=?').get(row.user_id)
@@ -473,6 +476,11 @@ function daftarkanRouteKeamanan(app, ctx) {
   })
 
   app.post('/api/auth/magic/consume', ctx.authLimiter, (req, res) => {
+    // Tautan lama yang masih beredar tidak boleh dipakai bila admin mematikan
+    // metode ini — perubahan pengaturan harus berlaku surut.
+    if (!require('./login-methods.cjs').metodeAktif(db, tenantDari(req), 'tautan')) {
+      return res.status(403).json({ error: 'Login lewat tautan email sedang dinonaktifkan oleh admin lembaga.', code: 'METODE_NONAKTIF' })
+    }
     const row = ambilChallenge(db, String(req.body?.token || ''), 'magic')
     if (!row) return res.status(400).json({ error: 'Tautan tidak valid atau sudah kedaluwarsa.' })
     pakaiChallenge(db, row)

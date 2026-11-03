@@ -26,11 +26,11 @@ async function boot() {
   const batas = Date.now() + 60000
   while (Date.now() < batas && !/running/i.test(out)) await new Promise(r => setTimeout(r, 150))
   if (!/running/i.test(out)) { try { proc.kill('SIGKILL') } catch { /* abaikan */ } assert.fail('server gagal start: ' + out.slice(-400)) }
-  return { proc, port }
+  return { proc, port, dbFile }
 }
 
 test('metode login: bawaan sandi, OTP/tautan ditolak saat dimatikan', async (t) => {
-  const { proc, port } = await boot()
+  const { proc, port, dbFile } = await boot()
   t.after(() => { try { proc.kill('SIGKILL') } catch { /* abaikan */ } })
   const base = `http://127.0.0.1:${port}`
   const H = { 'Content-Type': 'application/json' }
@@ -57,6 +57,21 @@ test('metode login: bawaan sandi, OTP/tautan ditolak saat dimatikan', async (t) 
   assert.equal((await otp.json()).code, 'METODE_NONAKTIF')
   const tautan = await fetch(base + '/api/auth/magic/request', { method: 'POST', headers: tamu, body: JSON.stringify({ email: 'x@uji.id' }) })
   assert.equal(tautan.status, 403)
+
+  // 2b. Tautan lama pun tidak boleh dipakai saat metode dimatikan.
+  const Database = require('better-sqlite3')
+  const db = new Database(dbFile)
+  const tenantRow = db.prepare('SELECT id FROM tenants ORDER BY rowid DESC LIMIT 1').get()
+  const userRow = db.prepare('SELECT id FROM users WHERE tenant_id=? ORDER BY rowid DESC LIMIT 1').get(tenantRow.id)
+  const tokenUji = 'token-tautan-uji'
+  const hash = crypto.createHash('sha256').update(tokenUji).digest('hex')
+  db.prepare(`INSERT INTO auth_challenge(id,user_id,tenant_id,jenis,token_hash,expires_at)
+    VALUES(?,?,?,?,?,datetime('now','+10 minutes'))`).run(crypto.randomUUID(), userRow.id, tenantRow.id, 'magic', hash)
+  db.close()
+  const peek = await fetch(base + '/api/auth/magic/peek?token=' + tokenUji, { headers: tamu })
+  assert.equal(peek.status, 403, 'peek tautan ditolak saat metode dimatikan')
+  const pakai = await fetch(base + '/api/auth/magic/consume', { method: 'POST', headers: tamu, body: JSON.stringify({ token: tokenUji }) })
+  assert.equal(pakai.status, 403, 'tautan lama tidak boleh menerbitkan sesi')
 
   // 3. Admin menyalakan OTP -> permintaan diterima (balasan generik).
   const put = await fetch(base + '/api/settings/metode-login', { method: 'PUT', headers: auth, body: JSON.stringify({ metode: ['sandi', 'otp'] }) })

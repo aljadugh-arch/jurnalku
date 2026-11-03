@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react'
 import { QRCodeSVG } from 'qrcode.react'
-import { Printer, RefreshCw, QrCode, Info } from 'lucide-react'
+import QRCode from 'qrcode'
+import JSZip from 'jszip'
+import { Printer, RefreshCw, QrCode, Info, Download, Loader2 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import api from '../../services/api'
 
@@ -10,6 +12,7 @@ export default function QrKelasPage() {
   const [tanggal, setTanggal] = useState('')
   const [data, setData] = useState<{ tanggal: string; berlaku_sampai: string; kelas: Kelas[] } | null>(null)
   const [memuat, setMemuat] = useState(false)
+  const [mengunduh, setMengunduh] = useState(false)
 
   const muat = async (tgl = tanggal) => {
     setMemuat(true)
@@ -23,6 +26,55 @@ export default function QrKelasPage() {
   }
 
   useEffect(() => { void muat() }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const namaBerkas = (nama: string) => `QR_${String(nama || 'kelas').replace(/[^\w\-]+/g, '_')}`
+
+  const simpanBerkas = (blob: Blob, nama: string) => {
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = nama
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
+    setTimeout(() => URL.revokeObjectURL(url), 2000)
+  }
+
+  // Gambar QR dibuat di perangkat (canvas), bukan diunduh dari layanan luar.
+  const qrDataUrl = async (payload: string) => {
+    const canvas = document.createElement('canvas')
+    await QRCode.toCanvas(canvas, payload, { width: 700, margin: 2, errorCorrectionLevel: 'M' })
+    return canvas.toDataURL('image/png')
+  }
+
+  const unduhSatu = async (k: Kelas) => {
+    try {
+      const dataUrl = await qrDataUrl(k.payload)
+      const bin = await (await fetch(dataUrl)).blob()
+      simpanBerkas(bin, `${namaBerkas(k.nama)}_${data?.tanggal || ''}.png`)
+    } catch { toast.error('Gagal membuat berkas QR') }
+  }
+
+  const unduhSemua = async () => {
+    const kelas = data?.kelas || []
+    if (!kelas.length) { toast.error('Belum ada QR untuk diunduh'); return }
+    setMengunduh(true)
+    try {
+      const zip = new JSZip()
+      for (const k of kelas) {
+        const dataUrl = await qrDataUrl(k.payload)
+        zip.file(`${namaBerkas(k.nama)}.png`, dataUrl.split(',')[1], { base64: true })
+      }
+      zip.file('README.txt',
+        `QR Ruang Kelas — JURNALKU\nTanggal berlaku: ${data?.tanggal}\nBerlaku sampai: ${data?.berlaku_sampai}\n\n` +
+        'Cetak dan tempel di pintu ruang. Guru memindai lewat tombol Masuk Kelas.\n' +
+        'QR hanya berlaku pada tanggal tersebut; cetak ulang setiap hari.\n')
+      const blob = await zip.generateAsync({ type: 'blob' })
+      simpanBerkas(blob, `QR_Ruang_Kelas_${data?.tanggal || 'hari-ini'}.zip`)
+      toast.success(`${kelas.length} QR diunduh`)
+    } catch { toast.error('Gagal membuat berkas ZIP') }
+    finally { setMengunduh(false) }
+  }
 
   return (
     <div className="mx-auto max-w-5xl space-y-4">
@@ -47,8 +99,12 @@ export default function QrKelasPage() {
           <button onClick={() => void muat()} disabled={memuat} className="inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm font-semibold hover:bg-gray-50">
             <RefreshCw size={15} className={memuat ? 'animate-spin' : ''} /> Muat
           </button>
-          <button onClick={() => window.print()} className="inline-flex items-center gap-2 rounded-lg bg-primary px-3 py-2 text-sm font-semibold text-white hover:opacity-90">
+          <button onClick={() => window.print()} className="inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm font-semibold hover:bg-gray-50">
             <Printer size={15} /> Cetak
+          </button>
+          <button onClick={() => void unduhSemua()} disabled={mengunduh} className="inline-flex items-center gap-2 rounded-lg bg-primary px-3 py-2 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-60">
+            {mengunduh ? <Loader2 size={15} className="animate-spin" /> : <Download size={15} />}
+            {mengunduh ? 'Menyiapkan…' : 'Unduh Semua (ZIP)'}
           </button>
         </div>
       </div>
@@ -74,6 +130,12 @@ export default function QrKelasPage() {
               <QRCodeSVG value={k.payload} size={140} level="M" />
             </div>
             <p className="mt-2 text-[10px] leading-4 text-gray-400">Pindai lewat menu Masuk Kelas di aplikasi guru</p>
+            <button
+              onClick={() => void unduhSatu(k)}
+              className="tanpa-cetak mt-2 inline-flex items-center gap-1 rounded-lg border px-2 py-1 text-[11px] font-semibold text-gray-600 hover:bg-gray-50"
+            >
+              <Download size={12} /> Unduh PNG
+            </button>
           </div>
         ))}
         {data && data.kelas.length === 0 && (
