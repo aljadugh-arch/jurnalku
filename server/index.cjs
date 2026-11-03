@@ -499,16 +499,21 @@ const apiLimiter = rateLimit({
 // akun sah untuk menarik seluruh isi lembaga berulang kali.
 const bulkLimiter = rateLimit({
   windowMs: 60 * 60 * 1000,
-  max: Number(process.env.EXPORT_MAX_PER_HOUR || 20),
+  max: Number(process.env.EXPORT_MAX_PER_HOUR || 60),
   keyGenerator: kunciPemanggil,
   standardHeaders: true,
   legacyHeaders: false,
   skip: (req) => {
     const url = String(req.originalUrl || '')
+    // Cetak rapor SATU SISWA adalah pekerjaan harian, bukan panen data —
+    // jangan dihitung. Yang dibatasi: ekspor massal (pdf-bulk), limit=0, dan
+    // ekspor daftar (ledger/rekap).
+    const raporSatuSiswa = /^\/api\/rapor\/export\/pdf(\?|$)/.test(url)
+    if (raporSatuSiswa) return true
     const mintaSemua = /[?&]limit=0(&|$)/.test(url)
     return !(mintaSemua || /\/export(\/|\?|$)/.test(url))
   },
-  message: { error: 'Batas ekspor/unduh data tercapai (20 per jam). Coba lagi nanti.' },
+  message: { error: 'Batas ekspor massal tercapai (60 per jam). Coba lagi nanti.' },
 })
 // Anti-scraping: endpoint publik (tanpa auth) dibatasi jauh lebih ketat supaya
 // data landing/tenant/geocode tidak bisa dipanen massal oleh scraper. Endpoint

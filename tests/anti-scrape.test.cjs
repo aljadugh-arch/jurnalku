@@ -88,6 +88,13 @@ test('paginasi: limit=0 dibatasi 500 baris dan menyatakan has_more', async (t) =
   assert.equal(body.total, 650)
 })
 
+test('cetak rapor satu siswa tidak dihitung sebagai ekspor massal', () => {
+  const src = fs.readFileSync(path.join(root, 'server/index.cjs'), 'utf8')
+  assert.ok(/raporSatuSiswa = \/\^\\\/api\\\/rapor\\\/export\\\/pdf/.test(src), 'jalur rapor per siswa dikecualikan')
+  assert.match(src, /pdf-bulk/, 'ekspor massal tetap dibatasi')
+  assert.match(src, /EXPORT_MAX_PER_HOUR \|\| 60/, 'batas ekspor 60/jam')
+})
+
 test('UI ekspor memaginasi 500 baris per permintaan', () => {
   const s = fs.readFileSync(path.join(root, 'src/pages/admin/JurnalPage.tsx'), 'utf8')
   assert.ok(s.includes('limit: 500'), 'meminta 500 per halaman')
