@@ -312,6 +312,17 @@ function renderProfilLembaga(req, res) {
   const nRombel = hitung("SELECT COUNT(*) n FROM rombel WHERE tenant_id=?")
   let ekskul = []
   try { ekskul = db.prepare('SELECT nama FROM ekskul WHERE tenant_id=? ORDER BY nama LIMIT 24').all(tenantId).map(r => r.nama).filter(Boolean) } catch { ekskul = [] }
+  // Konten unik tambahan: mata pelajaran, tahun ajaran aktif, dan berita terbaru.
+  // Ini yang membuat halaman profil punya kata kunci khas, bukan sekadar identitas.
+  let mapel = []
+  try { mapel = db.prepare('SELECT nama FROM mapel WHERE tenant_id=? ORDER BY nama LIMIT 24').all(tenantId).map(r => r.nama).filter(Boolean) } catch { mapel = [] }
+  let tahunAktif = ''
+  try { tahunAktif = String(db.prepare('SELECT nama FROM tahun_ajaran WHERE tenant_id=? AND aktif=1 ORDER BY nama DESC LIMIT 1').get(tenantId)?.nama || '') } catch { tahunAktif = '' }
+  let berita = []
+  try {
+    berita = db.prepare(`SELECT id, judul, substr(COALESCE(isi,''),1,160) cuplikan, created_at
+      FROM posting WHERE tenant_id=? ORDER BY created_at DESC LIMIT 6`).all(tenantId)
+  } catch { berita = [] }
   const nama = String(s.nama_lembaga || '').trim() || 'Lembaga'
   const jenjang = String(s.jenjang || '').trim()
   const alamat = String(s.alamat || '').trim()
@@ -343,7 +354,18 @@ function renderProfilLembaga(req, res) {
     ...(alamat ? { address: { '@type': 'PostalAddress', streetAddress: alamat, addressCountry: 'ID' } } : {}),
     ...(npsn ? { identifier: { '@type': 'PropertyValue', propertyID: 'NPSN', value: npsn } } : {}),
     ...(kepala ? { employee: { '@type': 'Person', name: kepala, jobTitle: 'Kepala Sekolah' } } : {}),
+    ...(String(s.telepon || '').trim() ? { telephone: String(s.telepon).trim() } : {}),
+    ...(String(s.email || '').trim() ? { email: String(s.email).trim() } : {}),
+    ...(String(s.alamat || '').trim() ? { address: { '@type': 'PostalAddress', streetAddress: String(s.alamat).trim(), addressCountry: 'ID' } } : {}),
     description: deskripsi,
+  })}</script>
+<script type="application/ld+json">${JSON.stringify({
+    '@context': 'https://schema.org',
+    '@type': 'BreadcrumbList',
+    itemListElement: [
+      { '@type': 'ListItem', position: 1, name: 'Beranda', item: base + '/' },
+      { '@type': 'ListItem', position: 2, name: 'Profil Lembaga', item: base + '/profil' },
+    ],
   })}</script>
 <style>body{font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;max-width:760px;margin:0 auto;padding:24px 20px 64px;line-height:1.65;color:#1e293b}h1{font-size:1.5rem;margin:0 0 4px}.sub{color:#64748b;font-size:.9rem;margin-bottom:24px}table{width:100%;border-collapse:collapse;margin:16px 0}th,td{text-align:left;padding:8px 10px;border-bottom:1px solid #e2e8f0;font-size:.92rem;vertical-align:top}th{width:38%;color:#475569;font-weight:600}.angka{display:flex;gap:10px;flex-wrap:wrap;margin:18px 0}.kartu{flex:1 1 140px;border:1px solid #e2e8f0;border-radius:10px;padding:12px 14px}.kartu b{display:block;font-size:1.4rem;color:#1e40af}.kartu span{font-size:.78rem;color:#64748b}h2{font-size:1.05rem;margin:26px 0 8px}.tag{display:inline-block;background:#eff6ff;color:#1e40af;border-radius:999px;padding:3px 10px;font-size:.8rem;margin:0 6px 6px 0}a{color:#1e40af}</style>
 </head><body>
@@ -365,7 +387,10 @@ ${baris('Kepala sekolah', kepala)}
 ${baris('Telepon', String(s.telepon || '').trim())}
 ${baris('Email', String(s.email || '').trim())}
 </table>
+${mapel.length ? `<h2>Mata Pelajaran</h2><div>${mapel.map(m => `<span class="tag">${escHtml(m)}</span>`).join('')}</div>` : ''}
 ${ekskul.length ? `<h2>Ekstrakurikuler</h2><div>${ekskul.map(e => `<span class="tag">${escHtml(e)}</span>`).join('')}</div>` : ''}
+${berita.length ? `<h2>Kegiatan &amp; Berita Terbaru</h2><ul style="padding-left:20px">${berita.map(b => `<li style="margin-bottom:8px"><a href="/posting/${encodeURIComponent(b.id)}">${escHtml(String(b.judul || 'Kegiatan'))}</a><br><span style="font-size:.8rem;color:#64748b">${escHtml(String(b.created_at || '').slice(0, 10))}</span></li>`).join('')}</ul>` : ''}
+${tahunAktif ? `<h2>Tahun Ajaran Aktif</h2><p>${escHtml(tahunAktif)}</p>` : ''}
 <p style="margin-top:32px;font-size:.85rem;color:#64748b">Dikelola dengan JURNALKU — sistem informasi manajemen sekolah dan madrasah.</p>
 <p><a href="/">Kembali ke beranda</a> · <a href="/ppdb">Penerimaan peserta didik baru</a></p>
 </body></html>`

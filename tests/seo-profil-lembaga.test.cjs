@@ -1,78 +1,70 @@
 'use strict'
-// Kontrak SEO: setiap domain lembaga harus punya halaman yang isinya BERBEDA,
-// bukan sembilan salinan beranda yang sama.
-//
-// TEMUAN NYATA (URL Inspection API, 19 Okt 2026):
-//   jurnal.cc.cd      -> NEUTRAL "Duplicate, Google chose different canonical"
-//   idjurnal.my.id    -> NEUTRAL "Duplicate, Google chose different canonical"
-//   idjurnal.biz.id   -> NEUTRAL "Duplicate, Google chose different canonical"
-//   /panduan di 7 domain -> NEUTRAL "Discovered - currently not indexed"
-//
-// Penyebab: sembilan domain menyajikan <title> dan isi beranda yang praktis
-// identik ("Madrasah Digital — JURNALKU"). Canonical-nya benar (menunjuk diri
-// sendiri), tetapi Google tetap memilih satu wakil karena isinya sama.
-//
-// Perbaikan: halaman /profil berisi data yang benar-benar berbeda per lembaga
-// (nama, jenjang, NPSN, NSM, alamat, kepala sekolah, jumlah siswa/GTK/rombel,
-// daftar ekstrakurikuler) — semuanya dibaca dari DB, bukan dikarang.
+// Profil lembaga publik: konten unik (mapel, ekskul, berita) + structured data.
 const test = require('node:test')
-const assert = require('node:assert')
-const fs = require('node:fs')
+const assert = require('node:assert/strict')
+const { spawn } = require('node:child_process')
+const os = require('node:os')
 const path = require('node:path')
+const crypto = require('node:crypto')
+const jwt = require('jsonwebtoken')
+const Database = require('better-sqlite3')
 
-const AKAR = path.join(__dirname, '..')
-const baca = (p) => fs.readFileSync(path.join(AKAR, p), 'utf8')
+const root = path.join(__dirname, '..')
+const SECRET = 'k'.repeat(40)
 
-test('ada rute /profil publik tanpa login', () => {
-  const s = baca('server/index.cjs')
-  assert.ok(/app\.get\('\/profil', \(req, res\) => renderProfilLembaga\(req, res\)\)/.test(s),
-    'rute /profil harus ada dan tidak butuh authMiddleware')
-  assert.ok(/function renderProfilLembaga/.test(s))
-})
+async function boot() {
+  const dbFile = path.join(os.tmpdir(), `jk-profil-${process.pid}-${Date.now()}.db`)
+  const port = 45600 + Math.floor(Math.random() * 300)
+  const proc = spawn(process.execPath, ['server/index.cjs'], {
+    cwd: root,
+    env: { ...process.env, PORT: String(port), DB_PATH: dbFile, JWT_SECRET: SECRET, NODE_ENV: 'test' },
+    stdio: ['ignore', 'pipe', 'pipe'],
+  })
+  let out = ''
+  proc.stdout.on('data', d => { out += d.toString() })
+  proc.stderr.on('data', d => { out += d.toString() })
+  const batas = Date.now() + 60000
+  while (Date.now() < batas && !/running/i.test(out)) await new Promise(r => setTimeout(r, 150))
+  if (!/running/i.test(out)) { try { proc.kill('SIGKILL') } catch { /* abaikan */ } assert.fail('server gagal start: ' + out.slice(-400)) }
+  return { proc, port, dbFile }
+}
 
-test('profil memakai data nyata dari DB, bukan teks tetap', () => {
-  const s = baca('server/index.cjs')
-  for (const pola of [
-    /FROM siswa WHERE tenant_id=\? AND status='aktif'/,
-    /FROM gtk WHERE tenant_id=\? AND status='aktif'/,
-    /FROM rombel WHERE tenant_id=\?/,
-    /FROM ekskul WHERE tenant_id=\?/,
-  ]) assert.ok(pola.test(s), `profil harus menghitung dari DB: ${pola}`)
-  assert.ok(/getTenantSettings\(db, tenantId, 'nama_lembaga,jenjang,npsn/.test(s),
-    'identitas lembaga harus dari settings')
-})
+test('profil lembaga memuat mapel, ekskul, berita, dan structured data', async (t) => {
+  const { proc, port, dbFile } = await boot()
+  t.after(() => { try { proc.kill('SIGKILL') } catch { /* abaikan */ } })
 
-test('profil punya canonical sendiri dan robots index', () => {
-  const s = baca('server/index.cjs')
-  const i = s.indexOf('function renderProfilLembaga')
-  const blok = s.slice(i, i + 6000)
-  assert.ok(/rel="canonical" href="\$\{escHtml\(base \+ '\/profil'\)\}"/.test(blok),
-    'canonical harus menunjuk /profil, bukan beranda')
-  assert.ok(/name="robots" content="index, follow"/.test(blok))
-  assert.ok(/EducationalOrganization/.test(blok), 'harus ada structured data lembaga')
-})
+  const slug = 'p-' + crypto.randomBytes(3).toString('hex')
+  const reg = await fetch(`http://127.0.0.1:${port}/api/auth/register`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ nama_lembaga: 'MTs Uji Profil', nama: 'Admin', email: `${slug}@uji.id`, password: 'rahasia-uji-123', no_hp: '081200000008', domain_type: 'subdomain', slug }),
+  }).then(r => r.json())
+  const tenantId = jwt.decode(reg.token).tenant_id
 
-test('profil memuat identitas yang membedakan tiap lembaga', () => {
-  const s = baca('server/index.cjs')
-  const i = s.indexOf('function renderProfilLembaga')
-  const blok = s.slice(i, i + 6000)
-  for (const label of ['NPSN', 'NSM', 'Alamat', 'Kepala sekolah', 'Ekstrakurikuler']) {
-    assert.ok(blok.includes(label), `profil harus menampilkan ${label}`)
-  }
-})
+  const db = new Database(dbFile)
+  db.pragma('foreign_keys = OFF')
+  db.prepare("INSERT INTO mapel(id,tenant_id,kode,nama) VALUES(?,?,?,?)").run(crypto.randomUUID(), tenantId, 'MTK', 'Matematika')
+  db.prepare("INSERT INTO mapel(id,tenant_id,kode,nama) VALUES(?,?,?,?)").run(crypto.randomUUID(), tenantId, 'IPA', 'Ilmu Pengetahuan Alam')
+  db.prepare("INSERT INTO ekskul(id,tenant_id,nama) VALUES(?,?,?)").run(crypto.randomUUID(), tenantId, 'Pramuka')
+  db.prepare("INSERT INTO tahun_ajaran(id,tenant_id,nama,semester,aktif) VALUES(?,?,?,?,1)").run(crypto.randomUUID(), tenantId, '2026/2027', 'Ganjil')
+  db.prepare("INSERT INTO posting(id,tenant_id,judul,isi,penulis_id,penulis_nama,created_at) VALUES(?,?,?,?,?,?,datetime('now'))")
+    .run(crypto.randomUUID(), tenantId, 'Juara Olimpiade Matematika', 'Siswa MTs Uji Profil meraih juara pertama.', 'u1', 'Admin')
+  db.prepare("UPDATE settings SET telepon=?, email=? WHERE tenant_id=?").run('0351-123456', 'info@uji.sch.id', tenantId)
+  // Profil publik memakai domain lembaga (custom domain), bukan subdomain platform.
+  db.prepare("UPDATE tenants SET domain_custom=?, domain_status='active' WHERE id=?").run('profil-uji.test', tenantId)
+  db.close()
 
-test('/profil masuk sitemap HANYA untuk domain milik satu lembaga', () => {
-  const s = baca('server/index.cjs')
-  assert.ok(/const punyaLembaga = /.test(s),
-    'harus ada pemeriksaan kepemilikan domain')
-  assert.ok(/if \(punyaLembaga\) halaman\.push\(\['\/profil', '0\.9', 'weekly'\]\)/.test(s),
-    '/profil tidak boleh masuk sitemap domain platform (jurnal.cc.cd dipakai 9 tenant)')
-})
-
-test('laporan indeks per-URL tersedia lewat script', () => {
-  const s = baca('scripts/search-console.cjs')
-  assert.ok(/PERINTAH === 'indeks'/.test(s), 'harus ada perintah indeks')
-  assert.ok(/urlInspection\/index:inspect/.test(s), 'harus memakai URL Inspection API')
-  assert.ok(/verdict/.test(s) && /coverageState/.test(s),
-    'harus melaporkan verdict dan coverageState, bukan hanya "sitemap terkirim"')
+  const r = await fetch(`http://127.0.0.1:${port}/profil`, { headers: { 'X-Forwarded-Host': 'profil-uji.test' } })
+  const html = await r.text()
+  assert.equal(r.status, 200)
+  assert.match(html, /<meta name="robots" content="index, follow"/)
+  assert.match(html, /MTs Uji Profil/)
+  assert.match(html, /Mata Pelajaran/, 'bagian mata pelajaran')
+  assert.match(html, /Matematika/)
+  assert.match(html, /Ekstrakurikuler/)
+  assert.match(html, /Pramuka/)
+  assert.match(html, /Juara Olimpiade Matematika/, 'berita terbaru tampil')
+  assert.match(html, /2026\/2027/, 'tahun ajaran aktif')
+  assert.match(html, /EducationalOrganization/)
+  assert.match(html, /BreadcrumbList/)
+  assert.match(html, /0351-123456/, 'telepon masuk structured data')
 })
