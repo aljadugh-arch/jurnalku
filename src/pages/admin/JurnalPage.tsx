@@ -91,15 +91,25 @@ export default function JurnalPage() {
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
-  // Ambil SEMUA baris (untuk ekspor) memakai limit=0 di server.
+  // Ambil semua baris untuk ekspor DENGAN PAGINASI. Server membatasi 500 baris
+  // sekali tarik (anti-panen data); klien mengulang sampai has_more=false.
   const ambilSemuaUntukEkspor = async (): Promise<any[]> => {
-    const params: any = { limit: 0 }
-    if (filter.tanggal) params.tanggal = filter.tanggal
-    if (filter.guru_id) params.guru_id = filter.guru_id
-    if (filter.status) params.status = filter.status
-    if (filter.rombel_id) params.rombel_id = filter.rombel_id
-    const res = await api.get('/jurnal', { params })
-    return Array.isArray(res.data) ? res.data : (res.data.rows || [])
+    const dasar: any = {}
+    if (filter.tanggal) dasar.tanggal = filter.tanggal
+    if (filter.guru_id) dasar.guru_id = filter.guru_id
+    if (filter.status) dasar.status = filter.status
+    if (filter.rombel_id) dasar.rombel_id = filter.rombel_id
+    const kumpulan: any[] = []
+    let halaman = 1
+    for (;;) {
+      const res = await api.get('/jurnal', { params: { ...dasar, limit: 500, page: halaman } })
+      const rows = Array.isArray(res.data) ? res.data : (res.data.rows || [])
+      kumpulan.push(...rows)
+      const adaLagi = Array.isArray(res.data) ? false : Boolean(res.data.has_more)
+      if (!adaLagi || rows.length === 0 || halaman >= 40) break
+      halaman += 1
+    }
+    return kumpulan
   }
 
   const updateStatus = async (id: string, status: string) => {

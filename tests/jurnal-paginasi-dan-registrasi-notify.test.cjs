@@ -48,7 +48,7 @@ test('GET /api/jurnal mendukung page & limit, klien lama tetap dapat array penuh
   assert.match(route, /adaPaginasi/, 'harus punya cabang tanpa paginasi')
   assert.match(route, /LIMIT \? OFFSET \?/, 'harus memakai LIMIT/OFFSET')
   assert.match(route, /has_more/, 'harus mengembalikan has_more')
-  assert.match(route, /Math\.min\(5000/, 'limit dibatasi maksimum')
+  assert.match(route, /Math\.min\(500/, 'limit dibatasi maksimum 500 (anti-panen data)')
   // Tanpa page/limit → bentuk array seperti sebelumnya.
   assert.match(route, /if \(!adaPaginasi\) \{\s*\/\/[^\n]*\n\s*return res\.json\(db\.prepare\(sql\)\.all\(\.\.\.params\)\)/)
 })
@@ -94,8 +94,9 @@ test('halaman Jurnal memakai paginasi + status memuat + skeleton', () => {
   assert.match(page, /aria-busy/)
   assert.match(page, /reqSeq/, 'harus ada penjaga race request')
   assert.match(page, /clearTimeout/, 'filter harus di-debounce')
-  // Ekspor memakai limit=0 (semua baris), bukan hanya halaman aktif.
-  assert.match(page, /limit: 0/)
+  // Ekspor memaginasi 500 baris per permintaan (server membatasi 500).
+  assert.match(page, /limit: 500/)
+  assert.match(page, /has_more/)
 })
 
 // ─── Notifikasi registrasi ─────────────────────────────────────────────────

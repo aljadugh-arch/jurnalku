@@ -33,7 +33,9 @@ test('library menu is present on desktop and mobile/tablet paths', () => {
 test('all user login token durations are configurable', () => {
   const src = read('server/index.cjs')
   assert.match(src, /JWT_EXPIRES_IN/)
-  assert.equal((src.match(/expiresIn: JWT_EXPIRES_IN/g) || []).length, 3)
+  // Login biasa memakai JWT_EXPIRES_IN; token demo sengaja berumur pendek.
+  assert.equal((src.match(/expiresIn: JWT_EXPIRES_IN/g) || []).length, 2)
+  assert.match(src, /expiresIn: '60m'/, 'token demo harus berumur pendek')
   assert.doesNotMatch(src, /expiresIn: ['\"](?:8h|24h)['\"]/)
 })
 

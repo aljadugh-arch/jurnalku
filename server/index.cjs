@@ -475,11 +475,40 @@ const loginAccountLimiter = rateLimit({
   standardHeaders: false,
   legacyHeaders: false
 })
+// Batas untuk endpoint ber-token: dihitung PER TOKEN (bukan per IP), supaya
+// satu akun tidak bisa memanen data dengan banyak IP, dan supaya sekolah yang
+// berbagi IP (NAT) tidak saling mengunci. 600/menit cukup untuk dashboard
+// (yang memuat beberapa daftar sekaligus) tetapi jauh di bawah laju scraping.
+const cryptoUntukKunci = require('crypto')
+const kunciPemanggil = (req) => {
+  const auth = String(req.headers.authorization || '')
+  const token = auth.startsWith('Bearer ') ? auth.slice(7) : ''
+  if (token) return 'tok:' + cryptoUntukKunci.createHash('sha1').update(token).digest('hex').slice(0, 20)
+  return 'ip:' + req.ip
+}
 const apiLimiter = rateLimit({
   windowMs: 60 * 1000,
-  max: 2000, // lenient: SPA can burst on dashboard
+  max: Number(process.env.API_MAX_PER_TOKEN || 600),
+  keyGenerator: kunciPemanggil,
   standardHeaders: true,
-  legacyHeaders: false
+  legacyHeaders: false,
+  message: { error: 'Terlalu banyak permintaan dari akun ini. Tunggu sebentar.' }
+})
+
+// Ekspor/unduh massal dibatasi harian per akun. Ini menutup penyalahgunaan
+// akun sah untuk menarik seluruh isi lembaga berulang kali.
+const bulkLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: Number(process.env.EXPORT_MAX_PER_HOUR || 20),
+  keyGenerator: kunciPemanggil,
+  standardHeaders: true,
+  legacyHeaders: false,
+  skip: (req) => {
+    const url = String(req.originalUrl || '')
+    const mintaSemua = /[?&]limit=0(&|$)/.test(url)
+    return !(mintaSemua || /\/export(\/|\?|$)/.test(url))
+  },
+  message: { error: 'Batas ekspor/unduh data tercapai (20 per jam). Coba lagi nanti.' },
 })
 // Anti-scraping: endpoint publik (tanpa auth) dibatasi jauh lebih ketat supaya
 // data landing/tenant/geocode tidak bisa dipanen massal oleh scraper. Endpoint
@@ -526,6 +555,7 @@ app.use('/api/', (req, res, next) => {
 })
 app.use('/api/', scrapeLimiter)
 app.use('/api/', apiLimiter)
+app.use('/api/', bulkLimiter)
 
 // Limiter untuk endpoint pembuatan akun / reset password. Sebelumnya hanya
 // /api/auth/login yang dibatasi, sehingga pendaftaran tenant baru (yang langsung
@@ -3573,7 +3603,16 @@ function seedDemoKampus(db) {
   } catch {}
 })()
 
-app.post('/api/auth/demo', (req, res) => {
+// Token demo: masa berlaku pendek + dibatasi per IP. Tanpa ini, satu klik
+// "Akun Demo" memberi akses 30 hari untuk memanen data.
+const demoLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: Number(process.env.DEMO_MAX_PER_HOUR || 30),
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Terlalu banyak permintaan akun demo. Coba lagi dalam satu jam.' },
+})
+app.post('/api/auth/demo', demoLimiter, (req, res) => {
   // Di belakang Caddy, req.headers.host = '127.0.0.1:3002' — domain asli ada di
   // x-forwarded-host. Membaca headers.host membuat SEMUA host terlihat sebagai
   // localhost, sehingga tombol demo di domain platform selalu dibalas 404.
@@ -3649,7 +3688,7 @@ app.post('/api/auth/demo', (req, res) => {
       }
     } catch {}
   }
-  const token = jwt.sign({ id: user.id, email: user.email, nama: user.nama, role: user.role, tenant_id: user.tenant_id, gtk_id: user.gtk_id, siswa_id: user.siswa_id, nis: user.nis }, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN })
+  const token = jwt.sign({ id: user.id, email: user.email, nama: user.nama, role: user.role, tenant_id: user.tenant_id, gtk_id: user.gtk_id, siswa_id: user.siswa_id, nis: user.nis }, JWT_SECRET, { expiresIn: '60m' })
   res.json({ token, user: { id: user.id, email: user.email, nama: user.nama, role: user.role, tenant_id: user.tenant_id, avatar: user.avatar || null } })
 })
 
@@ -9662,14 +9701,16 @@ app.get('/api/jurnal', requireRole('admin', 'super_admin', 'kepala', 'operator',
 
   const limitMinta = Number(req.query.limit)
   const limit = Number.isFinite(limitMinta) && limitMinta >= 0
-    ? Math.min(5000, Math.max(0, Math.floor(limitMinta)))
+    ? Math.min(500, Math.max(0, Math.floor(limitMinta)))
     : 50
   const page = Math.max(1, Math.floor(Number(req.query.page) || 1))
 
   const total = db.prepare(`SELECT COUNT(*) AS n FROM jurnal_mengajar j${whereSql}`).get(...params).n
 
   if (limit === 0) {
-    return res.json({ rows: db.prepare(sql).all(...params), total, page: 1, limit: 0, has_more: false })
+    // Maksimal 500 baris sekali tarik; klien yang butuh semua harus memaginasi.
+    const rows = db.prepare(sql + ' LIMIT 500').all(...params)
+    return res.json({ rows, total, page: 1, limit: 500, has_more: rows.length < total })
   }
   const rows = db.prepare(sql + ' LIMIT ? OFFSET ?').all(...params, limit, (page - 1) * limit)
   res.json({ rows, total, page, limit, has_more: (page - 1) * limit + rows.length < total })
