@@ -408,34 +408,6 @@ app.get(`/${INDEXNOW_KEY}.txt`, (req, res) => {
   res.type('text/plain').send(INDEXNOW_KEY)
 })
 
-// Kirim URL ke IndexNow (Bing, Yandex, Seznam, Naver). Tanpa akun, tanpa OAuth.
-// Body: { urlList?: string[], semua?: boolean } — `semua` mengambil isi sitemap.
-app.post('/api/seo/indexnow', async (req, res) => {
-  if (req.user?.role !== 'super_admin') return res.status(403).json({ error: 'Hanya super admin.' })
-  const host = hostPermintaan(req)
-  const basis = `${skemaPermintaan(req)}://${host}`
-  let urlList = Array.isArray(req.body?.urlList) ? req.body.urlList.map(String).filter(u => /^https?:\/\//.test(u)) : []
-  if (req.body?.semua !== false) {
-    try {
-      const xml = await fetch(`${basis}/sitemap.xml`, { headers: { 'User-Agent': 'JURNALKU-IndexNow' } }).then(r => r.text())
-      const dariSitemap = [...xml.matchAll(/<loc>([^<]+)<\/loc>/g)].map(m => m[1])
-      urlList = [...new Set([...urlList, ...dariSitemap])]
-    } catch { /* pakai urlList apa adanya */ }
-  }
-  urlList = urlList.filter(u => u.startsWith(basis)).slice(0, 10000)
-  if (!urlList.length) return res.status(400).json({ error: 'Tidak ada URL untuk dikirim.' })
-  try {
-    const r = await fetch('https://api.indexnow.org/indexnow', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json; charset=utf-8' },
-      body: JSON.stringify({ host, key: INDEXNOW_KEY, keyLocation: `${basis}/${INDEXNOW_KEY}.txt`, urlList }),
-    })
-    res.json({ ok: r.ok, status: r.status, terkirim: urlList.length, contoh: urlList.slice(0, 3) })
-  } catch (e) {
-    res.status(502).json({ error: 'Gagal menghubungi IndexNow: ' + e.message })
-  }
-})
-
 app.get('/sitemap.xml', (req, res) => {
   const host = hostPermintaan(req)
   const tenantId = tenantDariHost(host)
@@ -2501,6 +2473,35 @@ const ADMIN = requireRole('admin', 'super_admin')
 // Admin lembaga memakai WA gateway lembanya sendiri lewat menu Broadcast/Notif.
 const SUPERADMIN = requireRole('super_admin')
 const SUPER = requireRole('super_admin')
+
+// Kirim URL ke IndexNow (Bing, Yandex, Seznam, Naver). Tanpa akun, tanpa OAuth.
+// Body: { urlList?: string[], semua?: boolean } — `semua` mengambil isi sitemap.
+app.post('/api/seo/indexnow', async (req, res) => {
+  if (req.user?.role !== 'super_admin') return res.status(403).json({ error: 'Hanya super admin.' })
+  const host = hostPermintaan(req)
+  const basis = `${skemaPermintaan(req)}://${host}`
+  let urlList = Array.isArray(req.body?.urlList) ? req.body.urlList.map(String).filter(u => /^https?:\/\//.test(u)) : []
+  if (req.body?.semua !== false) {
+    try {
+      const xml = await fetch(`${basis}/sitemap.xml`, { headers: { 'User-Agent': 'JURNALKU-IndexNow' } }).then(r => r.text())
+      const dariSitemap = [...xml.matchAll(/<loc>([^<]+)<\/loc>/g)].map(m => m[1])
+      urlList = [...new Set([...urlList, ...dariSitemap])]
+    } catch { /* pakai urlList apa adanya */ }
+  }
+  urlList = urlList.filter(u => u.startsWith(basis)).slice(0, 10000)
+  if (!urlList.length) return res.status(400).json({ error: 'Tidak ada URL untuk dikirim.' })
+  try {
+    const r = await fetch('https://api.indexnow.org/indexnow', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json; charset=utf-8' },
+      body: JSON.stringify({ host, key: INDEXNOW_KEY, keyLocation: `${basis}/${INDEXNOW_KEY}.txt`, urlList }),
+    })
+    res.json({ ok: r.ok, status: r.status, terkirim: urlList.length, contoh: urlList.slice(0, 3) })
+  } catch (e) {
+    res.status(502).json({ error: 'Gagal menghubungi IndexNow: ' + e.message })
+  }
+})
+
 const PROCTOR = requireRole('admin', 'super_admin', 'proktor')
 const STAFF = requireRole('admin', 'super_admin', 'guru', 'wali_kelas', 'operator', 'tata_usaha', 'tu', 'kepala')
 const TEACHER = requireCapability('teacher')
