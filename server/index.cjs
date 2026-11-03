@@ -386,7 +386,8 @@ app.get('/sitemap.xml', (req, res) => {
     ['/', '1.0', 'daily'],
     ['/panduan', '0.8', 'weekly'],
     ['/ppdb', '0.8', 'weekly'],
-    ['/login', '0.5', 'monthly'],
+    ['/faq', '0.6', 'monthly'],
+    ['/pengumuman', '0.6', 'weekly'],
     ['/register', '0.6', 'monthly'],
   ]
   // Profil lembaga hanya dimasukkan bila domain ini benar-benar milik satu
@@ -12753,6 +12754,14 @@ function renderIndexSeo(req) {
   // Platform (tanpa lembaga): deskripsi mengikuti pintu segmen domain.
   const segmenPintu = (req.tenantId && req.tenantId !== 'default') ? null : (SEGMENT_DOOR(host)?.segmen)
   if (segmenPintu && SEGMEN_DESC[segmenPintu] && !nama) deskripsi = SEGMEN_DESC[segmenPintu]
+  // Judul juga dibedakan per pintu. Sebelumnya semua domain platform memakai
+  // judul "Sekolah/Madrasah" yang sama sehingga Google melihatnya duplikat.
+  const SEGMEN_JUDUL = {
+    kemenag: 'JURNALKU - Sistem Informasi Madrasah dan Pesantren',
+    dikdasmen: 'JURNALKU - Sistem Informasi Sekolah dan Kampus',
+    umum: 'JURNALKU - Sistem Informasi Lembaga Kursus dan Bimbel',
+  }
+  const judulAkhir = (!nama && path === '/' && segmenPintu && SEGMEN_JUDUL[segmenPintu]) ? SEGMEN_JUDUL[segmenPintu] : judul
   const gambar = `${base}/og-image.png`
   const namaAplikasi = String(s.pwa_name || nama || 'JURNALKU')
   const ld = {
@@ -12762,26 +12771,30 @@ function renderIndexSeo(req) {
     offers: { '@type': 'Offer', price: '0', priceCurrency: 'IDR' },
   }
   if (nama) { ld.author = { '@type': 'EducationalOrganization', name: nama }; ld.isPartOf = { '@type': 'WebSite', name: 'JURNALKU', url: `${canonicalBase}/` } }
+  // Halaman utilitas tidak layak diindeks: tipis, tanpa konten, dan bisa
+  // menurunkan kualitas sinyal. Tetap "follow" agar tautan internal terbaca.
+  const RUTE_NOINDEX = new Set(['/login', '/register', '/forgot-password', '/reset-password', '/verifikasi'])
+  const robotsMeta = RUTE_NOINDEX.has(path) ? 'noindex, follow' : 'index, follow'
   const blok = [
-    `<title>${escHtml(judul)}</title>`,
+    `<title>${escHtml(judulAkhir)}</title>`,
     `<meta name="description" content="${escHtml(deskripsi)}" />`,
     `<meta name="application-name" content="${escHtml(namaAplikasi)}" />`,
     `<link rel="canonical" href="${escHtml(canonicalBase + path)}" />`,
-    `<meta name="robots" content="index, follow" />`,
+    `<meta name="robots" content="${robotsMeta}" />`,
     `<meta name="author" content="JURNALKU" />`,
     `<meta name="keywords" content="aplikasi sekolah, sistem informasi madrasah, jurnal mengajar, absensi QR, absensi RFID, rapor digital, e-rapor, manajemen sekolah, jurnalku" />`,
     `<meta property="og:type" content="website" />`,
     `<meta property="og:site_name" content="${escHtml(namaAplikasi)}" />`,
-    `<meta property="og:title" content="${escHtml(judul)}" />`,
+    `<meta property="og:title" content="${escHtml(judulAkhir)}" />`,
     `<meta property="og:description" content="${escHtml(deskripsi)}" />`,
     `<meta property="og:url" content="${escHtml(canonicalBase + path)}" />`,
     `<meta property="og:image" content="${escHtml(gambar)}" />`,
     `<meta property="og:image:width" content="1200" />`,
     `<meta property="og:image:height" content="630" />`,
-    `<meta property="og:image:alt" content="${escHtml(judul)}" />`,
+    `<meta property="og:image:alt" content="${escHtml(judulAkhir)}" />`,
     `<meta property="og:locale" content="id_ID" />`,
     `<meta name="twitter:card" content="summary_large_image" />`,
-    `<meta name="twitter:title" content="${escHtml(judul)}" />`,
+    `<meta name="twitter:title" content="${escHtml(judulAkhir)}" />`,
     `<meta name="twitter:description" content="${escHtml(deskripsi)}" />`,
     `<meta name="twitter:image" content="${escHtml(gambar)}" />`,
     `<script type="application/ld+json">${JSON.stringify(ld)}</script>`,
