@@ -129,7 +129,10 @@ function teruskanSetelahTrial(db, tenant, now = new Date()) {
   let jumlah = 0
   try { jumlah = db.prepare("SELECT COUNT(*) c FROM siswa WHERE tenant_id=? AND COALESCE(status,'aktif')='aktif'").get(tenant.id).c } catch { jumlah = 0 }
   if (jumlah > BATAS_GRATIS_SISWA) return tenant // tetap terkunci, harus berlangganan
-  const sampai = computeExpiry(now.toISOString(), 6, 'bulan')
+  // Total masa gratis = 6 BULAN TERMASUK trial 1 bulan. Jadi lanjutan setelah
+  // trial hanya 5 bulan, dihitung dari tanggal trial berakhir — bukan 6 bulan
+  // baru dari hari ini (itu akan menjadi total 7 bulan).
+  const sampai = computeExpiry(new Date(berakhir).toISOString(), 5, 'bulan')
   db.prepare("UPDATE tenants SET plan='gratis', subscription_ends_at=?, features_json=NULL WHERE id=?").run(sampai, tenant.id)
   return db.prepare('SELECT * FROM tenants WHERE id=?').get(tenant.id)
 }
@@ -203,7 +206,7 @@ const DEFAULT_PLANS = [
   { plan: 'trial', label: 'Trial', harga: 0, masa_nilai: 1, masa_satuan: 'bulan', aktif: 1, urutan: 0 },
   // Setelah trial: lembaga <=100 siswa boleh lanjut gratis 6 bulan. Paket ini
   // yang menjaga batas 100 itu; Trial sendiri TIDAK dibatasi siswa.
-  { plan: 'gratis', label: 'Gratis', harga: 0, masa_nilai: 6, masa_satuan: 'bulan', aktif: 1, urutan: 1 },
+  { plan: 'gratis', label: 'Gratis', harga: 0, masa_nilai: 5, masa_satuan: 'bulan', aktif: 1, urutan: 1 },
   { plan: 'lite', label: 'Lite', harga: 50000, masa_nilai: 1, masa_satuan: 'bulan', aktif: 1, urutan: 1 },
   { plan: 'pro', label: 'Pro', harga: 80000, masa_nilai: 1, masa_satuan: 'bulan', aktif: 1, urutan: 2 },
   { plan: 'premium', label: 'Premium', harga: 150000, masa_nilai: 1, masa_satuan: 'bulan', aktif: 1, urutan: 3 },

@@ -67,8 +67,10 @@ test('trial habis + siswa <=100 -> otomatis lanjut Gratis 6 bulan', async (t) =>
 
   const t2 = s.db.prepare('SELECT plan, subscription_ends_at FROM tenants WHERE id=?').get(s.tenantId)
   assert.equal(t2.plan, 'gratis')
-  const sisaHari = (new Date(t2.subscription_ends_at).getTime() - Date.now()) / 86400000
-  assert.ok(sisaHari > 170 && sisaHari < 190, `masa gratis harus ~6 bulan, dapat ${sisaHari.toFixed(0)} hari`)
+  // Total 6 bulan TERMASUK trial 1 bulan: trial berakhir kemarin, jadi sisa
+  // lanjutan ~5 bulan (150 hari), bukan 6 bulan lagi.
+  const totalHari = (new Date(t2.subscription_ends_at).getTime() - Date.now()) / 86400000
+  assert.ok(totalHari > 140 && totalHari < 160, `sisa masa gratis harus ~5 bulan (total 6 termasuk trial), dapat ${totalHari.toFixed(0)} hari`)
 
   const { kuotaTenant } = require('../server/kuota.cjs')
   assert.equal(kuotaTenant(s.db, s.tenantId, 'siswa').batas, 100, 'paket gratis dibatasi 100')
