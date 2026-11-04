@@ -565,3 +565,14 @@ test('registrasi: route menerima pilihan paket & mengembalikan data pembayaran',
   assert.match(idx, /app\.get\('\/api\/public\/plans'/, 'endpoint publik daftar paket')
   assert.match(idx, /app\.get\('\/api\/subscription\/payment\/:intentId', authMiddleware/)
 })
+// Regresi: pemeriksaan SSRF pada klien gateway harus benar-benar ditunggu.
+// Sebelumnya promise-nya dibiarkan menggantung sehingga (a) alamat internal tidak
+// pernah benar-benar diblokir dan (b) kegagalan DNS muncul sebagai
+// unhandledRejection yang membuat berkas tes gagal acak di suite paralel.
+test('klienGateway menunggu pemeriksaan SSRF, bukan menembakkannya', () => {
+  const fs = require('node:fs')
+  const path = require('node:path')
+  const sumber = fs.readFileSync(path.join(__dirname, '..', 'server', 'payment-gateway.cjs'), 'utf8')
+  assert.ok(/await assertSafeOutboundUrl\(url\)/.test(sumber), 'harus di-await')
+  assert.ok(!/(?<!await )assertSafeOutboundUrl\(url\)\s*\n/.test(sumber.replace(/await assertSafeOutboundUrl\(url\)/, '')), 'tidak boleh ada pemanggilan tanpa await')
+})

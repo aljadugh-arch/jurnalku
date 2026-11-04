@@ -227,7 +227,11 @@ function klienGateway({ baseUrl, apiKey, fetchImpl = globalThis.fetch, timeoutMs
 
   async function panggil(path, { method = 'GET', body } = {}) {
     const url = `${base}${path}`
-    if (assertSafeOutboundUrl) assertSafeOutboundUrl(url)
+    // WAJIB di-await. Sebelumnya promise-nya dibiarkan menggantung: pemeriksaan
+    // SSRF (resolve DNS + blokir alamat internal) tidak pernah benar-benar menahan
+    // permintaan, dan kegagalan DNS-nya muncul sebagai unhandledRejection yang
+    // membuat berkas tes gagal acak di tengah suite paralel.
+    if (assertSafeOutboundUrl) await assertSafeOutboundUrl(url)
     const res = await fetchImpl(url, {
       method,
       headers: { 'X-API-Key': kunci, Accept: 'application/json', ...(body ? { 'Content-Type': 'application/json' } : {}) },
