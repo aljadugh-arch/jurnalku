@@ -28,6 +28,7 @@ read -r -p "Ketik LIVE untuk lanjut: " confirm
 
 remote bash -s -- "$LIVE" "$SECONDARY_LIVE" "$STG" "$TS" "$LIVE_PM2_APP" "$LIVE_HEALTH_URL" <<'REMOTE'
 set -euo pipefail
+shopt -s nullglob
 LIVE="$1"; SECONDARY_LIVE="$2"; STG="$3"; TS="$4"; PM2_APP="$5"; HEALTH_URL="$6"
 BACKUP="$LIVE/.rollback-$TS"
 SECONDARY_BACKUP="$SECONDARY_LIVE/.rollback-$TS"
@@ -38,7 +39,7 @@ rollback() {
   if [[ "$ACTIVATED" == "1" && -d "$BACKUP" ]]; then
     rm -rf "$LIVE/dist"
     mv "$BACKUP/dist" "$LIVE/dist"
-    rm -f "$LIVE"/server/*.cjs
+    rm -f "$LIVE"/server/*.cjs "$LIVE"/server/*.mjs
     cp -a "$BACKUP/server/." "$LIVE/server/"
     if [[ -d "$BACKUP/server/scripts" ]]; then
       rm -rf "$LIVE/server/scripts"
@@ -63,7 +64,7 @@ trap rollback ERR
 mkdir -p "$BACKUP/server" "$SECONDARY_BACKUP"
 cp -a "$LIVE/dist" "$BACKUP/dist"
 cp -a "$SECONDARY_LIVE/dist" "$SECONDARY_BACKUP/dist"
-cp -a "$LIVE"/server/*.cjs "$BACKUP/server/"
+cp -a "$LIVE"/server/*.cjs "$LIVE"/server/*.mjs "$BACKUP/server/"
 # Skrip bantu (server/scripts/) juga dipakai fitur runtime (auto-provision domain
 # custom). Ikut di-backup supaya rollback benar-benar memulihkan keadaan sebelumnya.
 [[ ! -d "$LIVE/server/scripts" ]] || cp -a "$LIVE/server/scripts" "$BACKUP/server/scripts"
@@ -71,7 +72,7 @@ mkdir -p /root/backups/jurnalku
 sqlite3 "$LIVE/server/jurnalku.db" ".backup /root/backups/jurnalku/jurnalku.db.pre-deploy-$TS"
 
 test -s "$STG/dist/index.html"
-for f in "$STG"/server/*.cjs; do
+for f in "$STG"/server/*.cjs "$STG"/server/*.mjs; do
   node -c "$f"
 done
 for f in "$STG"/server/scripts/*; do
@@ -88,7 +89,7 @@ cp -a "$STG/dist" "$SECONDARY_LIVE/dist.next"
 rm -rf "$LIVE/dist" "$SECONDARY_LIVE/dist"
 mv "$LIVE/dist.next" "$LIVE/dist"
 mv "$SECONDARY_LIVE/dist.next" "$SECONDARY_LIVE/dist"
-for f in "$STG"/server/*.cjs; do
+for f in "$STG"/server/*.cjs "$STG"/server/*.mjs; do
   install -m 0644 "$f" "$LIVE/server/$(basename "$f")"
 done
 if [[ -d "$STG/server/scripts" ]]; then

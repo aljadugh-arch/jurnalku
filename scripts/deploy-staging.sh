@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Build lokal lalu deploy kode ke staging. Production tidak disentuh.
 set -euo pipefail
+shopt -s nullglob
 cd "$(dirname "$0")/.."
 
 VPS_IP="${VPS_IP:?Set VPS_IP via environment}"
@@ -28,9 +29,9 @@ remote() { sshpass -e ssh "${SSH_OPTS[@]}" "$TARGET" "$@"; }
 # Seluruh modul backend *.cjs (kecuali file test) dikirim, bukan daftar hardcoded,
 # supaya modul baru (mis. rapor-grade-service.cjs, ledger-service.cjs) otomatis
 # ikut ter-deploy dan tidak menyebabkan MODULE_NOT_FOUND di staging/production.
-mapfile -t SERVER_FILES < <(find server -maxdepth 1 -name '*.cjs' ! -name '*.test.cjs' -printf '%f\n' | sort)
+mapfile -t SERVER_FILES < <(find server -maxdepth 1 \( -name '*.cjs' -o -name '*.mjs' \) ! -name '*.test.cjs' -printf '%f\n' | sort)
 if [[ ${#SERVER_FILES[@]} -eq 0 ]]; then
-  echo "ERROR: tidak ada file server/*.cjs ditemukan." >&2
+  echo "ERROR: tidak ada file server/*.cjs atau *.mjs ditemukan." >&2
   exit 1
 fi
 
@@ -78,6 +79,7 @@ sshpass -e scp "${SSH_OPTS[@]}" "$LOCAL_ARCHIVE" "$TARGET:$REMOTE_ARCHIVE"
 echo "[4/5] Pasang artefak staging secara atomik..."
 remote bash -s -- "$STG" "$REMOTE_ARCHIVE" "$DEPLOY_ID" "$STG_PM2_APP" "$STG_HEALTH_URL" "$STG_PORT" <<'REMOTE'
 set -euo pipefail
+shopt -s nullglob
 STG="$1"; ARCHIVE="$2"; DEPLOY_ID="$3"; PM2_APP="$4"; HEALTH_URL="$5"; STG_PORT="$6"
 WORK="$STG/.deploy-$DEPLOY_ID"
 BACKUP_SERVER="$STG/.server-backup-$DEPLOY_ID"
@@ -114,7 +116,7 @@ trap rollback ERR
 mkdir -p "$WORK" "$STG/server"
 tar -xzf "$ARCHIVE" -C "$WORK"
 test -s "$WORK/dist/index.html"
-for f in "$WORK"/server/*.cjs; do
+for f in "$WORK"/server/*.cjs "$WORK"/server/*.mjs; do
   node -c "$f"
 done
 for f in "$WORK"/server/scripts/*; do
@@ -134,7 +136,7 @@ mv "$WORK/dist" "$STG/dist.next"
 rm -rf "$STG/dist.previous"
 [[ ! -d "$STG/dist" ]] || mv "$STG/dist" "$STG/dist.previous"
 mv "$STG/dist.next" "$STG/dist"
-for f in "$WORK"/server/*.cjs; do
+for f in "$WORK"/server/*.cjs "$WORK"/server/*.mjs; do
   install -m 0644 "$f" "$STG/server/$(basename "$f")"
 done
 if [[ -d "$WORK/server/scripts" ]]; then
