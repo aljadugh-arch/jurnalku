@@ -131,7 +131,16 @@ async function connectInti(tenantId){
       // loop konflik yang tidak pernah selesai.
       try{ sock.end(undefined) }catch{}
       sockets.delete(tenantId); socketSejak.delete(tenantId); const code=lastDisconnect?.error?.output?.statusCode
-      if(code===DisconnectReason.loggedOut||stopping.delete(tenantId)){gagalBerturut.delete(tenantId);session(tenantId,'disconnected')}
+      // QR yang kedaluwarsa karena tidak pernah dipindai bukan gangguan jaringan:
+      // menyambung ulang hanya menghasilkan QR baru yang juga tak terpakai dan
+      // status berkedip 'reconnecting' selamanya. Berhenti sampai admin meminta
+      // connect lagi dari dashboard.
+      const alasan=String(lastDisconnect?.error?.message||'')
+      const qrKedaluwarsa=/QR refs attempts ended|QR ref timed out/i.test(alasan)
+      if(code===DisconnectReason.loggedOut||qrKedaluwarsa||stopping.delete(tenantId)){
+        gagalBerturut.delete(tenantId);retryAfter.delete(tenantId)
+        session(tenantId,'disconnected', qrKedaluwarsa?{error:'QR kedaluwarsa — buka WhatsApp lalu pindai ulang'}:{})
+      }
       else {
         const n=(gagalBerturut.get(tenantId)||0)+1; gagalBerturut.set(tenantId,n)
         const jeda=Math.min(10000*Math.pow(2,Math.min(n-1,5)),300000)

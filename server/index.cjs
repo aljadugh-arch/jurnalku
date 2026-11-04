@@ -12987,6 +12987,23 @@ app.use((err, req, res, next) => {
   res.status(500).json({ error: 'Terjadi kesalahan server: ' + (err.message || 'unknown') })
 })
 
+// Sesi kelas yang tidak pernah ditekan "Selesai Kelas" tertinggal berstatus
+// 'aktif' selamanya. Akibatnya monitoring menampilkan guru "sedang mengajar"
+// berhari-hari, dan sesi itu tidak pernah bisa ditutup dari UI. Tutup otomatis
+// setiap kali server start dan tiap 6 jam; waktu selesai diambil dari jam
+// pelajaran agar rekap tetap masuk akal.
+function tutupSesiKelasBasi() {
+  try {
+    const hasil = db.prepare(`UPDATE sesi_kelas_guru SET status='selesai',
+        waktu_selesai=COALESCE(waktu_selesai,(SELECT j.jam_selesai FROM jadwal j WHERE j.id=sesi_kelas_guru.jadwal_id)),
+        updated_at=datetime('now')
+      WHERE status='aktif' AND tanggal < ?`).run(todayJakarta())
+    if (hasil.changes) console.log(`[sesi-kelas] ${hasil.changes} sesi tertinggal ditutup otomatis`)
+  } catch (e) { console.error('[sesi-kelas] gagal menutup sesi tertinggal:', e.message) }
+}
+tutupSesiKelasBasi()
+setInterval(tutupSesiKelasBasi, 6 * 60 * 60 * 1000).unref()
+
 // Start server
 app.listen(PORT, () => {
   startBackupScheduler(backupScheduler)
