@@ -83,7 +83,9 @@ export default function MobileGuruDashboard() {
       toast.dismiss(idToast)
       if (r.data?.setelah_selesai) toast(r.data.pesan || 'Kelas sudah berakhir; kehadiran QR tercatat.', { icon: 'ℹ️' })
       else toast.success(`Masuk kelas via QR ${r.data?.sesi?.rombel_nama || ''}`.trim())
-      await await load()
+      void load()
+      const jadwalId = r.data?.jadwal?.id
+      if (jadwalId && !r.data?.setelah_selesai) navigate(`/guru/jurnal?jadwal_id=${encodeURIComponent(jadwalId)}`)
     } catch (err: any) {
       toast.dismiss(idToast)
       toast.error(err.response?.data?.error || 'QR tidak dapat diproses')
@@ -235,6 +237,11 @@ export default function MobileGuruDashboard() {
                       ) : isDone ? (
                         <span className="whitespace-nowrap rounded-full bg-slate-100 px-2.5 py-1.5 text-[10px] font-bold text-slate-400 dark:bg-gray-800">
                           SELESAI
+                        </span>
+                      ) : data.sesi_kelas_aktif && data.sesi_kelas_aktif.mapel_id === j.mapel_id &&
+                          String(data.sesi_kelas_aktif.rombel_id) === String(j.rombel_id) ? (
+                        <span className="whitespace-nowrap rounded-full bg-slate-100 px-2.5 py-1.5 text-[10px] font-bold text-slate-400 dark:bg-gray-800">
+                          GABUNGAN
                         </span>
                       ) : (
                         <button

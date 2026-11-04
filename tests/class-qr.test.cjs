@@ -209,3 +209,53 @@ test('pemindai QR responsif: detektor native, stop tidak memblokir', () => {
   assert.ok(/setQrOpen\(false\)\s*\n\s*const idToast = toast\.loading/.test(guru),
     'kamera harus ditutup sebelum menunggu jaringan')
 })
+
+test('JTM 2: satu pindai QR menandai kedua jam, jurnal & absensi cukup sekali', async (t) => {
+  const { proc, port, dbFile } = await boot()
+  t.after(() => { try { proc.kill('SIGKILL') } catch {} })
+  const base = `http://127.0.0.1:${port}`
+  const H = { 'Content-Type': 'application/json' }
+  const jjmm = (offsetMenit) => new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'Asia/Jakarta', hour: '2-digit', minute: '2-digit', hour12: false,
+  }).format(new Date(Date.now() + offsetMenit * 60000))
+
+  const reg = await fetch(base + '/api/auth/register', {
+    method: 'POST', headers: H,
+    body: JSON.stringify({ nama_lembaga: 'Uji JTM', nama: 'Admin', email: `jtm-${crypto.randomBytes(3).toString('hex')}@uji.id`, password: 'rahasia-uji-123', no_hp: '081200000006', domain_type: 'subdomain', slug: `jtm-${crypto.randomBytes(3).toString('hex')}` }),
+  }).then(r => r.json())
+  const db = new Database(dbFile)
+  const tenantId = db.prepare('SELECT tenant_id FROM users ORDER BY created_at DESC LIMIT 1').get().tenant_id
+
+  const gtkId = crypto.randomUUID(), mapelId = crypto.randomUUID(), rombelId = crypto.randomUUID(), userId = crypto.randomUUID()
+  const jamKe1 = crypto.randomUUID(), jamKe2 = crypto.randomUUID()
+  db.prepare("INSERT INTO gtk(id,tenant_id,nama,jenis_kelamin,status) VALUES(?,?,?,?,'aktif')").run(gtkId, tenantId, 'Guru JTM', 'L')
+  db.prepare("INSERT INTO mapel(id,tenant_id,nama,kode) VALUES(?,?,?,?)").run(mapelId, tenantId, 'Biologi', 'BIO')
+  db.prepare('INSERT INTO rombel(id,tenant_id,nama,tingkat,tahun_ajaran) VALUES(?,?,?,?,?)').run(rombelId, tenantId, 'XII-1', '12', '2026/2027')
+  const insJadwal = db.prepare(`INSERT INTO jadwal(id,tenant_id,gtk_id,mapel_id,rombel_id,hari,jam_mulai,jam_selesai,ruangan)
+    VALUES(?,?,?,?,?,?,?,?,?)`)
+  insJadwal.run(jamKe1, tenantId, gtkId, mapelId, rombelId, namaHari, jjmm(-10), jjmm(30), 'R1')
+  insJadwal.run(jamKe2, tenantId, gtkId, mapelId, rombelId, namaHari, jjmm(30), jjmm(70), 'R1')
+  db.prepare('INSERT INTO users(id,nama,email,password,role,tenant_id,gtk_id) VALUES(?,?,?,?,?,?,?)')
+    .run(userId, 'Guru JTM', `guru-jtm-${crypto.randomBytes(3).toString('hex')}@uji.id`, 'x', 'guru', tenantId, gtkId)
+
+  const qr = await fetch(base + '/api/admin/qr-kelas', { headers: { Authorization: `Bearer ${reg.token}` } }).then(r => r.json())
+  const kelas = qr.kelas.find(k => k.id === rombelId)
+  const guruToken = jwt.sign({ id: userId, role: 'guru', nama: 'Guru JTM', email: 'gj@uji.id', tenant_id: tenantId, gtk_id: gtkId }, SECRET, { expiresIn: '1h' })
+
+  const pindai = await fetch(base + '/api/guru/sesi-kelas/qr', {
+    method: 'POST', headers: { ...H, Authorization: `Bearer ${guruToken}` },
+    body: JSON.stringify({ payload: kelas.payload }),
+  }).then(r => r.json())
+
+  assert.equal(pindai.ok, true, JSON.stringify(pindai).slice(0, 160))
+  assert.equal(pindai.blok.jumlah_jam, 2, 'blok JTM 2 dikenali')
+  assert.equal(pindai.jadwal.id, jamKe1, 'kunci jurnal/absensi = jam pertama')
+  const sesi = db.prepare('SELECT jadwal_id,status FROM sesi_kelas_guru WHERE tenant_id=? AND guru_id=? ORDER BY jadwal_id').all(tenantId, gtkId)
+  assert.equal(sesi.length, 2, 'kedua jam tercatat dalam satu pindai')
+  assert.ok(sesi.every(s => s.status === 'aktif'))
+
+  // Absensi mapel dari jam KEDUA harus menulis ke jam pertama (satu absensi).
+  const { blokDariId } = require('../server/jadwal-block.cjs')
+  assert.equal(blokDariId(db, tenantId, jamKe2).blok[0].id, jamKe1)
+  db.close()
+})

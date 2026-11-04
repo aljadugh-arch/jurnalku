@@ -96,7 +96,10 @@ export default function GuruDashboard() {
       toast.dismiss(idToast)
       if (r.data?.setelah_selesai) toast(r.data.pesan || 'Kelas sudah berakhir; kehadiran QR tercatat.', { icon: 'ℹ️' })
       else toast.success(`Masuk kelas via QR ${r.data?.sesi?.rombel_nama || ''}`.trim())
-      await await loadDashboard()
+      void loadDashboard()
+      // Langsung buka form jurnal: guru tidak perlu mencari menu setelah memindai.
+      const jadwalId = r.data?.jadwal?.id
+      if (jadwalId && !r.data?.setelah_selesai) navigate(`/guru/jurnal?jadwal_id=${encodeURIComponent(jadwalId)}`)
     } catch (err: any) {
       toast.dismiss(idToast)
       toast.error(err.response?.data?.error || 'QR tidak dapat diproses')
@@ -286,6 +289,9 @@ export default function GuruDashboard() {
                   <span className="shrink-0 rounded-lg bg-purple-100 px-2.5 py-1.5 text-xs font-bold text-purple-700">Lihat</span>
                 ) : isFinished(j) ? (
                   <span className="shrink-0 rounded-lg bg-gray-100 px-2.5 py-1.5 text-xs font-bold text-gray-500">Selesai</span>
+                ) : data.sesi_kelas_aktif && data.sesi_kelas_aktif.mapel_id === j.mapel_id &&
+                    String(data.sesi_kelas_aktif.rombel_id) === String(j.rombel_id) ? (
+                  <span className="shrink-0 rounded-lg bg-gray-100 px-2.5 py-1.5 text-xs font-bold text-gray-500" title="Sudah tercakup sesi yang sedang berjalan">Gabungan</span>
                 ) : !data.sesi_kelas_aktif && !isFinished(j) ? (
                   <button
                     type="button"

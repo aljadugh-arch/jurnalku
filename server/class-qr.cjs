@@ -12,6 +12,7 @@
 //     membutuhkan GPS, sehingga tetap bekerja di dalam gedung.
 
 const crypto = require('crypto')
+const { blokDariJadwal, menit: keMenit } = require('./jadwal-block.cjs')
 
 const MASA_SEBELUM_MENIT = 30
 const MASA_SESUDAH_MENIT = 60
@@ -89,10 +90,19 @@ function daftarkanRouteQrKelas(app, ctx) {
       .find(j => kini >= menit(j.jam_mulai) - MASA_SEBELUM_MENIT && kini <= menit(j.jam_selesai) + MASA_SESUDAH_MENIT)
     if (!jadwal) return res.status(403).json({ error: 'Tidak ada jam mengajar Anda di ruang ini saat ini.' })
 
+    // Satu mapel JTM 2 tersimpan sebagai dua baris jadwal berurutan. Pindai QR
+    // sekali harus mencakup SELURUH blok: sesi dibuat untuk tiap baris (supaya
+    // kedua jam tampil "berjalan/selesai" di dashboard), tetapi jurnal dan
+    // absensi mapel cukup sekali karena keduanya berkunci sesi, bukan jam.
+    const blok = blokDariJadwal(db, jadwal)
+    const blokIds = blok.map(b => b.id)
+    const blokMulai = blok[0].jam_mulai
+    const blokSelesai = blok[blok.length - 1].jam_selesai
+
     // Sesi aktif lain? Harus diselesaikan dulu (sama seperti alur GPS).
     const aktif = db.prepare("SELECT * FROM sesi_kelas_guru WHERE tenant_id=? AND guru_id=? AND tanggal=? AND status='aktif' LIMIT 1")
       .get(req.tenantId, gtkId, tanggal)
-    if (aktif && aktif.jadwal_id !== jadwal.id) {
+    if (aktif && !blokIds.includes(aktif.jadwal_id)) {
       return res.status(409).json({ error: 'Selesaikan dahulu kelas yang sedang aktif.' })
     }
 
@@ -100,12 +110,11 @@ function daftarkanRouteQrKelas(app, ctx) {
     // baru sempat memindai setelah kelas bubar). Tetapi sesi TIDAK boleh dibiarkan
     // 'aktif': dashboard akan langsung menutupnya, dan guru melihat tombol yang
     // seolah tidak berubah. Simpan sebagai selesai + beri tahu klien.
-    const lewatSelesai = kini > menit(jadwal.jam_selesai)
+    const lewatSelesai = kini > keMenit(blokSelesai)
     const statusSesi = lewatSelesai ? 'selesai' : 'aktif'
-    const waktuSelesai = lewatSelesai ? jadwal.jam_selesai : null
+    const waktuSelesai = lewatSelesai ? blokSelesai : null
 
-    const id = crypto.randomUUID()
-    db.prepare(`INSERT INTO sesi_kelas_guru
+    const upsert = db.prepare(`INSERT INTO sesi_kelas_guru
       (id,jadwal_id,guru_id,mapel_id,rombel_id,tanggal,waktu_masuk,waktu_selesai,status,menit_terlambat,tenant_id,updated_at,jadwal_source,qr_verified,qr_at)
       VALUES (?,?,?,?,?,?,?,?,?,?,?,datetime('now'),'reguler',1,?)
       ON CONFLICT(tenant_id,jadwal_id,tanggal) DO UPDATE SET
@@ -113,18 +122,26 @@ function daftarkanRouteQrKelas(app, ctx) {
         waktu_selesai=CASE WHEN excluded.status='selesai' THEN COALESCE(sesi_kelas_guru.waktu_selesai, excluded.waktu_selesai) ELSE NULL END,
         status=excluded.status,
         qr_verified=1,qr_at=excluded.qr_at,updated_at=datetime('now')`)
-      .run(id, jadwal.id, gtkId, jadwal.mapel_id, jadwal.rombel_id, tanggal, sekarang, waktuSelesai, statusSesi,
-        Math.max(0, kini - menit(jadwal.jam_mulai) - 10), req.tenantId, sekarang)
 
-    const sesi = db.prepare('SELECT * FROM sesi_kelas_guru WHERE tenant_id=? AND jadwal_id=? AND tanggal=?').get(req.tenantId, jadwal.id, tanggal)
+    const simpan = db.transaction(() => {
+      for (const b of blok) {
+        upsert.run(crypto.randomUUID(), b.id, gtkId, b.mapel_id, b.rombel_id, tanggal, sekarang, waktuSelesai, statusSesi,
+          Math.max(0, kini - keMenit(blokMulai) - 10), req.tenantId, sekarang)
+      }
+    })
+    simpan()
+
+    const sesi = db.prepare('SELECT * FROM sesi_kelas_guru WHERE tenant_id=? AND jadwal_id=? AND tanggal=?').get(req.tenantId, blok[0].id, tanggal)
     res.json({
       ok: true,
       setelah_selesai: lewatSelesai,
       pesan: lewatSelesai
-        ? `Kelas ${jadwal.jam_mulai}-${jadwal.jam_selesai} sudah berakhir. Kehadiran lewat QR tetap tercatat.`
+        ? `Kelas ${blokMulai}-${blokSelesai} sudah berakhir. Kehadiran lewat QR tetap tercatat.`
         : null,
       sesi,
-      jadwal: { id: jadwal.id, jam_mulai: jadwal.jam_mulai, jam_selesai: jadwal.jam_selesai, rombel_id: jadwal.rombel_id },
+      blok: { jadwal_ids: blokIds, mulai: blokMulai, selesai: blokSelesai, jumlah_jam: blok.length },
+      // Baris pertama blok dipakai sebagai kunci jurnal & absensi mapel.
+      jadwal: { id: blok[0].id, jam_mulai: blokMulai, jam_selesai: blokSelesai, rombel_id: jadwal.rombel_id },
     })
   })
 }
