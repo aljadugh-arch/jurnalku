@@ -36,11 +36,14 @@ function kuotaTenant(db, tenantId, jenis = 'siswa') {
   if (!t) return { batas: 0, aktif: hitungAktif(db, tenantId, jenis), sisa: Infinity, plan: null, dari_paket: false }
   const paket = batasPaket(db, t.plan, jenis)
   const perLembaga = Number(jenis === 'gtk' ? t.max_gtk : t.max_siswa) || 0
-  // Trial SELALU tanpa batas siswa: masa uji coba tidak boleh dipotong kuota,
-  // berapa pun siswanya. Batas 100 baru berlaku di paket Gratis (lanjutan).
-  const batas = String(t.plan) === 'trial'
-    ? 0
-    : (paket && paket.nilai && paket.nilai > 0 ? paket.nilai : perLembaga)
+  // Batas ditentukan PAKET, bukan jumlah siswa pada paket berbayar:
+  //   Trial              -> tanpa batas (masa uji coba)
+  //   Gratis (<=100)     -> 100
+  //   Lite/Pro/Premium   -> tanpa batas siswa (bedanya di FITUR)
+  // Kolom per-lembaga hanya dipakai bila baris paket tidak ditemukan (data lama).
+  const batas = paket
+    ? (paket.nilai && paket.nilai > 0 ? paket.nilai : 0)
+    : perLembaga
   const aktif = hitungAktif(db, tenantId, jenis)
   return {
     batas,
