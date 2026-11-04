@@ -197,8 +197,18 @@ function setupSubscriptionPlans(db) {
     aktif INTEGER NOT NULL DEFAULT 1,
     fitur_json TEXT,
     urutan INTEGER NOT NULL DEFAULT 0,
+    -- Batas kuota per paket. NULL/0 = tidak dibatasi. Paket Trial memakai 100
+    -- siswa / 20 GTK: inilah yang membuat versi gratis benar-benar berhenti di
+    -- angka 100 dan mendorong lembaga berlangganan.
+    max_siswa INTEGER DEFAULT NULL,
+    max_gtk INTEGER DEFAULT NULL,
     updated_at TEXT NOT NULL DEFAULT (datetime('now'))
   )`)
+  try { db.exec('ALTER TABLE subscription_plans ADD COLUMN max_siswa INTEGER DEFAULT NULL') } catch (e) { if (!String(e.message).includes('duplicate column')) throw e }
+  try { db.exec('ALTER TABLE subscription_plans ADD COLUMN max_gtk INTEGER DEFAULT NULL') } catch (e) { if (!String(e.message).includes('duplicate column')) throw e }
+  // Trial wajib berbatas; paket berbayar dibiarkan NULL (tanpa batas) sampai
+  // admin platform mengisi angkanya sendiri.
+  db.prepare("UPDATE subscription_plans SET max_siswa=100, max_gtk=20 WHERE plan='trial' AND (max_siswa IS NULL OR max_siswa=0)").run()
   const ins = db.prepare(`INSERT OR IGNORE INTO subscription_plans(plan,label,harga,masa_nilai,masa_satuan,aktif,fitur_json,urutan)
     VALUES(?,?,?,?,?,?,?,?)`)
   for (const p of DEFAULT_PLANS) {
@@ -320,6 +330,16 @@ function validatePlanPatch(input = {}) {
     const satuan = String(input.masa_satuan)
     if (!MASA_SATUAN.includes(satuan)) return { error: "Satuan masa harus 'bulan' atau 'hari'" }
     values.masa_satuan = satuan
+  }
+  if (input.max_siswa !== undefined) {
+    const n = input.max_siswa === null || input.max_siswa === '' ? null : Number(input.max_siswa)
+    if (n !== null && (!Number.isInteger(n) || n < 0 || n > 1000000)) return { error: 'Batas siswa harus bulat 0 - 1.000.000 (0 = tanpa batas)' }
+    values.max_siswa = n
+  }
+  if (input.max_gtk !== undefined) {
+    const n = input.max_gtk === null || input.max_gtk === '' ? null : Number(input.max_gtk)
+    if (n !== null && (!Number.isInteger(n) || n < 0 || n > 1000000)) return { error: 'Batas GTK harus bulat 0 - 1.000.000 (0 = tanpa batas)' }
+    values.max_gtk = n
   }
   if (input.aktif !== undefined) values.aktif = input.aktif ? 1 : 0
   if (input.urutan !== undefined) {

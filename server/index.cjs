@@ -4767,15 +4767,11 @@ app.post('/api/siswa/bulk-delete', ADMIN, (req, res) => {
 // Kuota siswa/GTK per tenant (freemium default 100 siswa / 20 GTK). max_siswa /
 // max_gtk diset di data tenant; nilai <= 0 = TIDAK dibatasi. Menegakkan kuota
 // paket — sebelumnya max_siswa/max_gtk hanya DISIMPAN, tidak pernah ditegakkan.
+// Batas diambil dari paket (Trial = 100 siswa), lalu dari angka per-lembaga
+// bila paketnya tanpa batas. Implementasi tunggal ada di server/kuota.cjs agar
+// PPDB, impor, dan reaktivasi memakai aturan yang sama.
 function cekKuotaTenant(db, tenantId, jenis) {
-  const t = db.prepare('SELECT max_siswa, max_gtk FROM tenants WHERE id=?').get(tenantId)
-  if (!t) return { batas: 0, aktif: 0, sisa: Infinity }
-  const batas = jenis === 'gtk' ? Number(t.max_gtk) : Number(t.max_siswa)
-  if (!batas || batas <= 0) return { batas: 0, aktif: 0, sisa: Infinity }
-  const aktif = jenis === 'gtk'
-    ? db.prepare('SELECT COUNT(*) c FROM gtk WHERE tenant_id=?').get(tenantId).c
-    : db.prepare("SELECT COUNT(*) c FROM siswa WHERE tenant_id=? AND COALESCE(status,'aktif')='aktif'").get(tenantId).c
-  return { batas, aktif, sisa: batas - aktif }
+  return require('./kuota.cjs').kuotaTenant(db, tenantId, jenis)
 }
 
 app.post('/api/siswa/bulk-import', ADMIN, (req, res) => {
@@ -4784,8 +4780,8 @@ app.post('/api/siswa/bulk-import', ADMIN, (req, res) => {
     return res.status(400).json({ error: 'students array wajib (minimal 1 siswa)' })
   }
   const kuota = cekKuotaTenant(db, req.tenantId, 'siswa')
-  if (kuota.sisa <= 0) return res.status(403).json({ error: `Kuota siswa lembaga ini sudah penuh (${kuota.aktif}/${kuota.batas}). Naikkan paket atau hubungi admin platform.` })
-  if (students.length > kuota.sisa) return res.status(403).json({ error: `Kuota tersisa ${kuota.sisa} siswa, tetapi file memuat ${students.length}. Kurangi baris atau naikkan paket.` })
+  const pesanImpor = require('./kuota.cjs').pesanKuota(kuota, 'siswa', students.length)
+  if (pesanImpor) return res.status(403).json({ error: pesanImpor })
 
   // Get all rombels untuk mapping
   const allRombels = db.prepare('SELECT id, nama FROM rombel WHERE tenant_id=?').all(req.tenantId)
@@ -4912,7 +4908,8 @@ app.post('/api/siswa', ADMIN, (req, res) => {
     if (!rombel) return res.status(400).json({ error: 'Rombel tidak ditemukan pada lembaga ini.' })
   }
   const kuotaSiswa = cekKuotaTenant(db, req.tenantId, 'siswa')
-  if (kuotaSiswa.sisa <= 0) return res.status(403).json({ error: `Kuota siswa lembaga ini sudah penuh (${kuotaSiswa.aktif}/${kuotaSiswa.batas}). Naikkan paket atau hubungi admin platform.` })
+  const pesanSiswa = require('./kuota.cjs').pesanKuota(kuotaSiswa, 'siswa', 1)
+  if (pesanSiswa) return res.status(403).json({ error: pesanSiswa })
   try {
     db.prepare(`INSERT INTO siswa (
       id, nik, nis, nisn, nama, jenis_kelamin, tempat_lahir, tanggal_lahir, alamat, no_hp, nama_ortu, nama_panggilan, rombel_id, tenant_id,
@@ -4957,6 +4954,12 @@ app.put('/api/siswa/:id', ADMIN, (req, res) => {
       const rombel = db.prepare('SELECT id FROM rombel WHERE id=? AND tenant_id=?').get(values.rombel_id, req.tenantId)
       if (!rombel) return res.status(400).json({ error: 'Rombel tujuan tidak ditemukan pada lembaga ini.' })
     }
+  }
+  // Mengaktifkan kembali siswa arsip menambah jumlah siswa aktif, jadi harus
+  // melewati kuota yang sama seperti penambahan baru.
+  if (values.status === 'aktif' && current.status !== 'aktif') {
+    const pesanAktif = require('./kuota.cjs').pesanKuota(cekKuotaTenant(db, req.tenantId, 'siswa'), 'siswa', 1)
+    if (pesanAktif) return res.status(403).json({ error: pesanAktif })
   }
   try {
     const setClause = updates.map(field => `${field}=?`).join(', ')

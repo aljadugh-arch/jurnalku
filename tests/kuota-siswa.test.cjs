@@ -38,7 +38,10 @@ async function tenantDenganKuota(kuota) {
   }).then(r => r.json())
   const db = new Database(dbFile)
   const tenantId = db.prepare('SELECT tenant_id FROM users ORDER BY created_at DESC LIMIT 1').get().tenant_id
+  // Paket Trial kini berbatas (default 100). Tes memakai angka kecil supaya
+  // cepat: batas paket dan batas per-lembaga diset sama.
   db.prepare('UPDATE tenants SET max_siswa=? WHERE id=?').run(kuota, tenantId)
+  db.prepare("UPDATE subscription_plans SET max_siswa=? WHERE plan='trial'").run(kuota)
   return { proc, base, db, tenantId, token: reg.token, auth: { Authorization: `Bearer ${reg.token}`, 'Content-Type': 'application/json' } }
 }
 
@@ -74,5 +77,38 @@ test('impor massal: melebihi sisa kuota ditolak seluruhnya', async (t) => {
   assert.match(isi.error, /Kuota tersisa 1/)
   const n = s.db.prepare("SELECT COUNT(*) n FROM siswa WHERE tenant_id=? AND COALESCE(status,'aktif')='aktif'").get(s.tenantId).n
   assert.equal(n, 1, 'tidak boleh ada siswa yang masuk sebagian')
+  s.db.close()
+})
+
+test('batas PAKET menang atas angka per-lembaga', async (t) => {
+  const s = await tenantDenganKuota(2)
+  t.after(() => { try { s.proc.kill('SIGKILL') } catch { /* abaikan */ } })
+  // Lembaga diberi angka besar, tetapi paket Trial tetap 2 → harus tetap ditolak.
+  s.db.prepare('UPDATE tenants SET max_siswa=500 WHERE id=?').run(s.tenantId)
+
+  await fetch(s.base + '/api/siswa', { method: 'POST', headers: s.auth, body: JSON.stringify(siswa('P001')) })
+  await fetch(s.base + '/api/siswa', { method: 'POST', headers: s.auth, body: JSON.stringify(siswa('P002')) })
+  const r3 = await fetch(s.base + '/api/siswa', { method: 'POST', headers: s.auth, body: JSON.stringify(siswa('P003')) })
+  assert.equal(r3.status, 403)
+  const isi = await r3.json()
+  assert.match(isi.error, /2\/2/, 'batas yang dipakai adalah batas paket, bukan 500')
+  assert.match(isi.error, /Trial/i)
+  assert.match(isi.error, /Lite\/Pro\/Premium/i, 'pesan harus menyebut cara upgrade')
+  s.db.close()
+})
+
+test('reaktivasi siswa arsip ikut dicek kuotanya', async (t) => {
+  const s = await tenantDenganKuota(1)
+  t.after(() => { try { s.proc.kill('SIGKILL') } catch { /* abaikan */ } })
+  const idArsip = crypto.randomUUID()
+  s.db.prepare("INSERT INTO siswa(id,tenant_id,nama,nis,jenis_kelamin,status) VALUES(?,?,?,?,?,'nonaktif')")
+    .run(idArsip, s.tenantId, 'Siswa Arsip', 'A001', 'L')
+  await fetch(s.base + '/api/siswa', { method: 'POST', headers: s.auth, body: JSON.stringify(siswa('A002')) })
+
+  const r = await fetch(`${s.base}/api/siswa/${idArsip}`, {
+    method: 'PUT', headers: s.auth, body: JSON.stringify({ status: 'aktif' }),
+  })
+  assert.equal(r.status, 403, 'mengaktifkan kembali tidak boleh melewati kuota')
+  assert.match((await r.json()).error, /Kuota/i)
   s.db.close()
 })

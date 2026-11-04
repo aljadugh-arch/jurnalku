@@ -331,6 +331,13 @@ function buatLayananPpdb(db, { logger = console } = {}) {
     if (p.status !== STATUS.DAFTAR_ULANG) {
       return { ok: false, error: `Hanya pendaftar yang sudah DAFTAR ULANG bisa diterima (sekarang: ${p.status}).` }
     }
+    // Kuota diperiksa di sini juga: tanpa ini PPDB menjadi pintu belakang yang
+    // bisa melewati batas paket (mis. Trial 100 siswa) tanpa berlangganan.
+    {
+      const kuota = require('./kuota.cjs')
+      const pesan = kuota.pesanKuota(kuota.kuotaTenant(db, tenantId, 'siswa'), 'siswa', 1)
+      if (pesan) return { ok: false, error: pesan, code: 'KUOTA_PENUH' }
+    }
 
     let nis = String(opts.nis || '').trim()
     if (!nis) {

@@ -872,6 +872,12 @@ app.get('/api/superadmin/pengguna', authMiddleware, (req, res) => {
     const sourceRows = db.prepare(`SELECT * FROM siswa WHERE tenant_id=? AND id IN (${siswaIds.map(() => '?').join(',')})`).all(sourceTenantId, ...siswaIds)
     if (!sourceRows.length) return res.status(404).json({ error: 'Tidak ada siswa yang cocok di tenant sumber' })
 
+    // Impor antar-lembaga juga menambah siswa aktif: hormati kuota paket tujuan.
+    {
+      const kuota = require('./kuota.cjs')
+      const pesan = kuota.pesanKuota(kuota.kuotaTenant(db, target, 'siswa'), 'siswa', sourceRows.length)
+      if (pesan) return res.status(403).json({ error: pesan, code: 'KUOTA_PENUH' })
+    }
     const nisExists = db.prepare('SELECT 1 FROM siswa WHERE tenant_id=? AND nis=?')
     const nikExists = db.prepare('SELECT 1 FROM siswa WHERE tenant_id=? AND nik=? AND nik IS NOT NULL AND nik != \'\'')
     const insert = db.prepare(`INSERT INTO siswa (${['id', ...cols].join(',')}) VALUES (${['id', ...cols].map(() => '?').join(',')})`)
