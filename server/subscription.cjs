@@ -230,15 +230,17 @@ function setupSubscriptionPlans(db) {
   try { db.exec('ALTER TABLE subscription_plans ADD COLUMN max_gtk INTEGER DEFAULT NULL') } catch (e) { if (!String(e.message).includes('duplicate column')) throw e }
   // Trial wajib berbatas; paket berbayar dibiarkan NULL (tanpa batas) sampai
   // admin platform mengisi angkanya sendiri.
-  // Trial TIDAK dibatasi siswa: lembaga boleh mencoba dengan berapa pun siswanya.
-  // Batas 100 baru berlaku pada paket Gratis (lanjutan setelah trial).
-  db.prepare("UPDATE subscription_plans SET max_siswa=NULL, max_gtk=NULL WHERE plan='trial'").run()
-  db.prepare("UPDATE subscription_plans SET max_siswa=100, max_gtk=20 WHERE plan='gratis'").run()
   const ins = db.prepare(`INSERT OR IGNORE INTO subscription_plans(plan,label,harga,masa_nilai,masa_satuan,aktif,fitur_json,urutan)
     VALUES(?,?,?,?,?,?,?,?)`)
   for (const p of DEFAULT_PLANS) {
     ins.run(p.plan, p.label, p.harga, p.masa_nilai, p.masa_satuan, p.aktif, JSON.stringify(PLAN_FEATURES[p.plan] || FEATURE_KEYS), p.urutan)
   }
+
+  // Dijalankan SETELAH baris paket dipastikan ada. Sebelumnya update ini berada
+  // sebelum INSERT, sehingga baris 'gratis' belum ada dan batas 100 tidak pernah
+  // terpasang.
+  db.prepare("UPDATE subscription_plans SET max_siswa=NULL, max_gtk=NULL WHERE plan='trial'").run()
+  db.prepare("UPDATE subscription_plans SET max_siswa=100, max_gtk=20 WHERE plan='gratis'").run()
 
   // Sinkronisasi fitur paket bawaan.
   //
