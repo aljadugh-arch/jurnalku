@@ -1,9 +1,9 @@
-// Penegakan kuota siswa/GTK per tenant (freemium default 100 siswa / 20 GTK).
+// Penegakan kuota siswa/GTK per lembaga.
 //
-// Sebelumnya max_siswa/max_gtk HANYA disimpan di data tenant, tidak pernah
-// ditegakkan — siswa ke-101+ tetap bisa dibuat walau kuota tertulis 100.
-// Sekarang: pembuatan siswa (tunggal & bulk) dan GTK ditolak (403) bila kuota
-// habis. Nilai max <= 0 berarti TANPA kuota (unlimited).
+// Aturan: batas PAKET yang menang (Trial = 100 siswa / 20 GTK). Paket tanpa batas
+// memakai angka per-lembaga; 0/NULL berarti tanpa batas. Implementasi tunggal di
+// server/kuota.cjs agar semua pintu masuk (tambah, impor, PPDB, reaktivasi)
+// memakai aturan yang sama.
 
 const test = require('node:test')
 const assert = require('node:assert/strict')
@@ -11,31 +11,35 @@ const fs = require('node:fs')
 const path = require('node:path')
 
 const idx = fs.readFileSync(path.join(__dirname, '../server/index.cjs'), 'utf8')
+const kuota = fs.readFileSync(path.join(__dirname, '../server/kuota.cjs'), 'utf8')
+const ppdb = fs.readFileSync(path.join(__dirname, '../server/ppdb.cjs'), 'utf8')
+const tenant = fs.readFileSync(path.join(__dirname, '../server/tenant.cjs'), 'utf8')
 
-test('helper kuota ada dan menghitung siswa aktif / gtk', () => {
-  assert.match(idx, /function cekKuotaTenant\(db, tenantId, jenis\)/, 'helper kuota')
-  assert.match(idx, /COALESCE\(status,'aktif'\)='aktif'/, 'hitung siswa AKTIF saja')
-  assert.match(idx, /SELECT COUNT\(\*\) c FROM gtk WHERE tenant_id=\?/, 'hitung gtk')
-  assert.match(idx, /if \(!batas \|\| batas <= 0\) return \{ batas: 0, aktif: 0, sisa: Infinity \}/, '0 = unlimited')
+test('helper kuota: hitung siswa aktif & GTK, batas paket menang', () => {
+  assert.match(idx, /require\('\.\/kuota\.cjs'\)\.kuotaTenant/, 'index memakai helper bersama')
+  assert.match(kuota, /COALESCE\(status,'aktif'\)='aktif'/, 'hitung siswa AKTIF saja')
+  assert.match(kuota, /SELECT COUNT\(\*\) c FROM gtk WHERE tenant_id=\?/, 'hitung gtk')
+  assert.match(kuota, /paket && paket\.nilai && paket\.nilai > 0 \? paket\.nilai : perLembaga/, 'batas paket menang')
+  assert.match(kuota, /batas > 0 \? batas - aktif : Infinity/, '0 = tanpa batas')
 })
 
-test('pembuatan siswa tunggal menolak saat kuota habis', () => {
-  const awal = idx.indexOf("app.post('/api/siswa', ADMIN")
-  const blok = idx.slice(awal, idx.indexOf("app.put('/api/siswa/:id'", awal))
-  assert.match(blok, /kuotaSiswa\.sisa <= 0/, 'tolak bila kuota habis')
-  assert.match(blok, /Kuota siswa lembaga ini sudah penuh/, 'pesan jelas')
+test('tambah siswa tunggal & impor memakai pesan kuota paket', () => {
+  assert.match(idx, /const pesanSiswa = require\('\.\/kuota\.cjs'\)\.pesanKuota\(kuotaSiswa, 'siswa', 1\)/)
+  assert.match(idx, /const pesanImpor = require\('\.\/kuota\.cjs'\)\.pesanKuota\(kuota, 'siswa', students\.length\)/)
+  assert.match(idx, /if \(pesanSiswa\) return res\.status\(403\)/)
+  assert.match(idx, /if \(pesanImpor\) return res\.status\(403\)/)
 })
 
-test('bulk import menolak bila melebihi sisa kuota', () => {
-  const awal = idx.indexOf("app.post('/api/siswa/bulk-import'")
-  const blok = idx.slice(awal, idx.indexOf("app.post('/api/siswa', ADMIN", awal))
-  assert.match(blok, /students\.length > kuota\.sisa/, 'cek ukuran batch vs sisa')
-  assert.match(blok, /Kuota tersisa \$\{kuota\.sisa\} siswa/, 'pesan menyebut sisa')
+test('GTK juga memakai helper yang sama', () => {
+  assert.match(idx, /const pesanGtk = require\('\.\/kuota\.cjs'\)\.pesanKuota\(kuotaGtk, 'gtk', 1\)/)
 })
 
-test('pembuatan GTK menolak saat kuota habis', () => {
-  const awal = idx.indexOf("app.post('/api/gtk', ADMIN")
-  const blok = idx.slice(awal, idx.indexOf("app.put('/api/gtk/:id'", awal))
-  assert.match(blok, /kuotaGtk\.sisa <= 0/, 'tolak bila kuota habis')
-  assert.match(blok, /Kuota GTK lembaga ini sudah penuh/, 'pesan jelas')
+test('PPDB, reaktivasi, dan impor antar-lembaga ikut dicek', () => {
+  assert.match(ppdb, /kuota\.pesanKuota\(kuota\.kuotaTenant\(db, tenantId, 'siswa'\)/, 'PPDB dicek')
+  assert.match(idx, /values\.status === 'aktif' && current\.status !== 'aktif'/, 'reaktivasi dicek')
+  assert.match(tenant, /kuota\.kuotaTenant\(db, target, 'siswa'\)/, 'impor antar-lembaga dicek')
+})
+
+test('pesan menyebut paket dan ajakan upgrade untuk Trial', () => {
+  assert.match(kuota, /aktifkan paket Lite\/Pro\/Premium untuk menambah/, 'ajakan upgrade')
 })

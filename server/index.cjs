@@ -5099,7 +5099,8 @@ app.post('/api/gtk', ADMIN, (req, res) => {
   const { nik, nip, nuptk, nama, jenis_kelamin, tempat_lahir, tanggal_lahir, alamat, no_hp, email, jabatan, status_kepegawaian, bidang_studi, kode_guru, sertifikasi, nrg } = req.body
   if (nik && !/^\d{16}$/.test(String(nik))) return res.status(400).json({ error: 'NIK harus berupa 16 digit angka.' })
   const kuotaGtk = cekKuotaTenant(db, req.tenantId, 'gtk')
-  if (kuotaGtk.sisa <= 0) return res.status(403).json({ error: `Kuota GTK lembaga ini sudah penuh (${kuotaGtk.aktif}/${kuotaGtk.batas}). Naikkan paket atau hubungi admin platform.` })
+  const pesanGtk = require('./kuota.cjs').pesanKuota(kuotaGtk, 'gtk', 1)
+  if (pesanGtk) return res.status(403).json({ error: pesanGtk })
   try {
     db.prepare('INSERT INTO gtk (id, nik, nip, nuptk, nama, jenis_kelamin, tempat_lahir, tanggal_lahir, alamat, no_hp, email, jabatan, status_kepegawaian, bidang_studi, kode_guru, sertifikasi, nrg, tenant_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
       .run(id, nik || null, nip || null, nuptk, nama, jenis_kelamin, tempat_lahir, tanggal_lahir, alamat, no_hp, email,

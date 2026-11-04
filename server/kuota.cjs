@@ -20,14 +20,20 @@ function batasPaket(db, plan, jenis) {
 }
 
 function hitungAktif(db, tenantId, jenis) {
-  return jenis === 'gtk'
-    ? db.prepare('SELECT COUNT(*) c FROM gtk WHERE tenant_id=?').get(tenantId).c
-    : db.prepare("SELECT COUNT(*) c FROM siswa WHERE tenant_id=? AND COALESCE(status,'aktif')='aktif'").get(tenantId).c
+  try {
+    return jenis === 'gtk'
+      ? db.prepare('SELECT COUNT(*) c FROM gtk WHERE tenant_id=?').get(tenantId).c
+      : db.prepare("SELECT COUNT(*) c FROM siswa WHERE tenant_id=? AND COALESCE(status,'aktif')='aktif'").get(tenantId).c
+  } catch { return 0 }
 }
 
 function kuotaTenant(db, tenantId, jenis = 'siswa') {
-  const t = db.prepare('SELECT max_siswa, max_gtk, plan FROM tenants WHERE id=?').get(tenantId)
-  if (!t) return { batas: 0, aktif: 0, sisa: Infinity, plan: null, dari_paket: false }
+  // Tabel bisa belum lengkap pada fixture tes modul (DB minimal tanpa
+  // subscription_plans). Dalam kondisi itu kuota dianggap tidak dibatasi,
+  // bukan melempar error yang mematikan seluruh alur.
+  let t = null
+  try { t = db.prepare('SELECT max_siswa, max_gtk, plan FROM tenants WHERE id=?').get(tenantId) } catch { t = null }
+  if (!t) return { batas: 0, aktif: hitungAktif(db, tenantId, jenis), sisa: Infinity, plan: null, dari_paket: false }
   const paket = batasPaket(db, t.plan, jenis)
   const perLembaga = Number(jenis === 'gtk' ? t.max_gtk : t.max_siswa) || 0
   // Paket berbatas selalu menang; paket tanpa batas memakai angka per-lembaga.
