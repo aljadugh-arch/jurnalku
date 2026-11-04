@@ -70,7 +70,7 @@ const { normalizePiketIds, attachPiketNames, MAKS_GURU_PIKET } = require('./jadw
 const { registerRoutes: registerBackupRestoreRoutes, LIMITS: BACKUP_LIMITS } = require('./backup-restore.cjs')
 const { registerRoutes: registerDataAdminRoutes } = require('./data-admin.cjs')
 const { registerFinanceExcelRoutes } = require('./finance-excel.cjs')
-const { FEATURE_KEYS, PLAN_KEYS, addMonthsIso, computeExpiry, accessForTenant, featureForPath, normalizeFeatureSelection, generateUnlockCode, hashUnlockCode, setupSubscriptionTables, getPlans, planFeatureMap, updatePlan } = require('./subscription.cjs')
+const { FEATURE_KEYS, PLAN_KEYS, addMonthsIso, computeExpiry, accessForTenant, teruskanSetelahTrial, featureForPath, normalizeFeatureSelection, generateUnlockCode, hashUnlockCode, setupSubscriptionTables, getPlans, planFeatureMap, updatePlan } = require('./subscription.cjs')
 const { setupPesantrenTables, registerPesantrenRoutes } = require('./pesantren.cjs')
 const { setupSiakadPtTables, registerSiakadPtRoutes } = require('./siakad-pt.cjs')
 const invoiceService = require('./invoice-service.cjs')
@@ -2346,7 +2346,10 @@ function planMap() {
 function invalidatePlanMap() { _planMapCache = null; _planMapAt = 0 }
 
 function getTenantAccess(tenantId) {
-  const tenant = db.prepare('SELECT * FROM tenants WHERE id=?').get(tenantId || 'default')
+  let tenant = db.prepare('SELECT * FROM tenants WHERE id=?').get(tenantId || 'default')
+  // Trial habis + siswa <=100 -> otomatis lanjut Gratis 6 bulan (tanpa aksi admin).
+  // Trial habis + siswa >100 -> tetap terkunci sampai memilih paket berbayar.
+  try { tenant = teruskanSetelahTrial(db, tenant, new Date()) } catch (e) { console.error('[subscription] gagal melanjutkan gratis:', e.message) }
   return accessForTenant(tenant || { id: tenantId || 'default', plan: 'trial' }, new Date(), planMap())
 }
 
@@ -2365,9 +2368,10 @@ function enforceTenantAccess(req, res, next) {
   const access = getTenantAccess(req.tenantId)
   req.tenantAccess = access
   if (access.locked) {
-    const pesan = access.plan_inactive
-      ? 'Paket langganan lembaga ini sedang dinonaktifkan oleh admin platform. Hubungi admin platform untuk mengaktifkan kembali.'
-      : 'Masa percobaan/langganan sudah berakhir. Masukkan kunci unlock untuk melanjutkan.'
+    let pesan = 'Masa percobaan/langganan sudah berakhir. Masukkan kunci unlock untuk melanjutkan.'
+    if (access.plan_inactive) pesan = 'Paket langganan lembaga ini sedang dinonaktifkan oleh admin platform. Hubungi admin platform untuk mengaktifkan kembali.'
+    else if (access.plan === 'trial') pesan = 'Masa trial berakhir dan jumlah siswa lebih dari 100. Pilih paket Lite, Pro, atau Premium untuk melanjutkan.'
+    else if (access.plan === 'gratis') pesan = 'Masa gratis 6 bulan berakhir. Pilih paket Lite, Pro, atau Premium untuk melanjutkan.'
     return res.status(402).json({ error: pesan, code: access.plan_inactive ? 'PLAN_INACTIVE' : 'SUBSCRIPTION_LOCKED', subscription: access })
   }
   const feature = featureForPath(req.path)

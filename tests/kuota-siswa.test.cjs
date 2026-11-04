@@ -38,10 +38,10 @@ async function tenantDenganKuota(kuota) {
   }).then(r => r.json())
   const db = new Database(dbFile)
   const tenantId = db.prepare('SELECT tenant_id FROM users ORDER BY created_at DESC LIMIT 1').get().tenant_id
-  // Paket Trial kini berbatas (default 100). Tes memakai angka kecil supaya
-  // cepat: batas paket dan batas per-lembaga diset sama.
-  db.prepare('UPDATE tenants SET max_siswa=? WHERE id=?').run(kuota, tenantId)
-  db.prepare("UPDATE subscription_plans SET max_siswa=? WHERE plan='trial'").run(kuota)
+  // Trial TIDAK dibatasi siswa; batas 100 milik paket Gratis (lanjutan trial).
+  // Tes memakai paket gratis dengan angka kecil supaya cepat.
+  db.prepare("UPDATE tenants SET plan='gratis', max_siswa=? WHERE id=?").run(kuota, tenantId)
+  db.prepare("UPDATE subscription_plans SET max_siswa=? WHERE plan='gratis'").run(kuota)
   return { proc, base, db, tenantId, token: reg.token, auth: { Authorization: `Bearer ${reg.token}`, 'Content-Type': 'application/json' } }
 }
 
@@ -92,7 +92,7 @@ test('batas PAKET menang atas angka per-lembaga', async (t) => {
   assert.equal(r3.status, 403)
   const isi = await r3.json()
   assert.match(isi.error, /2\/2/, 'batas yang dipakai adalah batas paket, bukan 500')
-  assert.match(isi.error, /Trial/i)
+  assert.match(isi.error, /Gratis/i)
   assert.match(isi.error, /Lite\/Pro\/Premium/i, 'pesan harus menyebut cara upgrade')
   s.db.close()
 })

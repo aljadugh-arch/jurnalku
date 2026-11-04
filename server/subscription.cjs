@@ -51,6 +51,7 @@ const FITUR_BARU = ['ppdb', 'administrasi', 'perpustakaan', 'ujian', 'program_be
 const PLAN_FEATURES = {
   // Trial: semua fitur boleh dicoba, TAPI masa aktifnya pendek (default 1 bulan).
   trial: FEATURE_KEYS,
+  gratis: FEATURE_KEYS,
   // Lite: inti operasional harian + PPDB + administrasi surat + perpustakaan.
   // TANPA domain sendiri, backup Drive, REST API, SMTP, ujian/CBT, program
   // belajar nonformal, cashless, kantin, monitoring, integrasi yayasan.
@@ -115,8 +116,26 @@ function parseFeatures(value) {
   } catch { return {} }
 }
 
+// Setelah masa trial berakhir:
+//   - siswa <= 100  -> otomatis lanjut paket Gratis 6 bulan
+//   - siswa > 100   -> tetap terkunci sampai memilih Lite/Pro/Premium
+// Fungsi ini menulis ke DB, jadi dipanggil dari lapisan akses (bukan accessForTenant
+// yang murni). Mengembalikan tenant terbaru.
+const BATAS_GRATIS_SISWA = 100
+function teruskanSetelahTrial(db, tenant, now = new Date()) {
+  if (!tenant || tenant.plan !== 'trial' || tenant.id === 'default') return tenant
+  const berakhir = tenant.subscription_ends_at || tenant.trial_ends_at || tenant.expired_at
+  if (!berakhir || new Date(berakhir).getTime() > now.getTime()) return tenant
+  let jumlah = 0
+  try { jumlah = db.prepare("SELECT COUNT(*) c FROM siswa WHERE tenant_id=? AND COALESCE(status,'aktif')='aktif'").get(tenant.id).c } catch { jumlah = 0 }
+  if (jumlah > BATAS_GRATIS_SISWA) return tenant // tetap terkunci, harus berlangganan
+  const sampai = computeExpiry(now.toISOString(), 6, 'bulan')
+  db.prepare("UPDATE tenants SET plan='gratis', subscription_ends_at=?, features_json=NULL WHERE id=?").run(sampai, tenant.id)
+  return db.prepare('SELECT * FROM tenants WHERE id=?').get(tenant.id)
+}
+
 function accessForTenant(tenant, now = new Date(), planDefs = null) {
-  const plan = ['trial', 'lite', 'pro', 'premium'].includes(tenant.plan) ? tenant.plan : 'trial'
+  const plan = ['trial', 'gratis', 'lite', 'pro', 'premium'].includes(tenant.plan) ? tenant.plan : 'trial'
   // Plan 'premium' adalah grandfather/legacy plan berbayar tanpa siklus trial —
   // trial_ends_at pada tenant ini adalah sisa data lama dan tidak relevan;
   // hanya subscription_ends_at (jika pernah diset eksplisit) yang berlaku.
@@ -178,10 +197,13 @@ function hashUnlockCode(code) {
 // Paket (trial/lite/pro/premium) beserta HARGA dan MASA AKTIF-nya disimpan di
 // DB agar admin platform bisa mengubahnya sendiri tanpa deploy. Tabel bersifat
 // global (satu konfigurasi untuk seluruh platform), bukan per-tenant.
-const PLAN_KEYS = ['trial', 'lite', 'pro', 'premium']
+const PLAN_KEYS = ['trial', 'gratis', 'lite', 'pro', 'premium']
 const MASA_SATUAN = ['bulan', 'hari']
 const DEFAULT_PLANS = [
   { plan: 'trial', label: 'Trial', harga: 0, masa_nilai: 1, masa_satuan: 'bulan', aktif: 1, urutan: 0 },
+  // Setelah trial: lembaga <=100 siswa boleh lanjut gratis 6 bulan. Paket ini
+  // yang menjaga batas 100 itu; Trial sendiri TIDAK dibatasi siswa.
+  { plan: 'gratis', label: 'Gratis', harga: 0, masa_nilai: 6, masa_satuan: 'bulan', aktif: 1, urutan: 1 },
   { plan: 'lite', label: 'Lite', harga: 50000, masa_nilai: 1, masa_satuan: 'bulan', aktif: 1, urutan: 1 },
   { plan: 'pro', label: 'Pro', harga: 80000, masa_nilai: 1, masa_satuan: 'bulan', aktif: 1, urutan: 2 },
   { plan: 'premium', label: 'Premium', harga: 150000, masa_nilai: 1, masa_satuan: 'bulan', aktif: 1, urutan: 3 },
@@ -208,7 +230,10 @@ function setupSubscriptionPlans(db) {
   try { db.exec('ALTER TABLE subscription_plans ADD COLUMN max_gtk INTEGER DEFAULT NULL') } catch (e) { if (!String(e.message).includes('duplicate column')) throw e }
   // Trial wajib berbatas; paket berbayar dibiarkan NULL (tanpa batas) sampai
   // admin platform mengisi angkanya sendiri.
-  db.prepare("UPDATE subscription_plans SET max_siswa=100, max_gtk=20 WHERE plan='trial' AND (max_siswa IS NULL OR max_siswa=0)").run()
+  // Trial TIDAK dibatasi siswa: lembaga boleh mencoba dengan berapa pun siswanya.
+  // Batas 100 baru berlaku pada paket Gratis (lanjutan setelah trial).
+  db.prepare("UPDATE subscription_plans SET max_siswa=NULL, max_gtk=NULL WHERE plan='trial'").run()
+  db.prepare("UPDATE subscription_plans SET max_siswa=100, max_gtk=20 WHERE plan='gratis'").run()
   const ins = db.prepare(`INSERT OR IGNORE INTO subscription_plans(plan,label,harga,masa_nilai,masa_satuan,aktif,fitur_json,urutan)
     VALUES(?,?,?,?,?,?,?,?)`)
   for (const p of DEFAULT_PLANS) {
@@ -428,7 +453,7 @@ function setupSubscriptionTables(db) {
 
 module.exports = {
   FEATURE_KEYS, PLAN_FEATURES, PLAN_KEYS, MASA_SATUAN, DEFAULT_PLANS,
-  addMonthsIso, computeExpiry, accessForTenant, featureForPath, normalizeFeatureSelection,
+  addMonthsIso, computeExpiry, accessForTenant, teruskanSetelahTrial, BATAS_GRATIS_SISWA, featureForPath, normalizeFeatureSelection,
   generateUnlockCode, hashUnlockCode, setupSubscriptionTables,
   setupSubscriptionPlans, getPlans, planFeatureMap, planFeatures, validatePlanPatch, updatePlan,
 }

@@ -36,8 +36,11 @@ function kuotaTenant(db, tenantId, jenis = 'siswa') {
   if (!t) return { batas: 0, aktif: hitungAktif(db, tenantId, jenis), sisa: Infinity, plan: null, dari_paket: false }
   const paket = batasPaket(db, t.plan, jenis)
   const perLembaga = Number(jenis === 'gtk' ? t.max_gtk : t.max_siswa) || 0
-  // Paket berbatas selalu menang; paket tanpa batas memakai angka per-lembaga.
-  const batas = paket && paket.nilai && paket.nilai > 0 ? paket.nilai : perLembaga
+  // Trial SELALU tanpa batas siswa: masa uji coba tidak boleh dipotong kuota,
+  // berapa pun siswanya. Batas 100 baru berlaku di paket Gratis (lanjutan).
+  const batas = String(t.plan) === 'trial'
+    ? 0
+    : (paket && paket.nilai && paket.nilai > 0 ? paket.nilai : perLembaga)
   const aktif = hitungAktif(db, tenantId, jenis)
   return {
     batas,
@@ -52,9 +55,10 @@ function kuotaTenant(db, tenantId, jenis = 'siswa') {
 function pesanKuota(kuota, jenis = 'siswa', diminta = 1) {
   const kata = jenis === 'gtk' ? 'GTK' : 'siswa'
   if (kuota.sisa <= 0) {
-    const naik = kuota.plan === 'trial'
-      ? ` Paket ${kuota.label_paket || 'Trial'} dibatasi ${kuota.batas} ${kata}; aktifkan paket Lite/Pro/Premium untuk menambah.`
-      : ' Naikkan paket atau hubungi admin platform.'
+    const nama = kuota.label_paket || kuota.plan || 'Paket'
+    const naik = kuota.dari_paket
+      ? ` Paket ${nama} dibatasi ${kuota.batas} ${kata}; aktifkan paket Lite/Pro/Premium untuk menambah.`
+      : ` Batas ${kata} lembaga ini ${kuota.batas}; naikkan di pengaturan lembaga atau hubungi admin platform.`
     return `Kuota ${kata} lembaga ini sudah penuh (${kuota.aktif}/${kuota.batas}).${naik}`
   }
   if (diminta > kuota.sisa) {
