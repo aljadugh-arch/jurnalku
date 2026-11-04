@@ -96,18 +96,36 @@ function daftarkanRouteQrKelas(app, ctx) {
       return res.status(409).json({ error: 'Selesaikan dahulu kelas yang sedang aktif.' })
     }
 
+    // Pemindaian masih diterima sampai 60 menit setelah jam selesai (mis. guru
+    // baru sempat memindai setelah kelas bubar). Tetapi sesi TIDAK boleh dibiarkan
+    // 'aktif': dashboard akan langsung menutupnya, dan guru melihat tombol yang
+    // seolah tidak berubah. Simpan sebagai selesai + beri tahu klien.
+    const lewatSelesai = kini > menit(jadwal.jam_selesai)
+    const statusSesi = lewatSelesai ? 'selesai' : 'aktif'
+    const waktuSelesai = lewatSelesai ? jadwal.jam_selesai : null
+
     const id = crypto.randomUUID()
     db.prepare(`INSERT INTO sesi_kelas_guru
       (id,jadwal_id,guru_id,mapel_id,rombel_id,tanggal,waktu_masuk,waktu_selesai,status,menit_terlambat,tenant_id,updated_at,jadwal_source,qr_verified,qr_at)
       VALUES (?,?,?,?,?,?,?,?,?,?,?,datetime('now'),'reguler',1,?)
       ON CONFLICT(tenant_id,jadwal_id,tanggal) DO UPDATE SET
-        waktu_masuk=excluded.waktu_masuk,waktu_selesai=NULL,status='aktif',
+        waktu_masuk=excluded.waktu_masuk,
+        waktu_selesai=CASE WHEN excluded.status='selesai' THEN COALESCE(sesi_kelas_guru.waktu_selesai, excluded.waktu_selesai) ELSE NULL END,
+        status=excluded.status,
         qr_verified=1,qr_at=excluded.qr_at,updated_at=datetime('now')`)
-      .run(id, jadwal.id, gtkId, jadwal.mapel_id, jadwal.rombel_id, tanggal, sekarang, null, 'aktif',
+      .run(id, jadwal.id, gtkId, jadwal.mapel_id, jadwal.rombel_id, tanggal, sekarang, waktuSelesai, statusSesi,
         Math.max(0, kini - menit(jadwal.jam_mulai) - 10), req.tenantId, sekarang)
 
     const sesi = db.prepare('SELECT * FROM sesi_kelas_guru WHERE tenant_id=? AND jadwal_id=? AND tanggal=?').get(req.tenantId, jadwal.id, tanggal)
-    res.json({ ok: true, sesi, jadwal: { id: jadwal.id, jam_mulai: jadwal.jam_mulai, jam_selesai: jadwal.jam_selesai, rombel_id: jadwal.rombel_id } })
+    res.json({
+      ok: true,
+      setelah_selesai: lewatSelesai,
+      pesan: lewatSelesai
+        ? `Kelas ${jadwal.jam_mulai}-${jadwal.jam_selesai} sudah berakhir. Kehadiran lewat QR tetap tercatat.`
+        : null,
+      sesi,
+      jadwal: { id: jadwal.id, jam_mulai: jadwal.jam_mulai, jam_selesai: jadwal.jam_selesai, rombel_id: jadwal.rombel_id },
+    })
   })
 }
 

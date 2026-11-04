@@ -144,3 +144,54 @@ test('UI: halaman QR kelas + tombol pindai di dashboard guru', () => {
   assert.ok(page.includes('toCanvas'), 'QR digambar lokal, bukan dari layanan luar')
   assert.ok(guru.includes('/guru/sesi-kelas/qr'), 'guru bisa memindai QR')
 })
+
+test('pindai setelah jam pelajaran berakhir: tercatat, tetapi tidak "aktif"', async (t) => {
+  // Kasus nyata (4 Nov 2026): guru memindai pukul 08:22 untuk jadwal 07:30-08:10.
+  // Server menerima (masa tenggang 60 menit), membuat sesi 'aktif', lalu dashboard
+  // langsung menutupnya karena jam sudah lewat — guru melihat tombol seolah tidak
+  // berubah. Sekarang sesi disimpan sebagai 'selesai' dan klien diberi tahu.
+  const { proc, port, dbFile } = await boot()
+  t.after(() => { try { proc.kill('SIGKILL') } catch {} })
+  const base = `http://127.0.0.1:${port}`
+  const H = { 'Content-Type': 'application/json' }
+
+  const jjmm = (offsetMenit) => new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'Asia/Jakarta', hour: '2-digit', minute: '2-digit', hour12: false,
+  }).format(new Date(Date.now() + offsetMenit * 60000))
+  const selesai = jjmm(-30)
+  const mulai = jjmm(-90)
+
+  const reg = await fetch(base + '/api/auth/register', {
+    method: 'POST', headers: H,
+    body: JSON.stringify({ nama_lembaga: 'Uji QR Lewat', nama: 'Admin', email: `qrl-${crypto.randomBytes(3).toString('hex')}@uji.id`, password: 'rahasia-uji-123', no_hp: '081200000005', domain_type: 'subdomain', slug: `qrl-${crypto.randomBytes(3).toString('hex')}` }),
+  }).then(r => r.json())
+  const db = new Database(dbFile)
+  const tenantId = db.prepare('SELECT tenant_id FROM users ORDER BY created_at DESC LIMIT 1').get().tenant_id
+
+  const gtkId = crypto.randomUUID(), mapelId = crypto.randomUUID(), rombelId = crypto.randomUUID(), userId = crypto.randomUUID()
+  db.prepare("INSERT INTO gtk(id,tenant_id,nama,jenis_kelamin,status) VALUES(?,?,?,?,'aktif')").run(gtkId, tenantId, 'Guru Lewat', 'L')
+  db.prepare("INSERT INTO mapel(id,tenant_id,nama,kode) VALUES(?,?,?,?)").run(mapelId, tenantId, 'Kimia', 'KIM')
+  db.prepare('INSERT INTO rombel(id,tenant_id,nama,tingkat,tahun_ajaran) VALUES(?,?,?,?,?)').run(rombelId, tenantId, 'XI-1', '11', '2026/2027')
+  db.prepare(`INSERT INTO jadwal(id,tenant_id,gtk_id,mapel_id,rombel_id,hari,jam_mulai,jam_selesai,ruangan)
+    VALUES(?,?,?,?,?,?,?,?,?)`).run(crypto.randomUUID(), tenantId, gtkId, mapelId, rombelId, namaHari, mulai, selesai, 'R1')
+  db.prepare('INSERT INTO users(id,nama,email,password,role,tenant_id,gtk_id) VALUES(?,?,?,?,?,?,?)')
+    .run(userId, 'Guru Lewat', `guru-lewat-${crypto.randomBytes(3).toString('hex')}@uji.id`, 'x', 'guru', tenantId, gtkId)
+
+  const admin = { Authorization: `Bearer ${reg.token}` }
+  const qr = await fetch(base + '/api/admin/qr-kelas', { headers: admin }).then(r => r.json())
+  const kelas = qr.kelas.find(k => k.id === rombelId)
+
+  const guruToken = jwt.sign({ id: userId, role: 'guru', nama: 'Guru Lewat', email: 'gl@uji.id', tenant_id: tenantId, gtk_id: gtkId }, SECRET, { expiresIn: '1h' })
+  const pindai = await fetch(base + '/api/guru/sesi-kelas/qr', {
+    method: 'POST', headers: { ...H, Authorization: `Bearer ${guruToken}` },
+    body: JSON.stringify({ payload: kelas.payload }),
+  }).then(r => r.json())
+
+  assert.equal(pindai.ok, true, JSON.stringify(pindai).slice(0, 160))
+  assert.equal(pindai.setelah_selesai, true, 'klien harus tahu kelas sudah berakhir')
+  assert.ok(pindai.pesan, 'ada pesan yang bisa ditampilkan')
+  const sesi = db.prepare('SELECT status, waktu_selesai FROM sesi_kelas_guru WHERE tenant_id=? AND guru_id=?').get(tenantId, gtkId)
+  assert.equal(sesi.status, 'selesai', 'tidak boleh dibiarkan aktif setelah jam berakhir')
+  assert.equal(sesi.waktu_selesai, selesai)
+  db.close()
+})

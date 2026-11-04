@@ -89,7 +89,10 @@ export default function GuruDashboard() {
   const scanMasuk = async (payload: string) => {
     try {
       const r = await api.post('/guru/sesi-kelas/qr', { payload })
-      toast.success(`Masuk kelas via QR ${r.data?.sesi?.rombel_nama || ''}`.trim())
+      // Server bisa menolak "mengaktifkan" sesi bila jam pelajaran sudah lewat:
+      // pemindaian tetap tercatat, tetapi kelasnya tidak sedang berlangsung.
+      if (r.data?.setelah_selesai) toast(r.data.pesan || 'Kelas sudah berakhir; kehadiran QR tercatat.', { icon: 'ℹ️' })
+      else toast.success(`Masuk kelas via QR ${r.data?.sesi?.rombel_nama || ''}`.trim())
       setQrOpen(false)
       await loadDashboard()
     } catch (err: any) {
@@ -243,9 +246,16 @@ export default function GuruDashboard() {
               ? 'flex flex-col items-center justify-center min-w-[58px] rounded-lg bg-primary text-white px-2 py-1'
               : 'flex flex-col items-center justify-center min-w-[58px] rounded-lg bg-gray-100 text-gray-700 px-2 py-1'
             return (
-              <button
+              <div
                 key={j.id || i}
+                role="button"
+                tabIndex={0}
                 onClick={() => navigate(isAcademicSchedule(j) ? `/guru/jurnal?jadwal_id=${encodeURIComponent(j.id)}` : '/guru/absensi-ekskul')}
+                onKeyDown={event => {
+                  if (event.key !== 'Enter' && event.key !== ' ') return
+                  event.preventDefault()
+                  navigate(isAcademicSchedule(j) ? `/guru/jurnal?jadwal_id=${encodeURIComponent(j.id)}` : '/guru/absensi-ekskul')
+                }}
                 className={rowCls + ' w-full text-left'}
               >
                 <div className={tileCls}>
@@ -264,28 +274,24 @@ export default function GuruDashboard() {
                   </p>
                 </div>
                 {isAcademicSchedule(j) && data.sesi_kelas_aktif?.jadwal_id === j.id ? (
-                  <span
-                    role="button"
-                    tabIndex={0}
+                  <button
+                    type="button"
                     onClick={event => { event.stopPropagation(); finishClass() }}
-                    onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); event.stopPropagation(); finishClass() } }}
                     className="shrink-0 rounded-lg bg-red-600 px-2.5 py-1.5 text-xs font-bold text-white"
-                  >Selesai Kelas</span>
+                  >Selesai Kelas</button>
                 ) : !isAcademicSchedule(j) ? (
                   <span className="shrink-0 rounded-lg bg-purple-100 px-2.5 py-1.5 text-xs font-bold text-purple-700">Lihat</span>
                 ) : isFinished(j) ? (
                   <span className="shrink-0 rounded-lg bg-gray-100 px-2.5 py-1.5 text-xs font-bold text-gray-500">Selesai</span>
                 ) : !data.sesi_kelas_aktif && !isFinished(j) ? (
-                  <span
-                    role="button"
-                    tabIndex={0}
+                  <button
+                    type="button"
                     onClick={event => { event.stopPropagation(); bukaScan(j) }}
-                    onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); event.stopPropagation(); bukaScan(j) } }}
                     className="shrink-0 rounded-lg bg-emerald-600 px-2.5 py-1.5 text-xs font-bold text-white"
-                  >Masuk</span>
+                  >Masuk</button>
                 ) : null}
                 <ChevronRight size={18} className="text-gray-400 shrink-0" />
-              </button>
+              </div>
             )
           })}
         </div>

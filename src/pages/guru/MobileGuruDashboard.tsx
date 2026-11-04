@@ -76,7 +76,10 @@ export default function MobileGuruDashboard() {
   const scanMasuk = async (payload: string) => {
     try {
       const r = await api.post('/guru/sesi-kelas/qr', { payload })
-      toast.success(`Masuk kelas via QR ${r.data?.sesi?.rombel_nama || ''}`.trim())
+      // Pindai setelah jam pelajaran berakhir tetap tercatat, tetapi kelasnya
+      // tidak sedang berlangsung — beri tahu guru, jangan diam seolah gagal.
+      if (r.data?.setelah_selesai) toast(r.data.pesan || 'Kelas sudah berakhir; kehadiran QR tercatat.', { icon: 'ℹ️' })
+      else toast.success(`Masuk kelas via QR ${r.data?.sesi?.rombel_nama || ''}`.trim())
       setQrOpen(false)
       await load()
     } catch (err: any) {
