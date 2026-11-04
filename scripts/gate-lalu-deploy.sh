@@ -83,7 +83,10 @@ echo "Arsip log: $DIR_LOG"
 echo
 jalankan "tsc -b"       "$TSC_LOG"   npx tsc -b
 jalankan "vite build"  "$VITE_LOG"  npx vite build
-jalankan "suite tes"   "$SUITE_LOG" node --test tests/
+# Konkurensi dibatasi: tiap berkas tes menyalakan server sendiri (SQLite + port),
+# dan pada mesin yang sedang sibuk 16 proses paralel membuat boot melewati batas
+# 60 detik — hasilnya "gagal" padahal kodenya benar. 4 cukup cepat dan stabil.
+jalankan "suite tes"   "$SUITE_LOG" node --test --test-concurrency=4 tests/
 
 echo
 grep -E '^ℹ (tests|pass|fail)' "$SUITE_LOG" 2>/dev/null | sed 's/^/   /' || true

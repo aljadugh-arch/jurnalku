@@ -6210,6 +6210,60 @@ app.post('/api/absensi-mapel/bulk', STAFF, (req, res) => {
   res.json({ count: data.length, tanggal: date, jadwal_id: jadwalKunci.id, blok_jam: blok.length })
 })
 
+// Rekap absensi PER MAPEL: sumbernya absensi_mapel, bukan absensi harian.
+// Penyebutnya catatan jam pelajaran (siswa x jam), jadi tidak boleh dicampur
+// dengan persentase kehadiran harian yang penyebutnya jumlah siswa.
+app.get('/api/absensi-mapel/ringkasan', DASHBOARD_ROLES, (req, res) => {
+  const tanggal = /^\d{4}-\d{2}-\d{2}$/.test(String(req.query.tanggal || '')) ? String(req.query.tanggal) : todayJakarta()
+  const baris = db.prepare(`SELECT am.mapel_id, am.rombel_id, m.nama AS mapel_nama, r.nama AS rombel_nama,
+      COUNT(*) AS catatan,
+      SUM(CASE WHEN am.status='hadir' THEN 1 ELSE 0 END) AS hadir,
+      SUM(CASE WHEN am.status='sakit' THEN 1 ELSE 0 END) AS sakit,
+      SUM(CASE WHEN am.status='izin' THEN 1 ELSE 0 END) AS izin,
+      SUM(CASE WHEN am.status='alpha' THEN 1 ELSE 0 END) AS alpha
+    FROM absensi_mapel am
+    LEFT JOIN mapel m ON m.id=am.mapel_id AND m.tenant_id=am.tenant_id
+    LEFT JOIN rombel r ON r.id=am.rombel_id AND r.tenant_id=am.tenant_id
+    WHERE am.tenant_id=? AND am.tanggal=?
+    GROUP BY am.mapel_id, am.rombel_id
+    ORDER BY r.nama, m.nama`).all(req.tenantId, tanggal)
+
+  // Jumlah sesi (jam mengajar) per mapel+rombel pada tanggal itu, untuk memberi
+  // konteks berapa catatan yang seharusnya ada.
+  const sesi = new Map()
+  for (const s of db.prepare(`SELECT mapel_id, rombel_id, COUNT(*) n FROM sesi_kelas_guru
+      WHERE tenant_id=? AND tanggal=? GROUP BY mapel_id, rombel_id`).all(req.tenantId, tanggal)) {
+    sesi.set(`${s.mapel_id}|${s.rombel_id}`, Number(s.n))
+  }
+  const jumlahSiswa = new Map()
+  for (const s of db.prepare(`SELECT rombel_id, COUNT(*) n FROM siswa
+      WHERE tenant_id=? AND COALESCE(status,'aktif')='aktif' GROUP BY rombel_id`).all(req.tenantId)) {
+    jumlahSiswa.set(String(s.rombel_id), Number(s.n))
+  }
+
+  const per_mapel = baris.map(r => {
+    const catatan = Number(r.catatan)
+    const hadir = Number(r.hadir)
+    const kunci = `${r.mapel_id}|${r.rombel_id}`
+    const sesiN = sesi.get(kunci) || 0
+    const siswaN = jumlahSiswa.get(String(r.rombel_id)) || 0
+    return {
+      ...r, catatan, hadir,
+      sakit: Number(r.sakit), izin: Number(r.izin), alpha: Number(r.alpha),
+      persentase: catatan ? Math.round((hadir / catatan) * 100) : 0,
+      sesi: sesiN,
+      siswa: siswaN,
+      diharapkan: sesiN && siswaN ? sesiN * siswaN : null,
+    }
+  })
+  const totals = per_mapel.reduce((a, r) => ({
+    catatan: a.catatan + r.catatan, hadir: a.hadir + r.hadir, sakit: a.sakit + r.sakit,
+    izin: a.izin + r.izin, alpha: a.alpha + r.alpha,
+  }), { catatan: 0, hadir: 0, sakit: 0, izin: 0, alpha: 0 })
+  totals.persentase = totals.catatan ? Math.round((totals.hadir / totals.catatan) * 100) : 0
+  res.json({ tanggal, totals, per_mapel })
+})
+
 
 function titleHari(row) {
   return { ...row, hari: row.hari ? row.hari.charAt(0).toUpperCase() + row.hari.slice(1).toLowerCase() : row.hari }
@@ -12367,6 +12421,12 @@ app.get('/api/ujian/aktif', EXAM_ROLES, (req, res) => {
 // ==================== DASHBOARD STATS ====================
 app.get('/api/absensi-siswa/ringkasan', DASHBOARD_ROLES, (req, res) => {
   const tanggal = /^\d{4}-\d{2}-\d{2}$/.test(String(req.query.tanggal || '')) ? String(req.query.tanggal) : todayJakarta()
+  // "Alpha" hanya untuk siswa yang MEMANG ditandai alpha, atau untuk hari yang
+  // sudah lewat (data dianggap final). Pada hari berjalan, siswa tanpa catatan
+  // dipisahkan sebagai "belum tercatat" — sebelumnya semuanya langsung dihitung
+  // alpha sehingga sekolah yang pemindaiannya belum lengkap terlihat membolos
+  // massal (mis. 53 alpha padahal gerbang baru memindai sebagian).
+  const tertutup = tanggal < todayJakarta()
   const rows = db.prepare(`SELECT r.id,r.nama,COUNT(s.id) AS total_siswa,
     SUM(CASE WHEN a.status='hadir' THEN 1 ELSE 0 END) AS hadir,
     SUM(CASE WHEN a.status='sakit' THEN 1 ELSE 0 END) AS sakit,
@@ -12374,13 +12434,22 @@ app.get('/api/absensi-siswa/ringkasan', DASHBOARD_ROLES, (req, res) => {
     SUM(CASE WHEN a.status='alpha' THEN 1 ELSE 0 END) AS alpha
     FROM rombel r LEFT JOIN siswa s ON s.rombel_id=r.id AND s.tenant_id=r.tenant_id AND COALESCE(s.status,'aktif')='aktif'
     LEFT JOIN absensi_siswa a ON a.siswa_id=s.id AND a.tenant_id=r.tenant_id AND a.tanggal=?
-    WHERE r.tenant_id=? GROUP BY r.id,r.nama ORDER BY r.nama`).all(tanggal, req.tenantId).map(row => ({
-      ...row,
-      alpha: Math.max(0, Number(row.total_siswa) - Number(row.hadir) - Number(row.sakit) - Number(row.izin)),
-      persentase: row.total_siswa ? Math.round((Number(row.hadir) / Number(row.total_siswa)) * 100) : 0
-    }))
-  const totals = rows.reduce((sum, row) => ({ hadir: sum.hadir + Number(row.hadir), sakit: sum.sakit + Number(row.sakit), izin: sum.izin + Number(row.izin), alpha: sum.alpha + Number(row.alpha) }), { hadir: 0, sakit: 0, izin: 0, alpha: 0 })
-  res.json({ tanggal, totals, rombel: rows })
+    WHERE r.tenant_id=? GROUP BY r.id,r.nama ORDER BY r.nama`).all(tanggal, req.tenantId).map(row => {
+      const hadir = Number(row.hadir), sakit = Number(row.sakit), izin = Number(row.izin), alphaEksplisit = Number(row.alpha)
+      const belum = Math.max(0, Number(row.total_siswa) - hadir - sakit - izin - alphaEksplisit)
+      return {
+        ...row,
+        alpha: alphaEksplisit + (tertutup ? belum : 0),
+        belum_tercatat: tertutup ? 0 : belum,
+        persentase: row.total_siswa ? Math.round((hadir / Number(row.total_siswa)) * 100) : 0,
+      }
+    })
+  const totals = rows.reduce((sum, row) => ({
+    hadir: sum.hadir + Number(row.hadir), sakit: sum.sakit + Number(row.sakit),
+    izin: sum.izin + Number(row.izin), alpha: sum.alpha + Number(row.alpha),
+    belum_tercatat: sum.belum_tercatat + Number(row.belum_tercatat || 0),
+  }), { hadir: 0, sakit: 0, izin: 0, alpha: 0, belum_tercatat: 0 })
+  res.json({ tanggal, tertutup, totals, rombel: rows })
 })
 
 app.get('/api/dashboard/stats', DASHBOARD_ROLES, (req, res) => {
