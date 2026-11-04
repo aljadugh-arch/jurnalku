@@ -87,15 +87,18 @@ export default function GuruDashboard() {
   const bukaScan = (jadwal: any) => { setQrJadwal(jadwal); setQrOpen(true) }
 
   const scanMasuk = async (payload: string) => {
+    // Tutup kamera lebih dulu: guru tidak perlu menatap viewfinder selama
+    // permintaan jaringan selesai. Umpan balik pindah ke toast.
+    setQrOpen(false)
+    const idToast = toast.loading('Memverifikasi QR…')
     try {
       const r = await api.post('/guru/sesi-kelas/qr', { payload })
-      // Server bisa menolak "mengaktifkan" sesi bila jam pelajaran sudah lewat:
-      // pemindaian tetap tercatat, tetapi kelasnya tidak sedang berlangsung.
+      toast.dismiss(idToast)
       if (r.data?.setelah_selesai) toast(r.data.pesan || 'Kelas sudah berakhir; kehadiran QR tercatat.', { icon: 'ℹ️' })
       else toast.success(`Masuk kelas via QR ${r.data?.sesi?.rombel_nama || ''}`.trim())
-      setQrOpen(false)
-      await loadDashboard()
+      await await loadDashboard()
     } catch (err: any) {
+      toast.dismiss(idToast)
       toast.error(err.response?.data?.error || 'QR tidak dapat diproses')
     }
   }

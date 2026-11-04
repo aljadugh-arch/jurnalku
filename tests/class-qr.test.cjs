@@ -195,3 +195,17 @@ test('pindai setelah jam pelajaran berakhir: tercatat, tetapi tidak "aktif"', as
   assert.equal(sesi.waktu_selesai, selesai)
   db.close()
 })
+
+test('pemindai QR responsif: detektor native, stop tidak memblokir', () => {
+  const baca = (f) => fs.readFileSync(path.join(root, f), 'utf8')
+  const modal = baca('src/components/ScanQrKelasModal.tsx')
+  assert.ok(modal.includes('useBarCodeDetectorIfSupported: true'),
+    'harus memakai BarcodeDetector bawaan browser bila tersedia')
+  assert.ok(/fps:\s*15/.test(modal), 'fps 15 agar QR terbaca dalam sedikit frame')
+  assert.ok(modal.includes('disableFlip: true'), 'QR statis tidak perlu upaya mirroring')
+  assert.ok(/diam\(qr\.stop\(\)\)/.test(modal), 'stop() dijalankan tanpa ditunggu')
+  assert.ok(!/await\s*\(qr\.stop as any\)\(\)/.test(modal), 'stop() tidak boleh menahan validasi')
+  const guru = baca('src/pages/guru/GuruDashboard.tsx')
+  assert.ok(/setQrOpen\(false\)\s*\n\s*const idToast = toast\.loading/.test(guru),
+    'kamera harus ditutup sebelum menunggu jaringan')
+})

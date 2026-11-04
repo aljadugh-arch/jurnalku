@@ -14,6 +14,7 @@ export default function ScanQrKelasModal({ open, onClose, onHasil, onFallback, f
 }) {
   const [galat, setGalat] = useState('')
   const [memproses, setMemproses] = useState(false)
+  const [siap, setSiap] = useState(false)
   const instance = useRef<Html5Qrcode | null>(null)
   // html5-qrcode mengetik stop()/clear() sebagai void walau sebenarnya Promise;
   // bungkus agar aman dipanggil tanpa memicu unhandled rejection.
@@ -22,21 +23,31 @@ export default function ScanQrKelasModal({ open, onClose, onHasil, onFallback, f
 
   useEffect(() => {
     if (!open) return
-    setGalat(''); setMemproses(false); selesai.current = false
+    setGalat(''); setMemproses(false); setSiap(false); selesai.current = false
     const id = 'qr-kelas-reader'
-    const qr = new Html5Qrcode(id)
+    // experimentalFeatures.useBarCodeDetectorIfSupported memakai BarcodeDetector
+    // bawaan browser (Android/Chrome) alih-alih decoder JS — jauh lebih ringan
+    // dan mengenali QR dalam 1–2 frame, bukan 5–10.
+    const qr = new Html5Qrcode(id, {
+      verbose: false,
+      experimentalFeatures: { useBarCodeDetectorIfSupported: true },
+    } as any)
     instance.current = qr
     ;(async () => {
     try {
     await (qr.start as any)(
       { facingMode: 'environment' },
-      { fps: 10, qrbox: { width: 240, height: 240 } },
+      // fps 15 + tanpa upaya mirroring: lebih responsif untuk QR statis di pintu.
+      { fps: 15, qrbox: { width: 240, height: 240 }, disableFlip: true },
       async (teks: string) => {
         if (selesai.current) return
         selesai.current = true
         setMemproses(true)
+        try { navigator.vibrate?.(25) } catch { /* perangkat tanpa getar */ }
         try {
-          try { await (qr.stop as any)() } catch { /* abaikan */ }
+          // Jangan menunggu kamera benar-benar berhenti: stop() butuh ~100-300 ms
+          // dan tidak ada hubungannya dengan validasi QR. Jalankan di latar.
+          diam(qr.stop())
           await onHasil(teks)
         } catch (e: any) {
           setGalat(e?.response?.data?.error || e?.message || 'QR tidak dapat diproses')
@@ -46,6 +57,7 @@ export default function ScanQrKelasModal({ open, onClose, onHasil, onFallback, f
       },
       () => { /* frame tanpa QR: abaikan */ },
     )
+    setSiap(true)
     } catch (e: any) {
       setGalat(e?.message || 'Kamera tidak dapat dibuka. Izinkan akses kamera lalu coba lagi.')
     }
@@ -70,6 +82,7 @@ export default function ScanQrKelasModal({ open, onClose, onHasil, onFallback, f
         <div className="p-3">
           <div id="qr-kelas-reader" className="overflow-hidden rounded-xl bg-black" style={{ minHeight: 260 }} />
           {galat && <p className="mt-2 rounded-lg bg-rose-50 px-3 py-2 text-xs text-rose-700">{galat}</p>}
+          {!siap && !galat && <p className="mt-2 text-center text-xs text-gray-500">Menyiapkan kamera…</p>}
           {memproses && <p className="mt-2 text-center text-xs font-semibold text-primary">Memproses QR…</p>}
           <p className="mt-2 text-center text-[11px] leading-4 text-gray-400">
             Arahkan kamera ke QR di pintu ruang kelas. Jangan lupa izinkan akses kamera.
