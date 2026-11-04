@@ -19,7 +19,8 @@ test('helper kuota: hitung siswa aktif & GTK, batas paket menang', () => {
   assert.match(idx, /require\('\.\/kuota\.cjs'\)\.kuotaTenant/, 'index memakai helper bersama')
   assert.match(kuota, /COALESCE\(status,'aktif'\)='aktif'/, 'hitung siswa AKTIF saja')
   assert.match(kuota, /SELECT COUNT\(\*\) c FROM gtk WHERE tenant_id=\?/, 'hitung gtk')
-  assert.match(kuota, /paket && paket\.nilai && paket\.nilai > 0 \? paket\.nilai : perLembaga/, 'batas paket menang')
+  assert.match(kuota, /const batas = paket\s*\n\s*\? \(paket\.nilai && paket\.nilai > 0 \? paket\.nilai : 0\)\s*\n\s*: perLembaga/,
+    'batas ditentukan paket; tanpa baris paket pakai angka lembaga')
   assert.match(kuota, /batas > 0 \? batas - aktif : Infinity/, '0 = tanpa batas')
 })
 
