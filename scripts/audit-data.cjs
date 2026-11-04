@@ -14,8 +14,10 @@ hasil[hasil.length - 1].nilai = D.pragma('quick_check', { simple: true })
 
 cek('sesi_kelas aktif dari hari lalu', one("SELECT COUNT(*) n FROM sesi_kelas_guru WHERE status='aktif' AND tanggal<?", hariIni))
 cek('sesi_kelas aktif hari ini', one("SELECT COUNT(*) n FROM sesi_kelas_guru WHERE status='aktif' AND tanggal=?", hariIni), 999)
+// Kunci duplikat HARUS menyertakan jam_ke: satu mapel boleh diajar dua kali
+// dalam sehari (jam berbeda) dan itu sah, bukan duplikat.
 cek('jurnal ganda per sesi', one(`SELECT COUNT(*) n FROM (
-  SELECT 1 FROM jurnal_mengajar GROUP BY tenant_id,guru_id,mapel_id,rombel_id,tanggal HAVING COUNT(*)>1)`))
+  SELECT 1 FROM jurnal_mengajar GROUP BY tenant_id,guru_id,mapel_id,rombel_id,tanggal,jam_ke HAVING COUNT(*)>1)`))
 cek('absensi_mapel ganda', one(`SELECT COUNT(*) n FROM (
   SELECT 1 FROM absensi_mapel GROUP BY tenant_id,siswa_id,jadwal_id,tanggal HAVING COUNT(*)>1)`))
 cek('jadwal tanpa GTK', one("SELECT COUNT(*) n FROM jadwal j LEFT JOIN gtk g ON g.id=j.gtk_id AND g.tenant_id=j.tenant_id WHERE COALESCE(j.jenis_kegiatan,'mapel')='mapel' AND g.id IS NULL"))
