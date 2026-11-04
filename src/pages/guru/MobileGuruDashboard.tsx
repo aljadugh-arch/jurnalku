@@ -47,6 +47,11 @@ export default function MobileGuruDashboard() {
   const [qrJadwal, setQrJadwal] = useState<any>(null)
   const navigate = useNavigate()
 
+  // Prefetch chunk form jurnal: setelah pindai QR guru langsung diarahkan ke
+  // sana. Tanpa ini, sinyal lemah saat pindah rute bisa memunculkan halaman
+  // "Halaman gagal ditampilkan" karena chunk belum ada di cache.
+  useEffect(() => { void import('./GuruJurnalPage').catch(() => {}) }, [])
+
   const load = useCallback(
     () => api.get('/guru/dashboard').then(res => setData(res.data)).catch(() => {}),
     [],
