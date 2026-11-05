@@ -16,8 +16,11 @@ test('sesi auth hanya dibuang saat token benar-benar ditolak server', () => {
   assert.match(store, /const status = /)
   assert.match(store, /status === 401/)
   assert.doesNotMatch(store, /\[401, 403\]\.includes\(status\)/)
+  // Percobaan pertama (belum ada profil tersimpan) menahan layar sebentar.
   assert.match(store, /set\(\{ authReady: false, token, isAuthenticated: true/)
-  assert.match(store, /window\.setTimeout\(\(\) => void get\(\)\.checkAuth\(\), AUTH_RETRY_MS\)/)
+  // Percobaan ulang dijadwalkan lewat backoff terbatas, bukan timer tetap
+  // yang berulang selamanya.
+  assert.match(store, /jadwalkanCekUlang\(percobaan\)/)
   assert.match(store, /authError: /)
   // ProtectedRoute tidak boleh merender anak saat identitas masih null.
   assert.match(app, /if \(!authReady \|\| \(isAuthenticated && !user\)\)/)
