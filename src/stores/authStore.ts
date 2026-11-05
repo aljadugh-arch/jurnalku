@@ -11,6 +11,8 @@ interface AuthState {
   /** false selama token yang tersimpan belum divalidasi ke /auth/me. */
   authReady: boolean
   authError: string | null
+  /** Jumlah percobaan /auth/me yang gagal berturut-turut (untuk backoff). */
+  percobaanAuth: number
   login: (user: User, token: string) => void
   loginWithCredentials: (email: string, password: string, captchaToken?: string, captchaJawaban?: string) => Promise<any>
   verifikasiDuaFaktor: (challengeToken: string, code: string) => Promise<void>
@@ -50,19 +52,52 @@ export const canAccessTeacherDashboard = (user: User | null) =>
 })()
 
 const storedToken = () => localStorage.getItem('jurnalku_token')
+
+// Profil terakhir disimpan supaya aplikasi bisa langsung dirender saat dibuka
+// di perangkat/koneksi lambat. Tanpa ini layar tertahan di "Memuat sesi..."
+// sampai /auth/me menjawab — dan kalau jaringan buruk, bisa lama sekali.
+const USER_CACHE = 'jurnalku_user'
+function bacaCacheUser(): User | null {
+  try {
+    const raw = localStorage.getItem(USER_CACHE)
+    if (!raw) return null
+    const u = JSON.parse(raw)
+    return u && u.id && u.role ? (u as User) : null
+  } catch { return null }
+}
+function simpanCacheUser(user: User | null) {
+  try {
+    if (user) localStorage.setItem(USER_CACHE, JSON.stringify(user))
+    else localStorage.removeItem(USER_CACHE)
+  } catch { /* penyimpanan penuh/diblokir — abaikan, cache hanya mempercepat */ }
+}
+
 const AUTH_RETRY_MS = 3000
+const AUTH_RETRY_MAKS = 30000
+let timerAuth: number | null = null
+function jadwalkanCekUlang(percobaan: number) {
+  if (typeof window === 'undefined') return
+  if (timerAuth) window.clearTimeout(timerAuth)
+  // Backoff 3s -> 6s -> 12s -> 24s -> 30s, supaya perangkat lemah tidak
+  // menghantam server terus-menerus saat jaringan sedang bermasalah.
+  const jeda = Math.min(AUTH_RETRY_MAKS, AUTH_RETRY_MS * Math.pow(2, Math.max(0, percobaan - 1)))
+  timerAuth = window.setTimeout(() => { timerAuth = null; void useAuthStore.getState().checkAuth() }, jeda)
+}
 
 export const useAuthStore = create<AuthState>((set, get) => ({
-  user: null,
+  // Bila ada token + profil tersimpan, langsung siap render; validasi tetap
+  // berjalan di belakang layar dan akan memperbaiki/mengeluarkan sesi bila perlu.
+  user: storedToken() ? bacaCacheUser() : null,
   token: storedToken(),
   isAuthenticated: !!storedToken(),
-  // Tanpa token tidak ada yang perlu dihidrasi, jadi langsung siap.
-  authReady: !storedToken(),
+  authReady: !storedToken() || !!bacaCacheUser(),
   authError: null,
+  percobaanAuth: 0,
   login: (user, token) => {
     localStorage.setItem('jurnalku_token', token)
     sessionStorage.removeItem('jurnalku_token')
-    set({ user, token, isAuthenticated: true, authReady: true })
+    simpanCacheUser(user)
+    set({ user, token, isAuthenticated: true, authReady: true, percobaanAuth: 0, authError: null })
   },
   loginWithCredentials: async (email, password, captchaToken, captchaJawaban) => {
     // Login memakai batas waktu jauh lebih pendek dari 90 detik. Di koneksi
@@ -90,7 +125,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     if (res.data?.mfa_required) return res.data
     localStorage.setItem('jurnalku_token', res.data.token)
     sessionStorage.removeItem('jurnalku_token')
-    set({ user: res.data.user, token: res.data.token, isAuthenticated: true, authReady: true })
+    simpanCacheUser(res.data.user)
+    set({ user: res.data.user, token: res.data.token, isAuthenticated: true, authReady: true, percobaanAuth: 0, authError: null })
     // loadSettings TIDAK ditunggu. Sebelumnya `await` di sini menahan navigasi
     // setelah login: token sudah sah, tetapi pengguna masih melihat spinner
     // karena menunggu /api/settings selesai di koneksi lemah. Diambil di
@@ -104,7 +140,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     const res = await api.post('/auth/2fa/verify', { challenge_token: challengeToken, code }, { timeout: 20000 })
     localStorage.setItem('jurnalku_token', res.data.token)
     sessionStorage.removeItem('jurnalku_token')
-    set({ user: res.data.user, token: res.data.token, isAuthenticated: true, authReady: true })
+    simpanCacheUser(res.data.user)
+    set({ user: res.data.user, token: res.data.token, isAuthenticated: true, authReady: true, percobaanAuth: 0, authError: null })
     void useSettingsStore.getState().loadSettings().catch(() => {})
   },
   // Tanpa sandi: username/email/NIS + kode authenticator.
@@ -112,7 +149,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     const res = await api.post('/auth/totp-login', { identifier, code }, { timeout: 20000 })
     localStorage.setItem('jurnalku_token', res.data.token)
     sessionStorage.removeItem('jurnalku_token')
-    set({ user: res.data.user, token: res.data.token, isAuthenticated: true, authReady: true })
+    simpanCacheUser(res.data.user)
+    set({ user: res.data.user, token: res.data.token, isAuthenticated: true, authReady: true, percobaanAuth: 0, authError: null })
     void useSettingsStore.getState().loadSettings().catch(() => {})
   },
   mintaTautanMasuk: async (email) => {
@@ -124,7 +162,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     if (res.data?.mfa_required) return res.data
     localStorage.setItem('jurnalku_token', res.data.token)
     sessionStorage.removeItem('jurnalku_token')
-    set({ user: res.data.user, token: res.data.token, isAuthenticated: true, authReady: true })
+    simpanCacheUser(res.data.user)
+    set({ user: res.data.user, token: res.data.token, isAuthenticated: true, authReady: true, percobaanAuth: 0, authError: null })
     void useSettingsStore.getState().loadSettings().catch(() => {})
   },
   // Wali murid: kode 6 digit dikirim ke WhatsApp nomor yang terdaftar.
@@ -138,7 +177,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     const res = await api.post('/auth/otp/verify', { phone, code }, { timeout: 20000 })
     localStorage.setItem('jurnalku_token', res.data.token)
     sessionStorage.removeItem('jurnalku_token')
-    set({ user: res.data.user, token: res.data.token, isAuthenticated: true, authReady: true })
+    simpanCacheUser(res.data.user)
+    set({ user: res.data.user, token: res.data.token, isAuthenticated: true, authReady: true, percobaanAuth: 0, authError: null })
     void useSettingsStore.getState().loadSettings().catch(() => {})
   },
   // Superadmin: pindah konteks ke satu lembaga tanpa logout. Token baru tetap
@@ -160,7 +200,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     const res = await api.post('/auth/demo', { role }, { timeout: 20000 })
     localStorage.setItem('jurnalku_token', res.data.token)
     sessionStorage.removeItem('jurnalku_token')
-    set({ user: res.data.user, token: res.data.token, isAuthenticated: true, authReady: true })
+    simpanCacheUser(res.data.user)
+    set({ user: res.data.user, token: res.data.token, isAuthenticated: true, authReady: true, percobaanAuth: 0, authError: null })
     // Sama seperti login biasa: pengaturan dimuat di belakang layar supaya
     // panel demo tidak tertahan di koneksi lambat.
     void useSettingsStore.getState().loadSettings().catch(() => {})
@@ -172,13 +213,16 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     // meninggalkan tema atau pengaturannya pada sesi berikutnya.
     clearLocalTheme()
     localStorage.removeItem('jurnalku_settings')
+    localStorage.removeItem(USER_CACHE)
+    if (timerAuth) { window.clearTimeout(timerAuth); timerAuth = null }
     useSettingsStore.setState({ settings: {} })
-    set({ user: null, token: null, isAuthenticated: false, authReady: true })
+    set({ user: null, token: null, isAuthenticated: false, authReady: true, percobaanAuth: 0, authError: null })
   },
   checkAuth: async () => {
     const token = storedToken()
     if (!token) {
-      set({ user: null, token: null, isAuthenticated: false, authReady: true, authError: null })
+      simpanCacheUser(null)
+      set({ user: null, token: null, isAuthenticated: false, authReady: true, authError: null, percobaanAuth: 0 })
       return
     }
     try {
@@ -187,22 +231,58 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       // melihat "Memuat sesi..." sangat lama, padahal ia cukup diarahkan ke
       // halaman login yang bisa langsung dipakai.
       const res = await api.get('/auth/me', { timeout: 12000 })
-      set({ user: res.data, token, isAuthenticated: true, authReady: true, authError: null })
+      if (timerAuth) { window.clearTimeout(timerAuth); timerAuth = null }
+      simpanCacheUser(res.data)
+      set({ user: res.data, token, isAuthenticated: true, authReady: true, authError: null, percobaanAuth: 0 })
     } catch (error: any) {
       const status = error?.response?.status
-      // Hanya 401 yang membuktikan token tidak lagi valid. 403 dapat berasal
-      // dari izin/tenant, sedangkan 5xx dan error jaringan bersifat sementara.
+      // Hanya 401 yang membuktikan token tidak lagi valid.
       if (status === 401) {
         localStorage.removeItem('jurnalku_token')
         sessionStorage.removeItem('jurnalku_token')
-        set({ user: null, token: null, isAuthenticated: false, authReady: true, authError: null })
+        simpanCacheUser(null)
+        if (timerAuth) { window.clearTimeout(timerAuth); timerAuth = null }
+        set({ user: null, token: null, isAuthenticated: false, authReady: true, authError: null, percobaanAuth: 0 })
         return
       }
-      // Jangan render protected route sebelum identitas tersedia. Simpan token
-      // dan lakukan retry supaya refresh pulih tanpa logout paksa.
-      set({ authReady: false, token, isAuthenticated: true, authError: status === 403 ? 'Sesi belum dapat diverifikasi' : 'Koneksi ke server terganggu' })
-      window.setTimeout(() => void get().checkAuth(), AUTH_RETRY_MS)
+
+      const percobaan = get().percobaanAuth + 1
+      // 403 dan 5xx/putus koneksi bersifat sementara. Jangan tahan layar:
+      // render dengan profil terakhir yang tersimpan, lalu perbaiki di latar.
+      const tersimpan = get().user || bacaCacheUser()
+      if (tersimpan) {
+        set({
+          user: tersimpan, token, isAuthenticated: true, authReady: true, percobaanAuth: percobaan,
+          authError: status === 403
+            ? 'Sesi belum dapat diverifikasi — menampilkan data terakhir.'
+            : 'Koneksi terganggu — menampilkan data terakhir.',
+        })
+        // Berhenti mencoba setelah 6 kali; tombol "Coba lagi"/peristiwa online
+        // akan memulai lagi tanpa membebani server.
+        if (percobaan < 6) jadwalkanCekUlang(percobaan)
+        return
+      }
+
+      // Tidak ada identitas tersimpan sama sekali. Satu percobaan cepat masih
+      // wajar; setelah itu lepaskan layar dan arahkan pengguna ke login.
+      if (percobaan >= 2) {
+        set({
+          user: null, token, isAuthenticated: false, authReady: true, percobaanAuth: percobaan,
+          authError: 'Koneksi ke server terganggu. Periksa jaringan lalu masuk kembali.',
+        })
+        return
+      }
+      set({ authReady: false, token, isAuthenticated: true, percobaanAuth: percobaan, authError: 'Menghubungkan…' })
+      jadwalkanCekUlang(percobaan)
     }
   },
   updateUser: (partial) => set((s) => ({ user: s.user ? { ...s.user, ...partial } : s.user })),
 }))
+
+// Perangkat kembali online: jangan menunggu backoff berikutnya.
+if (typeof window !== 'undefined') {
+  window.addEventListener('online', () => {
+    const st = useAuthStore.getState()
+    if (st.token && (!st.user || st.authError)) { useAuthStore.setState({ percobaanAuth: 0 }); void st.checkAuth() }
+  })
+}

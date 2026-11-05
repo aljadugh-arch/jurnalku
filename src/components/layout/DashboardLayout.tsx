@@ -8,7 +8,7 @@ import TwoFactorBanner from '../TwoFactorBanner'
 import { useSidebarStore } from '../../stores/sidebarStore'
 import { useAuthStore } from '../../stores/authStore'
 import { isReadOnly } from '../../lib/roles'
-import { Eye, Building2, ArrowLeft } from 'lucide-react'
+import { Eye, Building2, ArrowLeft, Wifi } from 'lucide-react'
 import { clsx } from 'clsx'
 import { useState, useEffect } from 'react'
 import api from '../../services/api'
@@ -16,6 +16,8 @@ import api from '../../services/api'
 export default function DashboardLayout() {
   const { isOpen } = useSidebarStore()
   const role = useAuthStore(s => s.user?.role)
+  const authError = useAuthStore(s => s.authError)
+  const cekSesi = useAuthStore(s => s.checkAuth)
   // Superadmin bisa masuk ke konteks satu lembaga. Token menyimpan tenant asal;
   // selama itu ada, tampilkan banner + jalan kembali agar tidak tersesat.
   const [diLembaga, setDiLembaga] = useState(false)
@@ -70,6 +72,16 @@ export default function DashboardLayout() {
         {isReadOnly(role) && (
           <div className="bg-amber-50 dark:bg-amber-950/40 border-b border-amber-200 dark:border-amber-900 text-amber-800 dark:text-amber-200 text-xs px-4 sm:px-6 py-2 flex items-center gap-2">
             <Eye size={14} /> Mode Pimpinan (Kepala Madrasah/Sekolah) — akses hanya-lihat, tidak dapat mengubah data.
+          </div>
+        )}
+        {authError && (
+          <div className="flex flex-wrap items-center gap-2 border-b border-amber-200 bg-amber-50 px-4 py-2 text-xs text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200 sm:px-6">
+            <Wifi size={14} className="shrink-0" />
+            <span>{authError} Data yang tampil bisa belum terbaru.</span>
+            <button onClick={() => void cekSesi()}
+              className="ml-auto inline-flex items-center gap-1 rounded-lg border border-amber-300 bg-white px-2 py-1 font-semibold text-amber-700 hover:bg-amber-100 dark:border-amber-800 dark:bg-gray-900 dark:text-amber-300">
+              Coba lagi
+            </button>
           </div>
         )}
         <main className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden p-4 pb-24 sm:p-6 lg:pb-6">
