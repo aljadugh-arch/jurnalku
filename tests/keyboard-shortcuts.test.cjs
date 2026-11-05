@@ -38,3 +38,19 @@ test('dipasang di layout dasbor dan menyebut menu pertama per peran', () => {
   assert.match(layout, /<KeyboardShortcuts \/>/, 'dirender di dalam layout')
   assert.match(komponen, /menu\.slice\(0, 9\)/, 'bantuan menampilkan sembilan menu pertama')
 })
+
+test('palet bisa dipilih dengan keyboard, bukan hanya klik', () => {
+  // Navigasi harus berada SEBELUM penjaga "sedang mengetik", karena fokus
+  // berada di kolom pencarian palet.
+  const posisiNavigasi = komponen.indexOf("if (paletBuka) {")
+  const posisiPenjaga = komponen.indexOf('if (sedangMengetik(e.target)) return')
+  assert.ok(posisiNavigasi > 0, 'blok navigasi palet ada')
+  assert.ok(posisiPenjaga > 0, 'penjaga pengetikan ada')
+  assert.ok(posisiNavigasi < posisiPenjaga, 'navigasi palet diperiksa sebelum penjaga')
+
+  assert.match(komponen, /e\.key === 'ArrowDown'/)
+  assert.match(komponen, /e\.key === 'ArrowUp'/)
+  assert.match(komponen, /e\.key === 'Enter'/)
+  assert.match(komponen, /const pilih = hasil\[sorot\] \|\| hasil\[0\]/, 'Enter memilih baris tersorot')
+  assert.match(komponen, /data-sorot=/, 'baris tersorot ditandai untuk digulir')
+})

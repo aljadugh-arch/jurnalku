@@ -58,6 +58,30 @@ export default function KeyboardShortcuts() {
       }
       if (e.key === 'Escape') { setPaletBuka(false); setBantuanBuka(false); return }
 
+      // Palet sedang terbuka: panah dan Enter harus bekerja walaupun fokus
+      // berada di kolom pencarian. Sebelumnya penjaga "sedang mengetik" di
+      // bawah menelan tombol-tombol ini, sehingga pilihan hanya bisa diklik.
+      if (paletBuka) {
+        if (e.key === 'ArrowDown') {
+          e.preventDefault()
+          setSorot(i => (hasil.length ? Math.min(i + 1, hasil.length - 1) : 0))
+          return
+        }
+        if (e.key === 'ArrowUp') {
+          e.preventDefault()
+          setSorot(i => Math.max(i - 1, 0))
+          return
+        }
+        if (e.key === 'Home') { e.preventDefault(); setSorot(0); return }
+        if (e.key === 'End') { e.preventDefault(); setSorot(Math.max(0, hasil.length - 1)); return }
+        if (e.key === 'Enter') {
+          e.preventDefault()
+          const pilih = hasil[sorot] || hasil[0]
+          if (pilih) buka(pilih)
+          return
+        }
+      }
+
       if (sedangMengetik(e.target)) return
       // Di layar ponsel navigasi sudah lewat bottom nav; pintasan hanya untuk desktop.
       if (window.innerWidth < 1024) return
@@ -72,11 +96,6 @@ export default function KeyboardShortcuts() {
 
       if (e.key === '?') { e.preventDefault(); setBantuanBuka(v => !v); return }
 
-      if (paletBuka) {
-        if (e.key === 'ArrowDown') { e.preventDefault(); setSorot(i => Math.min(i + 1, hasil.length - 1)) }
-        if (e.key === 'ArrowUp') { e.preventDefault(); setSorot(i => Math.max(i - 1, 0)) }
-        if (e.key === 'Enter') { e.preventDefault(); buka(hasil[sorot]) }
-      }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
@@ -93,6 +112,13 @@ export default function KeyboardShortcuts() {
   useEffect(() => {
     if (paletBuka) setTimeout(() => inputRef.current?.focus(), 30)
   }, [paletBuka])
+
+  // Baris tersorot ikut digulir agar navigasi panah tetap terlihat saat daftar
+  // panjang (maks 40 baris).
+  useEffect(() => {
+    if (!paletBuka) return
+    document.querySelector('[data-sorot="true"]')?.scrollIntoView({ block: 'nearest' })
+  }, [sorot, paletBuka])
 
   return (
     <>
@@ -121,6 +147,8 @@ export default function KeyboardShortcuts() {
                 <p className="px-4 py-6 text-center text-xs text-gray-400">Tidak ada menu yang cocok.</p>
               ) : hasil.map((item, i) => (
                 <button key={`${item.path}-${item.label}`} type="button"
+                  data-sorot={i === sorot ? 'true' : undefined}
+                  aria-selected={i === sorot}
                   onMouseEnter={() => setSorot(i)}
                   onClick={() => buka(item)}
                   className={`flex w-full items-center gap-3 px-4 py-2 text-left text-sm ${i === sorot ? 'bg-primary/10 text-primary' : 'text-gray-700 dark:text-gray-200'}`}>
