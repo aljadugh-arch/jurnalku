@@ -86,6 +86,20 @@ ACTIVATED=1
 rm -rf "$LIVE/dist.next" "$SECONDARY_LIVE/dist.next"
 cp -a "$STG/dist" "$LIVE/dist.next"
 cp -a "$STG/dist" "$SECONDARY_LIVE/dist.next"
+# Chunk lama SENGAJA dipertahankan. Vite memberi nama berkas ber-hash, dan
+# halaman yang sudah terbuka di perangkat pengguna masih menunjuk chunk lama.
+# Tanpa ini, mengganti dist membuat import dinamis gagal ("Failed to fetch
+# dynamically imported module") sampai pengguna memuat ulang. Berkas lebih tua
+# dari 30 hari dibuang agar ukuran tidak tumbuh tanpa batas.
+for D in "$LIVE/dist.next" "$SECONDARY_LIVE/dist.next"; do
+  mkdir -p "$D/assets"
+  case "$D" in
+    "$LIVE"*) SUMBER="$LIVE/dist/assets" ;;
+    *) SUMBER="$SECONDARY_LIVE/dist/assets" ;;
+  esac
+  if [[ -d "$SUMBER" ]]; then cp -an "$SUMBER/." "$D/assets/" 2>/dev/null || true; fi
+  find "$D/assets" -type f -mtime +30 -delete 2>/dev/null || true
+done
 rm -rf "$LIVE/dist" "$SECONDARY_LIVE/dist"
 mv "$LIVE/dist.next" "$LIVE/dist"
 mv "$SECONDARY_LIVE/dist.next" "$SECONDARY_LIVE/dist"

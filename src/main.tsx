@@ -5,6 +5,20 @@ import './styles/sisfo.css'
 import App from './App'
 import { applyTheme } from './stores/themeStore'
 import { daftarkanServiceWorker } from './lib/pushNotif'
+import { segarkanSekali } from './components/ErrorBoundary'
+
+// Import dinamis juga bisa gagal di luar render (mis. saat menekan tombol
+// ekspor setelah deploy baru). Tangkap di sini dan segarkan sekali, bukan
+// membiarkan pengguna melihat layar kosong.
+const POLA_CHUNK = /dynamically imported module|Importing a module script failed|Loading chunk|ChunkLoadError/i
+window.addEventListener('unhandledrejection', (e) => {
+  const pesan = String((e.reason && (e.reason.message || e.reason)) || '')
+  if (POLA_CHUNK.test(pesan) && segarkanSekali()) e.preventDefault()
+})
+window.addEventListener('error', (e) => {
+  const t = e.target as HTMLElement | null
+  if (t && t.tagName === 'SCRIPT' && segarkanSekali()) e.preventDefault()
+}, true)
 
 // Apply dark mode from persisted store before first render
 applyTheme()
