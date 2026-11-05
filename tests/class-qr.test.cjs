@@ -18,12 +18,27 @@ const HARI = ['minggu', 'senin', 'selasa', 'rabu', 'kamis', 'jumat', 'sabtu']
 const hariIni = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Jakarta' })
 const namaHari = HARI[new Date(hariIni + 'T12:00:00Z').getUTCDay()]
 
-test('payload QR: sah hanya untuk tenant + tanggal yang sama', () => {
+test('QR permanen: dicetak sekali, tetap sah di tanggal mana pun', () => {
+  const p = buatPayload({ tenantId: 't1', rombelId: 'r1' }, SECRET)
+  for (const tgl of ['2026-11-05', '2027-02-14', '2030-12-31']) {
+    const v = verifikasiPayload(p, { tenantId: 't1', tanggal: tgl, secret: SECRET })
+    assert.equal(v.ok, true, 'harus sah pada ' + tgl)
+    assert.equal(v.permanen, true)
+    assert.equal(v.rombel_id, 'r1')
+  }
+  assert.equal(verifikasiPayload(p, { tenantId: 't2', tanggal: '2026-11-05', secret: SECRET }).ok, false, 'tenant lain ditolak')
+  assert.equal(verifikasiPayload(p, { tenantId: 't1', tanggal: '2026-11-05', secret: 'lain' }).ok, false, 'tanda tangan salah ditolak')
+  const palsu = Buffer.from(JSON.stringify({ ...JSON.parse(Buffer.from(p, 'base64url')), r: 'r2' })).toString('base64url')
+  assert.equal(verifikasiPayload(palsu, { tenantId: 't1', tanggal: '2026-11-05', secret: SECRET }).ok, false, 'isi diubah ditolak')
+})
+
+test('payload QR bertanggal: sah untuk tenant yang benar di hari mana pun', () => {
   const t = { tenantId: 't1', rombelId: 'r1', tanggal: '2026-11-02' }
   const p = buatPayload(t, SECRET)
   assert.equal(verifikasiPayload(p, { tenantId: 't1', tanggal: '2026-11-02', secret: SECRET }).ok, true)
   assert.equal(verifikasiPayload(p, { tenantId: 't2', tanggal: '2026-11-02', secret: SECRET }).ok, false)
-  assert.equal(verifikasiPayload(p, { tenantId: 't1', tanggal: '2026-11-03', secret: SECRET }).ok, false)
+  // QR cetakan lama tetap sah di hari lain: tidak ada cetak ulang harian.
+  assert.equal(verifikasiPayload(p, { tenantId: 't1', tanggal: '2026-11-03', secret: SECRET }).ok, true)
   assert.equal(verifikasiPayload(p, { tenantId: 't1', tanggal: '2026-11-02', secret: 'lain' }).ok, false)
   // Diubah isinya -> tanda tangan tidak cocok.
   const palsu = Buffer.from(JSON.stringify({ ...JSON.parse(Buffer.from(p, 'base64url')), r: 'r2' })).toString('base64url')

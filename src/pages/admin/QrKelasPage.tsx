@@ -9,17 +9,15 @@ import api from '../../services/api'
 type Kelas = { id: string; nama: string; tingkat: string; payload: string }
 
 export default function QrKelasPage() {
-  const [tanggal, setTanggal] = useState('')
-  const [data, setData] = useState<{ tanggal: string; berlaku_sampai: string; kelas: Kelas[] } | null>(null)
+  const [data, setData] = useState<{ permanen?: boolean; berlaku_sampai?: string; kelas: Kelas[] } | null>(null)
   const [memuat, setMemuat] = useState(false)
   const [mengunduh, setMengunduh] = useState(false)
 
-  const muat = async (tgl = tanggal) => {
+  const muat = async () => {
     setMemuat(true)
     try {
-      const r = await api.get('/admin/qr-kelas', { params: tgl ? { tanggal: tgl } : {} })
+      const r = await api.get('/admin/qr-kelas')
       setData(r.data)
-      setTanggal(r.data.tanggal)
     } catch (e: any) {
       toast.error(e.response?.data?.error || 'Gagal memuat QR kelas')
     } finally { setMemuat(false) }
@@ -51,7 +49,7 @@ export default function QrKelasPage() {
     try {
       const dataUrl = await qrDataUrl(k.payload)
       const bin = await (await fetch(dataUrl)).blob()
-      simpanBerkas(bin, `${namaBerkas(k.nama)}_${data?.tanggal || ''}.png`)
+      simpanBerkas(bin, `${namaBerkas(k.nama)}.png`)
     } catch { toast.error('Gagal membuat berkas QR') }
   }
 
@@ -66,11 +64,14 @@ export default function QrKelasPage() {
         zip.file(`${namaBerkas(k.nama)}.png`, dataUrl.split(',')[1], { base64: true })
       }
       zip.file('README.txt',
-        `QR Ruang Kelas — JURNALKU\nTanggal berlaku: ${data?.tanggal}\nBerlaku sampai: ${data?.berlaku_sampai}\n\n` +
-        'Cetak dan tempel di pintu ruang. Guru memindai lewat tombol Masuk Kelas.\n' +
-        'QR hanya berlaku pada tanggal tersebut; cetak ulang setiap hari.\n')
+        'QR Ruang Kelas — JURNALKU\n\n' +
+        'QR ini PERMANEN: cetak sekali, tempel di pintu ruang, dan tidak perlu dicetak ulang.\n' +
+        'Guru memindai lewat tombol Masuk Kelas di aplikasi.\n\n' +
+        'Keamanan: server tetap memeriksa bahwa guru memang punya jadwal di ruang itu\n' +
+        'pada jam pelajaran saat ini, jadi QR yang difoto orang lain tidak bisa dipakai\n' +
+        'di luar jadwal.\n')
       const blob = await zip.generateAsync({ type: 'blob' })
-      simpanBerkas(blob, `QR_Ruang_Kelas_${data?.tanggal || 'hari-ini'}.zip`)
+      simpanBerkas(blob, 'QR_Ruang_Kelas.zip')
       toast.success(`${kelas.length} QR diunduh`)
     } catch { toast.error('Gagal membuat berkas ZIP') }
     finally { setMengunduh(false) }
@@ -95,7 +96,6 @@ export default function QrKelasPage() {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <input type="date" value={tanggal} onChange={e => setTanggal(e.target.value)} className="rounded-lg border px-3 py-2 text-sm" />
           <button onClick={() => void muat()} disabled={memuat} className="inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm font-semibold hover:bg-gray-50">
             <RefreshCw size={15} className={memuat ? 'animate-spin' : ''} /> Muat
           </button>
@@ -112,9 +112,9 @@ export default function QrKelasPage() {
       <div className="tanpa-cetak flex items-start gap-2 rounded-xl border border-sky-200 bg-sky-50 px-3 py-2 text-xs text-sky-800">
         <Info size={15} className="mt-0.5 shrink-0" />
         <span>
-          QR berlaku untuk <strong>{data?.tanggal || '—'}</strong> saja (sampai {data?.berlaku_sampai || '23:59'}).
-          Cetak ulang setiap hari, atau cetak versi laporan bila sekolah ingin satu lembar per pekan.
-          QR lama otomatis ditolak besok.
+          <strong>QR permanen — cetak sekali saja.</strong> Tempel di pintu tiap ruang dan tidak perlu diganti.
+          Server tetap memeriksa jadwal guru dan jam pelajaran, jadi QR yang difoto orang lain tidak bisa dipakai
+          di luar jadwalnya.
         </span>
       </div>
 

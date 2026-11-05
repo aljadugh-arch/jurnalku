@@ -24,8 +24,22 @@ function tanda(secret, tenantId, rombelId, tanggal) {
     .slice(0, 32)
 }
 
+// QR PERMANEN: dicetak sekali, ditempel di pintu, dan tetap sah seterusnya.
+// Yang membuktikan keaslian adalah tanda tangan HMAC atas tenant+ruang; tanggal
+// tidak lagi ikut, jadi tidak ada cetak ulang harian. Penyalahgunaan tetap
+// terkendali karena server juga memeriksa jadwal guru dan jam pelajaran saat itu.
+function tandaPermanen(secret, tenantId, rombelId) {
+  return crypto.createHmac('sha256', String(secret))
+    .update(`${tenantId}|${rombelId}|v1`)
+    .digest('hex')
+    .slice(0, 32)
+}
+
 function buatPayload({ tenantId, rombelId, tanggal }, secret) {
-  const isi = { t: tenantId, r: rombelId, d: tanggal, s: tanda(secret, tenantId, rombelId, tanggal) }
+  // `tanggal` hanya dikirim oleh pemanggil lama; tanpa tanggal -> permanen.
+  const isi = tanggal
+    ? { t: tenantId, r: rombelId, d: tanggal, s: tanda(secret, tenantId, rombelId, tanggal) }
+    : { t: tenantId, r: rombelId, v: 1, s: tandaPermanen(secret, tenantId, rombelId) }
   return Buffer.from(JSON.stringify(isi)).toString('base64url')
 }
 
@@ -35,14 +49,20 @@ function bacaPayload(payload) {
 
 function verifikasiPayload(payload, { tenantId, tanggal, secret }) {
   const isi = bacaPayload(payload)
-  if (!isi || !isi.t || !isi.r || !isi.d || !isi.s) return { ok: false, error: 'QR tidak dikenali.' }
+  if (!isi || !isi.t || !isi.r || !isi.s) return { ok: false, error: 'QR tidak dikenali.' }
   if (String(isi.t) !== String(tenantId)) return { ok: false, error: 'QR milik lembaga lain.' }
-  if (String(isi.d) !== String(tanggal)) return { ok: false, error: 'QR ini sudah kedaluwarsa. Minta admin mencetak QR untuk hari ini.' }
-  const harapan = tanda(secret, isi.t, isi.r, isi.d)
+
+  // QR cetakan lama (bertanggal) tetap sah selamanya: yang penting tanda
+  // tangannya benar. Jadi kertas yang sudah tertempel kemarin tidak perlu
+  // dicetak ulang hanya karena harinya berganti.
+  const bertanggal = Boolean(isi.d)
+  const harapan = bertanggal
+    ? tanda(secret, isi.t, isi.r, isi.d)
+    : tandaPermanen(secret, isi.t, isi.r)
   const a = Buffer.from(String(isi.s))
   const b = Buffer.from(harapan)
   if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) return { ok: false, error: 'QR tidak sah.' }
-  return { ok: true, rombel_id: String(isi.r) }
+  return { ok: true, rombel_id: String(isi.r), permanen: !bertanggal }
 }
 
 function menit(hm) {
@@ -57,17 +77,16 @@ function daftarkanRouteQrKelas(app, ctx) {
   // Daftar QR kelas untuk dicetak (per tanggal; bawaan hari ini).
   app.get('/api/admin/qr-kelas', authMiddleware, (req, res) => {
     if (!ROLE_ADMIN.includes(req.user.role)) return res.status(403).json({ error: 'Tidak berwenang.' })
-    const diminta = String(req.query.tanggal || '')
-    const tanggal = /^\d{4}-\d{2}-\d{2}$/.test(diminta) ? diminta : todayJakarta()
     const rombel = db.prepare('SELECT id, nama, tingkat FROM rombel WHERE tenant_id=? ORDER BY nama').all(req.tenantId)
     res.json({
-      tanggal,
-      berlaku_sampai: `${tanggal} 23:59`,
+      permanen: true,
+      berlaku_sampai: 'selamanya',
       kelas: rombel.map(r => ({
         id: r.id,
         nama: r.nama,
         tingkat: r.tingkat,
-        payload: buatPayload({ tenantId: req.tenantId, rombelId: r.id, tanggal }, JWT_SECRET),
+        // Tanpa tanggal: QR tidak pernah kedaluwarsa.
+        payload: buatPayload({ tenantId: req.tenantId, rombelId: r.id }, JWT_SECRET),
       })),
     })
   })
