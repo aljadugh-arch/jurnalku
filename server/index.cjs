@@ -6267,12 +6267,41 @@ app.get('/api/absensi-mapel/ringkasan', DASHBOARD_ROLES, (req, res) => {
       diharapkan: sesiN && siswaN ? sesiN * siswaN : null,
     }
   })
+  // Kelas yang SEHARUSNYA ada hari ini tetapi belum diabsensi sama sekali.
+  // Tanpa ini, rekap hanya menampilkan yang sudah diisi sehingga admin
+  // menyimpulkan mapel lain "tidak ada", padahal guru belum mengisinya.
+  let belum_diabsen = 0
+  if (tanggal === todayJakarta()) {
+    const sudah = new Set(per_mapel.map(r => `${r.mapel_id}|${r.rombel_id}`))
+    const rencana = db.prepare(`SELECT j.mapel_id, j.rombel_id, COUNT(*) AS sesi,
+        MIN(j.jam_mulai) AS mulai, MAX(j.jam_selesai) AS selesai,
+        m.nama AS mapel_nama, r.nama AS rombel_nama
+      FROM jadwal j
+      LEFT JOIN mapel m ON m.id=j.mapel_id AND m.tenant_id=j.tenant_id
+      LEFT JOIN rombel r ON r.id=j.rombel_id AND r.tenant_id=j.tenant_id
+      WHERE j.tenant_id=? AND lower(j.hari)=? AND j.mapel_id IS NOT NULL AND j.rombel_id IS NOT NULL
+      GROUP BY j.mapel_id, j.rombel_id
+      ORDER BY r.nama, m.nama`).all(req.tenantId, require('./attendance-rules.cjs').hariJakarta())
+    for (const j of rencana) {
+      if (sudah.has(`${j.mapel_id}|${j.rombel_id}`)) continue
+      belum_diabsen++
+      per_mapel.push({
+        mapel_id: j.mapel_id, rombel_id: j.rombel_id,
+        mapel_nama: j.mapel_nama, rombel_nama: j.rombel_nama,
+        catatan: 0, hadir: 0, sakit: 0, izin: 0, alpha: 0, persentase: 0,
+        sesi: Number(j.sesi), siswa: jumlahSiswa.get(String(j.rombel_id)) || 0,
+        diharapkan: null, tercatat: false, mulai: j.mulai, selesai: j.selesai,
+      })
+    }
+  }
+  for (const r of per_mapel) if (r.tercatat === undefined) r.tercatat = true
+
   const totals = per_mapel.reduce((a, r) => ({
     catatan: a.catatan + r.catatan, hadir: a.hadir + r.hadir, sakit: a.sakit + r.sakit,
     izin: a.izin + r.izin, alpha: a.alpha + r.alpha,
   }), { catatan: 0, hadir: 0, sakit: 0, izin: 0, alpha: 0 })
   totals.persentase = totals.catatan ? Math.round((totals.hadir / totals.catatan) * 100) : 0
-  res.json({ tanggal, totals, per_mapel })
+  res.json({ tanggal, totals, per_mapel, belum_diabsen })
 })
 
 

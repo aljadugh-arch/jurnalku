@@ -14,15 +14,17 @@ interface Summary {
 interface MapelSummary {
   tanggal: string
   totals: { catatan: number; hadir: number; sakit: number; izin: number; alpha: number; persentase: number }
+  belum_diabsen?: number
   per_mapel: Array<{
     mapel_id: string; rombel_id: string; mapel_nama: string; rombel_nama: string
     catatan: number; hadir: number; sakit: number; izin: number; alpha: number
     persentase: number; sesi: number; siswa: number; diharapkan: number | null
+    tercatat?: boolean; mulai?: string; selesai?: string
   }>
 }
 
 const initial: Summary = { tanggal: todayWib(), totals: { hadir: 0, sakit: 0, izin: 0, alpha: 0, belum_tercatat: 0 }, rombel: [] }
-const initialMapel: MapelSummary = { tanggal: todayWib(), totals: { catatan: 0, hadir: 0, sakit: 0, izin: 0, alpha: 0, persentase: 0 }, per_mapel: [] }
+const initialMapel: MapelSummary = { tanggal: todayWib(), totals: { catatan: 0, hadir: 0, sakit: 0, izin: 0, alpha: 0, persentase: 0 }, per_mapel: [], belum_diabsen: 0 }
 
 export default function MobileAttendanceSummary({ tanggal = todayWib() }: { tanggal?: string }) {
   const navigate = useNavigate()
@@ -102,18 +104,29 @@ export default function MobileAttendanceSummary({ tanggal = todayWib() }: { tang
 
       <p className="px-1 text-[10px] leading-4 text-slate-400">Per mapel dihitung dari catatan jam pelajaran (siswa × jam), bukan dari presensi gerbang. Keduanya sengaja dipisah.</p>
 
+      {!loadingMapel && Number(mapel.belum_diabsen || 0) > 0 && (
+        <div className="flex items-start gap-2 rounded-2xl bg-amber-50 px-3 py-2.5 text-[11px] leading-4 text-amber-800 dark:bg-amber-500/10 dark:text-amber-200">
+          <Clock3 size={14} className="mt-0.5 shrink-0" />
+          <span><strong>{mapel.belum_diabsen} kelas belum diabsen.</strong> Baris bertanda "Belum diabsen" adalah jadwal hari ini yang absensinya belum diisi guru.</span>
+        </div>
+      )}
+
       <section className="rounded-3xl bg-white p-4 shadow-sm dark:bg-gray-900">
         <h3 className="mb-3 text-sm font-bold text-slate-900 dark:text-white">Rekap per Mapel &amp; Rombel</h3>
-        {loadingMapel ? <p className="py-8 text-center text-xs text-slate-400">Memuat rekap mapel...</p> : mapel.per_mapel.length === 0 ? <p className="py-8 text-center text-xs text-slate-400">Belum ada absensi mapel pada tanggal ini.</p> : <div className="space-y-3">{mapel.per_mapel.map(row => <div key={`${row.mapel_id}-${row.rombel_id}`} className="rounded-2xl bg-slate-50 p-3 dark:bg-gray-800">
+        {loadingMapel ? <p className="py-8 text-center text-xs text-slate-400">Memuat rekap mapel...</p> : mapel.per_mapel.length === 0 ? <p className="py-8 text-center text-xs text-slate-400">Belum ada absensi mapel pada tanggal ini.</p> : <div className="space-y-3">{mapel.per_mapel.map(row => <div key={`${row.mapel_id}-${row.rombel_id}`} className={`rounded-2xl p-3 dark:bg-gray-800 ${row.tercatat === false ? 'border border-dashed border-amber-300 bg-amber-50/40' : 'bg-slate-50'}`}>
           <div className="mb-2 flex items-center gap-2">
             <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-primary/10 text-primary"><BookOpen size={16} /></span>
             <div className="min-w-0 flex-1">
               <p className="truncate text-xs font-bold text-slate-900 dark:text-white">{row.mapel_nama || 'Mapel'} · {row.rombel_nama || '-'}</p>
               <p className="text-[10px] text-slate-500">
-                {row.hadir} hadir dari {row.catatan} catatan{row.sesi ? ` · ${row.sesi} sesi${row.diharapkan ? ` · ideal ${row.diharapkan}` : ''}` : ''}
+                {row.tercatat === false
+                  ? `Belum diabsen · ${row.sesi} jam pelajaran${row.mulai ? ` (${String(row.mulai).slice(0,5)}–${String(row.selesai || '').slice(0,5)})` : ''}`
+                  : <>{row.hadir} hadir dari {row.catatan} catatan{row.sesi ? ` · ${row.sesi} sesi${row.diharapkan ? ` · ideal ${row.diharapkan}` : ''}` : ''}</>}
               </p>
             </div>
-            <strong className="text-sm text-primary">{row.persentase}%</strong>
+            {row.tercatat === false
+              ? <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-700">Belum</span>
+              : <strong className="text-sm text-primary">{row.persentase}%</strong>}
           </div>
           <div className="h-2 overflow-hidden rounded-full bg-slate-200 dark:bg-gray-700"><div className="h-full rounded-full bg-primary transition-all" style={{ width: `${Math.min(100, row.persentase)}%` }} /></div>
           <div className="mt-2 flex flex-wrap gap-1.5 text-[10px]">
