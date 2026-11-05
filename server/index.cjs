@@ -13099,6 +13099,23 @@ function renderIndexSeo(req) {
     offers: { '@type': 'Offer', price: '0', priceCurrency: 'IDR' },
   }
   if (nama) { ld.author = { '@type': 'EducationalOrganization', name: nama }; ld.isPartOf = { '@type': 'WebSite', name: 'JURNALKU', url: `${canonicalBase}/` } }
+  // FAQPage: pertanyaan yang sama dengan blok teks crawler, dalam bentuk yang
+  // dibaca mesin. Ini yang memungkinkan hasil pencarian menampilkan daftar
+  // pertanyaan (rich result), bukan sekadar judul dan deskripsi.
+  const faqPublik = !nama && path === '/' ? [
+    ['Apakah data sekolah aman dan milik siapa?', 'Data tersimpan di server lembaga masing-masing dan hanya dapat diakses akun berizin di lembaga itu. Setiap permintaan API diperiksa token dan perannya, dan setiap lembaga terpisah datanya dari lembaga lain dalam satu instalasi.'],
+    ['Apakah guru perlu memasang aplikasi?', 'Tidak. JURNALKU berjalan di peramban ponsel maupun komputer. Bila diinginkan, aplikasi dapat dipasang ke layar utama sebagai PWA sehingga tampil seperti aplikasi biasa.'],
+    ['Bagaimana absensi bekerja tanpa sinyal GPS di dalam gedung?', 'Guru memindai QR yang tertempel di pintu ruang kelas. Pindai itu menjadi bukti kehadiran di ruangan, dan server mencocokkannya dengan jadwal serta jam pelajaran yang sedang berjalan.'],
+    ['Apakah bisa dipakai lebih dari satu sekolah?', 'Bisa. Satu instalasi dapat melayani banyak lembaga dengan domain atau subdomain sendiri, masing-masing dengan data, pengguna, dan pengaturan terpisah.'],
+    ['Apakah rapor bisa dicetak massal?', 'Bisa. Rapor seluruh siswa dalam satu rombel dapat dibuat sekaligus menjadi berkas PDF, dengan identitas lembaga, tanda tangan kepala sekolah, dan catatan wali kelas.'],
+  ] : []
+  const ldFaq = faqPublik.length ? {
+    '@context': 'https://schema.org', '@type': 'FAQPage',
+    mainEntity: faqPublik.map(([q, a]) => ({
+      '@type': 'Question', name: q,
+      acceptedAnswer: { '@type': 'Answer', text: a },
+    })),
+  } : null
   // Halaman utilitas tidak layak diindeks: tipis, tanpa konten, dan bisa
   // menurunkan kualitas sinyal. Tetap "follow" agar tautan internal terbaca.
   const RUTE_NOINDEX = new Set(['/login', '/register', '/forgot-password', '/reset-password', '/verifikasi'])
@@ -13126,26 +13143,91 @@ function renderIndexSeo(req) {
     `<meta name="twitter:description" content="${escHtml(deskripsi)}" />`,
     `<meta name="twitter:image" content="${escHtml(gambar)}" />`,
     `<script type="application/ld+json">${JSON.stringify(ld)}</script>`,
+    ...(ldFaq ? [`<script type="application/ld+json">${JSON.stringify(ldFaq)}</script>`] : []),
   ].join('\n    ')
   // Isi HTML untuk crawler. Aplikasi ini SPA: <div id="root"> kosong sampai JS
   // jalan, sehingga crawler yang tidak mengeksekusi JS hanya melihat halaman
   // tanpa teks — tidak ada yang bisa diindeks selain judul. Blok ini dirender
   // di dalam #root dan DILEBUR React saat mount (createRoot mengganti isinya),
   // jadi pengunjung normal tidak melihatnya sama sekali.
-  const ringkas = [
+  // Blok teks yang dibaca crawler tanpa menjalankan JS. Sebelumnya hanya ~90
+  // kata — terlalu tipis untuk dinilai bernilai oleh Google. Isi di bawah
+  // ditulis sebagai penjelasan nyata tentang apa yang dikerjakan aplikasi,
+  // ditambah FAQ yang menjawab pertanyaan yang benar-benar ditanyakan calon
+  // pengguna. Semuanya di dalam #root sehingga React menimpanya saat mount:
+  // pengunjung tidak pernah melihat versi ini.
+  const ringkasPlatform = [
     `<h1>${escHtml(nama || 'JURNALKU — Sistem Informasi Manajemen Sekolah & Madrasah')}</h1>`,
     `<p>${escHtml(deskripsi)}</p>`,
-    `<h2>Fitur</h2>`,
+
+    `<h2>Apa itu JURNALKU</h2>`,
+    `<p>JURNALKU adalah aplikasi administrasi sekolah berbasis web yang dipakai kepala sekolah, wali kelas, guru, bendahara, operator, dan wali murid dalam satu sistem. Tidak ada yang perlu dipasang di komputer: cukup peramban, dan seluruh data tersimpan di server lembaga sendiri.</p>`,
+    `<p>Pekerjaan yang biasanya tersebar di buku jurnal, absensi kertas, dan lembar nilai Excel disatukan: guru memindai QR ruang kelas untuk membuka sesi mengajar, mengisi jurnal dan absensi mapel sekali di layar yang sama, lalu nilai dan rapor terisi otomatis dari data yang sudah masuk.</p>`,
+
+    `<h2>Fitur utama</h2>`,
     `<ul>`,
-    `<li>Jurnal mengajar harian dan rekap KBM</li>`,
-    `<li>Absensi siswa dan guru dengan QR code maupun RFID</li>`,
-    `<li>Penilaian, e-rapor, dan cetak rapor Kurikulum Merdeka</li>`,
-    `<li>Manajemen siswa, GTK, rombel, jadwal, dan tahun ajaran</li>`,
-    `<li>Tagihan, tabungan siswa, dan perpustakaan</li>`,
-    `<li>Notifikasi WhatsApp untuk guru, siswa, dan wali murid</li>`,
+    `<li><strong>Jurnal mengajar</strong> — catatan harian per jam pelajaran, lengkap dengan materi, kehadiran, dan tanda tangan digital guru. Rekap KBM per guru, kelas, dan periode.</li>`,
+    `<li><strong>Absensi tiga lapis</strong> — presensi gerbang (QR/RFID), absensi per mata pelajaran, dan ceklok guru berbasis geolokasi. Ketiganya punya penyebut berbeda dan dipisah agar persentase tidak menyesatkan.</li>`,
+    `<li><strong>QR ruang kelas permanen</strong> — dicetak sekali, ditempel di pintu, tidak kedaluwarsa. Server tetap memeriksa jadwal guru dan jam pelajaran, jadi QR yang difoto tidak bisa dipakai di luar jadwal.</li>`,
+    `<li><strong>Penilaian dan e-rapor</strong> — nilai formatif, sumatif, proyek, dan rapor Kurikulum Merdeka beserta cetak PDF massal.</li>`,
+    `<li><strong>Data induk</strong> — siswa, GTK, rombel, mata pelajaran, jadwal, tahun ajaran, dan impor massal dari Excel.</li>`,
+    `<li><strong>Keuangan</strong> — tagihan SPP, tabungan siswa, buku kas, dan rekonsiliasi pembayaran.</li>`,
+    `<li><strong>PPDB daring</strong> — pendaftaran peserta didik baru, unggah berkas, dan pemantauan status penerimaan.</li>`,
+    `<li><strong>Notifikasi WhatsApp</strong> — pengumuman, tagihan, rekap keuangan, pengingat jadwal mengajar, dan pengingat absensi yang belum diisi.</li>`,
+    `<li><strong>Multi-lembaga</strong> — satu instalasi melayani banyak sekolah dengan domain sendiri, data terpisah, dan hak akses per peran.</li>`,
     `</ul>`,
-    `<p><a href="/panduan">Panduan penggunaan</a> · <a href="/ppdb">PPDB daring</a> · <a href="/login">Masuk</a> · <a href="/register">Daftar lembaga</a></p>`,
+
+    `<h2>Untuk siapa</h2>`,
+    `<ul>`,
+    `<li><strong>Madrasah dan pesantren</strong> (MI, MTs, MA, MAK) — termasuk mapel PAI, tahsin, tahfidz, dan penilaian sesuai KMA.</li>`,
+    `<li><strong>Sekolah umum</strong> (SD, SMP, SMA, SMK) — rapor Kurikulum Merdeka dan administrasi pembelajaran.</li>`,
+    `<li><strong>Lembaga kursus dan bimbel</strong> — kelas, pengajar, jadwal, dan tagihan siswa.</li>`,
+    `<li><strong>Perguruan tinggi dan pesantren mahasiswa</strong> — program studi, dosen, dan administrasi akademik dasar.</li>`,
+    `</ul>`,
+
+    `<h2>Cara mulai</h2>`,
+    `<ol>`,
+    `<li>Daftarkan lembaga, isi identitas sekolah dan jenjang.</li>`,
+    `<li>Impor data siswa, guru, dan rombel — bisa dari berkas Excel yang sudah ada.</li>`,
+    `<li>Susun jadwal pelajaran, cetak QR ruang kelas satu kali, lalu mulai mengajar.</li>`,
+    `</ol>`,
+    `<p>Masa uji coba diberikan tanpa batas jumlah siswa. Setelah masa uji berakhir, lembaga dengan 100 siswa atau kurang dapat melanjutkan pada paket gratis; di atas itu tersedia paket Lite, Pro, dan Premium yang membedakan fitur, bukan jumlah siswa.</p>`,
+
+    `<h2>Pertanyaan yang sering diajukan</h2>`,
+    `<h3>Apakah data sekolah aman dan milik siapa?</h3>`,
+    `<p>Data tersimpan di server lembaga masing-masing dan hanya dapat diakses akun berizin di lembaga itu. Setiap permintaan API diperiksa token dan perannya, dan setiap lembaga terpisah datanya dari lembaga lain dalam satu instalasi.</p>`,
+    `<h3>Apakah guru perlu memasang aplikasi?</h3>`,
+    `<p>Tidak. JURNALKU berjalan di peramban ponsel maupun komputer. Bila diinginkan, aplikasi dapat dipasang ke layar utama sebagai PWA sehingga tampil seperti aplikasi biasa.</p>`,
+    `<h3>Bagaimana absensi bekerja tanpa sinyal GPS di dalam gedung?</h3>`,
+    `<p>Guru memindai QR yang tertempel di pintu ruang kelas. Pindai itu menjadi bukti kehadiran di ruangan, dan server mencocokkannya dengan jadwal serta jam pelajaran yang sedang berjalan. Geolokasi hanya dipakai sebagai jalur alternatif bila sekolah mengaktifkannya.</p>`,
+    `<h3>Apakah bisa dipakai lebih dari satu sekolah?</h3>`,
+    `<p>Bisa. Satu instalasi dapat melayani banyak lembaga dengan domain atau subdomain sendiri, masing-masing dengan data, pengguna, dan pengaturan terpisah.</p>`,
+    `<h3>Apakah rapor bisa dicetak massal?</h3>`,
+    `<p>Bisa. Rapor seluruh siswa dalam satu rombel dapat dibuat sekaligus menjadi berkas PDF, dengan identitas lembaga, tanda tangan kepala sekolah, dan catatan wali kelas.</p>`,
+
+    `<h2>Tautan</h2>`,
+    `<p><a href="/panduan">Panduan penggunaan</a> · <a href="/ppdb">PPDB daring</a> · <a href="/faq">Tanya jawab</a> · <a href="/pengumuman">Pengumuman</a> · <a href="/login">Masuk</a> · <a href="/register">Daftar lembaga</a></p>`,
   ].join('\n      ')
+
+  // Halaman lembaga: sebut identitas dan angka nyatanya, bukan teks platform.
+  const ringkasLembaga = [
+    `<h1>${escHtml(nama)}</h1>`,
+    `<p>${escHtml(deskripsi)}</p>`,
+    `<h2>Tentang lembaga</h2>`,
+    `<p>${escHtml(nama)} menggunakan JURNALKU untuk administrasi harian: jurnal mengajar, absensi siswa dan guru, penilaian, rapor, keuangan, dan komunikasi dengan wali murid.</p>`,
+    `<h2>Layanan</h2>`,
+    `<ul>`,
+    `<li>Jurnal mengajar dan rekap kegiatan belajar mengajar</li>`,
+    `<li>Absensi siswa dengan QR code dan RFID, serta absensi per mata pelajaran</li>`,
+    `<li>Ceklok guru berbasis geolokasi dan QR ruang kelas</li>`,
+    `<li>Penilaian dan cetak rapor</li>`,
+    `<li>Tagihan, tabungan siswa, dan laporan keuangan</li>`,
+    `<li>PPDB daring dan pengumuman resmi lembaga</li>`,
+    `<li>Notifikasi WhatsApp kepada guru dan wali murid</li>`,
+    `</ul>`,
+    `<p><a href="/profil">Profil lembaga</a> · <a href="/panduan">Panduan</a> · <a href="/ppdb">PPDB</a> · <a href="/pengumuman">Pengumuman</a> · <a href="/login">Masuk</a></p>`,
+  ].join('\n      ')
+  const ringkas = nama ? ringkasLembaga : ringkasPlatform
   const isiCrawler = `<div id="root"><div style="max-width:720px;margin:0 auto;padding:24px;font-family:system-ui,sans-serif">\n      ${ringkas}\n    </div></div>`
 
   if (html.includes('<!--SEO:START-->') && html.includes('<!--SEO:END-->')) {
