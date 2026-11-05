@@ -3,6 +3,7 @@ import Sidebar from './Sidebar'
 import Header from './Header'
 import BottomNavigation from './BottomNavigation'
 import AdzanNotifier from '../AdzanNotifier'
+import KeyboardShortcuts from '../KeyboardShortcuts'
 import TwoFactorBanner from '../TwoFactorBanner'
 import { useSidebarStore } from '../../stores/sidebarStore'
 import { useAuthStore } from '../../stores/authStore'
@@ -80,6 +81,8 @@ export default function DashboardLayout() {
       {/* Adzan otomatis saat masuk waktu sholat (hanya untuk peran staf,
           hanya bila diaktifkan admin di Pengaturan > Notifikasi). */}
       <AdzanNotifier />
+      {/* Ctrl/⌘+K, Alt+1..9, ? — hanya aktif di desktop. */}
+      <KeyboardShortcuts />
     </div>
   )
 }

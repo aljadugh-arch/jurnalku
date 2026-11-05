@@ -1,6 +1,6 @@
 import { useAuthStore } from '../../stores/authStore'
 import { useThemeStore } from '../../stores/themeStore'
-import { Search, LogOut, Lock, ChevronDown, User, Moon, Sun, Repeat2 } from 'lucide-react'
+import { Search, LogOut, Lock, ChevronDown, User, Moon, Sun, Repeat2, Keyboard } from 'lucide-react'
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { roleLabel } from '../../lib/roles'
@@ -45,6 +45,15 @@ export default function Header() {
               <span className="hidden sm:inline">{teacherMode ? 'Mode Manajemen' : 'Mode Guru'}</span>
             </button>
           )}
+          {/* Bantuan pintasan papan tombol */}
+          <button
+            onClick={() => window.dispatchEvent(new Event('jurnalku:bantuan-pintasan'))}
+            className="hidden lg:inline-flex p-2 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors"
+            title="Pintasan papan tombol (?)"
+            aria-label="Pintasan papan tombol"
+          >
+            <Keyboard size={18} />
+          </button>
           {/* Dark mode toggle */}
           <button
             onClick={toggleDark}
