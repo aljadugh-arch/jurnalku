@@ -104,6 +104,58 @@ function queueDueTeachers(db,{tenantId,date,time}) {
     else out.skipped++
   } return out
 }
+// Pengingat absensi mapel: guru sudah membuka/menjalani sesi kelas tetapi
+// absensi mapel belum diisi sampai jam pelajaran berakhir. Tanpa ini, rekap
+// per mapel hanya berisi satu-dua kelas karena guru memindai QR lalu pergi.
+//
+// Aturan:
+//   - hanya untuk jam pelajaran yang SUDAH selesai (jam_selesai <= time),
+//   - hanya dalam 3 jam setelah jam selesai (agar tidak mengirim tengah malam),
+//   - satu pesan per guru+mapel+rombel+tanggal (idempotency key),
+//   - dilewati bila mapel+rombel itu sudah punya catatan absensi hari ini.
+function queueAbsensiMapelBelum(db,{tenantId,date,time}) {
+  const out={queued:0,skipped:0,missing:0}
+  if (shouldSuppress(db, tenantId, date)) return {...out, reason:'holiday'}
+  const conf=db.prepare('SELECT * FROM notif_settings WHERE tenant_id=?').get(tenantId)
+  if(!conf?.notif_absensi_mapel_belum)return out
+  if(!time || !/^\d{2}:\d{2}$/.test(String(time))) return {...out,reason:'invalid_time'}
+  const day=['Minggu','Senin','Selasa','Rabu','Kamis','Jumat','Sabtu'][new Date(`${date}T12:00:00Z`).getUTCDay()]
+  const school=getTenantSettings(db, tenantId, 'nama_lembaga')
+  const keMenit=(t)=>{const [h,m]=String(t||'00:00').slice(0,5).split(':').map(Number);return (h*60+m)||0}
+  const kini=keMenit(time)
+  const rows=db.prepare(`SELECT j.gtk_id, j.mapel_id, j.rombel_id,
+      MAX(j.jam_selesai) jam_selesai, MIN(j.jam_mulai) jam_mulai,
+      g.nama nama_guru, g.no_hp, g.jenis_kelamin, m.nama mapel, r.nama rombel,
+      (SELECT COUNT(*) FROM absensi_mapel am WHERE am.tenant_id=j.tenant_id
+         AND am.tanggal=? AND am.mapel_id=j.mapel_id AND am.rombel_id=j.rombel_id) AS catatan
+    FROM jadwal j
+    JOIN gtk g ON g.id=j.gtk_id AND g.tenant_id=j.tenant_id AND g.status='aktif'
+    JOIN mapel m ON m.id=j.mapel_id AND m.tenant_id=j.tenant_id
+    JOIN rombel r ON r.id=j.rombel_id AND r.tenant_id=j.tenant_id
+    WHERE j.tenant_id=? AND lower(j.hari)=lower(?) AND j.gtk_id IS NOT NULL
+      AND COALESCE(j.jenis_kegiatan,'mapel')='mapel'
+    GROUP BY j.gtk_id, j.mapel_id, j.rombel_id`).all(date, tenantId, day)
+
+  for(const x of rows){
+    const selesai=keMenit(x.jam_selesai)
+    if(kini < selesai) { out.skipped++; continue }             // belum berakhir
+    if(kini - selesai > 180) { out.skipped++; continue }        // terlalu lama
+    if(Number(x.catatan) > 0) { out.skipped++; continue }       // sudah diisi
+    if(!normalizePhone(x.no_hp)){out.missing++;continue}
+    const namaGuru = honorificTeacherName(x.nama_guru, x.jenis_kelamin)
+    const message=render(conf.template_absensi_mapel_belum,{
+      nama_guru:namaGuru, nama:namaGuru, mapel:x.mapel, rombel:x.rombel,
+      jam_mulai:String(x.jam_mulai||'').slice(0,5), jam_selesai:String(x.jam_selesai||'').slice(0,5),
+      tanggal:date, lembaga:school?.nama_lembaga||'Sekolah',
+    })
+    const r=enqueue(db,{tenantId,phone:x.no_hp,message,
+      key:`absensi-mapel-belum:${x.gtk_id}:${x.mapel_id}:${x.rombel_id}:${date}`,
+      targetType:'gtk',targetId:x.gtk_id})
+    if (r.queued) out.queued++
+    else out.skipped++
+  }
+  return out
+}
 function queueDueSchedules(db,{tenantId,date,time}) {
   const out={queued:0,skipped:0,missing:0}
   if (shouldSuppress(db, tenantId, date)) return {...out, reason:'holiday'}
@@ -401,4 +453,4 @@ function queueAdzanReminders(db, { tenantId, date, time, force = false, paksaWak
   return out
 }
 
-module.exports={setupWA,normalizePhone,enqueue,claimNext,render,honorificTeacherName,queueWaliAttendance,queueDueTeachers,queueDueSchedules,queueDueExamSchedules,queueDueEkskul,queueFinanceReports,queueAdzanReminders,penerimaAdzan,isWhitelisted,shouldSuppress}
+module.exports={setupWA,normalizePhone,enqueue,claimNext,render,honorificTeacherName,queueWaliAttendance,queueDueTeachers,queueAbsensiMapelBelum,queueDueSchedules,queueDueExamSchedules,queueDueEkskul,queueFinanceReports,queueAdzanReminders,penerimaAdzan,isWhitelisted,shouldSuppress}
