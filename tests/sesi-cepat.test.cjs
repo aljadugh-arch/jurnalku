@@ -25,8 +25,8 @@ test('profil terakhir dipakai agar layar tidak tertahan', () => {
   assert.match(store, /user: storedToken\(\) \? bacaCacheUser\(\) : null/)
 })
 
-test('/auth/me dibatasi 12 detik, bukan 90 detik', () => {
-  assert.match(store, /api\.get\('\/auth\/me', \{ timeout: 12000 \}\)/)
+test('/auth/me dibatasi 8 detik, bukan 90 detik', () => {
+  assert.match(store, /api\.get\('\/auth\/me', \{ timeout: 8000 \}\)/)
 })
 
 test('gagal sementara memakai cache dan backoff terbatas', () => {

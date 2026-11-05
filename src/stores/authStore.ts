@@ -230,7 +230,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       // dirender. Dengan timeout bawaan (90 detik) di koneksi lemah pengguna
       // melihat "Memuat sesi..." sangat lama, padahal ia cukup diarahkan ke
       // halaman login yang bisa langsung dipakai.
-      const res = await api.get('/auth/me', { timeout: 12000 })
+      const res = await api.get('/auth/me', { timeout: 8000 })
       if (timerAuth) { window.clearTimeout(timerAuth); timerAuth = null }
       simpanCacheUser(res.data)
       set({ user: res.data, token, isAuthenticated: true, authReady: true, authError: null, percobaanAuth: 0 })
