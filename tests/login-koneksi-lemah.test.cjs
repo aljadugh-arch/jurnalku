@@ -94,7 +94,9 @@ test('checkAuth punya timeout pendek agar tidak menahan halaman', () => {
   const i = s.indexOf('checkAuth: async')
   assert.ok(i > 0, 'checkAuth async harus ada')
   const blok = s.slice(i, i + 900)
-  assert.ok(/api\.get\('\/auth\/me', \{ timeout: 12000 \}\)/.test(blok), 'batas 12 detik')
+  // Batas 8 detik: cukup untuk koneksi lambat, tetapi tidak membuat pengguna
+  // menatap "Memuat sesi..." lebih lama dari yang perlu.
+  assert.ok(/api\.get\('\/auth\/me', \{ timeout: 8000 \}\)/.test(blok), 'batas 8 detik')
 })
 
 test('permintaan opsional di halaman login dibatasi waktunya', () => {
