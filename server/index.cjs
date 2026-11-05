@@ -320,6 +320,35 @@ function renderProfilLembaga(req, res) {
   // Ini yang membuat halaman profil punya kata kunci khas, bukan sekadar identitas.
   let mapel = []
   try { mapel = db.prepare('SELECT nama FROM mapel WHERE tenant_id=? ORDER BY nama LIMIT 24').all(tenantId).map(r => r.nama).filter(Boolean) } catch { mapel = [] }
+  // Konten unik berbasis data nyata. Halaman profil sebelumnya hanya berisi
+  // identitas + daftar mapel (~120 kata) sehingga Google menilainya tipis dan
+  // menolak mengindeksnya. Data berikut sudah ada di database dan tidak
+  // mengarang apa pun: rombel beserta jumlah siswa & wali kelas, guru pengampu
+  // per mapel, jadwal pekan ini, serta agenda terdekat.
+  let rombel = []
+  try {
+    rombel = db.prepare(`SELECT r.nama, r.tingkat,
+        (SELECT COUNT(*) FROM siswa s WHERE s.rombel_id=r.id AND s.tenant_id=r.tenant_id AND COALESCE(s.status,'aktif')='aktif') siswa,
+        (SELECT nama FROM gtk g WHERE g.id=r.wali_kelas_id AND g.tenant_id=r.tenant_id) wali
+      FROM rombel r WHERE r.tenant_id=? ORDER BY r.tingkat, r.nama LIMIT 40`).all(tenantId)
+  } catch { rombel = [] }
+  let pengampu = []
+  try {
+    pengampu = db.prepare(`SELECT m.nama mapel, COUNT(DISTINCT j.gtk_id) guru, COUNT(*) jtm,
+        GROUP_CONCAT(DISTINCT g.nama) daftar_guru
+      FROM jadwal j
+      JOIN mapel m ON m.id=j.mapel_id AND m.tenant_id=j.tenant_id
+      LEFT JOIN gtk g ON g.id=j.gtk_id AND g.tenant_id=j.tenant_id
+      WHERE j.tenant_id=? AND j.mapel_id IS NOT NULL
+      GROUP BY m.nama ORDER BY m.nama LIMIT 40`).all(tenantId)
+  } catch { pengampu = [] }
+  let jumlahJadwal = 0
+  try { jumlahJadwal = db.prepare('SELECT COUNT(*) n FROM jadwal WHERE tenant_id=?').get(tenantId)?.n || 0 } catch { jumlahJadwal = 0 }
+  let agenda = []
+  try {
+    agenda = db.prepare(`SELECT COALESCE(judul,'') nama, tanggal, jenis FROM kalender_kbm
+      WHERE tenant_id=? AND tanggal>=? ORDER BY tanggal LIMIT 8`).all(tenantId, todayJakarta())
+  } catch { agenda = [] }
   let tahunAktif = ''
   try { tahunAktif = String(db.prepare('SELECT nama FROM tahun_ajaran WHERE tenant_id=? AND aktif=1 ORDER BY nama DESC LIMIT 1').get(tenantId)?.nama || '') } catch { tahunAktif = '' }
   let berita = []
@@ -335,7 +364,12 @@ function renderProfilLembaga(req, res) {
   const nsm = String(s.nsm || '').trim()
   const kota = String(s.kota_cetak || '').trim()
   const judul = `${nama}${jenjang ? ' — ' + jenjang : ''} | Profil Lembaga`
-  const deskripsi = `Profil ${nama}${jenjang ? ' (' + jenjang + ')' : ''}${alamat ? ', ' + alamat : ''}. ${nSiswa} siswa, ${nGtk} guru/tenaga kependidikan, ${nRombel} rombongan belajar. Sistem informasi manajemen sekolah JURNALKU.`
+  const deskripsi = `Profil ${nama}${jenjang ? ' (' + jenjang + ')' : ''}${alamat ? ', ' + alamat : ''}. `
+    + `${nSiswa} siswa aktif, ${nGtk} guru dan tenaga kependidikan, ${nRombel} rombongan belajar`
+    + `${mapel.length ? `, ${mapel.length} mata pelajaran` : ''}`
+    + `${ekskul.length ? `, ${ekskul.length} ekstrakurikuler` : ''}`
+    + `${tahunAktif ? `, tahun ajaran ${tahunAktif}` : ''}. `
+    + `Data resmi lembaga yang dikelola dengan JURNALKU.`
   const baris = (label, nilai) => nilai ? `<tr><th>${escHtml(label)}</th><td>${escHtml(nilai)}</td></tr>` : ''
   const html = `<!DOCTYPE html>
 <html lang="id"><head><meta charset="UTF-8">
@@ -395,6 +429,16 @@ ${mapel.length ? `<h2>Mata Pelajaran</h2><div>${mapel.map(m => `<span class="tag
 ${ekskul.length ? `<h2>Ekstrakurikuler</h2><div>${ekskul.map(e => `<span class="tag">${escHtml(e)}</span>`).join('')}</div>` : ''}
 ${berita.length ? `<h2>Kegiatan &amp; Berita Terbaru</h2><ul style="padding-left:20px">${berita.map(b => `<li style="margin-bottom:8px"><a href="/posting/${encodeURIComponent(b.id)}">${escHtml(String(b.judul || 'Kegiatan'))}</a><br><span style="font-size:.8rem;color:#64748b">${escHtml(String(b.created_at || '').slice(0, 10))}</span></li>`).join('')}</ul>` : ''}
 ${tahunAktif ? `<h2>Tahun Ajaran Aktif</h2><p>${escHtml(tahunAktif)}</p>` : ''}
+${rombel.length ? `<h2>Rombongan Belajar &amp; Wali Kelas</h2>
+<table><tr><th>Kelas</th><th>Jumlah siswa</th><th>Wali kelas</th></tr>
+${rombel.map(r => `<tr><td>${escHtml(String(r.nama || '-'))}</td><td>${Number(r.siswa) || 0}</td><td>${escHtml(String(r.wali || '-'))}</td></tr>`).join('')}
+</table>` : ''}
+${pengampu.length ? `<h2>Guru Pengampu per Mata Pelajaran</h2>
+<table><tr><th>Mata pelajaran</th><th>Guru</th><th>Jam pelajaran/pekan</th></tr>
+${pengampu.map(r => `<tr><td>${escHtml(String(r.mapel || '-'))}</td><td>${Number(r.guru) || 0}</td><td>${Number(r.jtm) || 0}</td></tr>`).join('')}
+</table>
+<p style="font-size:.88rem;color:#475569">Total ${jumlahJadwal} jam pelajaran terjadwal setiap pekan.</p>` : ''}
+${agenda.length ? `<h2>Agenda Terdekat</h2><ul style="padding-left:20px">${agenda.map(a => `<li style="margin-bottom:6px">${escHtml(String(a.tanggal || ''))} — ${escHtml(String(a.nama || ''))}${a.jenis ? ` <span style="font-size:.78rem;color:#64748b">(${escHtml(String(a.jenis))})</span>` : ''}</li>`).join('')}</ul>` : ''}
 <p style="margin-top:32px;font-size:.85rem;color:#64748b">Dikelola dengan JURNALKU — sistem informasi manajemen sekolah dan madrasah.</p>
 <p><a href="/">Kembali ke beranda</a> · <a href="/ppdb">Penerimaan peserta didik baru</a></p>
 </body></html>`
@@ -449,7 +493,30 @@ app.get('/sitemap.xml', (req, res) => {
     } catch { return false }
   })()
   if (punyaLembaga) halaman.push(['/profil', '0.9', 'weekly'])
-  const baris = halaman.map(([loc, pri, freq]) => `  <url><loc>${base}${loc}</loc><changefreq>${freq}</changefreq><priority>${pri}</priority></url>`)
+  // lastmod: sinyal terkuat agar crawler mau datang lagi. Tanpa ini, halaman
+  // yang isinya baru diperkaya tidak pernah dirayapi ulang — persis yang
+  // terjadi pada /profil lembaga (crawl terakhir 18 Okt, konten berubah 3 Nov).
+  // Tanggal diambil dari data nyata: posting terbaru, atau hari ini bila belum ada.
+  let lastmodHalaman = todayJakarta()
+  if (tenantId) {
+    try {
+      const p = db.prepare('SELECT MAX(created_at) t FROM posting WHERE tenant_id=?').get(tenantId)
+      if (p?.t) lastmodHalaman = String(p.t).slice(0, 10)
+    } catch { /* tabel posting belum ada */ }
+  }
+  // Halaman statis berubah ketika kode berubah; pakai tanggal build dist agar
+  // tidak berbohong dengan "hari ini" setiap kali crawler datang.
+  let lastmodBuild = ''
+  try {
+    const st = fs.statSync(path.join(__dirname, '..', 'dist', 'index.html'))
+    lastmodBuild = new Date(st.mtimeMs).toLocaleDateString('en-CA', { timeZone: 'Asia/Jakarta' })
+  } catch { lastmodBuild = '' }
+
+  const baris = halaman.map(([loc, pri, freq]) => {
+    const lm = loc === '/' ? (lastmodBuild || lastmodHalaman) : lastmodHalaman
+    const tag = lm ? `<lastmod>${lm}</lastmod>` : ''
+    return `  <url><loc>${base}${loc}</loc>${tag}<changefreq>${freq}</changefreq><priority>${pri}</priority></url>`
+  })
   // Posting publik ikut diindeks supaya berita/kegiatan lembaga muncul di
   // hasil pencarian — inilah konten yang membuat domain punya kata kunci unik
   // (nama kegiatan, prestasi, agenda), bukan sekadar judul generik.
