@@ -69,7 +69,12 @@ test('SEO: tenant publik diresolusi dari host, bukan dari sesi', () => {
 test('SEO: judul & deskripsi berbeda per halaman', () => {
   const s = baca('server/index.cjs')
   const r = s.indexOf('function renderIndexSeo(req)')
-  const badan = s.slice(r, r + 6000)
+  // Badan fungsi dipotong sampai penanda berikutnya. Jendela offset tetap
+  // rapuh: menambah teks crawler membuatnya melewati batas dan tes gagal
+  // padahal perilakunya benar.
+  const akhir = s.indexOf('// SPA fallback', r)
+  assert.ok(akhir > r, 'batas badan renderIndexSeo harus ketemu')
+  const badan = s.slice(r, akhir)
   for (const rute of ["'/panduan'", "'/ppdb'", "'/login'", "'/register'"]) {
     assert.ok(badan.includes(rute), `meta khusus untuk ${rute} harus ada`)
   }
@@ -94,7 +99,7 @@ test('SEO: sitemap memuat posting publik per tenant', () => {
 test('SEO: HTML punya konten untuk crawler di dalam #root', () => {
   const s = baca('server/index.cjs')
   const r = s.indexOf('function renderIndexSeo(req)')
-  const badan = s.slice(r, r + 9000)
+  const badan = s.slice(r, s.indexOf('// SPA fallback', r))
   // Konten crawler didefinisikan sebagai `isiCrawler` berisi <div id="root">.
   // Jangan terikat offset karakter — panjang teks fitur bisa berubah.
   const defIsi = s.slice(s.indexOf('const isiCrawler'), s.indexOf('const isiCrawler') + 300)
