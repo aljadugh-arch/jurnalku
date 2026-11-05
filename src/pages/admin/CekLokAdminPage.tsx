@@ -19,6 +19,7 @@ interface CeklokRecord {
   longitude_masuk: number | null
   jarak_masuk: number | null
   keterangan: string
+  jadwal?: { jtm: number; mulai: string; selesai: string } | null
 }
 
 interface Summary {
@@ -26,6 +27,8 @@ interface Summary {
   terlambat: number
   tidak_hadir: number
   total_guru: number
+  mengajar_hari_ini?: number
+  tanpa_jadwal?: number
 }
 
 interface PersonalCeklok {
@@ -41,6 +44,8 @@ export default function CekLokAdminPage() {
   const [tanggal, setTanggal] = useState(today)
   const [search, setSearch] = useState('')
   const [filterStatus, setFilterStatus] = useState('')
+  // false = semua GTK; true = hanya yang punya jam pelajaran hari ini.
+  const [hanyaMengajar, setHanyaMengajar] = useState(false)
   const [personal, setPersonal] = useState<PersonalCeklok>({ today: null, history: [] })
   const [personalLoading, setPersonalLoading] = useState(true)
   const [ceklokLoading, setCeklokLoading] = useState(false)
@@ -49,7 +54,7 @@ export default function CekLokAdminPage() {
     setLoading(true)
     try {
       const res = await api.get('/ceklok/admin', {
-        params: { tanggal, ...(filterStatus ? { status: filterStatus } : {}) }
+        params: { tanggal, ...(filterStatus ? { status: filterStatus } : {}), ...(hanyaMengajar ? { hanya_mengajar: '1' } : {}) }
       })
       setRecords(res.data.records || res.data)
       if (res.data.summary) setSummary(res.data.summary)
@@ -60,7 +65,7 @@ export default function CekLokAdminPage() {
     }
   }
 
-  useEffect(() => { fetchData() }, [tanggal, filterStatus])
+  useEffect(() => { fetchData() }, [tanggal, filterStatus, hanyaMengajar])
 
   const fetchPersonal = async () => {
     setPersonalLoading(true)
@@ -117,7 +122,7 @@ export default function CekLokAdminPage() {
     { label: 'Hadir', value: summary.hadir, icon: <CheckCircle size={20} />, color: 'text-green-600 bg-green-100' },
     { label: 'Terlambat', value: summary.terlambat, icon: <Clock size={20} />, color: 'text-amber-600 bg-amber-100' },
     { label: 'Tidak Hadir', value: summary.tidak_hadir, icon: <XCircle size={20} />, color: 'text-red-600 bg-red-100' },
-    { label: 'Total Guru', value: summary.total_guru, icon: <MapPin size={20} />, color: 'text-blue-600 bg-blue-100' },
+    { label: 'Mengajar Hari Ini', value: summary.mengajar_hari_ini ?? summary.total_guru, icon: <MapPin size={20} />, color: 'text-blue-600 bg-blue-100' },
   ]
 
   return (
@@ -179,6 +184,10 @@ export default function CekLokAdminPage() {
             className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg text-sm"
           />
         </div>
+        <button type="button" onClick={() => setHanyaMengajar(v => !v)}
+          className={`px-3 py-2 rounded-lg text-sm font-medium border ${hanyaMengajar ? 'bg-primary text-white border-primary' : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50'}`}>
+          {hanyaMengajar ? 'Hanya yang mengajar' : 'Semua GTK'}
+        </button>
         <div className="flex gap-2 flex-wrap">
           {[
             { v: '', l: 'Semua' },
@@ -209,16 +218,17 @@ export default function CekLokAdminPage() {
                 <th className="text-center px-4 py-3 font-medium text-gray-600">Masuk</th>
                 <th className="text-center px-4 py-3 font-medium text-gray-600">Keluar</th>
                 <th className="text-center px-4 py-3 font-medium text-gray-600">Jarak</th>
+                <th className="text-left px-4 py-3 font-medium text-gray-600">Jadwal Hari Ini</th>
                 <th className="text-left px-4 py-3 font-medium text-gray-600">Status</th>
                 <th className="text-left px-4 py-3 font-medium text-gray-600">Keterangan</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
               {loading && (
-                <tr><td colSpan={7} className="px-4 py-8 text-center text-gray-400">Memuat...</td></tr>
+                <tr><td colSpan={8} className="px-4 py-8 text-center text-gray-400">Memuat...</td></tr>
               )}
               {!loading && filtered.length === 0 && (
-                <tr><td colSpan={7} className="px-4 py-8 text-center text-gray-400">Belum ada data ceklok untuk tanggal ini.</td></tr>
+                <tr><td colSpan={8} className="px-4 py-8 text-center text-gray-400">Belum ada data ceklok untuk tanggal ini.</td></tr>
               )}
               {!loading && filtered.map(r => {
                 const sc = statusConfig[r.status] || { label: r.status, color: 'bg-gray-100 text-gray-600' }
@@ -262,6 +272,9 @@ export default function CekLokAdminPage() {
                   <span>Keluar: <b>{r.jam_keluar || '-'}</b></span>
                   {r.jarak_masuk != null && <span>Jarak: <b>{r.jarak_masuk}m</b></span>}
                 </div>
+                <p className="mt-1 text-xs text-slate-500">
+                  {r.jadwal ? `Jadwal: ${r.jadwal.jtm} JTM · ${r.jadwal.mulai?.slice(0,5)}–${r.jadwal.selesai?.slice(0,5)}` : 'Tidak ada jadwal hari ini'}
+                </p>
                 {r.keterangan && <p className="mt-1 text-xs text-gray-400">{r.keterangan}</p>}
               </div>
             )

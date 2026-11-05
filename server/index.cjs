@@ -6574,9 +6574,23 @@ app.get('/api/ceklok/admin', CEKLOK_ACCESS, (req, res) => {
   const visibleGtk = staffGtkIds.length ? gtkRows.filter(row => staffGtkIds.includes(row.id)) : gtkRows
   const attendance = db.prepare('SELECT * FROM absensi_guru WHERE tanggal=? AND tenant_id=?').all(tanggal, req.tenantId)
   const byGtk = new Map(attendance.map(row => [row.gtk_id, row]))
+
+  // Jadwal hari ini: dipakai untuk menandai siapa yang memang seharusnya
+  // mengajar. Ceklok tetap menampilkan semua GTK beralas akun, tetapi admin
+  // bisa menyaring hanya yang punya jam pelajaran hari ini.
+  const hariIni = require('./attendance-rules.cjs').hariJakarta()
+  const jadwalHariIni = new Map()
+  for (const j of db.prepare(`SELECT gtk_id, COUNT(*) jtm, MIN(jam_mulai) mulai, MAX(jam_selesai) selesai
+      FROM jadwal WHERE tenant_id=? AND lower(hari)=? AND gtk_id IS NOT NULL
+      GROUP BY gtk_id`).all(req.tenantId, hariIni)) {
+    jadwalHariIni.set(String(j.gtk_id), { jtm: Number(j.jtm), mulai: j.mulai, selesai: j.selesai })
+  }
+  const hanyaMengajar = String(req.query.hanya_mengajar || '') === '1'
   let records = visibleGtk.map(gtk => {
     const row = byGtk.get(gtk.id)
+    const jadwal = jadwalHariIni.get(String(gtk.id)) || null
     return {
+      jadwal,
       id: row?.id || `missing-${gtk.id}`,
       guru_id: gtk.id,
       guru_nama: gtk.nama,
@@ -6591,12 +6605,15 @@ app.get('/api/ceklok/admin', CEKLOK_ACCESS, (req, res) => {
       keterangan: row?.keterangan || ''
     }
   })
+  if (hanyaMengajar) records = records.filter(row => row.jadwal)
   if (status) records = records.filter(row => row.status === status)
   const summary = {
     hadir: records.filter(row => row.status === 'hadir').length,
     terlambat: records.filter(row => row.status === 'terlambat').length,
     tidak_hadir: records.filter(row => row.status === 'tidak_hadir').length,
-    total_guru: visibleGtk.length
+    total_guru: records.length,
+    mengajar_hari_ini: records.filter(row => row.jadwal).length,
+    tanpa_jadwal: records.filter(row => !row.jadwal).length,
   }
   res.json({ records, summary })
 })

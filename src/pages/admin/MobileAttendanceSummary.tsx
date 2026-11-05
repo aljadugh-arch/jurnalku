@@ -31,6 +31,10 @@ export default function MobileAttendanceSummary({ tanggal = todayWib() }: { tang
   const [mapel, setMapel] = useState<MapelSummary>(initialMapel)
   const [loading, setLoading] = useState(true)
   const [loadingMapel, setLoadingMapel] = useState(false)
+  // Tanggal yang rekapnya sudah benar-benar dimuat. Sebelumnya penjaga memakai
+  // mapel.tanggal yang sudah terisi tanggal hari ini sejak awal, sehingga
+  // tab Per Mapel tidak pernah memanggil API dan selalu tampak kosong.
+  const [mapelDimuat, setMapelDimuat] = useState<string | null>(null)
 
   useEffect(() => {
     setLoading(true)
@@ -41,13 +45,13 @@ export default function MobileAttendanceSummary({ tanggal = todayWib() }: { tang
   }, [tanggal])
 
   useEffect(() => {
-    if (tab !== 'mapel' || mapel.tanggal === tanggal) return
+    if (tab !== 'mapel' || mapelDimuat === tanggal) return
     setLoadingMapel(true)
     api.get('/absensi-mapel/ringkasan', { params: { tanggal } })
-      .then(res => setMapel(res.data))
-      .catch(() => setMapel({ ...initialMapel, tanggal }))
+      .then(res => { setMapel(res.data); setMapelDimuat(tanggal) })
+      .catch(() => { setMapel({ ...initialMapel, tanggal }); setMapelDimuat(tanggal) })
       .finally(() => setLoadingMapel(false))
-  }, [tab, tanggal, mapel.tanggal])
+  }, [tab, tanggal, mapelDimuat])
 
   const belum = Number(summary.totals.belum_tercatat || 0)
   const cards = [
