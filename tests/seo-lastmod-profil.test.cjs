@@ -35,9 +35,15 @@ test('sitemap memuat lastmod untuk halaman utama dan profil', async (t) => {
   t.after(() => { try { proc.kill('SIGKILL') } catch { /* abaikan */ } })
   const xml = await fetch(`http://127.0.0.1:${port}/sitemap.xml`).then(r => r.text())
   assert.match(xml, /<lastmod>\d{4}-\d{2}-\d{2}<\/lastmod>/, 'ada lastmod')
-  // Halaman utama adalah entri pertama.
   const pertama = xml.split('<url>')[1] || ''
   assert.match(pertama, /<lastmod>/, 'halaman utama punya lastmod')
+  // Semua entri halaman statis membawa lastmod (di lingkungan tanpa tenant,
+  // /profil memang tidak dimasukkan karena domain platform bukan satu lembaga).
+  const jumlahUrl = (xml.match(/<url>/g) || []).length
+  const jumlahLastmod = (xml.match(/<lastmod>/g) || []).length
+  assert.equal(jumlahLastmod, jumlahUrl, 'setiap URL punya lastmod')
+  assert.match(require('node:fs').readFileSync(path.join(root, 'server/index.cjs'), 'utf8'),
+    /loc === '\/' \|\| loc === '\/profil'/, 'profil memakai tanggal build')
 })
 
 test('profil lembaga diperkaya data nyata, bukan sekadar identitas', async (t) => {

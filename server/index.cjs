@@ -512,8 +512,15 @@ app.get('/sitemap.xml', (req, res) => {
     lastmodBuild = new Date(st.mtimeMs).toLocaleDateString('en-CA', { timeZone: 'Asia/Jakarta' })
   } catch { lastmodBuild = '' }
 
+  const terbaru = (a, b) => (String(a || '') > String(b || '') ? a : b)
   const baris = halaman.map(([loc, pri, freq]) => {
-    const lm = loc === '/' ? (lastmodBuild || lastmodHalaman) : lastmodHalaman
+    // lastmod harus jujur: memakai tanggal perubahan isi, bukan "hari ini"
+    // setiap kali dirayapi (Google mengabaikan lastmod yang selalu berubah).
+    // Halaman utama dan profil berubah saat kode/tampilan berubah, jadi
+    // tanggal build ikut dipertimbangkan; halaman lain mengikuti posting.
+    const lm = (loc === '/' || loc === '/profil')
+      ? terbaru(lastmodBuild, lastmodHalaman)
+      : lastmodHalaman
     const tag = lm ? `<lastmod>${lm}</lastmod>` : ''
     return `  <url><loc>${base}${loc}</loc>${tag}<changefreq>${freq}</changefreq><priority>${pri}</priority></url>`
   })
