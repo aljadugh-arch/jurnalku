@@ -32,8 +32,10 @@ function siapkanTabel(db) {
     pesan_count INTEGER NOT NULL DEFAULT 0,
     created_by TEXT,
     created_by_nama TEXT,
+    media_path TEXT,
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
   )`)
+  try { db.exec('ALTER TABLE platform_broadcast ADD COLUMN media_path TEXT') } catch (e) { if (!String(e.message).includes('duplicate column')) throw e }
 }
 
 function kumpulanPenerima(db, tenantId) {
@@ -136,9 +138,13 @@ function daftarkanRouteBroadcast(app, ctx) {
     const pesan = String(req.body?.pesan || '').trim()
     const target = req.body?.target ?? 'semua'
     const kering = req.body?.kering === true
+    const mediaPath = String(req.body?.media_path || '').trim()
+    if (mediaPath && !/^\/uploads\/broadcast\/[A-Za-z0-9._-]+$/.test(mediaPath)) {
+      return res.status(400).json({ error: 'Lampiran tidak valid. Unggah ulang gambar.' })
+    }
 
     if (judul.length < 3) return res.status(400).json({ error: 'Judul minimal 3 karakter.' })
-    if (pesan.length < 10) return res.status(400).json({ error: 'Isi pengumuman minimal 10 karakter.' })
+    if (pesan.length < 10 && !mediaPath) return res.status(400).json({ error: 'Isi pengumuman minimal 10 karakter, atau lampirkan gambar.' })
 
     const tenants = daftarTenant(db, target)
     if (!tenants.length) return res.status(400).json({ error: 'Tidak ada lembaga aktif pada target ini.' })
@@ -159,10 +165,10 @@ function daftarkanRouteBroadcast(app, ctx) {
     let terkirimKeAntrean = 0
 
     const jalan = db.transaction(() => {
-      db.prepare(`INSERT INTO platform_broadcast(id,judul,pesan,target,tenant_count,pesan_count,created_by,created_by_nama)
-        VALUES(?,?,?,?,?,?,?,?)`).run(
+      db.prepare(`INSERT INTO platform_broadcast(id,judul,pesan,target,tenant_count,pesan_count,created_by,created_by_nama,media_path)
+        VALUES(?,?,?,?,?,?,?,?,?)`).run(
         id, judul, pesan, Array.isArray(target) ? JSON.stringify(target) : String(target),
-        tenants.length, total, req.user.id, req.user.nama || '',
+        tenants.length, total, req.user.id, req.user.nama || '', mediaPath || null,
       )
       for (const { tenant, penerima } of rencana) {
         for (const p of penerima) {
@@ -173,6 +179,8 @@ function daftarkanRouteBroadcast(app, ctx) {
             key: `broadcast:${id}:${p.phone}`,
             targetType: 'broadcast',
             targetId: id,
+            mediaPath: mediaPath || '',
+            mediaType: mediaPath ? 'image/webp' : '',
           })
           if (r.queued) terkirimKeAntrean++
         }

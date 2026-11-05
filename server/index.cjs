@@ -1643,6 +1643,7 @@ db.exec(`
     total_terkirim INTEGER DEFAULT 0,
     total_gagal INTEGER DEFAULT 0,
     status TEXT DEFAULT 'pending',
+    media_path TEXT,
     created_at TEXT DEFAULT (datetime('now')),
     completed_at TEXT
   );
@@ -1692,6 +1693,8 @@ db.exec(`
     PRIMARY KEY (tenant_id, tanggal, waktu)
   );
 `);
+// Kolom media untuk broadcast (ALTER dipisah dari blok CREATE di atas).
+try { db.exec('ALTER TABLE broadcast_log ADD COLUMN media_path TEXT') } catch (e) { if (!String(e.message).includes('duplicate column')) throw e }
 
 try {
   const userColumns = db.prepare('PRAGMA table_info(users)').all()
@@ -12659,6 +12662,29 @@ app.post('/api/wa-gateway/logout', ...WA_KELOLA, (req, res) => {
 
 // ==================== BROADCAST ====================
 // List broadcasts (per-tenant)
+// Unggah gambar untuk broadcast. Dikompres ke WebP agar hemat kuota penerima
+// (gambar 3 MB biasanya menjadi 150-400 KB). Path disimpan relatif ke MEDIA_ROOT.
+const broadcastUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 5 * 1024 * 1024, files: 1 },
+  fileFilter: (_req, file, cb) => cb(null, /^image\/(png|jpeg|webp)$/.test(file.mimetype)),
+})
+const BROADCAST_MEDIA_DIR = path.join(UPLOAD_DIR, 'broadcast')
+fs.mkdirSync(BROADCAST_MEDIA_DIR, { recursive: true })
+const mediaBroadcastValid = (p) => typeof p === 'string' && /^\/uploads\/broadcast\/[A-Za-z0-9._-]+$/.test(p)
+
+app.post('/api/broadcast/upload', ADMIN, broadcastUpload.single('gambar'), async (req, res) => {
+  if (!req.file) return res.status(400).json({ error: 'Lampirkan gambar JPG/PNG/WebP (maks 5 MB).' })
+  try {
+    const keluaran = await compressImageBuffer(req.file.buffer, { maxDimension: 1280, quality: 75 })
+    const nama = `broadcast-${Date.now()}-${crypto.randomBytes(8).toString('hex')}.webp`
+    await fs.promises.writeFile(path.join(BROADCAST_MEDIA_DIR, nama), keluaran)
+    res.json({ path: `/uploads/broadcast/${nama}`, type: 'image/webp', bytes: keluaran.length })
+  } catch (e) {
+    res.status(400).json({ error: 'Gambar tidak dapat diproses: ' + (e.message || 'format tidak didukung') })
+  }
+})
+
 app.get('/api/broadcast', authMiddleware, (req, res) => {
   const data = db.prepare('SELECT * FROM broadcast_log WHERE tenant_id = ? ORDER BY created_at DESC LIMIT 50').all(req.tenantId)
   res.json(data)
@@ -12675,11 +12701,14 @@ app.get('/api/broadcast/:id', authMiddleware, (req, res) => {
 // Create & send broadcast (per-tenant)
 app.post('/api/broadcast', ADMIN, async (req, res) => {
   const { kategori, judul, pesan, penerima } = req.body
+  const mediaPath = String(req.body?.media_path || '').trim()
   if (!penerima || penerima.length === 0) return res.status(400).json({ error: 'Tidak ada penerima' })
+  if (mediaPath && !mediaBroadcastValid(mediaPath)) return res.status(400).json({ error: 'Lampiran tidak valid. Unggah ulang gambar.' })
+  if (!String(pesan || '').trim() && !mediaPath) return res.status(400).json({ error: 'Isi pesan atau lampiran wajib ada.' })
   const tenantId = req.tenantId
   const broadcastId = uuidv4()
-  db.prepare('INSERT INTO broadcast_log (id, kategori, judul, pesan, total_penerima, status, tenant_id) VALUES (?,?,?,?,?,?,?)')
-    .run(broadcastId, kategori, judul, pesan, penerima.length, 'sending', tenantId)
+  db.prepare('INSERT INTO broadcast_log (id, kategori, judul, pesan, total_penerima, status, tenant_id, media_path) VALUES (?,?,?,?,?,?,?,?)')
+    .run(broadcastId, kategori, judul, pesan, penerima.length, 'sending', tenantId, mediaPath || null)
 
   const insDetail = db.prepare('INSERT INTO broadcast_detail (id, broadcast_id, phone, nama, status, tenant_id) VALUES (?,?,?,?,?,?)')
   for (const p of penerima) {
@@ -12692,7 +12721,7 @@ app.post('/api/broadcast', ADMIN, async (req, res) => {
   const config = waGateway.getConfig(tenantId)
   let terkirim = 0, gagal = 0
   for (const p of penerima) {
-    const result = await waGateway.sendMessage(p.phone, waGateway.renderTemplate(pesan, p, config), tenantId)
+    const result = await waGateway.sendMessage(p.phone, waGateway.renderTemplate(pesan, p, config), tenantId, { mediaPath, mediaType: mediaPath ? 'image/webp' : '' })
     if (result.success) {
       terkirim++
       db.prepare("UPDATE broadcast_detail SET status='sent', sent_at=datetime('now') WHERE broadcast_id=? AND phone=?").run(broadcastId, p.phone)
@@ -12709,6 +12738,9 @@ app.post('/api/broadcast', ADMIN, async (req, res) => {
 // Quick broadcast by category (per-tenant)
 app.post('/api/broadcast/quick', ADMIN, async (req, res) => {
   const { kategori, pesan } = req.body
+  const mediaPath = String(req.body?.media_path || '').trim()
+  if (mediaPath && !mediaBroadcastValid(mediaPath)) return res.status(400).json({ error: 'Lampiran tidak valid. Unggah ulang gambar.' })
+  if (!String(pesan || '').trim() && !mediaPath) return res.status(400).json({ error: 'Isi pesan atau lampiran wajib ada.' })
   const tenantId = req.tenantId
   let penerima = []
 
@@ -12726,8 +12758,8 @@ app.post('/api/broadcast/quick', ADMIN, async (req, res) => {
   if (penerima.length === 0) return res.status(400).json({ error: 'Tidak ada penerima dengan nomor HP valid' })
 
   const broadcastId = uuidv4()
-  db.prepare('INSERT INTO broadcast_log (id, kategori, judul, pesan, total_penerima, status, tenant_id) VALUES (?,?,?,?,?,?,?)')
-    .run(broadcastId, kategori, 'Quick: ' + kategori, pesan, penerima.length, 'sending', tenantId)
+  db.prepare('INSERT INTO broadcast_log (id, kategori, judul, pesan, total_penerima, status, tenant_id, media_path) VALUES (?,?,?,?,?,?,?,?)')
+    .run(broadcastId, kategori, 'Quick: ' + kategori, pesan, penerima.length, 'sending', tenantId, mediaPath || null)
 
   const insDetail = db.prepare('INSERT INTO broadcast_detail (id, broadcast_id, phone, nama, status, tenant_id) VALUES (?,?,?,?,?,?)')
   for (const p of penerima) {
@@ -12740,7 +12772,7 @@ app.post('/api/broadcast/quick', ADMIN, async (req, res) => {
   const config = waGateway.getConfig(tenantId)
   let terkirim = 0, gagal = 0
   for (const p of penerima) {
-    const result = await waGateway.sendMessage(p.phone, waGateway.renderTemplate(pesan, p, config), tenantId)
+    const result = await waGateway.sendMessage(p.phone, waGateway.renderTemplate(pesan, p, config), tenantId, { mediaPath, mediaType: mediaPath ? 'image/webp' : '' })
     if (result.success) {
       terkirim++
       db.prepare("UPDATE broadcast_detail SET status='sent', sent_at=datetime('now') WHERE broadcast_id=? AND phone=?").run(broadcastId, p.phone)

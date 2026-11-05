@@ -31,7 +31,7 @@ class WAGateway {
     }
   }
 
-  async sendMessage(phone, message, tenantId = 'default') {
+  async sendMessage(phone, message, tenantId = 'default', opts = {}) {
     const config = this.getConfig(tenantId)
     if (!config.enabled) {
       return { success: false, error: 'WA Gateway tidak aktif' }
@@ -39,7 +39,12 @@ class WAGateway {
     phone = this.normalizePhone(phone)
     if (config.provider === 'baileys') {
       const { enqueue } = require('./wa-queue.cjs')
-      return enqueue(this.db, { tenantId, phone, message, key: `gateway:${require('crypto').randomUUID()}` })
+      return enqueue(this.db, {
+        tenantId, phone, message,
+        key: `gateway:${require('crypto').randomUUID()}`,
+        mediaPath: opts.mediaPath || '',
+        mediaType: opts.mediaType || '',
+      })
     } else if (config.provider === 'sidobe') {
       return await this.sendViaSidobe(phone, message, config)
     }

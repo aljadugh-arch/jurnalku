@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Send, MessageSquare, Users, GraduationCap, UserCheck, Clock, CheckCircle, XCircle, Eye, Phone, Plus, Trash2 } from 'lucide-react'
+import { Send, MessageSquare, Users, GraduationCap, UserCheck, Clock, CheckCircle, XCircle, Eye, Phone, Plus, Trash2, Image as ImageIcon } from 'lucide-react'
 import toast from 'react-hot-toast'
 import api from '../../services/api'
 
@@ -21,6 +21,9 @@ export default function BroadcastPage() {
   const [selectedRombel, setSelectedRombel] = useState('')
   const [history, setHistory] = useState<any[]>([])
   const [sending, setSending] = useState(false)
+  // Lampiran gambar: satu gambar untuk semua penerima, sudah dikompres server.
+  const [lampiran, setLampiran] = useState<{ path: string; bytes?: number } | null>(null)
+  const [mengunggah, setMengunggah] = useState(false)
   const [detail, setDetail] = useState<any>(null)
   const [whitelist, setWhitelist] = useState<any[]>([])
   const [wForm, setWForm] = useState({ phone: '', reason: '' })
@@ -56,11 +59,28 @@ export default function BroadcastPage() {
     setPesan(t.pesan)
   }
 
+  const unggahGambar = async (file?: File | null) => {
+    if (!file) return
+    if (!/^image\/(png|jpeg|webp)$/.test(file.type)) { toast.error('Format harus JPG, PNG, atau WebP'); return }
+    if (file.size > 5 * 1024 * 1024) { toast.error('Ukuran maksimal 5 MB'); return }
+    setMengunggah(true)
+    try {
+      const fd = new FormData()
+      fd.append('gambar', file)
+      const r = await api.post('/broadcast/upload', fd, { headers: { 'Content-Type': 'multipart/form-data' } })
+      setLampiran({ path: r.data.path, bytes: r.data.bytes })
+      toast.success('Gambar siap dikirim')
+    } catch (e: any) {
+      toast.error(e.response?.data?.error || 'Gagal mengunggah gambar')
+    } finally { setMengunggah(false) }
+  }
+
   const handleSend = async () => {
-    if (!pesan.trim()) { toast.error('Pesan tidak boleh kosong'); return }
+    if (!pesan.trim() && !lampiran) { toast.error('Isi pesan atau lampirkan gambar'); return }
     setSending(true)
     try {
       const body: any = { kategori, pesan }
+      if (lampiran) body.media_path = lampiran.path
       if (kategori === 'per_rombel') body.rombel_id = selectedRombel
       const res = await api.post('/broadcast/quick', body)
       toast.success(`Broadcast dimulai ke ${res.data.total} penerima`)
@@ -127,6 +147,18 @@ export default function BroadcastPage() {
             <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
               <h3 className="font-medium text-gray-800 mb-3 text-sm">Edit Pesan</h3>
               <textarea value={pesan} onChange={e => setPesan(e.target.value)} rows={10} className="w-full px-3 py-2 border rounded-lg text-sm font-mono" />
+              <div className="mt-3 flex flex-wrap items-center gap-2">
+                <label className={`inline-flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-2 text-xs font-semibold ${mengunggah ? 'opacity-60' : 'hover:bg-gray-50'}`}>
+                  <ImageIcon size={14} /> {mengunggah ? 'Mengunggah…' : lampiran ? 'Ganti gambar' : 'Lampirkan gambar'}
+                  <input type="file" accept="image/png,image/jpeg,image/webp" className="hidden" disabled={mengunggah}
+                    onChange={e => { void unggahGambar(e.target.files?.[0]); e.currentTarget.value = '' }} />
+                </label>
+                {lampiran && <>
+                  <img src={lampiran.path} alt="Lampiran" className="h-12 w-12 rounded-lg border object-cover" />
+                  <button type="button" onClick={() => setLampiran(null)} className="text-xs font-semibold text-rose-600 hover:underline">Hapus</button>
+                  {lampiran.bytes ? <span className="text-[10px] text-gray-400">{Math.round(lampiran.bytes / 1024)} KB setelah kompres</span> : null}
+                </>}
+              </div>
               <div className="mt-2 text-xs text-gray-500">
                 Variabel: <code className="bg-gray-100 px-1 rounded">{'{nama}'}</code> <code className="bg-gray-100 px-1 rounded">{'{nis}'}</code> <code className="bg-gray-100 px-1 rounded">{'{nip}'}</code> <code className="bg-gray-100 px-1 rounded">{'{kelas}'}</code> <code className="bg-gray-100 px-1 rounded">{'{mapel}'}</code> <code className="bg-gray-100 px-1 rounded">{'{tanggal}'}</code> <code className="bg-gray-100 px-1 rounded">{'{jam}'}</code> <code className="bg-gray-100 px-1 rounded">{'{jumlah}'}</code> <code className="bg-gray-100 px-1 rounded">{'{status}'}</code> <code className="bg-gray-100 px-1 rounded">{'{lembaga}'}</code>
               </div>

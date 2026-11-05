@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import toast from 'react-hot-toast'
-import { Megaphone, Send, RefreshCw, AlertTriangle, CheckCircle2, Building2, Loader2 } from 'lucide-react'
+import { Megaphone, Send, RefreshCw, AlertTriangle, CheckCircle2, Building2, Loader2, Image as ImageIcon } from 'lucide-react'
 import api from '../../services/api'
 
 type Audiens = {
@@ -35,6 +35,8 @@ export default function PlatformBroadcastPage() {
   const [audiens, setAudiens] = useState<Audiens | null>(null)
   const [memuatAudiens, setMemuatAudiens] = useState(false)
   const [mengirim, setMengirim] = useState(false)
+  const [lampiran, setLampiran] = useState<{ path: string; bytes?: number } | null>(null)
+  const [mengunggah, setMengunggah] = useState(false)
   const [riwayat, setRiwayat] = useState<Riwayat[]>([])
   const [memuatRiwayat, setMemuatRiwayat] = useState(false)
 
@@ -67,18 +69,48 @@ export default function PlatformBroadcastPage() {
     setPilihan(p => p.includes(id) ? p.filter(x => x !== id) : [...p, id])
   }
 
+  const unggahGambar = async (file?: File | null) => {
+    if (!file) return
+    if (!/^image\/(png|jpeg|webp)$/.test(file.type)) { toast.error('Format harus JPG, PNG, atau WebP'); return }
+    if (file.size > 5 * 1024 * 1024) { toast.error('Ukuran maksimal 5 MB'); return }
+    setMengunggah(true)
+    try {
+      const fd = new FormData(); fd.append('gambar', file)
+      const r = await api.post('/broadcast/upload', fd, { headers: { 'Content-Type': 'multipart/form-data' } })
+      setLampiran({ path: r.data.path, bytes: r.data.bytes })
+      toast.success('Gambar siap dikirim')
+    } catch (e: any) {
+      toast.error(e.response?.data?.error || 'Gagal mengunggah gambar')
+    } finally { setMengunggah(false) }
+  }
+
   const kirim = async () => {
     if (judul.trim().length < 3) { toast.error('Judul minimal 3 karakter'); return }
-    if (pesan.trim().length < 10) { toast.error('Isi pengumuman minimal 10 karakter'); return }
+    if (pesan.trim().length < 10 && !lampiran) { toast.error('Isi pengumuman minimal 10 karakter (atau lampirkan gambar)'); return }
     if (!semua && pilihan.length === 0) { toast.error('Pilih minimal satu lembaga'); return }
-    const jumlah = audiens?.nomor_count ?? 0
+      const unggahGambar = async (file?: File | null) => {
+    if (!file) return
+    if (!/^image\/(png|jpeg|webp)$/.test(file.type)) { toast.error('Format harus JPG, PNG, atau WebP'); return }
+    if (file.size > 5 * 1024 * 1024) { toast.error('Ukuran maksimal 5 MB'); return }
+    setMengunggah(true)
+    try {
+      const fd = new FormData(); fd.append('gambar', file)
+      const r = await api.post('/broadcast/upload', fd, { headers: { 'Content-Type': 'multipart/form-data' } })
+      setLampiran({ path: r.data.path, bytes: r.data.bytes })
+      toast.success('Gambar siap dikirim')
+    } catch (e: any) {
+      toast.error(e.response?.data?.error || 'Gagal mengunggah gambar')
+    } finally { setMengunggah(false) }
+  }
+
+const jumlah = audiens?.nomor_count ?? 0
     const yakin = window.confirm(`Kirim pengumuman ke ${jumlah} nomor WhatsApp?\n\nPesan akan masuk antrean dan dikirim mengikuti status sesi WA tiap lembaga.`)
     if (!yakin) return
     setMengirim(true)
     try {
-      const r = await api.post('/superadmin/broadcast', { judul, pesan, target })
+      const r = await api.post('/superadmin/broadcast', { judul, pesan, target, ...(lampiran ? { media_path: lampiran.path } : {}) })
       toast.success(`Masuk antrean: ${r.data.masuk_antrean} pesan ke ${r.data.tenant_count} lembaga`)
-      setJudul(''); setPesan('')
+      setJudul(''); setPesan(''); setLampiran(null)
       void muatRiwayat()
     } catch (e: any) {
       toast.error(e.response?.data?.error || 'Gagal mengirim pengumuman')
@@ -106,6 +138,18 @@ export default function PlatformBroadcastPage() {
             <span className={`text-[11px] ${pesan.length > MAKS_PANJANG ? 'text-rose-600' : 'text-gray-400'}`}>{pesan.length}/{MAKS_PANJANG}</span>
           </div>
           <textarea value={pesan} onChange={e => setPesan(e.target.value.slice(0, MAKS_PANJANG))} rows={6} placeholder="Tulis informasi singkat, jelas, dan tanpa data sensitif." className="w-full rounded-lg border px-4 py-2 text-sm" />
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            <label className={`inline-flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-2 text-xs font-semibold ${mengunggah ? 'opacity-60' : 'hover:bg-gray-50'}`}>
+              <ImageIcon size={14} /> {mengunggah ? 'Mengunggah…' : lampiran ? 'Ganti gambar' : 'Lampirkan gambar'}
+              <input type="file" accept="image/png,image/jpeg,image/webp" className="hidden" disabled={mengunggah}
+                onChange={e => { void unggahGambar(e.target.files?.[0]); e.currentTarget.value = '' }} />
+            </label>
+            {lampiran && <>
+              <img src={lampiran.path} alt="Lampiran" className="h-12 w-12 rounded-lg border object-cover" />
+              <button type="button" onClick={() => setLampiran(null)} className="text-xs font-semibold text-rose-600 hover:underline">Hapus</button>
+              {lampiran.bytes ? <span className="text-[10px] text-gray-400">{Math.round(lampiran.bytes / 1024)} KB setelah kompres</span> : null}
+            </>}
+          </div>
         </div>
 
         <div className="space-y-2">

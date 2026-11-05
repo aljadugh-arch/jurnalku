@@ -162,7 +162,8 @@ export default function KeyboardShortcuts() {
               <li className="flex items-center justify-between gap-3"><span>Tutup jendela</span><kbd className="rounded border px-1.5 py-0.5 text-[10px]">Esc</kbd></li>
             </ul>
             <p className="mt-3 text-[11px] leading-4 text-gray-400">
-              Pintasan tidak aktif saat kursor berada di kolom isian, dan tidak tersedia di layar ponsel.
+              Menu lain di luar sembilan di atas dibuka lewat <strong>Ctrl/⌘ + K</strong> (ketik namanya).
+              Pintasan tidak aktif saat kursor di kolom isian dan tidak tersedia di layar ponsel.
             </p>
           </div>
         </div>

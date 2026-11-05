@@ -10,6 +10,17 @@ import csBot from './wa-cs-bot.cjs'
 
 dotenv.config({ path: path.join(import.meta.dirname, '.env') })
 const dbPath = process.env.DB_PATH ? path.resolve(import.meta.dirname, process.env.DB_PATH) : path.join(import.meta.dirname, 'jurnalku.db')
+const uploadRoot = process.env.MEDIA_ROOT ? path.resolve(process.env.MEDIA_ROOT) : path.join(import.meta.dirname, 'uploads')
+// Susun isi pesan: teks saja, atau media (gambar/dokumen) dengan caption.
+function isiPesan(job) {
+  const caption = String(job.message || '')
+  if (!job.media_path) return { text: caption }
+  const rel = String(job.media_path).replace(/^\/?uploads\/?/, '')
+  const file = path.isAbsolute(job.media_path) ? job.media_path : path.join(uploadRoot, rel)
+  const tipe = String(job.media_type || 'image/webp')
+  if (tipe.startsWith('image/')) return { image: { url: file }, caption }
+  return { document: { url: file }, fileName: path.basename(file), mimetype: tipe, caption }
+}
 const authRoot = process.env.WA_AUTH_DIR ? path.resolve(import.meta.dirname, process.env.WA_AUTH_DIR) : path.join(import.meta.dirname, 'wa-auth')
 const db=new Database(dbPath); db.pragma('journal_mode=WAL'); queue.setupWA(db)
 const log=pino({level:process.env.LOG_LEVEL||'info'}); const sockets=new Map(); const stopping=new Set(); const retryAfter=new Map()
@@ -206,7 +217,20 @@ async function tick(){
     // penyebab notifikasi jadwal terlihat "belum work" padahal scheduler jalan.
     denyut(c.tenant_id, 'online')
     const job=queue.claimNext(db,c.tenant_id); if(!job)return
-    try {const r=await sock.sendMessage(`${job.phone}@s.whatsapp.net`,{text:job.message}); db.prepare("UPDATE wa_queue SET status='sent',sent_at=datetime('now'),message_id=?,last_error=NULL WHERE id=? AND tenant_id=?").run(r.key?.id||null,job.id,c.tenant_id); log.info({tenantId:c.tenant_id,queueId:job.id,status:'sent'},'WA queue message sent')}
+    try {
+      let r
+      try {
+        r = await sock.sendMessage(`${job.phone}@s.whatsapp.net`, isiPesan(job))
+      } catch (errMedia) {
+        // Media gagal (berkas hilang/format ditolak): jangan buang pesan —
+        // kirim teksnya saja supaya penerima tetap mendapat informasi.
+        if (!job.media_path) throw errMedia
+        log.warn({tenantId:c.tenant_id,queueId:job.id,err:String(errMedia.message||errMedia).slice(0,200)},'media gagal, kirim teks saja')
+        r = await sock.sendMessage(`${job.phone}@s.whatsapp.net`, { text: job.message || '' })
+      }
+      db.prepare("UPDATE wa_queue SET status='sent',sent_at=datetime('now'),message_id=?,last_error=NULL WHERE id=? AND tenant_id=?").run(r.key?.id||null,job.id,c.tenant_id)
+      log.info({tenantId:c.tenant_id,queueId:job.id,status:'sent',media:!!job.media_path},'WA queue message sent')
+    }
     catch(e){const msg=String(e.message||e).slice(0,500); db.prepare("UPDATE wa_queue SET status='failed',failed_at=datetime('now'),last_error=?,available_at=datetime('now',printf('+%d minutes',MIN(attempts,5)*2)) WHERE id=? AND tenant_id=?").run(msg,job.id,c.tenant_id); log.error({tenantId:c.tenant_id,queueId:job.id,status:'failed',error:msg},'WA queue message failed')}
   },(e,c)=>{retryAfter.set(c.tenant_id,Date.now()+10000);session(c.tenant_id,'reconnecting',{error:String(e.message||e).slice(0,500)});log.error({tenantId:c.tenant_id,err:e.message},'WA tenant tick failed')})
 }

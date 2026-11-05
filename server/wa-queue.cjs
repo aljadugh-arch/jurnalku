@@ -13,6 +13,11 @@ function setupWA(db) {
     CREATE TABLE IF NOT EXISTS wa_sessions(tenant_id TEXT PRIMARY KEY,status TEXT NOT NULL DEFAULT 'disconnected',qr TEXT,last_error TEXT,phone TEXT,requested_action TEXT,updated_at TEXT NOT NULL DEFAULT (datetime('now')));
     CREATE TABLE IF NOT EXISTS wa_notif_whitelist(id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL, target_type TEXT NOT NULL, target_id TEXT, phone TEXT, reason TEXT, aktif INTEGER DEFAULT 1, created_at TEXT DEFAULT (datetime('now')))`)
   if(!db.prepare("PRAGMA table_info(wa_sessions)").all().some(c=>c.name==='requested_action')) db.exec('ALTER TABLE wa_sessions ADD COLUMN requested_action TEXT')
+  // Media pada antrean: satu pesan boleh membawa gambar/dokumen. Path disimpan
+  // relatif terhadap MEDIA_ROOT (mis. /uploads/broadcast/xxx.webp).
+  const kolomQueue = db.prepare('PRAGMA table_info(wa_queue)').all().map(c => c.name)
+  if (!kolomQueue.includes('media_path')) db.exec('ALTER TABLE wa_queue ADD COLUMN media_path TEXT')
+  if (!kolomQueue.includes('media_type')) db.exec('ALTER TABLE wa_queue ADD COLUMN media_type TEXT')
 }
 function normalizePhone(value) {
   let p=String(value||'').replace(/\D/g,'')
@@ -24,12 +29,13 @@ function isWhitelisted(db, tenantId, phone, targetType='', targetId='') {
   if(!normalized)return false
   return !!db.prepare(`SELECT id FROM wa_notif_whitelist WHERE tenant_id=? AND aktif=1 AND (phone=? OR (target_type=? AND target_id=?)) LIMIT 1`).get(tenantId, normalized, targetType, targetId)
 }
-function enqueue(db,{tenantId,phone,message,key,targetType='',targetId=''}) {
+function enqueue(db,{tenantId,phone,message,key,targetType='',targetId='',mediaPath='',mediaType=''}) {
   const normalized=normalizePhone(phone)
   if(isWhitelisted(db, tenantId, normalized, targetType, targetId)) return {queued:false,reason:'whitelisted'}
-  if(!tenantId||!normalized||!String(message||'').trim()) return {queued:false,reason:'invalid'}
+  // Pesan boleh kosong bila ada media: keterangan (caption) opsional.
+  if(!tenantId||!normalized||(!String(message||'').trim()&&!mediaPath)) return {queued:false,reason:'invalid'}
   const id=crypto.randomUUID()
-  const r=db.prepare(`INSERT OR IGNORE INTO wa_queue(id,tenant_id,phone,message,idempotency_key) VALUES(?,?,?,?,?)`).run(id,tenantId,normalized,String(message),key||id)
+  const r=db.prepare(`INSERT OR IGNORE INTO wa_queue(id,tenant_id,phone,message,idempotency_key,media_path,media_type) VALUES(?,?,?,?,?,?,?)`).run(id,tenantId,normalized,String(message||''),key||id,mediaPath||null,mediaType||null)
   return {queued:r.changes===1,id:r.changes?id:db.prepare('SELECT id FROM wa_queue WHERE tenant_id=? AND idempotency_key=?').get(tenantId,key)?.id,reason:r.changes?'queued':'duplicate'}
 }
 function claimNext(db,tenantId) {
