@@ -397,6 +397,62 @@ function penerimaAdzan(db, tenantId, conf) {
  * Waktu diambil dari koordinat lembaga (Pengaturan) lewat jadwalSholatTenant —
  * sumber yang sama dengan kartu Jadwal Sholat, sehingga keduanya tidak berbeda.
  */
+// Pengingat agenda pribadi. Agenda punya jam dan (opsional) berapa menit
+// sebelum jam itu pengingat dikirim. Tick berjalan tiap menit; pengingat
+// dikirim bila waktu sekarang sudah melewati target tetapi belum lewat 5 menit,
+// sehingga satu kali terlewat (mis. worker restart) masih tertangkap.
+//
+// Agenda lembaga sengaja TIDAK dikirim lewat WA: satu agenda dibagikan ke semua
+// pengguna, dan mengirimnya ke semua orang adalah spam. Agenda lembaga tetap
+// tampil di dasbor masing-masing.
+function queueAgendaReminders(db, { tenantId, date, time }) {
+  const out = { queued: 0, skipped: 0, missing: 0 }
+  if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(String(date))) return { ...out, reason: 'invalid_date' }
+  if (!time || !/^\d{2}:\d{2}$/.test(String(time))) return { ...out, reason: 'invalid_time' }
+  const conf = db.prepare('SELECT * FROM notif_settings WHERE tenant_id=?').get(tenantId)
+  if (!conf?.notif_agenda) return { ...out, reason: 'disabled' }
+
+  const keMenit = (t) => {
+    const [h, m] = String(t || '00:00').slice(0, 5).split(':').map(Number)
+    return (h * 60 + m) || 0
+  }
+  const kini = keMenit(time)
+  const sekolah = getTenantSettings(db, tenantId, 'nama_lembaga')
+
+  // Nomor tujuan diambil dari data yang memang ada: GTK untuk guru/staf,
+  // siswa untuk akun siswa, dan wali (lewat siswa_id) untuk akun wali murid.
+  const baris = db.prepare(`SELECT a.id, a.user_id, a.judul, a.catatan, a.jam, a.pengingat_menit,
+      u.nama, u.role, u.gtk_id, u.siswa_id,
+      COALESCE(g.no_hp, s.no_hp) AS no_hp
+    FROM agenda_pribadi a
+    JOIN users u ON u.id = a.user_id AND u.tenant_id = a.tenant_id
+    LEFT JOIN gtk g ON g.id = u.gtk_id AND g.tenant_id = a.tenant_id
+    LEFT JOIN siswa s ON s.id = u.siswa_id AND s.tenant_id = a.tenant_id
+    WHERE a.tenant_id=? AND a.tanggal=? AND COALESCE(a.selesai,0)=0 AND a.jam IS NOT NULL
+      AND a.jam <> ''`).all(tenantId, date)
+
+  for (const a of baris) {
+    const target = keMenit(a.jam) - Math.max(0, Number(a.pengingat_menit) || 0)
+    if (kini < target) { out.skipped++; continue }
+    if (kini - target > 5) { out.skipped++; continue }
+    if (!normalizePhone(a.no_hp)) { out.missing++; continue }
+    const pesan = render(conf.template_agenda, {
+      nama: a.nama || 'Bapak/Ibu',
+      judul: a.judul,
+      jam: String(a.jam).slice(0, 5),
+      catatan: a.catatan || '',
+      tanggal: date,
+      lembaga: sekolah?.nama_lembaga || 'Sekolah',
+    })
+    const r = enqueue(db, {
+      tenantId, phone: a.no_hp, message: pesan,
+      key: `agenda:${a.id}:${date}`, targetType: 'user', targetId: a.user_id,
+    })
+    if (r.queued) out.queued++
+    else out.skipped++
+  }
+  return out
+}
 function queueAdzanReminders(db, { tenantId, date, time, force = false, paksaWaktu = '' }) {
   const out = { queued: 0, skipped: 0, missing: 0 }
   if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(String(date))) return { ...out, reason: 'invalid_date' }
@@ -453,4 +509,4 @@ function queueAdzanReminders(db, { tenantId, date, time, force = false, paksaWak
   return out
 }
 
-module.exports={setupWA,normalizePhone,enqueue,claimNext,render,honorificTeacherName,queueWaliAttendance,queueDueTeachers,queueAbsensiMapelBelum,queueDueSchedules,queueDueExamSchedules,queueDueEkskul,queueFinanceReports,queueAdzanReminders,penerimaAdzan,isWhitelisted,shouldSuppress}
+module.exports={setupWA,normalizePhone,enqueue,claimNext,render,honorificTeacherName,queueWaliAttendance,queueDueTeachers,queueAbsensiMapelBelum,queueDueSchedules,queueDueExamSchedules,queueDueEkskul,queueFinanceReports,queueAdzanReminders,queueAgendaReminders,penerimaAdzan,isWhitelisted,shouldSuppress}

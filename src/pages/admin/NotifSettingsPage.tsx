@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { Link } from 'react-router-dom'
-import { Bell, BellRing, MessageSquare, Save, Loader2, AlertTriangle, Volume2, Square, Clock, Smartphone, BookOpen } from 'lucide-react'
+import { Bell, BellRing, MessageSquare, Save, Loader2, AlertTriangle, Volume2, Square, Clock, Smartphone, BookOpen, CalendarClock } from 'lucide-react'
 import toast from 'react-hot-toast'
 import api from '../../services/api'
 import { useTerminologi } from '../../lib/terminologi'
@@ -22,6 +22,8 @@ export default function NotifSettingsPage() {
     notif_ekskul_guru: false,
     template_ekskul_guru: '',
     notif_cs_bot: false,
+    notif_agenda: false,
+    template_agenda: '',
     notif_absensi_mapel_belum: false,
     template_absensi_mapel_belum: '',
     notif_keuangan_wali: false,
@@ -69,6 +71,8 @@ export default function NotifSettingsPage() {
         notif_ekskul_guru: !!d.notif_ekskul_guru,
         template_ekskul_guru: d.template_ekskul_guru || '',
         notif_cs_bot: !!d.notif_cs_bot,
+        notif_agenda: !!d.notif_agenda,
+        template_agenda: d.template_agenda || '',
         notif_absensi_mapel_belum: !!d.notif_absensi_mapel_belum,
         template_absensi_mapel_belum: d.template_absensi_mapel_belum || '',
         notif_keuangan_wali: !!d.notif_keuangan_wali,
@@ -271,6 +275,44 @@ export default function NotifSettingsPage() {
               placeholder="Gunakan variable: {nama_ortu}, {nama}, {status}, {tanggal}, {lembaga}"
             />
             <p className="text-xs text-gray-400 mt-1">Variable: {'{nama_ortu}'}, {'{nama}'}, {'{status}'}, {'{tanggal}'}, {'{lembaga}'}</p>
+          </div>
+        </div>
+
+        {/* Pengingat agenda pribadi */}
+        <div className="bg-white rounded-xl p-4 sm:p-6 shadow-sm border border-gray-100">
+          <div className="flex items-start justify-between gap-3 mb-4">
+            <div className="flex min-w-0 items-center gap-3">
+              <div className="w-10 h-10 shrink-0 bg-indigo-100 rounded-lg flex items-center justify-center">
+                <CalendarClock size={20} className="text-indigo-600" />
+              </div>
+              <div className="min-w-0">
+                <h3 className="font-semibold text-gray-800">Pengingat Agenda</h3>
+                <p className="break-words text-xs text-gray-500 mt-0.5">WA ke pengguna saat jam agenda pribadinya tiba</p>
+              </div>
+            </div>
+            <Toggle
+              checked={settings.notif_agenda}
+              onChange={next => setSettings({ ...settings, notif_agenda: next })}
+              label="Pengingat Agenda"
+              toneClassName="bg-green-600"
+            />
+          </div>
+          <div className="mt-4 space-y-3">
+            <div>
+              <label className="block text-xs font-medium text-gray-500 mb-1">Template Pesan</label>
+              <textarea
+                value={settings.template_agenda}
+                onChange={e => setSettings({ ...settings, template_agenda: e.target.value })}
+                rows={3}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                placeholder="Pengingat: {judul} pukul {jam}..."
+              />
+              <p className="text-xs text-gray-400 mt-1">Variabel: {`{nama} {judul} {jam} {catatan} {tanggal} {lembaga}`}</p>
+            </div>
+            <p className="text-xs text-gray-400">
+              Dikirim ke nomor HP pemilik agenda (GTK/siswa) pada jam agenda, atau lebih awal bila ia mengisi
+              "ingatkan sebelum". Agenda yang dibagikan admin ke seluruh lembaga tidak dikirim lewat WA.
+            </p>
           </div>
         </div>
 

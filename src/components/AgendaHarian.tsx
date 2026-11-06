@@ -61,7 +61,7 @@ export default function AgendaHarian({ ringkas = false }: { ringkas?: boolean })
   const [memuat, setMemuat] = useState(true)
   const [buka, setBuka] = useState(false)
   const [simpan, setSimpan] = useState(false)
-  const [form, setForm] = useState({ judul: '', catatan: '', jam: '', prioritas: 'normal', bersama: false })
+  const [form, setForm] = useState({ judul: '', catatan: '', jam: '', prioritas: 'normal', bersama: false, ingatkan: '0' })
 
   const muat = async (target = tgl) => {
     setMemuat(true)
@@ -92,9 +92,10 @@ export default function AgendaHarian({ ringkas = false }: { ringkas?: boolean })
         await api.post('/agenda', {
           tanggal: tgl, jam: form.jam || null, judul: form.judul.trim(),
           catatan: form.catatan.trim(), prioritas: form.prioritas,
+          pengingat_menit: Number(form.ingatkan) || 0,
         })
       }
-      setForm({ judul: '', catatan: '', jam: '', prioritas: 'normal', bersama: false })
+      setForm({ judul: '', catatan: '', jam: '', prioritas: 'normal', bersama: false, ingatkan: '0' })
       setBuka(false)
       toast.success('Agenda ditambahkan')
       await muat()
@@ -183,6 +184,19 @@ export default function AgendaHarian({ ringkas = false }: { ringkas?: boolean })
               </select>
             </label>
           </div>
+          {form.jam && (
+            <label className="block text-[10px] font-semibold text-slate-500">
+              Ingatkan lewat WhatsApp
+              <select value={form.ingatkan} onChange={e => setForm({ ...form, ingatkan: e.target.value })}
+                className="mt-1 w-full rounded-lg border border-slate-200 px-2 py-1.5 text-xs dark:border-gray-700 dark:bg-gray-900 dark:text-white">
+                <option value="0">Tepat pada jam agenda</option>
+                <option value="5">5 menit sebelumnya</option>
+                <option value="15">15 menit sebelumnya</option>
+                <option value="30">30 menit sebelumnya</option>
+                <option value="60">1 jam sebelumnya</option>
+              </select>
+            </label>
+          )}
           {bolehBersama && (
             <label className="flex items-center gap-2 text-[11px] text-slate-600 dark:text-gray-300">
               <input type="checkbox" checked={form.bersama} onChange={e => setForm({ ...form, bersama: e.target.checked })} />

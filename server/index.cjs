@@ -8088,6 +8088,9 @@ for (const [name, definition] of [
   ['adzan_suara', 'INTEGER DEFAULT 1'],
   ['adzan_suara_url', "TEXT DEFAULT ''"],
   // Pengingat WA ke guru yang sudah mengajar tetapi belum mengisi absensi mapel.
+  // Pengingat WA untuk agenda pribadi (jam agenda tiba).
+  ['notif_agenda', 'INTEGER DEFAULT 0'],
+  ['template_agenda', "TEXT DEFAULT 'Pengingat: {judul} pukul {jam} tanggal {tanggal}. {catatan} - {lembaga}'"],
   ['notif_absensi_mapel_belum', 'INTEGER DEFAULT 0'],
   ['template_absensi_mapel_belum', "TEXT DEFAULT 'Assalamualaikum {nama_guru}, absensi mapel {mapel} kelas {rombel} pukul {jam_mulai}-{jam_selesai} hari ini belum diisi. Mohon lengkapi agar rekap kehadiran akurat. - {lembaga}'"]
 ]) if (!db.prepare('PRAGMA table_info(notif_settings)').all().some(c => c.name === name)) db.exec(`ALTER TABLE notif_settings ADD COLUMN ${name} ${definition}`)
@@ -8126,7 +8129,7 @@ app.put('/api/notif-settings', ADMIN, (req, res) => {
   // Pastikan baris pengaturan ada. UPDATE tanpa baris tidak melakukan apa pun,
   // sehingga admin melihat "tersimpan" padahal tidak ada yang berubah.
   db.prepare('INSERT OR IGNORE INTO notif_settings (id, tenant_id) VALUES (?,?)').run('main_' + req.tenantId, req.tenantId)
-  const { absensi_siswa_ke_wali, guru_belum_ceklok, batas_ceklok_guru, template_absensi_wali, template_guru_ceklok, notif_jadwal_guru, template_jadwal_guru, notif_ujian_guru, template_ujian_guru, notif_ekskul_guru, template_ekskul_guru, notif_cs_bot, notif_keuangan_wali, keuangan_frekuensi, keuangan_hari, keuangan_jam, template_keuangan_wali, notif_adzan, adzan_wa, adzan_waktu, adzan_menit_awal, adzan_target, template_adzan, adzan_suara, adzan_suara_url, notif_absensi_mapel_belum, template_absensi_mapel_belum } = req.body
+  const { absensi_siswa_ke_wali, guru_belum_ceklok, batas_ceklok_guru, template_absensi_wali, template_guru_ceklok, notif_jadwal_guru, template_jadwal_guru, notif_ujian_guru, template_ujian_guru, notif_ekskul_guru, template_ekskul_guru, notif_cs_bot, notif_keuangan_wali, keuangan_frekuensi, keuangan_hari, keuangan_jam, template_keuangan_wali, notif_adzan, adzan_wa, adzan_waktu, adzan_menit_awal, adzan_target, template_adzan, adzan_suara, adzan_suara_url, notif_absensi_mapel_belum, template_absensi_mapel_belum, notif_agenda, template_agenda } = req.body
   // Dua kanal adzan berdiri sendiri: WA (adzan_wa) dan suara aplikasi (adzan_suara).
   // Klien lama belum mengirim `adzan_wa` dan hanya punya satu sakelar `notif_adzan`;
   // bila field baru absen, perilaku lamanya dipetakan (notif_adzan → kedua kanal).
@@ -8143,8 +8146,8 @@ app.put('/api/notif-settings', ADMIN, (req, res) => {
   const waktuAdzan = (daftarAdzan.length ? [...new Set(daftarAdzan)] : WAKTU_SAH).join(',')
   const menitAwalAdzan = Math.max(0, Math.min(120, Number(adzan_menit_awal) || 0))
   const targetAdzan = ['gtk', 'admin'].includes(String(adzan_target || '').toLowerCase()) ? String(adzan_target).toLowerCase() : 'gtk'
-  db.prepare("UPDATE notif_settings SET absensi_siswa_ke_wali=?, guru_belum_ceklok=?, batas_ceklok_guru=?, template_absensi_wali=?, template_guru_ceklok=?, notif_jadwal_guru=?, template_jadwal_guru=?, notif_ujian_guru=?, template_ujian_guru=?, notif_ekskul_guru=?, template_ekskul_guru=?, notif_cs_bot=?, notif_keuangan_wali=?, keuangan_frekuensi=?, keuangan_hari=?, keuangan_jam=?, template_keuangan_wali=?, notif_adzan=?, adzan_wa=?, adzan_waktu=?, adzan_menit_awal=?, adzan_target=?, template_adzan=?, adzan_suara=?, adzan_suara_url=?, notif_absensi_mapel_belum=?, template_absensi_mapel_belum=? WHERE tenant_id=?")
-    .run(absensi_siswa_ke_wali ? 1 : 0, guru_belum_ceklok ? 1 : 0, batas_ceklok_guru || '07:30', template_absensi_wali || '', template_guru_ceklok || '', notif_jadwal_guru ? 1 : 0, template_jadwal_guru || '', notif_ujian_guru ? 1 : 0, template_ujian_guru || '', notif_ekskul_guru ? 1 : 0, template_ekskul_guru || '', notif_cs_bot ? 1 : 0, notif_keuangan_wali ? 1 : 0, keuangan_frekuensi || 'bulanan', keuangan_hari || '', keuangan_jam || '08:00', template_keuangan_wali || '', notifAdzanTurunan, adzanWaBaru ? 1 : 0, waktuAdzan, menitAwalAdzan, targetAdzan, template_adzan || '', adzanSuaraBaru ? 1 : 0, String(adzan_suara_url || '').trim(), notif_absensi_mapel_belum ? 1 : 0, template_absensi_mapel_belum || '', req.tenantId)
+  db.prepare("UPDATE notif_settings SET absensi_siswa_ke_wali=?, guru_belum_ceklok=?, batas_ceklok_guru=?, template_absensi_wali=?, template_guru_ceklok=?, notif_jadwal_guru=?, template_jadwal_guru=?, notif_ujian_guru=?, template_ujian_guru=?, notif_ekskul_guru=?, template_ekskul_guru=?, notif_cs_bot=?, notif_keuangan_wali=?, keuangan_frekuensi=?, keuangan_hari=?, keuangan_jam=?, template_keuangan_wali=?, notif_adzan=?, adzan_wa=?, adzan_waktu=?, adzan_menit_awal=?, adzan_target=?, template_adzan=?, adzan_suara=?, adzan_suara_url=?, notif_absensi_mapel_belum=?, template_absensi_mapel_belum=?, notif_agenda=?, template_agenda=? WHERE tenant_id=?")
+    .run(absensi_siswa_ke_wali ? 1 : 0, guru_belum_ceklok ? 1 : 0, batas_ceklok_guru || '07:30', template_absensi_wali || '', template_guru_ceklok || '', notif_jadwal_guru ? 1 : 0, template_jadwal_guru || '', notif_ujian_guru ? 1 : 0, template_ujian_guru || '', notif_ekskul_guru ? 1 : 0, template_ekskul_guru || '', notif_cs_bot ? 1 : 0, notif_keuangan_wali ? 1 : 0, keuangan_frekuensi || 'bulanan', keuangan_hari || '', keuangan_jam || '08:00', template_keuangan_wali || '', notifAdzanTurunan, adzanWaBaru ? 1 : 0, waktuAdzan, menitAwalAdzan, targetAdzan, template_adzan || '', adzanSuaraBaru ? 1 : 0, String(adzan_suara_url || '').trim(), notif_absensi_mapel_belum ? 1 : 0, template_absensi_mapel_belum || '', notif_agenda ? 1 : 0, template_agenda || '', req.tenantId)
   res.json({ success: true })
 })
 
