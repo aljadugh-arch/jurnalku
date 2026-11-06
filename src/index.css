@@ -2,6 +2,17 @@
 
 @custom-variant dark (&:where(.dark, .dark *));
 
+/* ============================================================================
+   PALET HANGAT (warm neutral).
+   Seluruh aplikasi memakai kelas `slate`/`gray` dari Tailwind. Alih-alih
+   menyentuh ratusan komponen satu per satu, skala warna di bawah ditimpa di
+   level token: `bg-slate-50`, `text-slate-500`, `border-slate-200`, dan
+   seterusnya otomatis menjadi abu-abu hangat (tidak kebiruan) di SEMUA halaman.
+   Tidak ada logika yang berubah — hanya warna.
+
+   Nilai diambil dari referensi desain yang diminta:
+     latar   #F7F7F6   ·   garis #EAEAE7   ·   teks redup #71716C
+   ============================================================================ */
 @theme {
   --color-primary: #1e40af;
   --color-primary-light: #3b82f6;
@@ -15,16 +26,54 @@
   --color-danger: #dc2626;
   --color-warning: #f97316;
   --color-success: #16a34a;
-  --color-sidebar: #1e293b;
-  --color-sidebar-hover: #334155;
-  --color-sidebar-active: #0f172a;
+
+  /* Sidebar: cokelat-arang hangat, bukan biru-tinta. */
+  --color-sidebar: #1c1a17;
+  --color-sidebar-hover: #2c2926;
+  --color-sidebar-active: #14120f;
+
   --font-sans: 'Inter', sans-serif;
   --font-display: 'Outfit', sans-serif;
+
+  /* --- skala netral hangat: menimpa slate & gray bawaan Tailwind --- */
+  --color-slate-50:  #faf9f7;
+  --color-slate-100: #f5f4f1;
+  --color-slate-200: #eae8e3;
+  --color-slate-300: #dcd9d2;
+  --color-slate-400: #a8a49b;
+  --color-slate-500: #7c7870;
+  --color-slate-600: #5d5952;
+  --color-slate-700: #45413a;
+  --color-slate-800: #2d2a25;
+  --color-slate-900: #1d1b17;
+  --color-slate-950: #12100d;
+
+  --color-gray-50:  #faf9f7;
+  --color-gray-100: #f5f4f1;
+  --color-gray-200: #eae8e3;
+  --color-gray-300: #dcd9d2;
+  --color-gray-400: #a8a49b;
+  --color-gray-500: #7c7870;
+  --color-gray-600: #5d5952;
+  --color-gray-700: #45413a;
+  --color-gray-800: #2d2a25;
+  --color-gray-900: #1d1b17;
+  --color-gray-950: #12100d;
+
+  /* --- radius lebih besar: kartu dan tombol terasa lebih lembut --- */
+  --radius-sm: 0.375rem;
+  --radius-md: 0.625rem;
+  --radius-lg: 0.875rem;
+  --radius-xl: 1rem;
+  --radius-2xl: 1.25rem;
+  --radius-3xl: 1.75rem;
+  --radius-4xl: 2.25rem;
 }
 
 body {
   font-family: var(--font-sans);
-  background-color: #f1f5f9;
+  /* Latar hangat, bukan abu kebiruan. */
+  background-color: #f7f6f4;
 }
 
 html, body {
@@ -54,39 +103,39 @@ aside nav::-webkit-scrollbar-thumb {
 
 @layer base {
   html { color-scheme: light; }
-  .dark body { color:#e2e8f0; background-color:#0f172a; }
-  .dark #root, .dark main { background-color:#0f172a; color:#e2e8f0; }
-  .dark .bg-white { background-color:#1e293b !important; }
-  .dark .bg-gray-50 { background-color:#0f172a !important; }
-  .dark .bg-gray-100 { background-color:#1e293b !important; }
-  .dark .text-gray-900 { color:#f8fafc !important; }
-  .dark .text-gray-800 { color:#f1f5f9 !important; }
-  .dark .text-gray-700 { color:#e2e8f0 !important; }
-  .dark .text-gray-600, .dark .text-gray-500 { color:#cbd5e1 !important; }
-  .dark .text-gray-400 { color:#94a3b8 !important; }
-  .dark .text-slate-900, .dark .text-slate-800 { color:#f1f5f9 !important; }
-  .dark .text-slate-700 { color:#e2e8f0 !important; }
-  .dark .text-slate-600, .dark .text-slate-500 { color:#cbd5e1 !important; }
-  .dark .text-slate-400 { color:#94a3b8 !important; }
+  .dark body { color:#eae8e3; background-color:#12100d; }
+  .dark #root, .dark main { background-color:#12100d; color:#eae8e3; }
+  .dark .bg-white { background-color:#1c1a17 !important; }
+  .dark .bg-gray-50 { background-color:#12100d !important; }
+  .dark .bg-gray-100 { background-color:#1c1a17 !important; }
+  .dark .text-gray-900 { color:#faf9f7 !important; }
+  .dark .text-gray-800 { color:#f5f4f1 !important; }
+  .dark .text-gray-700 { color:#eae8e3 !important; }
+  .dark .text-gray-600, .dark .text-gray-500 { color:#dcd9d2 !important; }
+  .dark .text-gray-400 { color:#a8a49b !important; }
+  .dark .text-slate-900, .dark .text-slate-800 { color:#f5f4f1 !important; }
+  .dark .text-slate-700 { color:#eae8e3 !important; }
+  .dark .text-slate-600, .dark .text-slate-500 { color:#dcd9d2 !important; }
+  .dark .text-slate-400 { color:#a8a49b !important; }
 
-  .dark .border-gray-50, .dark .border-gray-100, .dark .border-gray-200 { border-color:#334155 !important; }
-  .dark .border-gray-300 { border-color:#475569 !important; }
-  .dark input, .dark select, .dark textarea { color:#e2e8f0 !important; background-color:#1e293b !important; border-color:#475569 !important; }
-  .dark input::placeholder, .dark textarea::placeholder { color:#64748b !important; }
-  .dark .bg-gray-50 th { background-color:#1e293b !important; }
-  .dark .bg-blue-50, .dark .bg-green-50, .dark .bg-red-50, .dark .bg-amber-50, .dark .bg-yellow-50, .dark .bg-purple-50 { background-color:#243244 !important; }
-  .dark .bg-slate-50 { background-color:#1e293b !important; }
-  .dark .hover\:bg-gray-50:hover { background-color:#334155 !important; }
-  .dark .hover\:bg-gray-100:hover { background-color:#334155 !important; }
+  .dark .border-gray-50, .dark .border-gray-100, .dark .border-gray-200 { border-color:#2d2a25 !important; }
+  .dark .border-gray-300 { border-color:#45413a !important; }
+  .dark input, .dark select, .dark textarea { color:#eae8e3 !important; background-color:#1c1a17 !important; border-color:#45413a !important; }
+  .dark input::placeholder, .dark textarea::placeholder { color:#8c877e !important; }
+  .dark .bg-gray-50 th { background-color:#1c1a17 !important; }
+  .dark .bg-blue-50, .dark .bg-green-50, .dark .bg-red-50, .dark .bg-amber-50, .dark .bg-yellow-50, .dark .bg-purple-50 { background-color:#2a2620 !important; }
+  .dark .bg-slate-50 { background-color:#1c1a17 !important; }
+  .dark .hover\:bg-gray-50:hover { background-color:#2d2a25 !important; }
+  .dark .hover\:bg-gray-100:hover { background-color:#2d2a25 !important; }
   .dark .text-blue-600, .dark .text-blue-700 { color:#93c5fd !important; }
   .dark .text-red-600, .dark .text-red-700 { color:#fca5a5 !important; }
   .dark .text-green-600, .dark .text-green-700 { color:#86efac !important; }
   .dark .text-amber-600, .dark .text-amber-700 { color:#fcd34d !important; }
-  .dark .border-blue-200, .dark .border-gray-300 { border-color:#475569 !important; }
-  .dark .divide-gray-100 > :not([hidden]) ~ :not([hidden]) { border-color:#334155 !important; }
-  .dark aside, .dark aside nav { background:#1e293b !important; }
-  .dark aside .text-white, .dark aside .text-gray-300, .dark aside .text-gray-400 { color:#e2e8f0 !important; }
-  .dark aside .bg-sidebar-active { background:#0f172a !important; }
+  .dark .border-blue-200, .dark .border-gray-300 { border-color:#45413a !important; }
+  .dark .divide-gray-100 > :not([hidden]) ~ :not([hidden]) { border-color:#2d2a25 !important; }
+  .dark aside, .dark aside nav { background:#1c1a17 !important; }
+  .dark aside .text-white, .dark aside .text-gray-300, .dark aside .text-gray-400 { color:#eae8e3 !important; }
+  .dark aside .bg-sidebar-active { background:#12100d !important; }
 }
 
 /* Class utilitas legacy dipakai di beberapa halaman (RaporPage, AbsensiJamaahPage, dst) — */
@@ -94,11 +143,11 @@ aside nav::-webkit-scrollbar-thumb {
 @layer components {
   .card {
     background-color: #fff;
-    border-radius: 0.75rem;
+    border-radius: var(--radius-2xl);
     box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.05);
-    border: 1px solid #f3f4f6;
+    border: 1px solid var(--color-slate-200);
   }
-  .dark .card { background-color: #1e293b; border-color: #334155; }
+  .dark .card { background-color: var(--color-slate-900); border-color: var(--color-slate-800); }
 
   .input {
     display: block;
@@ -115,7 +164,7 @@ aside nav::-webkit-scrollbar-thumb {
     box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-primary) 20%, transparent);
     border-color: var(--color-primary);
   }
-  .dark .input { background-color: #1e293b; border-color: #475569; color: #e2e8f0; }
+  .dark .input { background-color: var(--color-slate-900); border-color: var(--color-slate-800); color: var(--color-slate-100); }
 
   .btn-primary {
     display: inline-flex;
@@ -150,8 +199,8 @@ aside nav::-webkit-scrollbar-thumb {
   }
   .btn-secondary:hover { background-color: #f9fafb; }
   .btn-secondary:disabled { opacity: 0.5; cursor: not-allowed; }
-  .dark .btn-secondary { background-color: #1e293b; border-color: #475569; color: #e2e8f0; }
-  .dark .btn-secondary:hover { background-color: #334155; }
+  .dark .btn-secondary { background-color: var(--color-slate-900); border-color: var(--color-slate-800); color: var(--color-slate-100); }
+  .dark .btn-secondary:hover { background-color: var(--color-slate-800); }
 }
 
 /* Gambar/video pada posting dirender INLINE dari HTML konten (RichEditor
