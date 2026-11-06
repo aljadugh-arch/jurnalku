@@ -9,6 +9,7 @@ import { getCurrentPosition } from '../../lib/geo'
 import MobileDashboardHeader from '../../components/MobileDashboardHeader'
 import JadwalSholatCard from '../../components/JadwalSholatCard'
 import ScanQrKelasModal from '../../components/ScanQrKelasModal'
+import AgendaHarian from '../../components/AgendaHarian'
 
 /* ─── helpers ─── */
 function nowMinutes() {
@@ -146,6 +147,8 @@ export default function MobileGuruDashboard() {
       </div>
 
       <div data-mobile-compact-dashboard="true" className="space-y-3 px-4 pt-3">
+        <AgendaHarian ringkas />
+
         {/* ── DUA GRID UTAMA: Ceklok Kehadiran & Jadwal Mengajar ── */}
         <div data-guru-main-grid="true" className="grid grid-cols-2 gap-3">
           <button

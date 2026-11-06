@@ -10,6 +10,7 @@ import { todayWib } from '../../lib/dateFormat'
 import MobileDashboardHeader from '../../components/MobileDashboardHeader'
 import JadwalSholatCard from '../../components/JadwalSholatCard'
 import MonthFilter, { labelBulan } from '../../components/MonthFilter'
+import AgendaHarian from '../../components/AgendaHarian'
 
 type BendaharaData = {
   tagihan_belum?: { jumlah?: number; nominal?: number }
@@ -62,6 +63,7 @@ export default function MobileBendaharaDashboard({ data, bulan, onUbahBulan }: {
       </div>
 
       <div data-mobile-compact-dashboard="true" className="space-y-3 px-4 pt-3">
+        <AgendaHarian ringkas />
         {/* ── RINGKASAN KEUANGAN (dulu hero bergradasi; kini kartu senada) ── */}
         <section className="rounded-3xl bg-white p-4 shadow-sm dark:bg-gray-900">
           <div className="mb-3 flex flex-wrap items-start justify-between gap-2">

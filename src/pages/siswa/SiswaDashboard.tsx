@@ -6,6 +6,7 @@ import { Card, StatCard, Badge, Avatar } from '../../components/ui'
 import MobileSiswaDashboard from './MobileSiswaDashboard'
 import { useAuthStore } from '../../stores/authStore'
 import { useThemeStore } from '../../stores/themeStore'
+import AgendaHarian from '../../components/AgendaHarian'
 
 function greetingByHour() {
   const h = new Date().getHours()
@@ -74,6 +75,7 @@ export default function SiswaDashboard() {
 
       {/* Desktop view */}
       <div className="hidden lg:block space-y-3">
+        <AgendaHarian ringkas />
       {/* Header + Logout + Darkmode */}
       <div className="flex items-start justify-between">
         <div className="flex flex-col items-start text-left gap-2.5 min-w-0 flex-1">

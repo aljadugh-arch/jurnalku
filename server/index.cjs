@@ -13191,6 +13191,9 @@ require('./auth-security.cjs').daftarkanRouteKeamanan(app, {
 // Metode login per lembaga (sandi / OTP WA / tautan email).
 require('./login-methods.cjs').daftarkanRouteMetodeLogin(app, { db, authMiddleware })
 
+// Agenda pribadi + agenda lembaga: pengingat di dasbor tiap peran.
+require('./agenda.cjs').daftarkanRouteAgenda(app, { db, authMiddleware })
+
 // QR ruang kelas: bukti kehadiran di ruangan (pelengkap/cadangan GPS).
 require('./class-qr.cjs').daftarkanRouteQrKelas(app, {
   db, authMiddleware, TEACHER, JWT_SECRET, todayJakarta, timeJakarta, resolveGtkForUser,

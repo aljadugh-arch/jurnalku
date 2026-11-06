@@ -5,6 +5,7 @@ import api from '../../services/api'
 import MobileBendaharaDashboard from './MobileBendaharaDashboard'
 import RekapKeuanganPanel from './RekapKeuanganPanel'
 import MonthFilter, { bulanSekarang, labelBulan } from '../../components/MonthFilter'
+import AgendaHarian from '../../components/AgendaHarian'
 
 export default function BendaharaDashboard() {
   const navigate = useNavigate()
@@ -46,6 +47,7 @@ export default function BendaharaDashboard() {
       <MobileBendaharaDashboard data={data} bulan={bulan} onUbahBulan={b => { setBulan(b); muat(b) }} />
     </div>
     <div className="hidden space-y-6 pb-24 lg:block lg:pb-6">
+      <AgendaHarian ringkas />
     <div className="rounded-3xl bg-gradient-to-r from-emerald-600 to-teal-500 text-white p-5 sm:p-6 shadow-sm">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>

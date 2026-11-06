@@ -7,6 +7,7 @@ import { getCurrentPosition } from '../../lib/geo'
 import toast from 'react-hot-toast'
 import { Card, StatCard, Badge, Avatar } from '../../components/ui'
 import MobileGuruDashboard from './MobileGuruDashboard'
+import AgendaHarian from '../../components/AgendaHarian'
 
 function greetingByHour() {
   const h = new Date().getHours()
@@ -166,6 +167,8 @@ export default function GuruDashboard() {
           </h1>
         </div>
       </div>
+
+      <AgendaHarian ringkas />
 
       {data.sesi_kelas_aktif ? (
         <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3">

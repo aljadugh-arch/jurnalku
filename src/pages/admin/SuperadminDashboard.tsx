@@ -5,6 +5,7 @@ import api from '../../services/api'
 import { useAuthStore } from '../../stores/authStore'
 import { useThemeStore } from '../../stores/themeStore'
 import MobileMenuGrid from '../../components/MobileMenuGrid'
+import AgendaHarian from '../../components/AgendaHarian'
 
 function StatCard({ label, value, icon, gradient, sub, to }: { label: string; value: number; icon: React.ReactNode; gradient: string; sub?: string; to?: string }) {
   const inner = (
@@ -102,6 +103,7 @@ export default function SuperadminDashboard() {
 
   return (
     <div className="space-y-3">
+      <AgendaHarian ringkas />
       {/* Mobile/tablet header — hanya tampil di bawah lg (desktop pakai DashboardLayout Header).
           JANGAN pakai `-mt-4`: margin negatif menarik header ini menembus padding `main`
           sehingga menutupi judul/kartu di atasnya (bug "header menutupi elemen lain").

@@ -7,6 +7,7 @@ import {
 import api from '../../services/api'
 import { useAuthStore } from '../../stores/authStore'
 import { useThemeStore } from '../../stores/themeStore'
+import AgendaHarian from '../../components/AgendaHarian'
 
 // Dashboard WALI MURID.
 //
@@ -113,6 +114,7 @@ export default function WaliDashboardPage() {
       </header>
 
       <main className="mx-auto max-w-5xl space-y-4 px-4 py-4">
+        <AgendaHarian ringkas />
         {galat && (
           <div className="flex items-start gap-2 rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-800">
             <AlertCircle size={16} className="mt-0.5 shrink-0" /> <span>{galat}</span>

@@ -12,6 +12,7 @@ import { useSettingsStore } from '../../stores/settingsStore'
 import MobileDashboardHeader from '../../components/MobileDashboardHeader'
 import JadwalSholatCard from '../../components/JadwalSholatCard'
 import MobileMenuSheet from '../../components/MobileMenuSheet'
+import AgendaHarian from '../../components/AgendaHarian'
 
 interface Props { stats: any; loading?: boolean }
 
@@ -87,6 +88,8 @@ export default function MobileAdminDashboard({ stats }: Props) {
       </div>
 
       <main data-mobile-compact-dashboard="true" className="space-y-3 px-4 pt-3">
+        <AgendaHarian ringkas />
+
         {/* ── MENU GRID 4x2 (ubin terakhir: Lainnya) ── */}
         <section className="rounded-3xl bg-white p-4 shadow-sm dark:bg-gray-900">
           <h2 className="mb-3 text-sm font-bold text-slate-900 dark:text-white">Menu Layanan</h2>

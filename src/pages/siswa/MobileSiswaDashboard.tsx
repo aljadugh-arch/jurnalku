@@ -21,6 +21,7 @@ import MobileDashboardHeader from '../../components/MobileDashboardHeader'
 import { useSettingsStore } from '../../stores/settingsStore'
 import { useThemeStore } from '../../stores/themeStore'
 import { heroColors } from '../../lib/applyTheme'
+import AgendaHarian from '../../components/AgendaHarian'
 
 // ─── helpers ───────────────────────────────────────────────────────────────────
 
@@ -118,6 +119,8 @@ export default function MobileSiswaDashboard() {
       <div className="px-4 pt-4"><MobileDashboardHeader photo={siswa?.foto || null} /></div>
 
       <div data-mobile-compact-dashboard="true" className="space-y-3 px-4 pt-3">
+
+        <AgendaHarian ringkas />
 
         {/* ─── 1. SAPAAN + PELAJARAN BERIKUTNYA ────────────────────── */}
         <div

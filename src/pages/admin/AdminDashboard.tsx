@@ -11,6 +11,7 @@ import { Link } from 'react-router-dom'
 import MobileMenuGrid from '../../components/MobileMenuGrid'
 import MobileAdminDashboard from './MobileAdminDashboard'
 import { useTerminologi } from '../../lib/terminologi'
+import AgendaHarian from '../../components/AgendaHarian'
 
 const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899']
 
@@ -86,6 +87,7 @@ export default function AdminDashboard() {
 
       <div className="hidden lg:block space-y-3">
         <PageHeader title="Dashboard" subtitle="Ringkasan data sekolah/madrasah hari ini" />
+        <AgendaHarian ringkas />
         <MobileMenuGrid />
 
       {/* Peringatan koneksi Google Drive terputus (rekonsiliasi backup) */}

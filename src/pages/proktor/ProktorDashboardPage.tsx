@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Activity, AlertCircle, CheckCircle2, Clock3, Loader2, RefreshCw, Users } from 'lucide-react'
 import toast from 'react-hot-toast'
 import api from '../../services/api'
+import AgendaHarian from '../../components/AgendaHarian'
 
 type Assignment = {
   id?: string
@@ -166,6 +167,7 @@ export default function ProktorDashboardPage() {
 
   return (
     <div className="space-y-6">
+      <AgendaHarian ringkas />
       <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold text-gray-800 dark:text-gray-100">Monitor Ujian</h1>
