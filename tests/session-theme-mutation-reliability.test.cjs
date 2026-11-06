@@ -83,3 +83,12 @@ test('tombol Masuk mengikuti jendela backend dan memakai tanggal route yang terd
   assert.match(startRoute, /jadwalId, gtk\.id, req\.tenantId, day, examTemplateId/)
   assert.doesNotMatch(startRoute, /todayDate/)
 })
+
+test('logout tidak mengembalikan tema ke terang (pilihan perangkat dipertahankan)', () => {
+  const store = read('src/stores/authStore.ts')
+  const i = store.indexOf('logout: () => {')
+  const logout = store.slice(i, i + 600)
+  assert.doesNotMatch(logout, /clearLocalTheme\(\)/, 'logout tidak boleh menghapus tema eksplisit')
+  assert.match(logout, /localStorage\.removeItem\('jurnalku_settings'\)/, 'pengaturan tenant tetap dibersihkan')
+  assert.match(logout, /localStorage\.removeItem\('jurnalku_token'\)/, 'token tetap dihapus')
+})

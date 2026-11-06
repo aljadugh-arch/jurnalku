@@ -2,7 +2,6 @@ import { create } from 'zustand'
 import type { User } from '../types'
 import api, { bisaDiulang } from '../services/api'
 import { useSettingsStore } from './settingsStore'
-import { clearLocalTheme } from './themeStore'
 
 interface AuthState {
   user: User | null
@@ -209,9 +208,11 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   logout: () => {
     localStorage.removeItem('jurnalku_token')
     sessionStorage.removeItem('jurnalku_token')
-    // Bersihkan preferensi bertenant agar tenant/pengguna sebelumnya tidak
-    // meninggalkan tema atau pengaturannya pada sesi berikutnya.
-    clearLocalTheme()
+    // Jangan sentuh tema eksplisit pengguna (jurnalku_theme). Tema terang/gelap
+    // adalah pilihan perangkat, bukan milik sesi/tenant: pengguna yang memilih
+    // gelap tidak boleh kembali terang hanya karena logout lalu login lagi.
+    // Yang dibersihkan hanyalah pengaturan bertenant (tema lembaga, terminologi,
+    // dsb), supaya akun/lembaga berikutnya tidak mewarisinya.
     localStorage.removeItem('jurnalku_settings')
     localStorage.removeItem(USER_CACHE)
     if (timerAuth) { window.clearTimeout(timerAuth); timerAuth = null }
