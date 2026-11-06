@@ -88,11 +88,13 @@ test('profil lembaga diperkaya data nyata, bukan sekadar identitas', async (t) =
   assert.match(isi, /EducationalOrganization/)
   assert.match(isi, /canonical/)
   assert.match(isi, /Rombongan Belajar/, 'tabel rombel ikut dirender')
-  assert.match(isi, /Wali kelas/)
+  assert.match(isi, /Wali Kelas/, 'kolom wali kelas ikut dirender')
   assert.match(isi, /Guru Pengampu per Mata Pelajaran/)
   assert.match(isi, /Nahwu/)
-  assert.match(isi, /Agenda Terdekat/)
   assert.match(isi, /Ujian Tengah Semester/)
+  // Halaman profil kini memakai tata letak bergaya landing page.
+  assert.match(isi, /class="hero"/)
+  assert.match(isi, /class="angka"/)
 })
 
 test('deskripsi meta menyebut jumlahnya, bukan kalimat generik', () => {

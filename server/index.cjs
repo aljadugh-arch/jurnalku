@@ -305,26 +305,30 @@ function renderProfilLembaga(req, res) {
   const host = hostPermintaan(req)
   const tenantId = req.tenantId || tenantDariHost(host)
   const base = `${skemaPermintaan(req)}://${host}`
-  if (!tenantId) return res.status(404).type('html').send('<!DOCTYPE html><html lang="id"><head><meta charset="utf-8"><title>Lembaga tidak ditemukan</title><meta name="robots" content="noindex"></head><body><p>Lembaga tidak ditemukan.</p><p><a href="/">Beranda</a></p></body></html>')
+  const tidakAda = (pesan) => `<!DOCTYPE html><html lang="id"><head><meta charset="utf-8"><title>Lembaga tidak ditemukan</title><meta name="robots" content="noindex"></head><body style="font-family:system-ui;padding:40px;text-align:center"><p>${pesan}</p><p><a href="/">Beranda</a></p></body></html>`
+  if (!tenantId) return res.status(404).type('html').send(tidakAda('Lembaga tidak ditemukan.'))
   let s = {}, t = null
-  try { s = getTenantSettings(db, tenantId, 'nama_lembaga,jenjang,npsn,nsm,alamat,telepon,email,kepala_sekolah,kota_cetak') || {} } catch { s = {} }
+  try { s = getTenantSettings(db, tenantId, 'nama_lembaga,jenjang,npsn,nsm,alamat,telepon,email,kepala_sekolah,kota_cetak,logo,primary_color') || {} } catch { s = {} }
   try { t = db.prepare('SELECT id FROM tenants WHERE id=?').get(tenantId) } catch { t = null }
-  if (!t) return res.status(404).type('html').send('<!DOCTYPE html><html lang="id"><head><meta charset="utf-8"><title>Lembaga tidak ditemukan</title><meta name="robots" content="noindex"></head><body><p>Lembaga tidak ditemukan.</p><p><a href="/">Beranda</a></p></body></html>')
+  if (!t) return res.status(404).type('html').send(tidakAda('Lembaga tidak ditemukan.'))
+
   const hitung = (sql) => { try { return db.prepare(sql).get(tenantId)?.n || 0 } catch { return 0 } }
-  const nSiswa = hitung("SELECT COUNT(*) n FROM siswa WHERE tenant_id=? AND status='aktif'")
+  const nSiswa = hitung("SELECT COUNT(*) n FROM siswa WHERE tenant_id=? AND COALESCE(status,'aktif')='aktif'")
   const nGtk = hitung("SELECT COUNT(*) n FROM gtk WHERE tenant_id=? AND status='aktif'")
   const nRombel = hitung("SELECT COUNT(*) n FROM rombel WHERE tenant_id=?")
+  const nMapel = hitung("SELECT COUNT(*) n FROM mapel WHERE tenant_id=?")
+
   let ekskul = []
   try { ekskul = db.prepare('SELECT nama FROM ekskul WHERE tenant_id=? ORDER BY nama LIMIT 24').all(tenantId).map(r => r.nama).filter(Boolean) } catch { ekskul = [] }
-  // Konten unik tambahan: mata pelajaran, tahun ajaran aktif, dan berita terbaru.
-  // Ini yang membuat halaman profil punya kata kunci khas, bukan sekadar identitas.
   let mapel = []
   try { mapel = db.prepare('SELECT nama FROM mapel WHERE tenant_id=? ORDER BY nama LIMIT 24').all(tenantId).map(r => r.nama).filter(Boolean) } catch { mapel = [] }
-  // Konten unik berbasis data nyata. Halaman profil sebelumnya hanya berisi
-  // identitas + daftar mapel (~120 kata) sehingga Google menilainya tipis dan
-  // menolak mengindeksnya. Data berikut sudah ada di database dan tidak
-  // mengarang apa pun: rombel beserta jumlah siswa & wali kelas, guru pengampu
-  // per mapel, jadwal pekan ini, serta agenda terdekat.
+  let tahunAktif = ''
+  try { tahunAktif = String(db.prepare('SELECT nama FROM tahun_ajaran WHERE tenant_id=? AND aktif=1 ORDER BY nama DESC LIMIT 1').get(tenantId)?.nama || '') } catch { tahunAktif = '' }
+  let berita = []
+  try {
+    berita = db.prepare(`SELECT id, judul, substr(COALESCE(isi,''),1,160) cuplikan, created_at, media_url, media
+      FROM posting WHERE tenant_id=? ORDER BY created_at DESC LIMIT 6`).all(tenantId)
+  } catch { berita = [] }
   let rombel = []
   try {
     rombel = db.prepare(`SELECT r.nama, r.tingkat,
@@ -334,11 +338,9 @@ function renderProfilLembaga(req, res) {
   } catch { rombel = [] }
   let pengampu = []
   try {
-    pengampu = db.prepare(`SELECT m.nama mapel, COUNT(DISTINCT j.gtk_id) guru, COUNT(*) jtm,
-        GROUP_CONCAT(DISTINCT g.nama) daftar_guru
+    pengampu = db.prepare(`SELECT m.nama mapel, COUNT(DISTINCT j.gtk_id) guru, COUNT(*) jtm
       FROM jadwal j
       JOIN mapel m ON m.id=j.mapel_id AND m.tenant_id=j.tenant_id
-      LEFT JOIN gtk g ON g.id=j.gtk_id AND g.tenant_id=j.tenant_id
       WHERE j.tenant_id=? AND j.mapel_id IS NOT NULL
       GROUP BY m.nama ORDER BY m.nama LIMIT 40`).all(tenantId)
   } catch { pengampu = [] }
@@ -349,13 +351,7 @@ function renderProfilLembaga(req, res) {
     agenda = db.prepare(`SELECT COALESCE(judul,'') nama, tanggal, jenis FROM kalender_kbm
       WHERE tenant_id=? AND tanggal>=? ORDER BY tanggal LIMIT 8`).all(tenantId, todayJakarta())
   } catch { agenda = [] }
-  let tahunAktif = ''
-  try { tahunAktif = String(db.prepare('SELECT nama FROM tahun_ajaran WHERE tenant_id=? AND aktif=1 ORDER BY nama DESC LIMIT 1').get(tenantId)?.nama || '') } catch { tahunAktif = '' }
-  let berita = []
-  try {
-    berita = db.prepare(`SELECT id, judul, substr(COALESCE(isi,''),1,160) cuplikan, created_at
-      FROM posting WHERE tenant_id=? ORDER BY created_at DESC LIMIT 6`).all(tenantId)
-  } catch { berita = [] }
+
   const nama = String(s.nama_lembaga || '').trim() || 'Lembaga'
   const jenjang = String(s.jenjang || '').trim()
   const alamat = String(s.alamat || '').trim()
@@ -363,6 +359,11 @@ function renderProfilLembaga(req, res) {
   const npsn = String(s.npsn || '').trim()
   const nsm = String(s.nsm || '').trim()
   const kota = String(s.kota_cetak || '').trim()
+  const telepon = String(s.telepon || '').trim()
+  const email = String(s.email || '').trim()
+  const logo = String(s.logo || '').trim()
+  const warna = /^#[0-9a-f]{6}$/i.test(String(s.primary_color || '')) ? String(s.primary_color) : '#1e40af'
+
   const judul = `${nama}${jenjang ? ' — ' + jenjang : ''} | Profil Lembaga`
   const deskripsi = `Profil ${nama}${jenjang ? ' (' + jenjang + ')' : ''}${alamat ? ', ' + alamat : ''}. `
     + `${nSiswa} siswa aktif, ${nGtk} guru dan tenaga kependidikan, ${nRombel} rombongan belajar`
@@ -370,31 +371,52 @@ function renderProfilLembaga(req, res) {
     + `${ekskul.length ? `, ${ekskul.length} ekstrakurikuler` : ''}`
     + `${tahunAktif ? `, tahun ajaran ${tahunAktif}` : ''}. `
     + `Data resmi lembaga yang dikelola dengan JURNALKU.`
-  const baris = (label, nilai) => nilai ? `<tr><th>${escHtml(label)}</th><td>${escHtml(nilai)}</td></tr>` : ''
+
+  const esc = escHtml
+  const inisial = nama.split(/\s+/).filter(Boolean).slice(0, 2).map(w => w[0]).join('').toUpperCase() || 'SK'
+  const tanggalIndo = (v) => {
+    const d = String(v || '').slice(0, 10)
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) return d
+    const bulan = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember']
+    return `${Number(d.slice(8, 10))} ${bulan[Number(d.slice(5, 7)) - 1]} ${d.slice(0, 4)}`
+  }
+  const gambarBerita = (b) => {
+    const kandidat = String(b.media_url || b.media || '').trim()
+    return /^https?:\/\//.test(kandidat) ? kandidat : (kandidat.startsWith('/') ? base + kandidat : '')
+  }
+
+  const kartuAngka = [
+    { n: nSiswa, l: 'Siswa aktif' },
+    { n: nGtk, l: 'Guru & tenaga kependidikan' },
+    { n: nRombel, l: 'Rombongan belajar' },
+    { n: nMapel, l: 'Mata pelajaran' },
+  ]
+
   const html = `<!DOCTYPE html>
 <html lang="id"><head><meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>${escHtml(judul)}</title>
-<meta name="description" content="${escHtml(deskripsi)}">
-<link rel="canonical" href="${escHtml(base + '/profil')}">
+<title>${esc(judul)}</title>
+<meta name="description" content="${esc(deskripsi)}">
+<link rel="canonical" href="${esc(base + '/profil')}">
 <meta name="robots" content="index, follow">
 <meta property="og:type" content="website">
-<meta property="og:title" content="${escHtml(judul)}">
-<meta property="og:description" content="${escHtml(deskripsi)}">
-<meta property="og:url" content="${escHtml(base + '/profil')}">
-<meta property="og:site_name" content="${escHtml(nama)}">
-<meta name="twitter:card" content="summary">
+<meta property="og:title" content="${esc(judul)}">
+<meta property="og:description" content="${esc(deskripsi)}">
+<meta property="og:url" content="${esc(base + '/profil')}">
+<meta property="og:site_name" content="${esc(nama)}">
+${logo ? `<meta property="og:image" content="${esc(base + logo)}">` : `<meta property="og:image" content="${esc(base + '/og-image.png')}">`}
+<meta name="twitter:card" content="summary_large_image">
 <script type="application/ld+json">${JSON.stringify({
     '@context': 'https://schema.org',
     '@type': 'EducationalOrganization',
     name: nama,
     url: base + '/',
+    ...(logo ? { logo: base + logo } : {}),
     ...(alamat ? { address: { '@type': 'PostalAddress', streetAddress: alamat, addressCountry: 'ID' } } : {}),
     ...(npsn ? { identifier: { '@type': 'PropertyValue', propertyID: 'NPSN', value: npsn } } : {}),
     ...(kepala ? { employee: { '@type': 'Person', name: kepala, jobTitle: 'Kepala Sekolah' } } : {}),
-    ...(String(s.telepon || '').trim() ? { telephone: String(s.telepon).trim() } : {}),
-    ...(String(s.email || '').trim() ? { email: String(s.email).trim() } : {}),
-    ...(String(s.alamat || '').trim() ? { address: { '@type': 'PostalAddress', streetAddress: String(s.alamat).trim(), addressCountry: 'ID' } } : {}),
+    ...(telepon ? { telephone: telepon } : {}),
+    ...(email ? { email } : {}),
     description: deskripsi,
   })}</script>
 <script type="application/ld+json">${JSON.stringify({
@@ -405,45 +427,292 @@ function renderProfilLembaga(req, res) {
       { '@type': 'ListItem', position: 2, name: 'Profil Lembaga', item: base + '/profil' },
     ],
   })}</script>
-<style>body{font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;max-width:760px;margin:0 auto;padding:24px 20px 64px;line-height:1.65;color:#1e293b}h1{font-size:1.5rem;margin:0 0 4px}.sub{color:#64748b;font-size:.9rem;margin-bottom:24px}table{width:100%;border-collapse:collapse;margin:16px 0}th,td{text-align:left;padding:8px 10px;border-bottom:1px solid #e2e8f0;font-size:.92rem;vertical-align:top}th{width:38%;color:#475569;font-weight:600}.angka{display:flex;gap:10px;flex-wrap:wrap;margin:18px 0}.kartu{flex:1 1 140px;border:1px solid #e2e8f0;border-radius:10px;padding:12px 14px}.kartu b{display:block;font-size:1.4rem;color:#1e40af}.kartu span{font-size:.78rem;color:#64748b}h2{font-size:1.05rem;margin:26px 0 8px}.tag{display:inline-block;background:#eff6ff;color:#1e40af;border-radius:999px;padding:3px 10px;font-size:.8rem;margin:0 6px 6px 0}a{color:#1e40af}</style>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#fbfaf8; --surface:#ffffff; --text:#1f2937; --muted:#6b7280;
+    --border:#e7e4df; --accent:${warna};
+    --accent-soft:color-mix(in srgb, ${warna} 9%, #ffffff);
+    --shadow:0 18px 44px rgba(58,48,40,.08); --shadow-soft:0 10px 30px rgba(58,48,40,.06);
+    --grad:linear-gradient(135deg, ${warna} 0%, color-mix(in srgb, ${warna} 74%, #000000) 100%);
+  }
+  @media (prefers-color-scheme: dark){
+    :root{ --bg:#0b0f19; --surface:#141c2e; --text:#f1f5f9; --muted:#94a3b8;
+      --border:rgba(255,255,255,.11); --accent-soft:color-mix(in srgb, ${warna} 22%, transparent);
+      --shadow:0 20px 50px rgba(0,0,0,.55); --shadow-soft:0 10px 30px rgba(0,0,0,.4); }
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);font-family:'Poppins',system-ui,-apple-system,'Segoe UI',sans-serif;line-height:1.6}
+  a{color:inherit;text-decoration:none}
+  .wrap{max-width:1160px;margin:0 auto;padding:0 20px}
+
+  /* navbar */
+  .nav{position:sticky;top:0;z-index:20;background:color-mix(in srgb, var(--bg) 86%, transparent);backdrop-filter:blur(10px);border-bottom:1px solid var(--border)}
+  .nav-in{max-width:1160px;margin:0 auto;padding:14px 20px;display:flex;align-items:center;justify-content:space-between;gap:16px}
+  .brand{display:flex;align-items:center;gap:10px;font-weight:700;font-size:17px;letter-spacing:-.01em}
+  .brand img{height:36px;width:auto;object-fit:contain;border-radius:8px}
+  .brand .inisial{width:36px;height:36px;border-radius:10px;background:var(--grad);color:#fff;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:800}
+  .nav-links{display:flex;gap:4px}
+  .nav-links a{padding:8px 14px;border-radius:10px;font-size:14px;font-weight:500;color:var(--muted);transition:.15s}
+  .nav-links a:hover{color:var(--text);background:var(--accent-soft)}
+  .nav-links a.active{color:var(--accent);font-weight:600}
+
+  /* hero */
+  .hero{position:relative;overflow:hidden;padding:56px 0 48px;background:
+    radial-gradient(900px 320px at 12% -10%, var(--accent-soft), transparent 70%),
+    radial-gradient(700px 260px at 92% 0%, var(--accent-soft), transparent 65%)}
+  .hero-in{display:grid;grid-template-columns:1.35fr .65fr;gap:36px;align-items:center}
+  .badge{display:inline-flex;align-items:center;gap:7px;padding:7px 14px;border-radius:999px;background:var(--accent-soft);color:var(--accent);font-size:12.5px;font-weight:600}
+  h1{margin:16px 0 10px;font-size:clamp(26px,4vw,42px);line-height:1.15;letter-spacing:-.02em;font-weight:800}
+  .lead{margin:0;color:var(--muted);font-size:15.5px;max-width:60ch}
+  .hero-cta{display:flex;flex-wrap:wrap;gap:12px;margin-top:24px}
+  .btn{display:inline-flex;align-items:center;justify-content:center;gap:9px;min-height:48px;padding:12px 22px;border-radius:12px;border:0;font-family:inherit;font-size:14px;font-weight:700;cursor:pointer;transition:.18s}
+  .btn-primary{background:var(--grad);color:#fff;box-shadow:0 10px 20px color-mix(in srgb, ${warna} 30%, transparent)}
+  .btn-primary:hover{transform:translateY(-1px);box-shadow:0 14px 26px color-mix(in srgb, ${warna} 38%, transparent)}
+  .btn-ghost{background:var(--surface);border:1px solid var(--border);color:var(--text);font-weight:600}
+  .btn-ghost:hover{box-shadow:var(--shadow-soft)}
+  .hero-mark{display:flex;align-items:center;justify-content:center}
+  .hero-mark .kotak{width:100%;max-width:280px;aspect-ratio:1;border-radius:32px;background:var(--grad);display:flex;align-items:center;justify-content:center;box-shadow:var(--shadow);overflow:hidden}
+  .hero-mark .kotak img{width:100%;height:100%;object-fit:cover}
+  .hero-mark .kotak span{font-size:72px;font-weight:800;color:#fff;letter-spacing:-.03em}
+
+  /* kartu angka */
+  .angka{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-top:-28px;position:relative;z-index:2}
+  .angka .k{background:var(--surface);border:1px solid var(--border);border-radius:20px;padding:20px;box-shadow:var(--shadow-soft);text-align:center}
+  .angka .k b{display:block;font-size:32px;line-height:1;font-weight:800;color:var(--accent);letter-spacing:-.02em}
+  .angka .k span{display:block;margin-top:8px;font-size:12px;color:var(--muted)}
+
+  /* seksi */
+  section{padding:56px 0}
+  .seksi-kepala{text-align:center;max-width:680px;margin:0 auto 32px}
+  .eyebrow{color:var(--accent);font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.1em}
+  h2{margin:8px 0 8px;font-size:clamp(21px,2.6vw,29px);font-weight:800;letter-spacing:-.01em}
+  .sub{color:var(--muted);font-size:14.5px;margin:0}
+
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+  .card{background:var(--surface);border:1px solid var(--border);border-radius:22px;padding:24px;box-shadow:var(--shadow-soft)}
+  .card h3{margin:0 0 14px;font-size:16px;font-weight:700}
+  .dl{display:grid;grid-template-columns:auto 1fr;gap:10px 18px;font-size:14px;margin:0}
+  .dl dt{color:var(--muted);font-size:13px}
+  .dl dd{margin:0;font-weight:600}
+  .chip{display:inline-block;padding:6px 13px;border-radius:999px;background:var(--accent-soft);color:var(--accent);font-size:12.5px;font-weight:600;margin:0 7px 7px 0}
+
+  table{width:100%;border-collapse:collapse;font-size:13.5px}
+  th{text-align:left;padding:11px 10px;color:var(--muted);font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.04em;border-bottom:1px solid var(--border)}
+  td{padding:11px 10px;border-bottom:1px solid var(--border)}
+  tr:last-child td{border-bottom:0}
+  .angka-kecil{font-weight:700;color:var(--accent)}
+
+  .berita{display:grid;grid-template-columns:repeat(3,1fr);gap:18px}
+  .berita a.kartu{display:flex;flex-direction:column;overflow:hidden;padding:0;transition:.2s}
+  .berita a.kartu:hover{transform:translateY(-3px);box-shadow:var(--shadow)}
+  .berita .foto{aspect-ratio:16/9;background:var(--accent-soft);display:flex;align-items:center;justify-content:center;color:var(--accent);font-weight:700;font-size:26px}
+  .berita .foto img{width:100%;height:100%;object-fit:cover}
+  .berita .isi{padding:18px 20px 22px}
+  .berita .tgl{font-size:11.5px;color:var(--muted);font-weight:500}
+  .berita h4{margin:6px 0 6px;font-size:14.5px;line-height:1.35;font-weight:700}
+  .berita p{margin:0;font-size:12.5px;color:var(--muted);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+
+  .agenda{display:grid;gap:10px}
+  .agenda .a{display:flex;gap:14px;align-items:flex-start;background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:14px 16px}
+  .agenda .tgl{flex:0 0 62px;text-align:center;background:var(--accent-soft);color:var(--accent);border-radius:12px;padding:8px 4px;font-weight:800;line-height:1.1}
+  .agenda .tgl small{display:block;font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;margin-top:3px}
+  .agenda .nm{font-size:14px;font-weight:600}
+  .agenda .jn{font-size:11.5px;color:var(--muted);text-transform:capitalize}
+
+  .cta{padding:0 0 64px}
+  .cta .kotak{background:var(--grad);border-radius:28px;padding:44px 32px;text-align:center;color:#fff;box-shadow:var(--shadow)}
+  .cta h2{color:#fff;margin:0 0 10px}
+  .cta p{margin:0 auto 22px;max-width:52ch;color:rgba(255,255,255,.88);font-size:14.5px}
+  .cta .btn{background:#fff;color:var(--accent);box-shadow:0 10px 22px rgba(0,0,0,.18)}
+
+  footer{border-top:1px solid var(--border);background:color-mix(in srgb, var(--bg) 80%, #000 4%);padding:28px 20px;text-align:center;color:var(--muted);font-size:13px}
+  footer .links{display:flex;flex-wrap:wrap;gap:18px;justify-content:center;margin-bottom:10px}
+  footer .links a:hover{color:var(--accent)}
+
+  @media(max-width:900px){
+    .hero-in{grid-template-columns:1fr}
+    .hero-mark{order:-1;justify-content:flex-start}
+    .hero-mark .kotak{max-width:130px;border-radius:24px}
+    .hero-mark .kotak span{font-size:40px}
+    .angka{grid-template-columns:repeat(2,1fr)}
+    .grid2{grid-template-columns:1fr}
+    .berita{grid-template-columns:1fr}
+    .nav-links{display:none}
+  }
+</style>
 </head><body>
-<h1>${escHtml(nama)}</h1>
-<div class="sub">${escHtml([jenjang, kota].filter(Boolean).join(' · ') || 'Profil lembaga')}</div>
-<div class="angka">
-  <div class="kartu"><b>${nSiswa}</b><span>Siswa aktif</span></div>
-  <div class="kartu"><b>${nGtk}</b><span>Guru &amp; tenaga kependidikan</span></div>
-  <div class="kartu"><b>${nRombel}</b><span>Rombongan belajar</span></div>
-</div>
-<h2>Identitas Lembaga</h2>
-<table>
-${baris('Nama lembaga', nama)}
-${baris('Jenjang', jenjang)}
-${baris('NPSN', npsn)}
-${baris('NSM', nsm)}
-${baris('Alamat', alamat)}
-${baris('Kepala sekolah', kepala)}
-${baris('Telepon', String(s.telepon || '').trim())}
-${baris('Email', String(s.email || '').trim())}
-</table>
-${mapel.length ? `<h2>Mata Pelajaran</h2><div>${mapel.map(m => `<span class="tag">${escHtml(m)}</span>`).join('')}</div>` : ''}
-${ekskul.length ? `<h2>Ekstrakurikuler</h2><div>${ekskul.map(e => `<span class="tag">${escHtml(e)}</span>`).join('')}</div>` : ''}
-${berita.length ? `<h2>Kegiatan &amp; Berita Terbaru</h2><ul style="padding-left:20px">${berita.map(b => `<li style="margin-bottom:8px"><a href="/posting/${encodeURIComponent(b.id)}">${escHtml(String(b.judul || 'Kegiatan'))}</a><br><span style="font-size:.8rem;color:#64748b">${escHtml(String(b.created_at || '').slice(0, 10))}</span></li>`).join('')}</ul>` : ''}
-${tahunAktif ? `<h2>Tahun Ajaran Aktif</h2><p>${escHtml(tahunAktif)}</p>` : ''}
-${rombel.length ? `<h2>Rombongan Belajar &amp; Wali Kelas</h2>
-<table><tr><th>Kelas</th><th>Jumlah siswa</th><th>Wali kelas</th></tr>
-${rombel.map(r => `<tr><td>${escHtml(String(r.nama || '-'))}</td><td>${Number(r.siswa) || 0}</td><td>${escHtml(String(r.wali || '-'))}</td></tr>`).join('')}
-</table>` : ''}
-${pengampu.length ? `<h2>Guru Pengampu per Mata Pelajaran</h2>
-<table><tr><th>Mata pelajaran</th><th>Guru</th><th>Jam pelajaran/pekan</th></tr>
-${pengampu.map(r => `<tr><td>${escHtml(String(r.mapel || '-'))}</td><td>${Number(r.guru) || 0}</td><td>${Number(r.jtm) || 0}</td></tr>`).join('')}
-</table>
-<p style="font-size:.88rem;color:#475569">Total ${jumlahJadwal} jam pelajaran terjadwal setiap pekan.</p>` : ''}
-${agenda.length ? `<h2>Agenda Terdekat</h2><ul style="padding-left:20px">${agenda.map(a => `<li style="margin-bottom:6px">${escHtml(String(a.tanggal || ''))} — ${escHtml(String(a.nama || ''))}${a.jenis ? ` <span style="font-size:.78rem;color:#64748b">(${escHtml(String(a.jenis))})</span>` : ''}</li>`).join('')}</ul>` : ''}
-<p style="margin-top:32px;font-size:.85rem;color:#64748b">Dikelola dengan JURNALKU — sistem informasi manajemen sekolah dan madrasah.</p>
-<p><a href="/">Kembali ke beranda</a> · <a href="/ppdb">Penerimaan peserta didik baru</a></p>
+
+<nav class="nav"><div class="nav-in">
+  <a class="brand" href="/">
+    ${logo ? `<img src="${esc(logo)}" alt="Logo ${esc(nama)}">` : `<span class="inisial">${esc(inisial)}</span>`}
+    <span>${esc(nama)}</span>
+  </a>
+  <div class="nav-links">
+    <a href="/">Beranda</a>
+    <a class="active" href="/profil">Profil</a>
+    <a href="/panduan">Panduan</a>
+    <a href="/pengumuman">Pengumuman</a>
+    <a href="/ppdb">PPDB</a>
+    <a href="/login">Masuk</a>
+  </div>
+</div></nav>
+
+<header class="hero"><div class="wrap hero-in">
+  <div>
+    <span class="badge">${esc(jenjang || 'Profil Lembaga')}${kota ? ' · ' + esc(kota) : ''}</span>
+    <h1>${esc(nama)}</h1>
+    <p class="lead">${esc(deskripsi)}</p>
+    <div class="hero-cta">
+      <a class="btn btn-primary" href="/ppdb">Daftar PPDB</a>
+      <a class="btn btn-ghost" href="/login">Masuk Aplikasi</a>
+      <a class="btn btn-ghost" href="/panduan">Panduan</a>
+    </div>
+  </div>
+  <div class="hero-mark"><div class="kotak">
+    ${logo ? `<img src="${esc(logo)}" alt="Logo ${esc(nama)}">` : `<span>${esc(inisial)}</span>`}
+  </div></div>
+</div></header>
+
+<div class="wrap"><div class="angka">
+  ${kartuAngka.map(k => `<div class="k"><b>${Number(k.n) || 0}</b><span>${esc(k.l)}</span></div>`).join('\n  ')}
+</div></div>
+
+<section><div class="wrap">
+  <div class="seksi-kepala">
+    <div class="eyebrow">Identitas</div>
+    <h2>Tentang Lembaga</h2>
+    <p class="sub">Data resmi yang dikelola langsung oleh ${esc(nama)}.</p>
+  </div>
+  <div class="grid2">
+    <div class="card">
+      <h3>Identitas Lembaga</h3>
+      <dl class="dl">
+        <dt>Nama</dt><dd>${esc(nama)}</dd>
+        ${jenjang ? `<dt>Jenjang</dt><dd>${esc(jenjang)}</dd>` : ''}
+        ${npsn ? `<dt>NPSN</dt><dd>${esc(npsn)}</dd>` : ''}
+        ${nsm ? `<dt>NSM</dt><dd>${esc(nsm)}</dd>` : ''}
+        ${kepala ? `<dt>Kepala</dt><dd>${esc(kepala)}</dd>` : ''}
+        ${tahunAktif ? `<dt>Tahun ajaran</dt><dd>${esc(tahunAktif)}</dd>` : ''}
+      </dl>
+    </div>
+    <div class="card">
+      <h3>Kontak &amp; Lokasi</h3>
+      <dl class="dl">
+        ${alamat ? `<dt>Alamat</dt><dd>${esc(alamat)}</dd>` : '<dt>Alamat</dt><dd>—</dd>'}
+        ${telepon ? `<dt>Telepon</dt><dd><a href="tel:${esc(telepon)}">${esc(telepon)}</a></dd>` : ''}
+        ${email ? `<dt>Email</dt><dd><a href="mailto:${esc(email)}">${esc(email)}</a></dd>` : ''}
+        ${kota ? `<dt>Kota</dt><dd>${esc(kota)}</dd>` : ''}
+      </dl>
+    </div>
+  </div>
+</div></section>
+
+${(mapel.length || ekskul.length) ? `<section style="background:color-mix(in srgb, var(--bg) 92%, #000 2%)"><div class="wrap">
+  <div class="seksi-kepala">
+    <div class="eyebrow">Kurikulum</div>
+    <h2>Mata Pelajaran &amp; Ekstrakurikuler</h2>
+    <p class="sub">Yang diajarkan dan dikembangkan di ${esc(nama)}.</p>
+  </div>
+  <div class="grid2">
+    ${mapel.length ? `<div class="card"><h3>Mata Pelajaran (${mapel.length})</h3><div>${mapel.map(m => `<span class="chip">${esc(m)}</span>`).join('')}</div></div>` : ''}
+    ${ekskul.length ? `<div class="card"><h3>Ekstrakurikuler (${ekskul.length})</h3><div>${ekskul.map(e => `<span class="chip">${esc(e)}</span>`).join('')}</div></div>` : ''}
+  </div>
+</div></section>` : ''}
+
+${rombel.length ? `<section><div class="wrap">
+  <div class="seksi-kepala">
+    <div class="eyebrow">Kelas</div>
+    <h2>Rombongan Belajar</h2>
+    <p class="sub">Jumlah siswa dan wali kelas tiap rombel pada tahun ajaran ${esc(tahunAktif || 'berjalan')}.</p>
+  </div>
+  <div class="card" style="padding:8px 20px 12px">
+    <table>
+      <thead><tr><th>Kelas</th><th>Siswa</th><th>Wali Kelas</th></tr></thead>
+      <tbody>${rombel.map(r => `<tr><td><strong>${esc(String(r.nama || '-'))}</strong></td><td class="angka-kecil">${Number(r.siswa) || 0}</td><td>${esc(String(r.wali || '—'))}</td></tr>`).join('')}</tbody>
+    </table>
+  </div>
+</div></section>` : ''}
+
+${pengampu.length ? `<section style="background:color-mix(in srgb, var(--bg) 92%, #000 2%)"><div class="wrap">
+  <div class="seksi-kepala">
+    <div class="eyebrow">Tenaga Pengajar</div>
+    <h2>Guru Pengampu per Mata Pelajaran</h2>
+    <p class="sub">${nGtk} guru dan tenaga kependidikan, dengan ${jumlahJadwal} jam pelajaran terjadwal setiap pekan.</p>
+  </div>
+  <div class="card" style="padding:8px 20px 12px">
+    <table>
+      <thead><tr><th>Mata Pelajaran</th><th>Guru</th><th>Jam / pekan</th></tr></thead>
+      <tbody>${pengampu.map(r => `<tr><td><strong>${esc(String(r.mapel || '-'))}</strong></td><td>${Number(r.guru) || 0} orang</td><td class="angka-kecil">${Number(r.jtm) || 0}</td></tr>`).join('')}</tbody>
+    </table>
+  </div>
+</div></section>` : ''}
+
+${berita.length ? `<section><div class="wrap">
+  <div class="seksi-kepala">
+    <div class="eyebrow">Kabar</div>
+    <h2>Kegiatan &amp; Berita Terbaru</h2>
+    <p class="sub">Dokumentasi kegiatan dan pengumuman resmi lembaga.</p>
+  </div>
+  <div class="berita">
+    ${berita.map(b => {
+      const foto = gambarBerita(b)
+      const cuplik = String(b.cuplikan || '').replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim()
+      return `<a class="kartu" href="/posting/${encodeURIComponent(b.id)}">
+      <div class="foto">${foto ? `<img src="${esc(foto)}" alt="${esc(String(b.judul || 'Kegiatan'))}" loading="lazy">` : esc(String(b.judul || 'K').slice(0, 1))}</div>
+      <div class="isi">
+        <div class="tgl">${esc(tanggalIndo(b.created_at))}</div>
+        <h4>${esc(String(b.judul || 'Kegiatan'))}</h4>
+        <p>${esc(cuplik)}</p>
+      </div>
+    </a>`
+    }).join('\n    ')}
+  </div>
+</div></section>` : ''}
+
+${agenda.length ? `<section style="background:color-mix(in srgb, var(--bg) 92%, #000 2%)"><div class="wrap">
+  <div class="seksi-kepala">
+    <div class="eyebrow">Kalender</div>
+    <h2>Agenda Terdekat</h2>
+    <p class="sub">Kegiatan yang akan datang di ${esc(nama)}.</p>
+  </div>
+  <div class="agenda" style="max-width:760px;margin:0 auto">
+    ${agenda.map(a => {
+      const tgl = String(a.tanggal || '').slice(0, 10)
+      const hari = tgl.slice(8, 10) || '—'
+      const bulan = tanggalIndo(tgl).split(' ')[1] || ''
+      return `<div class="a"><div class="tgl">${esc(hari)}<small>${esc(String(bulan).slice(0, 3))}</small></div>
+        <div><div class="nm">${esc(String(a.nama || 'Kegiatan'))}</div>
+        <div class="jn">${esc(String(a.jenis || '').replace(/_/g, ' '))} · ${esc(tanggalIndo(tgl))}</div></div></div>`
+    }).join('\n    ')}
+  </div>
+</div></section>` : ''}
+
+<div class="wrap cta"><div class="kotak">
+  <h2>Bergabung bersama ${esc(nama)}</h2>
+  <p>Pendaftaran peserta didik baru dibuka secara daring. Isi biodata, unggah berkas, dan pantau status penerimaan tanpa perlu datang ke sekolah.</p>
+  <a class="btn" href="/ppdb">Daftar Sekarang</a>
+</div></div>
+
+<footer>
+  <div class="links">
+    <a href="/">Beranda</a>
+    <a href="/profil">Profil</a>
+    <a href="/panduan">Panduan</a>
+    <a href="/pengumuman">Pengumuman</a>
+    <a href="/faq">Tanya Jawab</a>
+    <a href="/ppdb">PPDB</a>
+    <a href="/login">Masuk</a>
+  </div>
+  <div>${esc(nama)}${alamat ? ' · ' + esc(alamat) : ''}</div>
+  <div style="margin-top:6px;font-size:12px">Dikelola dengan JURNALKU — sistem informasi manajemen sekolah dan madrasah.</div>
+</footer>
 </body></html>`
   res.type('html').send(html)
 }
+
 app.get('/profil', (req, res) => renderProfilLembaga(req, res))
 
 // Kirim URL ke IndexNow tanpa menunggu hasil (dipakai hook posting).
