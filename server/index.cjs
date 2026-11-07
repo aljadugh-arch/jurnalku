@@ -84,7 +84,7 @@ const { daftarkanRuteSubstitusi } = require('./substitusi.cjs')
 const { daftarkanRutePayroll } = require('./payroll.cjs')
 const { daftarkanRuteRkas } = require('./rkas.cjs')
 const { daftarkanRuteLms } = require('./lms.cjs')
-const { assertSafeOutboundUrl } = require('./ssrf-guard.cjs')
+const { assertSafeOutboundUrl, safeFetch } = require('./ssrf-guard.cjs')
 const { setupEkskulMembership } = require('./extracurricular-membership.cjs')
 const { countStudents, deleteStudents } = require('./student-data-delete.cjs')
 const { migrateClassSessionScheduleSource } = require('./class-session-schema.cjs')
@@ -10549,6 +10549,68 @@ app.post('/api/posting/upload', STAFF, postingUpload.fields([{ name: 'files', ma
   // `gagal` dikirim apa adanya supaya klien bisa memberi tahu berkas mana yang
   // dilewati, alih-alih diam-diam kehilangan sebagian gambar.
   res.json({ media: saved, gagal })
+})
+
+// Pratinjau tautan: ambil judul/deskripsi/gambar (Open Graph) dari sebuah URL
+// supaya editor bisa menampilkan kartu tautan dengan thumbnail otomatis.
+// Di belakang safeFetch yang menolak alamat privat + membatasi ukuran respons,
+// sehingga tidak bisa dipakai sebagai pemindai SSRF/metadata.
+function ekstrakMetaOpenGraph(html, baseUrl) {
+  const ambil = (regex, kelompok = 1) => {
+    const m = regex.exec(html)
+    return m ? m[kelompok].trim() : ''
+  }
+  // og:image dan og:title adalah prioritas; twitter:image sebagai cadangan.
+  const ogImage = ambil(/<meta[^>]+property=["']og:image(?::secure_url)?["'][^>]+content=["']([^"']+)["']/i)
+    || ambil(/<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:image(?::secure_url)?["']/i)
+    || ambil(/<meta[^>]+name=["']twitter:image(?::src)?["'][^>]+content=["']([^"']+)["']/i)
+    || ambil(/<meta[^>]+content=["']([^"']+)["'][^>]+name=["']twitter:image(?::src)?["']/i)
+  const ogTitle = ambil(/<meta[^>]+property=["']og:title["'][^>]+content=["']([^"']+)["']/i)
+    || ambil(/<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:title["']/i)
+    || ambil(/<title[^>]*>([^<]+)<\/title>/i)
+  const ogDesc = ambil(/<meta[^>]+property=["']og:description["'][^>]+content=["']([^"']+)["']/i)
+    || ambil(/<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:description["']/i)
+    || ambil(/<meta[^>]+name=["']description["'][^>]+content=["']([^"']+)["']/i)
+    || ambil(/<meta[^>]+content=["']([^"']+)["'][^>]+name=["']description["']/i)
+  // URL relatif di dalam meta harus diabsolutkan terhadap asal halaman.
+  const absolutkan = (u) => {
+    if (!u) return ''
+    try { return new URL(u, baseUrl).toString() } catch { return u }
+  }
+  // Decode entitas HTML umum yang sering muncul di dalam atribut content.
+  const decodeEntitas = (s) => s
+    .replace(/&amp;/g, '&').replace(/&quot;/g, '"').replace(/&#39;|&apos;/g, "'")
+    .replace(/&lt;/g, '<').replace(/&gt;/g, '>')
+  return {
+    title: decodeEntitas(ogTitle),
+    description: decodeEntitas(ogDesc).slice(0, 300),
+    image: absolutkan(decodeEntitas(ogImage)),
+    url: baseUrl,
+  }
+}
+
+app.post('/api/posting/link-preview', STAFF, async (req, res) => {
+  const url = String(req.body?.url || '').trim()
+  if (!url) return res.status(400).json({ error: 'URL wajib diisi.' })
+  try {
+    const respons = await safeFetch(url, {
+      method: 'GET',
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (compatible; JurnalkuBot/1.0)',
+        'Accept': 'text/html,application/xhtml+xml',
+      },
+      timeoutMs: 8000,
+      maxBytes: 2 * 1024 * 1024,
+      label: 'URL tautan',
+    })
+    const meta = ekstrakMetaOpenGraph(respons.text || '', url)
+    if (!meta.title && !meta.image) {
+      return res.json({ ok: false, meta: { title: '', description: '', image: '', url }, pesan: 'Tidak ada pratinjau untuk tautan ini.' })
+    }
+    res.json({ ok: true, meta })
+  } catch (error) {
+    res.json({ ok: false, meta: { title: '', description: '', image: '', url }, pesan: error.message || 'Tidak dapat mengambil pratinjau.' })
+  }
 })
 
 app.delete('/api/posting/:id', STAFF, (req, res) => {

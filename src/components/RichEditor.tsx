@@ -22,7 +22,7 @@ import api from '../services/api'
 import toast from 'react-hot-toast'
 import {
   Bold, Italic, Strikethrough, Code, Heading1, Heading2, Heading3,
-  List, ListOrdered, Quote, Image as ImageIcon, Link as LinkIcon,
+  List, ListOrdered, Quote, Link as LinkIcon,
   Undo, Redo, Smile, Camera, MapPin, Hash, Plus,
   CheckSquare, X, Loader2, Superscript as SuperscriptIcon, Subscript as SubscriptIcon, Underline as UnderlineIcon
 } from 'lucide-react'
@@ -40,9 +40,8 @@ export default function RichEditor({ content, onChange, placeholder = 'Tulis pos
   const [showLink, setShowLink] = useState(false)
   const [linkUrl, setLinkUrl] = useState('')
   const [linkText, setLinkText] = useState('')
-  const [showImage, setShowImage] = useState(false)
-  const [imageUrls, setImageUrls] = useState('')
-  const [imageAlt, setImageAlt] = useState('')
+  const [linkPreview, setLinkPreview] = useState<{ title: string; description: string; image: string; url: string } | null>(null)
+  const [linkLoading, setLinkLoading] = useState(false)
   const [showPoll, setShowPoll] = useState(false)
   const [pollOptions, setPollOptions] = useState(['', ''])
   const [showLocation, setShowLocation] = useState(false)
@@ -53,6 +52,7 @@ export default function RichEditor({ content, onChange, placeholder = 'Tulis pos
   const [activityType, setActivityType] = useState('')
   const [charCount, setCharCount] = useState(0)
   const [uploading, setUploading] = useState(false)
+  const [dragging, setDragging] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const editor = useEditor({
@@ -91,26 +91,68 @@ export default function RichEditor({ content, onChange, placeholder = 'Tulis pos
       attributes: {
         class: 'prose prose-sm sm:prose lg:prose-xl max-w-none focus:outline-none min-h-[200px] p-3 bg-white dark:bg-gray-800 rounded-lg',
         spellcheck: 'true'
+      },
+      // Deteksi otomatis: paste sebuah URL kosong (tanpa teks lain) → ambil
+      // pratinjau tautan dan sisipkan kartu thumbnail, bukan teks mentah.
+      handlePaste: (_view, event) => {
+        const text = event.clipboardData?.getData('text/plain')?.trim()
+        if (!text) return false
+        const isUrl = /^https?:\/\/\S+$/i.test(text)
+        if (!isUrl) return false
+        event.preventDefault()
+        fetchLinkPreview(text).then(meta => {
+          // Pratinjau siap: sisipkan kartu. Jika gagal, tetap sisipkan tautan teks.
+          editor?.chain().focus().insertContent(
+            meta
+              ? `<a href="${text}" target="_blank" rel="noopener noreferrer" class="link-card"><span class="link-card-media"><img src="${meta.image}" alt="" /></span><span class="link-card-body"><span class="link-card-title">${meta.title || text}</span>${meta.description ? `<span class="link-card-desc">${meta.description}</span>` : ''}<span class="link-card-url">${text}</span></span></a>`
+              : `<a href="${text}" target="_blank" rel="noopener noreferrer">${text}</a>`
+          ).run()
+        })
+        return true
       }
     }
   })
 
-  const addImage = () => {
-    const urls = imageUrls.split(/\s*[\n,]+\s*/).map(url => url.trim()).filter(Boolean)
-    if (urls.length) {
-      urls.forEach(url => editor?.chain().focus().setImage({ src: url, alt: imageAlt.trim() }).run())
-      setImageUrls('')
-      setImageAlt('')
-      setShowImage(false)
+  const fetchLinkPreview = async (url: string): Promise<{ title: string; description: string; image: string; url: string } | null> => {
+    setLinkLoading(true)
+    setLinkPreview(null)
+    try {
+      const res = await api.post('/posting/link-preview', { url }, { timeout: 10000 })
+      if (res.data?.ok && (res.data.meta?.title || res.data.meta?.image)) {
+        setLinkPreview(res.data.meta)
+        return res.data.meta
+      }
+      return null
+    } catch {
+      return null
+    } finally {
+      setLinkLoading(false)
     }
   }
 
+  const insertLinkCard = (url: string, meta: { title?: string; description?: string; image?: string }) => {
+    const aman = url.trim()
+    if (!aman) return
+    const judul = meta.title || linkText.trim() || aman
+    const kartu = meta.image
+      ? `<a href="${aman}" target="_blank" rel="noopener noreferrer" class="link-card"><span class="link-card-media"><img src="${meta.image}" alt="" /></span><span class="link-card-body"><span class="link-card-title">${judul}</span>${meta.description ? `<span class="link-card-desc">${meta.description}</span>` : ''}<span class="link-card-url">${aman}</span></span></a>`
+      : `<a href="${aman}" target="_blank" rel="noopener noreferrer">${judul}</a>`
+    editor?.chain().focus().insertContent(kartu).run()
+    setShowLink(false)
+    setLinkUrl('')
+    setLinkText('')
+    setLinkPreview(null)
+  }
+
   const addLink = () => {
-    if (linkUrl.trim()) {
+    if (!linkUrl.trim()) return
+    // Tanpa pratinjau (gagal/tidak ada meta) → tautan teks biasa.
+    if (linkPreview) insertLinkCard(linkUrl, linkPreview)
+    else {
       editor?.chain().focus().extendMarkRange('link').setLink({ href: linkUrl.trim() }).run()
+      setShowLink(false)
       setLinkUrl('')
       setLinkText('')
-      setShowLink(false)
     }
   }
 
@@ -185,10 +227,24 @@ export default function RichEditor({ content, onChange, placeholder = 'Tulis pos
     setShowEmoji(false)
   }
 
+  const handleDropFiles = (files: FileList | File[]) => {
+    const media = Array.from(files).filter(f => f.type.startsWith('image/') || f.type.startsWith('video/'))
+    if (!media.length) {
+      toast.error('Hanya gambar dan video yang bisa disisipkan')
+      return
+    }
+    handleFileUpload(media as unknown as FileList)
+  }
+
   if (!editor) return <div className="animate-pulse h-[200px] bg-gray-100 rounded-lg" />
 
   return (
-    <div className="border border-gray-200 dark:border-gray-700 rounded-xl bg-white dark:bg-gray-900 overflow-hidden">
+    <div
+      className="relative border border-gray-200 dark:border-gray-700 rounded-xl bg-white dark:bg-gray-900 overflow-hidden"
+      onDragOver={e => { e.preventDefault(); if (!disabled) setDragging(true) }}
+      onDragLeave={e => { e.preventDefault(); setDragging(false) }}
+      onDrop={e => { e.preventDefault(); setDragging(false); if (!disabled && e.dataTransfer.files.length) handleDropFiles(e.dataTransfer.files) }}
+    >
       <div className="flex flex-wrap gap-1 p-2 border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800">
         <button type="button" onClick={() => editor.chain().focus().toggleHeading({ level: 1 }).run()} disabled={disabled} className="p-2 hover:bg-gray-200 dark:hover:bg-gray-700 rounded" title="Heading 1"><Heading1 size={16} /></button>
         <button type="button" onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()} disabled={disabled} className="p-2 hover:bg-gray-200 dark:hover:bg-gray-700 rounded" title="Heading 2"><Heading2 size={16} /></button>
@@ -218,7 +274,6 @@ export default function RichEditor({ content, onChange, placeholder = 'Tulis pos
         <button type="button" onClick={() => setShowLink(true)} disabled={disabled} className="p-2 hover:bg-gray-200 dark:hover:bg-gray-700 rounded" title="Insert Link"><LinkIcon size={16} /></button>
         <button type="button" onClick={() => { fileInputRef.current?.click() }} disabled={disabled || uploading} className="p-2 hover:bg-gray-200 dark:hover:bg-gray-700 rounded" title="Upload Image/Video"><Camera size={16} /></button>
         <input type="file" ref={fileInputRef} accept="image/*,video/*" multiple onChange={e => e.target.files && handleFileUpload(e.target.files)} className="hidden" />
-        <button type="button" onClick={() => setShowImage(true)} disabled={disabled} className="p-2 hover:bg-gray-200 dark:hover:bg-gray-700 rounded" title="Insert Image by URL"><ImageIcon size={16} /></button>
         <button type="button" onClick={() => setShowPoll(true)} disabled={disabled} className="p-2 hover:bg-gray-200 dark:hover:bg-gray-700 rounded" title="Insert Poll"><Hash size={16} /></button>
         <button type="button" onClick={() => setShowLocation(true)} disabled={disabled} className="p-2 hover:bg-gray-200 dark:hover:bg-gray-700 rounded" title="Insert Location"><MapPin size={16} /></button>
         <button type="button" onClick={() => setShowActivity(true)} disabled={disabled} className="p-2 hover:bg-gray-200 dark:hover:bg-gray-700 rounded" title="Insert Activity"><Plus size={16} /></button>
@@ -234,32 +289,37 @@ export default function RichEditor({ content, onChange, placeholder = 'Tulis pos
       )}
 
       {showLink && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="w-full max-w-md bg-white dark:bg-gray-800 rounded-xl p-6 shadow-xl">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => { setShowLink(false); setLinkUrl(''); setLinkText(''); setLinkPreview(null) }}>
+          <div className="w-full max-w-md bg-white dark:bg-gray-800 rounded-xl p-6 shadow-xl" onClick={e => e.stopPropagation()}>
             <h3 className="font-bold text-lg mb-4">Sisipkan Link</h3>
             <div className="space-y-3">
-              <div><label className="block text-sm font-medium mb-1">Teks link</label><input type="text" value={linkText} onChange={e => setLinkText(e.target.value)} className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700" placeholder="Teks yang ditampilkan" /></div>
-              <div><label className="block text-sm font-medium mb-1">URL *</label><input type="url" value={linkUrl} onChange={e => setLinkUrl(e.target.value)} className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700" placeholder="https://example.com" /></div>
+              <div>
+                <label className="block text-sm font-medium mb-1">URL *</label>
+                <input
+                  type="url"
+                  value={linkUrl}
+                  onChange={e => { setLinkUrl(e.target.value); setLinkPreview(null) }}
+                  onBlur={e => { const u = e.target.value.trim(); if (/^https?:\/\/\S+$/i.test(u)) fetchLinkPreview(u) }}
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700"
+                  placeholder="https://example.com"
+                  autoFocus
+                />
+              </div>
+              <div><label className="block text-sm font-medium mb-1">Teks link (opsional)</label><input type="text" value={linkText} onChange={e => setLinkText(e.target.value)} className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700" placeholder="Teks yang ditampilkan" /></div>
+              {linkLoading && <div className="flex items-center gap-2 text-sm text-gray-500"><Loader2 className="animate-spin" size={16} /> Mengambil pratinjau…</div>}
+              {linkPreview && (
+                <div className="flex gap-3 rounded-lg border border-gray-200 dark:border-gray-700 p-2 bg-gray-50 dark:bg-gray-700/50">
+                  {linkPreview.image && <img src={linkPreview.image} alt="" className="w-20 h-20 object-cover rounded-md shrink-0" />}
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium truncate">{linkPreview.title || linkUrl}</p>
+                    {linkPreview.description && <p className="text-xs text-gray-500 line-clamp-2">{linkPreview.description}</p>}
+                  </div>
+                </div>
+              )}
             </div>
             <div className="flex gap-3 mt-4 justify-end">
-              <button onClick={() => { setShowLink(false); setLinkUrl(''); setLinkText('') }} className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg">Batal</button>
+              <button onClick={() => { setShowLink(false); setLinkUrl(''); setLinkText(''); setLinkPreview(null) }} className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg">Batal</button>
               <button onClick={addLink} className="px-4 py-2 bg-primary text-white rounded-lg">Sisipkan</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {showImage && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="w-full max-w-md bg-white dark:bg-gray-800 rounded-xl p-6 shadow-xl">
-            <h3 className="font-bold text-lg mb-4">Sisipkan Gambar via URL</h3>
-            <div className="space-y-3">
-              <div><label className="block text-sm font-medium mb-1">URL Gambar *</label><textarea value={imageUrls} onChange={e => setImageUrls(e.target.value)} rows={4} className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700" placeholder="Satu URL per baris atau pisahkan dengan koma" /><p className="text-xs text-gray-500 mt-1">Beberapa gambar dapat dimasukkan sekaligus.</p></div>
-              <div><label className="block text-sm font-medium mb-1">Alt Text</label><input type="text" value={imageAlt} onChange={e => setImageAlt(e.target.value)} className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700" placeholder="Deskripsi gambar" /></div>
-            </div>
-            <div className="flex gap-3 mt-4 justify-end">
-              <button onClick={() => { setShowImage(false); setImageUrls(''); setImageAlt('') }} className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg">Batal</button>
-              <button onClick={addImage} className="px-4 py-2 bg-primary text-white rounded-lg">Sisipkan</button>
             </div>
           </div>
         </div>
@@ -333,6 +393,12 @@ export default function RichEditor({ content, onChange, placeholder = 'Tulis pos
       {uploading && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
           <div className="flex items-center gap-3 px-6 py-4 bg-white dark:bg-gray-800 rounded-xl shadow-xl"><Loader2 className="animate-spin text-primary" size={24} /> Mengunggah media...</div>
+        </div>
+      )}
+
+      {dragging && (
+        <div className="absolute inset-0 z-20 flex items-center justify-center bg-primary/10 border-2 border-dashed border-primary rounded-xl pointer-events-none">
+          <div className="px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium shadow-lg">Lepaskan gambar / video di sini</div>
         </div>
       )}
     </div>

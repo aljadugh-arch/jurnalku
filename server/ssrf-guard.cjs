@@ -226,6 +226,7 @@ function safeFetch(rawUrl, options = {}) {
     body,
     timeoutMs = 120000,
     label = 'URL',
+    maxBytes = 0,
   } = options
 
   return new Promise((resolve, reject) => {
@@ -265,7 +266,15 @@ function safeFetch(rawUrl, options = {}) {
       }
       const req = mod.request(requestOptions, res => {
         const chunks = []
-        res.on('data', chunk => chunks.push(chunk))
+        let received = 0
+        res.on('data', chunk => {
+          received += chunk.length
+          if (maxBytes > 0 && received > maxBytes) {
+            req.destroy(new Error(`Respons ${label} melebihi batas ${maxBytes} byte`))
+            return
+          }
+          chunks.push(chunk)
+        })
         res.on('end', () => finish(resolve, {
           ok: res.statusCode >= 200 && res.statusCode < 300,
           status: res.statusCode,

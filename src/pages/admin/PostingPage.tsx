@@ -164,11 +164,18 @@ export default function PostingPage() {
     }
   }
 
-  const renderMedia = (media: any[]) => {
+  const renderMedia = (media: any[], konten: string) => {
     if (!media.length) return null
+    // Gambar/video yang sudah tertanam inline di konten TIDAK ditampilkan ulang
+    // di grid — itu yang dulu membuat duplikat (gambar besar di teks + kecil di grid).
+    const inlineUrls = new Set(
+      Array.from(konten.matchAll(/<(img|video)[^>]*\bsrc=["']([^"']+)["']/gi), m => m[2])
+    )
+    const luar = media.filter(m => !inlineUrls.has(m.media_url || m.url))
+    if (!luar.length) return null
     return (
       <div className="mt-3 grid gap-2 grid-cols-2 md:grid-cols-3">
-        {media.map((m, i) => (
+        {luar.map((m, i) => (
           <div key={i} className="relative aspect-video rounded-lg overflow-hidden bg-gray-100 dark:bg-gray-800">
             {(m.media_type || m.type) === 'image' && <img src={m.media_url || m.url} alt={m.alt || m.filename || ''} loading="lazy" className="w-full h-full object-cover" />}
             {(m.media_type || m.type) === 'video' && <video src={m.media_url || m.url} controls className="w-full h-full" />}
@@ -259,7 +266,7 @@ export default function PostingPage() {
               <div dangerouslySetInnerHTML={{ __html: post.konten || post.isi }} />
             </div>
 
-            {renderMedia(post.media || [])}
+            {renderMedia(post.media || [], post.konten || post.isi || '')}
             {renderPoll(post.poll_data || [])}
             {post.location_name && renderLocation({ name: post.location_name, lat: post.location_lat, lng: post.location_lng })}
             {renderActivity(post.activity_type)}
