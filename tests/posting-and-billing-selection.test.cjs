@@ -20,11 +20,13 @@ test('posting editor sends multiple selected files in one authenticated multipar
   assert.match(server, /postingUpload\.fields\(/)
 })
 
-test('posting editor can insert multiple image URLs', () => {
+test('posting editor supports link preview (replaces image-by-URL dialog)', () => {
   const editor = read('src/components/RichEditor.tsx')
-  assert.match(editor, /imageUrls/)
-  assert.match(editor, /split\(/)
-  assert.match(editor, /Sisipkan Gambar via URL/)
+  // Modal "Sisipkan Gambar via URL" dihapus: menyisipkan URL kini otomatis
+  // menjadi kartu pratinjau link (thumbnail og:image), bukan daftar URL gambar.
+  assert.doesNotMatch(editor, /Sisipkan Gambar via URL/)
+  assert.match(editor, /link-preview/)
+  assert.match(editor, /link-card/)
 })
 
 test('single-student billing generation passes exactly the selected student to the server', () => {
